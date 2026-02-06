@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>LeagueSandbox_Scripts</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Characters\Aatrox\**" />
+    <Compile Remove="Characters\Aatrox_New\**" />
+    <Compile Remove="Characters\Ashe\**" />
+    <Compile Remove="Characters\Fizz\**" />
+    <Compile Remove="Characters\Katarina\**" />
+    <Compile Remove="Characters\Vayne\**" />
+    <Compile Remove="Characters\Zed\**" />
+    <EmbeddedResource Remove="Characters\Aatrox\**" />
+    <EmbeddedResource Remove="Characters\Aatrox_New\**" />
+    <EmbeddedResource Remove="Characters\Ashe\**" />
+    <EmbeddedResource Remove="Characters\Fizz\**" />
+    <EmbeddedResource Remove="Characters\Katarina\**" />
+    <EmbeddedResource Remove="Characters\Vayne\**" />
+    <EmbeddedResource Remove="Characters\Zed\**" />
+    <None Remove="Characters\Aatrox\**" />
+    <None Remove="Characters\Aatrox_New\**" />
+    <None Remove="Characters\Ashe\**" />
+    <None Remove="Characters\Fizz\**" />
+    <None Remove="Characters\Katarina\**" />
+    <None Remove="Characters\Vayne\**" />
+    <None Remove="Characters\Zed\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Maps\Map31\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\GameServerCore\GameServerCore.csproj" />
+    <ProjectReference Include="..\..\GameServerLib\GameServerLib.csproj" />
+  </ItemGroup>
+
+</Project>

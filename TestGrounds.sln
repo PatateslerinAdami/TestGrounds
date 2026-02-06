@@ -1,0 +1,66 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Packet", "Packet", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QuadTree", "QuadTree\QuadTree.csproj", "{9240C600-E83E-6B97-2497-8A7A13BB806B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LeagueSandbox-Scripts", "Content\LeagueSandbox-Scripts\LeagueSandbox-Scripts.csproj", "{1F6CB26E-6068-599F-F9CF-572CC1964B75}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LeaguePackets", "LeaguePackets\LeaguePackets.csproj", "{4F9F5305-388D-7ED0-95A0-7E3D57660849}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameServerLib", "GameServerLib\GameServerLib.csproj", "{DDBA3D1A-4779-FCB8-A27F-7880AF958326}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameServerCore", "GameServerCore\GameServerCore.csproj", "{A6A0A05F-051E-53D2-6A12-7020F5BFAD9B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameServerConsole", "GameServerConsole\GameServerConsole.csproj", "{0FC95E1B-4228-6D09-49D3-F0B7DA8CBF42}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameMaths", "GameMaths\GameMaths.csproj", "{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9240C600-E83E-6B97-2497-8A7A13BB806B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9240C600-E83E-6B97-2497-8A7A13BB806B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9240C600-E83E-6B97-2497-8A7A13BB806B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9240C600-E83E-6B97-2497-8A7A13BB806B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1F6CB26E-6068-599F-F9CF-572CC1964B75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1F6CB26E-6068-599F-F9CF-572CC1964B75}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1F6CB26E-6068-599F-F9CF-572CC1964B75}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1F6CB26E-6068-599F-F9CF-572CC1964B75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F9F5305-388D-7ED0-95A0-7E3D57660849}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F9F5305-388D-7ED0-95A0-7E3D57660849}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F9F5305-388D-7ED0-95A0-7E3D57660849}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F9F5305-388D-7ED0-95A0-7E3D57660849}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DDBA3D1A-4779-FCB8-A27F-7880AF958326}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDBA3D1A-4779-FCB8-A27F-7880AF958326}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDBA3D1A-4779-FCB8-A27F-7880AF958326}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDBA3D1A-4779-FCB8-A27F-7880AF958326}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A6A0A05F-051E-53D2-6A12-7020F5BFAD9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A6A0A05F-051E-53D2-6A12-7020F5BFAD9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A6A0A05F-051E-53D2-6A12-7020F5BFAD9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A6A0A05F-051E-53D2-6A12-7020F5BFAD9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0FC95E1B-4228-6D09-49D3-F0B7DA8CBF42}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0FC95E1B-4228-6D09-49D3-F0B7DA8CBF42}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0FC95E1B-4228-6D09-49D3-F0B7DA8CBF42}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0FC95E1B-4228-6D09-49D3-F0B7DA8CBF42}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4F9F5305-388D-7ED0-95A0-7E3D57660849} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B19E30FD-65F0-418C-9E10-237966DCB531}
+	EndGlobalSection
+EndGlobal
