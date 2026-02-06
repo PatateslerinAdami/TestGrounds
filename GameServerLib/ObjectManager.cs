@@ -303,53 +303,55 @@ namespace LeagueSandbox.GameServer
 
         bool UnitHasVisionOn(GameObject observer, GameObject tested)
         {
-            if(!tested.IsAffectedByFoW)
+            if (!tested.IsAffectedByFoW) return true;
+            if (tested.Team == observer.Team) return true;
+
+            if (Vector2.DistanceSquared(observer.Position, tested.Position) >= observer.VisionRadius * observer.VisionRadius)
             {
-                return true;
+                return false;
             }
 
-            if(observer is Region region)
+            bool hasLineOfSight = false;
+
+            if (observer is Region region && region.IgnoresLineOfSight)
             {
-                if(region.VisionTarget != null && region.VisionTarget != tested)
+                hasLineOfSight = true;
+            }
+            else
+            {
+                bool isSelfCheck = (observer is Region r && r.VisionTarget == tested);
+                if (isSelfCheck)
                 {
-                    return false;
+                    hasLineOfSight = true;
+                }
+                else
+                {
+                    hasLineOfSight = !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
                 }
             }
-            else if(tested is Particle particle)
+
+            if (!hasLineOfSight)
             {
-                // Default behaviour
-                if(particle.SpecificTeam == TeamId.TEAM_NEUTRAL)
+                return false;
+            }
+            if (tested is AttackableUnit au && au.Status.HasFlag(StatusFlags.Stealthed))
+            {
+                if (observer is Region r && r.RevealsStealth)
                 {
-                    if(
-                        // Globally visible to all teams
-                        particle.Team == TeamId.TEAM_NEUTRAL
-                        // Globally visible to team of creator
-                        || tested.Team == observer.Team
-                    ){
-                        return true;
+                    if (r.OnlyShowTarget && r.VisionTarget != tested)
+                    {
+                        return false;
                     }
-                    // Can become visible for other teams
+                    return true;
                 }
-                // Only visible to specific team
-                else if(particle.SpecificTeam != observer.Team)
-                {
-                    return false;
-                }
+                return false;
             }
-            else if(tested.Team == observer.Team)
+
+            if (observer is Region reg && reg.OnlyShowTarget && reg.VisionTarget != tested)
             {
-                return true;
+                return false;
             }
-
-            if(
-                !(observer is AttackableUnit u && u.IsDead)
-                && Vector2.DistanceSquared(observer.Position, tested.Position) < observer.VisionRadius * observer.VisionRadius
-                && !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true)
-            ){
-                return true;
-            }
-
-            return false;
+            return true;
         }
 
         /// <summary>

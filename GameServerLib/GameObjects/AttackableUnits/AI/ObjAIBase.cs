@@ -1,22 +1,34 @@
-﻿using System;
+﻿using GameServerCore.Enums;
+using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets.Game;
+using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Inventory;
+using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using log4net;
+using System;
+using System.Activities.Presentation.View;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using GameServerCore.Enums;
-using GameServerCore.Scripting.CSharp;
-using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.Inventory;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Activities.Presentation.View;
-using LeagueSandbox.GameServer.Logging;
-using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using log4net;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 {
+    public class DelayedSpellPacketInfo
+    {
+        public Spell SpellToPacketize { get; }
+        public float CreationTime { get; }
+
+        public DelayedSpellPacketInfo(Spell spell, float creationTime)
+        {
+            SpellToPacketize = spell;
+            CreationTime = creationTime;
+        }
+    }
     /// <summary>
     /// Base class for all moving, attackable, and attacking units.
     /// ObjAIBases normally follow these guidelines of functionality: Self movement, Inventory, Targeting, Attacking, and Spells.
@@ -88,6 +100,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public ICharScript CharScript { get; private set; }
         public bool IsBot { get; set; }
         public IAIScript AIScript { get; protected set; }
+        public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
+        private bool invisSent = false;
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
             Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "") :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
@@ -1105,10 +1119,48 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 SetPet(null);
             }
+            if (invisSent)
+            {
+                invisSent = false;
+                foreach (var info in delayedSpellPackets)
+                {
+                    var spell = info.SpellToPacketize;
+                    var target = spell.CastInfo.Targets.FirstOrDefault()?.Unit;
+                    if (target == null) continue;
+                    var attackType = AttackType.ATTACK_TYPE_RADIAL; // Default
+                    if (spell.CastInfo.IsAutoAttack || spell.CastInfo.UseAttackCastTime)
+                    {
+                        attackType = this.IsMelee ? AttackType.ATTACK_TYPE_MELEE : AttackType.ATTACK_TYPE_TARGETED;
+                    }
+                    else if (spell.SpellData.TargetingType == TargetingType.Target)
+                    {
+                        attackType = AttackType.ATTACK_TYPE_TARGETED;
+                    }
+                    float delayInSeconds = (_game.GameTime - info.CreationTime) / 1000.0f;
+                    var spellCastPacket = _game.PacketNotifier.ConstructCastSpellPacket(spell, delayInSeconds);
+                    var lookAtPacket = new S2C_UnitSetLookAt
+                    {
+                        SenderNetID = this.NetId,
+                        LookAtType = (byte)attackType,
+                        TargetNetID = target.NetId,
+                        TargetPosition = target.GetPosition3D()
+                    };
+                    foreach (TeamId team in Enum.GetValues(typeof(TeamId)))
+                    {
+                        if (team != Team)
+                        {
+                            _game.PacketNotifier.NotifyNPC_CastSpellTeam(spellCastPacket, this, team);
+                        }
+                    }
+                }
+                delayedSpellPackets.Clear();
+            }
         }
 
         public override void LateUpdate(float diff)
         {
+            if (delayedSpellPackets.Count > 0) invisSent = true;
+            
             // Stop targeting an untargetable unit.
             if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable))
             {

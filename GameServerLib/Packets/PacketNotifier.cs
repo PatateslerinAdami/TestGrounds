@@ -4344,5 +4344,98 @@ namespace PacketDefinitions420
             };
             _packetHandlerManager.SendPacket(client.ClientId, answer.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
         }
+
+        public void NotifyUnitInvis(float fadeTime, float value, AttackableUnit au)
+        {
+            var fade = new S2C_SetFadeOut
+            {
+                FadeTime = fadeTime,
+                FadeTargetValue = value,
+                SenderNetID = au.NetId
+            };
+            _packetHandlerManager.BroadcastPacket(fade.GetBytes(), Channel.CHL_S2C);
+        }
+        public void ColorRemapFx(Champion ch, bool IsFadingIn, float FadeTime, LeaguePackets.Game.Common.Color Color, float MaxWeight, bool ToTeam = false)
+        {
+            var color = new S2C_ColorRemapFX
+            {
+                SenderNetID = ch.NetId,
+                IsFadingIn = IsFadingIn,
+                FadeTime = FadeTime,
+                TeamID = (uint)ch.Team,
+                Color = Color,
+                MaxWeight = MaxWeight
+            };
+            if (ToTeam) _packetHandlerManager.BroadcastPacket(color.GetBytes(), Channel.CHL_S2C);
+            else _packetHandlerManager.SendPacket(ch.ClientId, color.GetBytes(), Channel.CHL_S2C);
+        }
+        public GamePacket ConstructCastSpellPacket(Spell s, float startTimeOffset = 0.0f)
+        {
+            var castInfo = new LeaguePackets.Game.Common.CastInfo
+            {
+                SpellHash = (uint)s.GetId(),
+                SpellNetID = s.CastInfo.SpellNetID,
+                SpellLevel = s.CastInfo.SpellLevel,
+                AttackSpeedModifier = s.CastInfo.AttackSpeedModifier,
+                CasterNetID = s.CastInfo.Owner.NetId,
+                SpellChainOwnerNetID = s.CastInfo.Owner.NetId,
+                PackageHash = s.CastInfo.Owner.GetObjHash(),
+                MissileNetID = s.CastInfo.MissileNetID,
+                TargetPosition = s.CastInfo.TargetPosition,
+                TargetPositionEnd = s.CastInfo.TargetPositionEnd,
+                DesignerCastTime = s.CastInfo.DesignerCastTime,
+                ExtraCastTime = s.CastInfo.ExtraCastTime,
+                DesignerTotalTime = s.CastInfo.DesignerTotalTime,
+                Cooldown = s.CastInfo.Cooldown,
+                StartCastTime = s.CastInfo.StartCastTime + startTimeOffset,
+                IsAutoAttack = s.CastInfo.IsAutoAttack,
+                IsSecondAutoAttack = s.CastInfo.IsSecondAutoAttack,
+                IsForceCastingOrChannel = s.CastInfo.IsForceCastingOrChannel,
+                IsOverrideCastPosition = s.CastInfo.IsOverrideCastPosition,
+                IsClickCasted = s.CastInfo.IsClickCasted,
+                SpellSlot = s.CastInfo.SpellSlot,
+                SpellCastLaunchPosition = s.CastInfo.SpellCastLaunchPosition,
+                AmmoUsed = s.CastInfo.AmmoUsed,
+                AmmoRechargeTime = s.CastInfo.AmmoRechargeTime
+            };
+
+            if (s.CastInfo.Targets.Count > 0)
+            {
+                s.CastInfo.Targets.ForEach(t =>
+                {
+                    if (t.Unit != null)
+                    {
+                        castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = t.Unit.NetId, HitResult = (byte)t.HitResult });
+                    }
+                    else
+                    {
+                        castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = 0, HitResult = (byte)t.HitResult });
+                    }
+                });
+            }
+
+            if (s.CastInfo.SpellLevel > 0)
+            {
+                castInfo.ManaCost = s.SpellData.ManaCost[s.CastInfo.SpellLevel];
+            }
+            else
+            {
+                castInfo.ManaCost = s.SpellData.ManaCost[0];
+            }
+
+            var castAnsPacket = new NPC_CastSpellAns
+            {
+                SenderNetID = s.CastInfo.Owner.NetId,
+                CasterPositionSyncID = Environment.TickCount,
+                Unknown1 = false,
+                CastInfo = castInfo
+            };
+
+            return castAnsPacket;
+        }
+        public void NotifyNPC_CastSpellTeam(GamePacket gp, ObjAIBase oa, TeamId team)
+        {
+            _packetHandlerManager.BroadcastPacketTeam(team, gp.GetBytes(), Channel.CHL_S2C);
+        }
     }
 }

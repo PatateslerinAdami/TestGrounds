@@ -31,7 +31,8 @@ namespace LeagueSandbox.GameServer.GameObjects
         public bool HasCollision { get; }
         public bool GrantVision { get; }
         public bool RevealsStealth { get; }
-
+        public bool IgnoresLineOfSight { get; }
+        public bool OnlyShowTarget { get; }
         /// <summary>
         /// Prepares the Particle, setting up the information required for networking it to clients.
         /// This particle will spawn and stay on the specified GameObject target.
@@ -67,8 +68,10 @@ namespace LeagueSandbox.GameServer.GameObjects
             float scale = 1.0f,
             float addedSize = 0,
             float lifetime = 0,
-            int clientId = 0
-        ): base(game, pos, 0, collisionRadius, visionRadius, team: team)
+            int clientId = 0,
+            bool ignoresLoS = false,
+            bool onlyShowTarget = true
+        ) : base(game, pos, 0, collisionRadius, visionRadius, team: team)
         {
             Type = (int)type;
             CollisionUnit = collisionUnit;
@@ -96,7 +99,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             GrantVision = VisionRadius > 0;
 
             RevealsStealth = revealStealth;
-
+            IgnoresLineOfSight = ignoresLoS;
+            OnlyShowTarget = onlyShowTarget;
             _game.ObjectManager.AddObject(this);
         }
 

@@ -441,7 +441,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _logger.Error(null, e);
             }
-
+            if (CastInfo.Owner.Status.HasFlag(StatusFlags.Stealthed) && Script.ScriptMetadata.CastingBreaksStealth)
+            {
+                CastInfo.Owner.ExitStealth();
+                var packetInfo = new DelayedSpellPacketInfo(this, _game.GameTime);
+                CastInfo.Owner.delayedSpellPackets.Add(packetInfo);
+                CastInfo.Owner.RemoveBuffsByType(BuffType.INVISIBILITY);
+            }
             if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableManaCosts))
             {
                 stats.CurrentMana -= SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction);

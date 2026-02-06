@@ -1,22 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using GameServerCore;
+﻿using GameServerCore;
 using GameServerCore.Content;
 using GameServerCore.Enums;
+using GameServerCore.Scripting.CSharp;
 using GameServerLib.Content;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.Logging;
-using log4net;
-using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using log4net;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 {
@@ -118,6 +119,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public override bool SpawnShouldBeHidden => true;
 
         private bool _teleportedDuringThisFrame = false;
+        private List<GameScriptTimer> _scriptTimers;
 
         public AttackableUnit(
             Game game,
@@ -159,6 +161,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ParentBuffs = new Dictionary<string, Buff>();
             BuffList = new List<Buff>();
             IconInfo = new IconInfo(_game, this);
+            _scriptTimers = new List<GameScriptTimer>();
         }
 
         /// <summary>
@@ -236,6 +239,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         public override void Update(float diff)
         {
+            UpdateTimers(diff);
             UpdateBuffs(diff);
 
             // TODO: Rework stat management.
@@ -1506,7 +1510,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
         }
-
+        /// <summary>
+        /// Deactivates all buffs of the given type.
+        /// </summary>
+        /// <param name="type">The BuffType to remove.</param>
+        public void RemoveBuffsByType(BuffType type)
+        {
+            var buffsToRemove = BuffList.FindAll(b => b.BuffType == type);
+            foreach (var buff in buffsToRemove)
+            {
+                buff.DeactivateBuff();
+            }
+        }
         /// <summary>
         /// Forces this unit to perform a dash which ends at the given position.
         /// </summary>
@@ -1608,6 +1623,87 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (animPairs != null)
             {
                 _game.PacketNotifier.NotifyS2C_SetAnimStates(this, animPairs);
+            }
+        }
+
+        /// <summary>
+        /// Registers a GameScriptTimer to be updated by this unit's game loop.
+        /// The timer will be automatically removed once it is finished.
+        /// </summary>
+        /// <param name="timer">The GameScriptTimer instance to register.</param>
+        public void RegisterTimer(GameScriptTimer timer)
+        {
+            _scriptTimers.Add(timer);
+        }
+        /// <summary>
+        /// Updates all registered script timers and removes any that have completed.
+        /// </summary>
+        private void UpdateTimers(float diff)
+        {
+            for (int i = _scriptTimers.Count - 1; i >= 0; i--)
+            {
+                var timer = _scriptTimers[i];
+                timer.Update(diff);
+                if (timer.IsDead())
+                {
+                    _scriptTimers.RemoveAt(i);
+                }
+            }
+        }
+        /// <summary>
+        /// Puts the unit into stealth, optionally after a delay, and applies
+        /// visual invisibility effects. Champions also receive a color remap
+        /// fade effect while entering stealth.
+        /// </summary>
+        /// <param name="fadeTime">
+        /// Time in seconds before the stealth status is applied.
+        /// If zero, stealth is applied immediately.
+        /// </param>
+        /// <param name="value">
+        /// The invisibility visibility value sent to clients (lower means more invisible).
+        /// </param>
+        /// <param name="IsFadingIn">
+        /// Whether the color remap effect should fade in.
+        /// </param>
+        /// <param name="FadeTime">
+        /// Duration of the color remap fade effect.
+        /// </param>
+        /// <param name="MaxWeight">
+        /// Maximum intensity of the color remap effect.
+        /// </param>
+        public void EnterStealth(float fadeTime = 0f, float value = 0.3f, bool IsFadingIn = true, float FadeTime = 0.0f, float MaxWeight = 0.2f)
+        {
+            if (fadeTime == 0f)
+            {
+                this.SetStatus(StatusFlags.Stealthed, true);
+            }
+            else
+            {
+                RegisterTimer(new GameScriptTimer(fadeTime, () =>
+                {
+                    this.SetStatus(StatusFlags.Stealthed, true);
+                }));
+            }
+
+            _game.PacketNotifier.NotifyUnitInvis(fadeTime, value, this);
+            if (this is Champion champ)
+            {
+                var tilt = new LeaguePackets.Game.Common.Color { Red = 255, Green = 128, Blue = 64, Alpha = 200 };
+                _game.PacketNotifier.ColorRemapFx(champ, IsFadingIn, FadeTime, tilt, MaxWeight, false);
+            }
+        }
+        /// <summary>
+        /// Removes stealth from the unit, restores visibility, clears visual
+        /// effects, and deactivates any active invisibility-related buffs.
+        /// </summary>
+        public void ExitStealth()
+        {
+            this.SetStatus(StatusFlags.Stealthed, false);
+            _game.PacketNotifier.NotifyUnitInvis(0, 1f, this);
+            if (this is Champion champ)
+            {
+                var tilt = new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 };
+                _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
             }
         }
     }
