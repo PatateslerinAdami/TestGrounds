@@ -755,7 +755,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (s == null || !CanLevelUpSpell(s))
             {
-                return null;
+                //Don't know what problems it might cause in the future but making a mental note for now for karma r
+                //return null;
             }
 
             s.LevelUp();
@@ -1159,6 +1160,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void LateUpdate(float diff)
         {
+            if (shieldFixSend)
+            {
+                _game.PacketNotifier.HealthBarTest(this);
+                shieldFixSend = false;
+            }
             if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.GetIsTargetableToTeam(Team))
             {
                 if (TargetUnit.CharData.IsUseable)

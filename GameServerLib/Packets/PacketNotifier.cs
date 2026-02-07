@@ -148,7 +148,6 @@ namespace PacketDefinitions420
         {
             var itemDataList = new List<LeaguePackets.Game.Common.ItemData>();
             var shields = new ShieldValues(); //TODO: Implement shields so this can be finished
-            Vector3 dir = new Vector3(1, 0, 0);
             var charStackDataList = new List<CharacterStackData>();
             var charStackData = new CharacterStackData
             {
@@ -163,6 +162,7 @@ namespace PacketDefinitions420
 
             if (o is AttackableUnit a)
             {
+                shields = a.ShieldValues;
                 charStackData.SkinName = a.Model;
                 NotifyFaceDirection(a, a.Direction, true);
                 if (a is ObjAIBase obj)
@@ -4436,6 +4436,28 @@ namespace PacketDefinitions420
         public void NotifyNPC_CastSpellTeam(GamePacket gp, ObjAIBase oa, TeamId team)
         {
             _packetHandlerManager.BroadcastPacketTeam(team, gp.GetBytes(), Channel.CHL_S2C);
+        }
+        public void NotifyModifyShield(float magic, float physical, uint senderNetId, bool stopShieldFade = true)
+        {
+            var mods = new ModifyShield
+            {
+                SenderNetID = senderNetId,
+                Physical = physical != 0,
+                Magical = magic != 0,
+                Amount = magic != 0 ? magic : physical,
+                StopShieldFade = stopShieldFade
+            };
+            _packetHandlerManager.BroadcastPacket(mods.GetBytes(), Channel.CHL_S2C);
+        }
+        public void HealthBarTest(AttackableUnit au)
+        {
+            var healthbarPacket = new OnEnterLocalVisibilityClient
+            {
+                SenderNetID = au.NetId,
+                MaxHealth = au.Stats.HealthPoints.Total,
+                Health = au.Stats.CurrentHealth,
+            };
+            _packetHandlerManager.BroadcastPacket(healthbarPacket.GetBytes(), Channel.CHL_S2C);
         }
     }
 }

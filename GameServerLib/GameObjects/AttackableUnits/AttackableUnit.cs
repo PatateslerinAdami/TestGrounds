@@ -4,6 +4,7 @@ using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.Content;
 using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets.Game;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -122,6 +123,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         private bool _teleportedDuringThisFrame = false;
         private List<GameScriptTimer> _scriptTimers;
+        public ShieldValues ShieldValues { get; set; }
+        protected bool shieldFixSend = false;
 
         public AttackableUnit(
             Game game,
@@ -164,6 +167,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             BuffList = new List<Buff>();
             IconInfo = new IconInfo(_game, this);
             _scriptTimers = new List<GameScriptTimer>();
+            ShieldValues = new ShieldValues();
         }
 
         /// <summary>
@@ -590,7 +594,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 return;
             }
-
+            if (ShieldValues.HasShield())
+            {
+                switch (type)
+                {
+                    case DamageType.DAMAGE_TYPE_TRUE:
+                        postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
+                        break;
+                    case DamageType.DAMAGE_TYPE_PHYSICAL:
+                        postMitigationDamage = TakeShield(0, -postMitigationDamage, false);
+                        if (postMitigationDamage > 0)
+                        {
+                            postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
+                        }
+                        break;
+                    case DamageType.DAMAGE_TYPE_MAGICAL:
+                        postMitigationDamage = TakeShield(-postMitigationDamage, 0, false);
+                        if (postMitigationDamage > 0)
+                        {
+                            postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
+                        }
+                        break;
+                }
+            }
             Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
 
             ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
@@ -1693,6 +1719,78 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
             }
             _game.ObjectManager.RefreshUnitVision(this);
+        }
+        public float TakeShield(float magic, float physical, bool stopShieldFade = true)
+        {
+            float unabsorbedDamage = 0;
+
+            if (magic != 0 && physical != 0)
+            {
+                if (magic > 0)
+                {
+                    ShieldValues.MagicalAndPhysical += magic;
+                    _game.PacketNotifier.NotifyModifyShield(magic, magic, NetId, stopShieldFade);
+                }
+                else
+                {
+                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.MagicalAndPhysical, magic);
+                    ShieldValues.MagicalAndPhysical += shieldChange;
+                    unabsorbedDamage = remainingDamage;
+
+                    if (shieldChange != 0)
+                    {
+                        _game.PacketNotifier.NotifyModifyShield(shieldChange, shieldChange, NetId, stopShieldFade);
+                    }
+                }
+            }
+            else if (magic != 0)
+            {
+                if (magic > 0)
+                {
+                    ShieldValues.Magical += magic;
+                    _game.PacketNotifier.NotifyModifyShield(magic, 0, NetId, stopShieldFade);
+                }
+                else
+                {
+                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.Magical, magic);
+                    ShieldValues.Magical += shieldChange;
+                    unabsorbedDamage = remainingDamage;
+
+                    if (shieldChange != 0)
+                    {
+                        _game.PacketNotifier.NotifyModifyShield(shieldChange, 0, NetId, stopShieldFade);
+                    }
+                }
+            }
+            else if (physical != 0)
+            {
+                if (physical > 0)
+                {
+                    ShieldValues.Phyisical += physical;
+                    _game.PacketNotifier.NotifyModifyShield(0, physical, NetId, stopShieldFade);
+                }
+                else
+                {
+                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.Phyisical, physical);
+                    ShieldValues.Phyisical += shieldChange;
+                    unabsorbedDamage = remainingDamage;
+
+                    if (shieldChange != 0)
+                    {
+                        _game.PacketNotifier.NotifyModifyShield(0, shieldChange, NetId, stopShieldFade);
+                    }
+                }
+            }
+            if (Stats.CurrentHealth + ShieldValues.GetAllShieldValue() > Stats.HealthPoints.Total && magic + physical < 0) shieldFixSend = true;
+            return unabsorbedDamage;
+        }
+        private (float shieldChange, float unabsorbedDamage) DeductShield(float currentShield, float damageAmount)
+        {
+            float incomingDamage = -damageAmount;
+            float effectiveChange = -System.Math.Min(currentShield, incomingDamage);
+            float remainingDamage = incomingDamage + effectiveChange;
+
+            return (effectiveChange, remainingDamage);
         }
     }
 }
