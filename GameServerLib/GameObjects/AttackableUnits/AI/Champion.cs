@@ -40,6 +40,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override bool SpawnShouldBeHidden => false;
 
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
+        public bool teamChanged = false;
 
         public Champion(Game game,
                         string model,
@@ -580,15 +581,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 if(damageData.DamageType == DamageType.DAMAGE_TYPE_MAGICAL)
                 {
-                    e.MagicalDamage = damageData.Damage;
+                    e.MagicalDamage = damageData.PostMitigationDamage;
                 }
                 else if(damageData.DamageType == DamageType.DAMAGE_TYPE_PHYSICAL)
                 {
-                    e.PhysicalDamage = damageData.Damage;
+                    e.PhysicalDamage = damageData.PostMitigationDamage;
                 }
                 else if(damageData.DamageType == DamageType.DAMAGE_TYPE_TRUE)
                 {
-                    e.TrueDamage = damageData.Damage;
+                    e.TrueDamage = damageData.PostMitigationDamage;
                 }
                 //TODO: handle mixed damage?
             }

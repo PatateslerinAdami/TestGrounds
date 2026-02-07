@@ -2152,6 +2152,12 @@ namespace PacketDefinitions420
         }
         public void NotifyNPC_Die_EventHistory(Champion ch, uint killerNetID = 0)
         {
+            //For some reason when on team blue event history doesn't get shown, its ugly but for now it doesn't seem to have a problem for now, making a mental note.
+            if (ch.Team == TeamId.TEAM_BLUE)
+            {
+                ch.teamChanged = true;
+                ch.SetTeam(TeamId.TEAM_PURPLE);
+            }
             var history = new NPC_Die_EventHistory();
             history.SenderNetID = ch.NetId;
             history.KillerNetID = killerNetID;
@@ -2166,6 +2172,11 @@ namespace PacketDefinitions420
             history.Entries = ch.EventHistory;
 
             _packetHandlerManager.SendPacket(ch.ClientId, history.GetBytes(), Channel.CHL_S2C);
+            if (ch.teamChanged)
+            {
+                ch.SetTeam(TeamId.TEAM_BLUE);
+                ch.teamChanged = false;
+            }
         }
         /// <summary>
         /// Sends a packet to all players with vision of the specified AttackableUnit detailing that the attacker has abrubtly stopped their attack (can be a spell or auto attack, although internally AAs are also spells).
