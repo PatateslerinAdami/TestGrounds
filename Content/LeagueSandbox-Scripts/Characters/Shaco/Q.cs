@@ -27,7 +27,12 @@ namespace Spells
         public void OnSpellPostCast(Spell spell)
         {
             FaceDirection(_end, _owner, true);
-            Vector2 result = _owner.Position + Vector2.Normalize(_end - _owner.Position) * spell.SpellData.CastRangeDisplayOverride;
+            Vector2 direction = _end - _owner.Position;
+            float maxRange = spell.SpellData.CastRangeDisplayOverride;
+            float distance = direction.Length();
+            Vector2 result = distance > maxRange
+                ? _owner.Position + Vector2.Normalize(direction) * maxRange
+                : _end;
             AddParticle(_owner, null, "JackintheboxPoof2", _owner.Position, lifetime: 2f);
             AddBuff("Deceive", 5f, 1, spell, _owner, _owner);
             _owner.TeleportTo(result.X, result.Y, false);

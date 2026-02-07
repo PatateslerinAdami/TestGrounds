@@ -190,24 +190,26 @@ namespace LeagueSandbox.GameServer.Content
         /// <returns>True/False.</returns>
         public bool IsValidTarget(ObjAIBase attacker, AttackableUnit target, SpellDataFlags overrideFlags = 0)
         {
-
             bool overrideTargetable = false;
+            var useFlags = Flags;
+
+            if (overrideFlags > 0)
+            {
+                useFlags = overrideFlags;
+            }
+            if (useFlags.HasFlag(SpellDataFlags.AffectUntargetable))
+            {
+                overrideTargetable = true;
+            }
             if (target.CharData.IsUseable && Flags.HasFlag(SpellDataFlags.AffectUseable))
             {
                 //TODO: Verify if we need a check for CharData.UsableByEnemy here too.
                 overrideTargetable = true;
             }
 
-            if (!target.Status.HasFlag(StatusFlags.Targetable) && !overrideTargetable)
+            if (!target.Status.HasFlag(StatusFlags.Targetable) && target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
             {
                 return false;
-            }
-
-            var useFlags = Flags;
-
-            if (overrideFlags > 0)
-            {
-                useFlags = overrideFlags;
             }
 
             if (target.IsDead && !useFlags.HasFlag(SpellDataFlags.AffectDead))

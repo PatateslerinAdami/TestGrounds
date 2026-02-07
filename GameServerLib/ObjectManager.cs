@@ -646,5 +646,17 @@ namespace LeagueSandbox.GameServer
 
             return champs;
         }
+        /// <summary>
+        /// Forces a vision update for a specific object immediately. 
+        /// </summary>
+        public void RefreshUnitVision(GameObject obj)
+        {
+            UpdateTeamsVision(obj);
+            var players = _game.PlayerManager.GetPlayers(includeBots: false);
+            foreach (var kv in players)
+            {
+                UpdateVisionSpawnAndSync(obj, kv, forceSpawn: false);
+            }
+        }
     }
 }

@@ -491,7 +491,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsAttacking = false;
                 HasMadeInitialAttack = false;
             }
-            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+            if (reset || fullCancel) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
         }
 
         /// <summary>
@@ -1075,6 +1075,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void Update(float diff)
         {
+            if (delayedSpellPackets.Count > 0) invisSent = true;
             base.Update(diff);
             try
             {
@@ -1119,50 +1120,46 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 SetPet(null);
             }
-            if (invisSent)
+            // i still wanna keep the delayed packet system for now since i dont know what happens when channeling and invis goes off.
+            /*
+            foreach (var info in delayedSpellPackets)
             {
-                invisSent = false;
-                foreach (var info in delayedSpellPackets)
+                var spell = info.SpellToPacketize;
+                var target = spell.CastInfo.Targets.FirstOrDefault()?.Unit;
+                if (target == null) continue;
+                var attackType = AttackType.ATTACK_TYPE_RADIAL; // Default
+                if (spell.CastInfo.IsAutoAttack || spell.CastInfo.UseAttackCastTime)
                 {
-                    var spell = info.SpellToPacketize;
-                    var target = spell.CastInfo.Targets.FirstOrDefault()?.Unit;
-                    if (target == null) continue;
-                    var attackType = AttackType.ATTACK_TYPE_RADIAL; // Default
-                    if (spell.CastInfo.IsAutoAttack || spell.CastInfo.UseAttackCastTime)
+                    attackType = this.IsMelee ? AttackType.ATTACK_TYPE_MELEE : AttackType.ATTACK_TYPE_TARGETED;
+                }
+                else if (spell.SpellData.TargetingType == TargetingType.Target)
+                {
+                    attackType = AttackType.ATTACK_TYPE_TARGETED;
+                }
+                float delayInSeconds = (_game.GameTime - info.CreationTime) / 1000.0f;
+                var spellCastPacket = _game.PacketNotifier.ConstructCastSpellPacket(spell, delayInSeconds);
+                var lookAtPacket = new S2C_UnitSetLookAt
+                {
+                    SenderNetID = this.NetId,
+                    LookAtType = (byte)attackType,
+                    TargetNetID = target.NetId,
+                    TargetPosition = target.GetPosition3D()
+                };
+                foreach (TeamId team in Enum.GetValues(typeof(TeamId)))
+                {
+                    if (team != Team)
                     {
-                        attackType = this.IsMelee ? AttackType.ATTACK_TYPE_MELEE : AttackType.ATTACK_TYPE_TARGETED;
-                    }
-                    else if (spell.SpellData.TargetingType == TargetingType.Target)
-                    {
-                        attackType = AttackType.ATTACK_TYPE_TARGETED;
-                    }
-                    float delayInSeconds = (_game.GameTime - info.CreationTime) / 1000.0f;
-                    var spellCastPacket = _game.PacketNotifier.ConstructCastSpellPacket(spell, delayInSeconds);
-                    var lookAtPacket = new S2C_UnitSetLookAt
-                    {
-                        SenderNetID = this.NetId,
-                        LookAtType = (byte)attackType,
-                        TargetNetID = target.NetId,
-                        TargetPosition = target.GetPosition3D()
-                    };
-                    foreach (TeamId team in Enum.GetValues(typeof(TeamId)))
-                    {
-                        if (team != Team)
-                        {
-                            _game.PacketNotifier.NotifyNPC_CastSpellTeam(spellCastPacket, this, team);
-                        }
+                        _game.PacketNotifier.NotifyNPC_CastSpellTeam(spellCastPacket, this, team);
                     }
                 }
-                delayedSpellPackets.Clear();
             }
+            delayedSpellPackets.Clear();
+            */
         }
 
         public override void LateUpdate(float diff)
         {
-            if (delayedSpellPackets.Count > 0) invisSent = true;
-            
-            // Stop targeting an untargetable unit.
-            if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable))
+            if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.GetIsTargetableToTeam(Team))
             {
                 if (TargetUnit.CharData.IsUseable)
                 {

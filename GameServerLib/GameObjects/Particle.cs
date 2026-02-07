@@ -1,4 +1,5 @@
 ﻿using GameServerCore.Enums;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.Other;
 using System.Numerics;
@@ -74,6 +75,8 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public override bool IsAffectedByFoW => true;
         public override bool SpawnShouldBeHidden => true;
+        public bool isInfinite = false;
+        public bool IgnoreCasterVisibility { get; }
 
         /// <summary>
         /// Prepares the Particle, setting up the information required for networking it to clients.
@@ -93,7 +96,8 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="lifetime">Number of seconds the Particle should exist.</param>
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
-        public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection)
+        /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
+        public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
                : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -109,6 +113,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             SpecificUnit = unitOnly;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
+            IgnoreCasterVisibility = ignoreCasterVisibility;
 
             if (bindObj != null)
             {
@@ -149,7 +154,8 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="lifetime">Number of seconds the Particle should exist.</param>
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
-        public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection)
+        /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
+        public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
                : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -171,6 +177,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             SpecificUnit = unitOnly;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
+            IgnoreCasterVisibility = ignoreCasterVisibility;
 
             if (bindObj != null)
             {
@@ -211,7 +218,8 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="lifetime">Number of seconds the Particle should exist.</param>
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
-        public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection)
+        /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
+        public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
                : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -229,6 +237,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             SpecificUnit = unitOnly;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
+            IgnoreCasterVisibility = ignoreCasterVisibility;
 
             if (caster != null)
             {
@@ -254,7 +263,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public override void Update(float diff)
         {
             _currentTime += diff / 1000.0f;
-            if (_currentTime >= Lifetime && Lifetime >= 0)
+            if (_currentTime >= Lifetime && Lifetime >= 0 && !isInfinite)
             {
                 SetToRemove();
             }
@@ -278,6 +287,17 @@ namespace LeagueSandbox.GameServer.GameObjects
                 base.SetToRemove();
                 _game.PacketNotifier.NotifyFXKill(this);
             }
+        }
+        public override void Sync(int userId, TeamId team, bool visible, bool forceSpawn = false)
+        {
+            bool finalVisibility = visible;
+
+            if (Caster is AttackableUnit casterUnit && !IgnoreCasterVisibility)
+            {
+                finalVisibility = casterUnit.IsVisibleForPlayer(userId);
+            }
+
+            base.Sync(userId, team, finalVisibility, forceSpawn);
         }
     }
 }

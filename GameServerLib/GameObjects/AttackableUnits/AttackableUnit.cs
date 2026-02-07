@@ -17,6 +17,7 @@ using log4net;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
@@ -94,6 +95,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             get { return Waypoints[CurrentWaypointKey]; }
         }
+        private Vector2 OldPoint = new Vector2(0, 0);
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
 
@@ -266,7 +268,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     Move(remainingFrameTime);
                 }
             }
-
+            if (Waypoints.Count - CurrentWaypointKey != 0)
+            {
+                if (OldPoint != CurrentWaypoint)
+                {
+                    var dir = Vector2.Normalize(CurrentWaypoint - Position);
+                    Direction = new Vector3(dir.X, 0, dir.Y);
+                    OldPoint = CurrentWaypoint;
+                }
+            }
             if (IsDead && _death != null)
             {
                 Die(_death);
@@ -632,6 +642,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="data">Data of the death.</param>
         public virtual void Die(DeathData data)
         {
+            ExitStealth();
+            //_game.ObjectManager.RefreshUnitVision(this);
             _game.ObjectManager.StopTargeting(this);
 
             if (!IsToRemove())
@@ -1650,38 +1662,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
         }
-        /// <summary>
-        /// Puts the unit into stealth, optionally after a delay, and applies
-        /// visual invisibility effects. Champions also receive a color remap
-        /// fade effect while entering stealth.
-        /// </summary>
-        /// <param name="fadeTime">
-        /// Time in seconds before the stealth status is applied.
-        /// If zero, stealth is applied immediately.
-        /// </param>
-        /// <param name="value">
-        /// The invisibility visibility value sent to clients (lower means more invisible).
-        /// </param>
-        /// <param name="IsFadingIn">
-        /// Whether the color remap effect should fade in.
-        /// </param>
-        /// <param name="FadeTime">
-        /// Duration of the color remap fade effect.
-        /// </param>
-        /// <param name="MaxWeight">
-        /// Maximum intensity of the color remap effect.
-        /// </param>
         public void EnterStealth(float fadeTime = 0f, float value = 0.3f, bool IsFadingIn = true, float FadeTime = 0.0f, float MaxWeight = 0.2f)
         {
             if (fadeTime == 0f)
             {
-                this.SetStatus(StatusFlags.Stealthed, true);
+                SetStatus(StatusFlags.Stealthed, true);
             }
             else
             {
                 RegisterTimer(new GameScriptTimer(fadeTime, () =>
                 {
-                    this.SetStatus(StatusFlags.Stealthed, true);
+                    SetStatus(StatusFlags.Stealthed, true);
                 }));
             }
 
@@ -1692,19 +1683,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _game.PacketNotifier.ColorRemapFx(champ, IsFadingIn, FadeTime, tilt, MaxWeight, false);
             }
         }
-        /// <summary>
-        /// Removes stealth from the unit, restores visibility, clears visual
-        /// effects, and deactivates any active invisibility-related buffs.
-        /// </summary>
         public void ExitStealth()
         {
-            this.SetStatus(StatusFlags.Stealthed, false);
+            SetStatus(StatusFlags.Stealthed, false);
             _game.PacketNotifier.NotifyUnitInvis(0, 1f, this);
             if (this is Champion champ)
             {
                 var tilt = new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 };
                 _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
             }
+            _game.ObjectManager.RefreshUnitVision(this);
         }
     }
 }

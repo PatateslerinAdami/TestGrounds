@@ -148,7 +148,7 @@ namespace PacketDefinitions420
         {
             var itemDataList = new List<LeaguePackets.Game.Common.ItemData>();
             var shields = new ShieldValues(); //TODO: Implement shields so this can be finished
-
+            Vector3 dir = new Vector3(1, 0, 0);
             var charStackDataList = new List<CharacterStackData>();
             var charStackData = new CharacterStackData
             {
@@ -164,7 +164,7 @@ namespace PacketDefinitions420
             if (o is AttackableUnit a)
             {
                 charStackData.SkinName = a.Model;
-
+                NotifyFaceDirection(a, a.Direction, true);
                 if (a is ObjAIBase obj)
                 {
                     charStackData.SkinID = (uint)obj.SkinID;

@@ -391,6 +391,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void Die(DeathData data)
         {
+            ExitStealth();
             var mapScript = _game.Map.MapScript;
             var mapScriptMetaData = mapScript.MapScriptMetadata;
             var mapData = _game.Map.MapData;

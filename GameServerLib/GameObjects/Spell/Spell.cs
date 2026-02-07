@@ -174,6 +174,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void ApplyEffects(AttackableUnit u, SpellMissile m = null, SpellSector s = null)
         {
+            if (!u.GetIsTargetableToTeam(CastInfo.Owner.Team))
+            {
+                return;
+            }
             if (SpellData.HaveHitEffect && !string.IsNullOrEmpty(SpellData.HitEffectName) && !CastInfo.IsAutoAttack && HasEmptyScript)
             {
                 if (SpellData.HaveHitBone)
@@ -231,6 +235,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 if (!spellTarget.IsVisibleByTeam(CastInfo.Owner.Team)
                 || !spellTarget.Status.HasFlag(StatusFlags.Targetable)
+                || !spellTarget.GetIsTargetableToTeam(CastInfo.Owner.Team)
                 || spellTarget.IsDead)
                 {
                     if (CastInfo.IsAutoAttack)
@@ -443,7 +448,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             if (CastInfo.Owner.Status.HasFlag(StatusFlags.Stealthed) && Script.ScriptMetadata.CastingBreaksStealth)
             {
-                CastInfo.Owner.ExitStealth();
                 var packetInfo = new DelayedSpellPacketInfo(this, _game.GameTime);
                 CastInfo.Owner.delayedSpellPackets.Add(packetInfo);
                 CastInfo.Owner.RemoveBuffsByType(BuffType.INVISIBILITY);
