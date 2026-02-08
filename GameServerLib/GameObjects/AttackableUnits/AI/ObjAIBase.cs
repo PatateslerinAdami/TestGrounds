@@ -331,7 +331,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 && _castingSpell == null
                 && (ChannelSpell == null || (ChannelSpell != null && !ChannelSpell.SpellData.CantCancelWhileChanneling));
         }
+        public bool CanIssueMoveOrders()
+        {
+            if (IsDead)
+                return false;
 
+            if (!Status.HasFlag(StatusFlags.CanMoveEver))
+                return false;
+
+            if (Status.HasFlag(StatusFlags.Stunned)
+                || Status.HasFlag(StatusFlags.Suppressed)
+                || Status.HasFlag(StatusFlags.Sleep)
+                || Status.HasFlag(StatusFlags.Feared)
+                || Status.HasFlag(StatusFlags.Taunted))
+                return false;
+
+            return true;
+        }
         /// <summary>
         /// Whether or not this AI is able to auto attack.
         /// </summary>

@@ -28,7 +28,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             var champion = peerInfo.Champion;
-            if (champion.MovementParameters == null)
+            if (champion.MovementParameters == null && champion.CanIssueMoveOrders())
             {
                 var nav = _game.Map.NavigationGrid;
 
