@@ -1,8 +1,10 @@
-﻿using GameServerCore.Packets.PacketDefinitions.Requests;
-using GameServerCore.Enums;
+﻿using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
-using LeagueSandbox.GameServer.Players;
+using GameServerCore.Packets.PacketDefinitions.Requests;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.Players;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -30,6 +32,12 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             var s = owner.Spells[req.Slot];
+            SpellCastInfo cs = new SpellCastInfo()
+            {
+                Position = req.Position,
+                EndPosition = req.EndPosition,
+                TargetUnit = targetUnit
+            };
             var ownerCastingSpell = owner.GetCastSpell();
 
             // Instant cast spells can be cast during other spell casts.
@@ -50,10 +58,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                             inventory.RemoveItem(inventory.GetItemSlot(item), owner);
                         }
                     }
+                    cs.CouldCast = true;
+                    ApiEventManager.OnSpellPress.Publish(s, cs);
 
                     return true;
                 }
             }
+            cs.CouldCast = false;
+            ApiEventManager.OnSpellPress.Publish(s, cs);
 
             return false;
         }

@@ -177,6 +177,8 @@ namespace LeagueSandbox.GameServer.API
                 = new ConditionDispatcher<ObjAIBase, OrderType>();
         public static Dispatcher<AttackableUnit, float> OnUpdateStats
                 = new Dispatcher<AttackableUnit, float>();
+        public static Dispatcher<Spell, SpellCastInfo> OnSpellPress
+                = new Dispatcher<Spell, SpellCastInfo>();
 
         public abstract class DispatcherBase
         {

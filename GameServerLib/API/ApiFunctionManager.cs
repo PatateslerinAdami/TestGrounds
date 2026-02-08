@@ -615,7 +615,19 @@ namespace LeagueSandbox.GameServer.API
             returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos));
             return returnList;
         }
-
+        public static List<AttackableUnit> GetUnitsInRangeDiffTeam(Vector2 targetPos, float range, bool isAlive, AttackableUnit OurGuy)
+        {
+            var returnList = new List<AttackableUnit>();
+            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(targetPos, range)))
+            {
+                if (obj is AttackableUnit u && (!isAlive || !u.IsDead) && u.Team != OurGuy.Team)
+                {
+                    returnList.Add(u);
+                }
+            }
+            returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, OurGuy.Position));
+            return returnList;
+        }
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position.
         /// </summary>

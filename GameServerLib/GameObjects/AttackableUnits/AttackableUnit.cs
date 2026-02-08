@@ -125,6 +125,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private List<GameScriptTimer> _scriptTimers;
         public ShieldValues ShieldValues { get; set; }
         protected bool shieldFixSend = false;
+        private class AnimOverrideInfo
+        {
+            public string OverrideValue { get; set; }
+            public object Source { get; set; }
+        }
+        private Dictionary<string, List<AnimOverrideInfo>> _animOverrideStack;
+        private Dictionary<string, string> animOverrides;
 
         public AttackableUnit(
             Game game,
@@ -168,6 +175,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             IconInfo = new IconInfo(_game, this);
             _scriptTimers = new List<GameScriptTimer>();
             ShieldValues = new ShieldValues();
+            _animOverrideStack = new Dictionary<string, List<AnimOverrideInfo>>(StringComparer.OrdinalIgnoreCase);
+            animOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>
@@ -1604,7 +1613,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (animation != null && animation != "")
             {
                 var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs);
+                SetAnimStates(animPairs, MovementParameters);
             }
 
             // Movement is networked this way instead.
@@ -1631,10 +1640,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             if (MovementParameters != null && state == false)
             {
+                RemoveAnimStates(MovementParameters);
                 MovementParameters = null;
-
-                var animPairs = new Dictionary<string, string> { { "RUN", "" } };
-                SetAnimStates(animPairs);
 
                 ApiEventManager.OnMoveEnd.Publish(this);
 
@@ -1656,14 +1663,71 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Given state pairs are expected to follow a specific structure:
         /// First string is the animation to override, second string is the animation to play in place of the first.
         /// <param name="animPairs">Dictionary of animations to set.</param>
-        public void SetAnimStates(Dictionary<string, string> animPairs)
+        public void SetAnimStates(Dictionary<string, string> animPairs, object source = null)
         {
-            if (animPairs != null)
+            if (animPairs == null || animPairs.Count == 0) return;
+            if (source == null) source = this;
+
+            var changesToSend = new Dictionary<string, string>();
+
+            foreach (var pair in animPairs)
             {
-                _game.PacketNotifier.NotifyS2C_SetAnimStates(this, animPairs);
+                string key = pair.Key;
+                string newValue = pair.Value;
+
+                if (!_animOverrideStack.ContainsKey(key))
+                {
+                    _animOverrideStack[key] = new List<AnimOverrideInfo>();
+                }
+
+                var list = _animOverrideStack[key];
+
+                list.RemoveAll(x => x.Source == source);
+                if (!string.IsNullOrEmpty(newValue))
+                {
+                    list.Add(new AnimOverrideInfo { OverrideValue = newValue, Source = source });
+                }
+
+                string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";
+
+                animOverrides[key] = activeVal;
+
+                changesToSend[key] = activeVal;
+            }
+
+            if (changesToSend.Count > 0)
+            {
+                _game.PacketNotifier.NotifyS2C_SetAnimStates(this, changesToSend);
             }
         }
+        /// <summary>
+        /// Removes all animation overrides applied by a specific source.
+        /// </summary>
+        /// <param name="source">The object that applied the overrides (e.g. MovementParameters)</param>
+        public void RemoveAnimStates(object source)
+        {
+            if (source == null) return;
 
+            var fullStatePacket = new Dictionary<string, string>();
+
+            foreach (var key in _animOverrideStack.Keys.ToList())
+            {
+                var list = _animOverrideStack[key];
+
+                list.RemoveAll(x => x.Source == source);
+
+                string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";
+
+                animOverrides[key] = activeVal;
+
+                fullStatePacket[key] = activeVal;
+            }
+
+            if (fullStatePacket.Count > 0)
+            {
+                _game.PacketNotifier.NotifyS2C_SetAnimStates(this, fullStatePacket);
+            }
+        }
         /// <summary>
         /// Registers a GameScriptTimer to be updated by this unit's game loop.
         /// The timer will be automatically removed once it is finished.

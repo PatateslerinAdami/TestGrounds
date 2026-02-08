@@ -551,7 +551,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (animation != null && animation != "")
             {
                 var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs);
+                SetAnimStates(animPairs, MovementParameters);
             }
 
             // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.

@@ -19,6 +19,14 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 
 namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 {
+    public class SpellCastInfo
+    {
+        public bool CouldCast { get; set; }
+        public Vector2 Position { get; init; }
+        public Vector2 EndPosition { get; init; }
+        public AttackableUnit? TargetUnit { get; init; }
+
+    }
     public class Spell: IEventSource
     {
         // Crucial Vars.
@@ -588,7 +596,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             return true;
         }
-
         public bool Cast(CastInfo castInfo, bool cast)
         {
             CastInfo = castInfo;
