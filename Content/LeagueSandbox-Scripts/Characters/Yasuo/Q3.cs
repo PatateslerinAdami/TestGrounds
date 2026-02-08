@@ -56,7 +56,7 @@ namespace Spells
             var owner = spell.CastInfo.Owner;
             AddParticleTarget(owner, owner, "Yasuo_Q_Hand", owner);
 
-            var targetPos = GetPointFromUnit(owner, 1000.0f);
+            var targetPos = GetPointFromUnit(owner, 1100.0f);
             SpellCast(owner, 3, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);
 
             if (owner.HasBuff("YasuoQ3W"))
@@ -80,6 +80,7 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+            spell.SetOverrideCastRange(1100.0f);
         }
         public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {

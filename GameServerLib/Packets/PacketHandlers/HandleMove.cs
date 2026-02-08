@@ -91,6 +91,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         champion.UpdateMoveOrder(req.OrderType);
                         return true;
                     case OrderType.Stop:
+                        champion.SetTargetUnit(null,true);
                         champion.UpdateMoveOrder(req.OrderType, true);
                         break;
                     case OrderType.PetHardStop:

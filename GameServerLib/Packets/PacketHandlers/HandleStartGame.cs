@@ -84,7 +84,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             {
                 var announcement = new OnReconnect { OtherNetID = player.Champion.NetId };
                 _game.PacketNotifier.NotifyS2C_OnEventWorld(announcement, player.Champion);
+                _game.PacketNotifier.NotifySyncMissionStartTimeS2C(player.ClientId, 0);
             }
+            else _game.PacketNotifier.NotifySyncMissionStartTimeS2C(player.ClientId, _game.GameTime);
+            _game.PacketNotifier.NotifySynchSimTimeS2C(player.ClientId, _game.GameTime);
 
             if (!player.IsMatchingVersion)
             {
@@ -106,15 +109,6 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 "Your Champion:", player.Champion.Model,
                 "", 0, player.Champion.NetId, _game.NetworkIdManager.GetNewNetId());
 
-            SyncTime(player.ClientId);
-        }
-
-        void SyncTime(int userId)
-        {
-            // Send the initial game time sync packets, then let the map send another
-            var gameTime = _game.GameTime;
-            _game.PacketNotifier.NotifySynchSimTimeS2C(userId, gameTime);
-            _game.PacketNotifier.NotifySyncMissionStartTimeS2C(userId, gameTime);
         }
     }
 }
