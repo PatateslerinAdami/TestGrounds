@@ -529,6 +529,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 DamageType = type,
                 DamageResultType = damageText
             };
+            ApiEventManager.OnPreDealDamage.Publish(attacker, damageData);
             this.TakeDamage(damageData, damageText, sourceScript);
             return damageData;
         }
@@ -575,10 +576,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var attackerStats = damageData.Attacker.Stats;
             var type = damageData.DamageType;
             var source = damageData.DamageSource;
-            var postMitigationDamage = damageData.PostMitigationDamage;
 
             ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
-
+            var postMitigationDamage = damageData.PostMitigationDamage;
             if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
                 switch (source)

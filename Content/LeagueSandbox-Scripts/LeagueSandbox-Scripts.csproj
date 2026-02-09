@@ -12,21 +12,18 @@
     <Compile Remove="Characters\Aatrox_New\**" />
     <Compile Remove="Characters\Ashe\**" />
     <Compile Remove="Characters\Fizz\**" />
-    <Compile Remove="Characters\Katarina\**" />
     <Compile Remove="Characters\Vayne\**" />
     <Compile Remove="Characters\Zed\**" />
     <EmbeddedResource Remove="Characters\Aatrox\**" />
     <EmbeddedResource Remove="Characters\Aatrox_New\**" />
     <EmbeddedResource Remove="Characters\Ashe\**" />
     <EmbeddedResource Remove="Characters\Fizz\**" />
-    <EmbeddedResource Remove="Characters\Katarina\**" />
     <EmbeddedResource Remove="Characters\Vayne\**" />
     <EmbeddedResource Remove="Characters\Zed\**" />
     <None Remove="Characters\Aatrox\**" />
     <None Remove="Characters\Aatrox_New\**" />
     <None Remove="Characters\Ashe\**" />
     <None Remove="Characters\Fizz\**" />
-    <None Remove="Characters\Katarina\**" />
     <None Remove="Characters\Vayne\**" />
     <None Remove="Characters\Zed\**" />
   </ItemGroup>

@@ -953,7 +953,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     CastInfo.Owner.SetChannelSpell(null);
                 }
 
-                CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                var status = CastInfo.Owner.Status;
+                bool isForcedMovement = status.HasFlag(StatusFlags.Feared) ||
+                                        status.HasFlag(StatusFlags.Charmed) ||
+                                        status.HasFlag(StatusFlags.Taunted);
+
+                if (reason != ChannelingStopSource.Move && reason != ChannelingStopSource.Attack &&
+                    !isForcedMovement)
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                }
                 // TODO: Find out how League calculates cooldown reduction for incomplete channels (assuming it isn't done in-script).
             }
 
@@ -1126,6 +1135,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             bool isServerOnly = SpellData.MissileEffect != "";
 
             SpellMissile p = null;
+            var castInfoClone = CastInfo.Clone();
 
             switch (parameters.Type)
             {
@@ -1135,7 +1145,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         (int)SpellData.LineWidth,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         SpellData.MissileSpeed,
                         SpellData.Flags,
                         netId,
@@ -1149,7 +1159,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         (int)SpellData.LineWidth,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         parameters,
                         SpellData.MissileSpeed,
                         SpellData.Flags,
@@ -1164,7 +1174,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         (int)SpellData.LineWidth,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         SpellData.MissileSpeed,
                         parameters.OverrideEndPosition,
                         SpellData.Flags,
@@ -1179,7 +1189,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         (int)SpellData.LineWidth,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         SpellData.MissileSpeed,
                         parameters.OverrideEndPosition,
                         SpellData.Flags,
@@ -1236,6 +1246,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             SpellSector s = null;
+            var castInfoClone = CastInfo.Clone();
 
             switch (parameters.Type)
             {
@@ -1245,7 +1256,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         parameters,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         netId
                     );
                     break;
@@ -1256,7 +1267,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         parameters,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         netId
                     );
                     break;
@@ -1267,7 +1278,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         _game,
                         parameters,
                         this,
-                        CastInfo,
+                        castInfoClone,
                         netId
                     );
                     break;

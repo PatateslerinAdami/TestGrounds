@@ -405,7 +405,7 @@ namespace PacketDefinitions420
                 AttackSpeedModifier = m.CastInfo.AttackSpeedModifier,
                 CasterNetID = m.CastInfo.Owner.NetId,
                 // TODO: Implement spell chains?
-                SpellChainOwnerNetID = m.CastInfo.Owner.NetId,
+                SpellChainOwnerNetID = m.CastInfo.SpellChainOwnerNetID != 0 ? m.CastInfo.SpellChainOwnerNetID : m.CastInfo.Owner.NetId,
                 PackageHash = m.CastInfo.PackageHash,
                 MissileNetID = m.CastInfo.MissileNetID,
                 // Not sure if we want to add height for these, but i did it anyway

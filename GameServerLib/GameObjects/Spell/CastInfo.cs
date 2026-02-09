@@ -81,5 +81,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             Targets[index] = new CastTarget(target, CastTarget.GetHitResult(target, IsAutoAttack, Owner.IsNextAutoCrit));
         }
+        public CastInfo Clone()
+        {
+            var clone = (CastInfo)this.MemberwiseClone();
+            if (Targets != null)
+            {
+                clone.Targets = new List<CastTarget>(Targets);
+            }
+            return clone;
+        }
     }
 }

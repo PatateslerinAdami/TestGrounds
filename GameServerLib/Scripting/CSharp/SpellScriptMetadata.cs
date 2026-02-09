@@ -88,6 +88,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// Position the missile should end at, only useful for Circle and Arc missile types.
         /// </summary>
         public Vector2 OverrideEndPosition { get; set; }
+        public string BounceSpellName { get; set; }
     }
 
     /// <summary>

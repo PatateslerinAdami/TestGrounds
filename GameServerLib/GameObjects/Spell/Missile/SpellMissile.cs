@@ -55,7 +55,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             CastInfo = castInfo;
 
             // TODO: Implement full support for multiple targets.
-            if (castInfo.Targets[0].Unit != null)
+            if (castInfo.Targets.Count > 0 && castInfo.Targets[0].Unit != null)
             {
                 TargetUnit = castInfo.Targets[0].Unit;
             }
