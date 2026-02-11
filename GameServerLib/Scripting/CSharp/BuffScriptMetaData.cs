@@ -8,5 +8,6 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public BuffAddType BuffAddType { get; set; } = BuffAddType.RENEW_EXISTING;
         public int MaxStacks { get; set; } = 1;
         public bool IsHidden { get; set; } = false;
+        public bool UpdateInfinite { get; set; } = false;
     }
 }

@@ -30,7 +30,10 @@ namespace Spells
                 AddParticleTarget(owner, null, "katarina_shadowStep_tar.troy", target);
             }
             AddBuff("KatarinaEReduction", 1.5f, 1, spell, owner, owner);
-            TeleportTo(owner, target.Position.X, target.Position.Y);
+
+            var tpLoc = target.Position - new Vector2(target.Direction.X, target.Direction.Z) * target.CollisionRadius;
+            TeleportTo(owner, tpLoc.X, tpLoc.Y);
+            spell.CastInfo.DesignerCastTime = 0f;
         }
 
     }

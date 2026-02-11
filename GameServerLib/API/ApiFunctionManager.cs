@@ -1,20 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using GameServerCore.Enums;
+﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.Inventory;
+using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.Content;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Numerics;
+using System.Text;
 
 namespace LeagueSandbox.GameServer.API
 {
@@ -277,6 +279,23 @@ namespace LeagueSandbox.GameServer.API
             try
             {
                 buff = new Buff(_game, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent);
+            }
+            catch (ArgumentException exception)
+            {
+                _logger.Error(exception);
+                return null;
+            }
+
+            onto.AddBuff(buff);
+            return buff;
+        }
+        public static Buff AddBuff(IBuffGameScript buffScript, string buffName, float duration, byte stacks, Spell originspell, AttackableUnit onto, ObjAIBase from, bool infiniteduration = false, IEventSource parent = null)
+        {
+            Buff buff;
+
+            try
+            {
+                buff = new Buff(_game, buffScript, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent);
             }
             catch (ArgumentException exception)
             {
@@ -642,6 +661,24 @@ namespace LeagueSandbox.GameServer.API
 
             return orderedUnits.First();
         }
+        /// <summary>
+        /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position
+        /// that belongs to the specified team.
+        /// </summary>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
+        /// <param name="teamId">Team the unit must belong to.</param>
+        /// <returns>Closest AttackableUnit.</returns>
+        public static AttackableUnit GetClosestTeamUnitInRange(Vector2 targetPos, float range, bool isAlive, TeamId teamId)
+        {
+            var units = GetUnitsInRange(targetPos, range, isAlive)
+                .Where(unit => unit.Team == teamId);
+            return units
+                .OrderBy(unit => Vector2.DistanceSquared(targetPos, unit.Position))
+                .FirstOrDefault();
+        }
+
 
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of another unit.
@@ -674,7 +711,10 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.ObjectManager.GetChampionsInRange(targetPos, range, isAlive);
         }
-
+        public static bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
+        {
+            return _game.ObjectManager.CheckChampionsInRangeFromTeam(checkPos, range, team, onlyAlive);
+        }
         /// <summary>
         /// Counts the number of units attacking a specified GameObject of type AttackableUnit.
         /// </summary>

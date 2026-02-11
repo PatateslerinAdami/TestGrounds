@@ -646,6 +646,18 @@ namespace LeagueSandbox.GameServer
 
             return champs;
         }
+        public bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
+        {
+            foreach (var kv in _champions)
+            {
+                var c = kv.Value;
+                if (Vector2.DistanceSquared(checkPos, c.Position) <= range * range)
+                    if (c.Team == team && (onlyAlive && !c.IsDead || !onlyAlive))
+                        return true;
+            }
+
+            return false;
+        }
         /// <summary>
         /// Forces a vision update for a specific object immediately. 
         /// </summary>
