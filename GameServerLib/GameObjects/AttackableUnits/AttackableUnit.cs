@@ -281,6 +281,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     Move(remainingFrameTime);
                 }
             }
+            UpdateFacing();
+            if (IsDead && _death != null)
+            {
+                Die(_death);
+                _death = null;
+            }
+        }
+        protected virtual void UpdateFacing()
+        {
             if (Waypoints.Count - CurrentWaypointKey != 0)
             {
                 if (OldPoint != CurrentWaypoint)
@@ -290,13 +299,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     OldPoint = CurrentWaypoint;
                 }
             }
-            if (IsDead && _death != null)
-            {
-                Die(_death);
-                _death = null;
-            }
         }
-
         /// <summary>
         /// Called when this unit collides with the terrain or with another GameObject. Refer to CollisionHandler for exact cases.
         /// </summary>

@@ -1466,5 +1466,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             _aiPaused = isPaused;
         }
+        protected override void UpdateFacing()
+        {
+            bool isCastingMobile = _castingSpell != null && _castingSpell.SpellData.CanMoveWhileChanneling;
+            bool isChannelingMobile = ChannelSpell != null && ChannelSpell.SpellData.CanMoveWhileChanneling;
+
+            if (!isCastingMobile && !isChannelingMobile)
+            {
+                base.UpdateFacing();
+            }
+
+        }
     }
 }

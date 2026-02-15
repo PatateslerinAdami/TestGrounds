@@ -472,10 +472,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                 {
-                    CastInfo.Owner.StopMovement();
-
-                    // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
-                    CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
+                    if (!SpellData.CanMoveWhileChanneling)
+                    {
+                        CastInfo.Owner.StopMovement();
+                        // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
+                        CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
+                    }
 
                     if (Script.ScriptMetadata.AutoFaceDirection)
                     {
@@ -556,8 +558,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CurrentAmmo--;
                 }
+                Vector3 originalTarget = CastInfo.TargetPosition;
+                Vector3 originalTargetEnd = CastInfo.TargetPositionEnd;
 
+                if (!Script.ScriptMetadata.AutoFaceDirection)
+                {
+                    var owner = CastInfo.Owner;
+                    var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
+                    if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0); 
+
+                    var fakePos = owner.Position + (forwardVec * 10.0f); 
+                    var fakePos3D = new Vector3(fakePos.X, _game.Map.NavigationGrid.GetHeightAtLocation(fakePos), fakePos.Y);
+
+                    CastInfo.TargetPosition = fakePos3D;
+                    CastInfo.TargetPositionEnd = fakePos3D;
+                }
                 _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+                if (SpellData.CanMoveWhileChanneling && !CastInfo.Owner.IsPathEnded())
+                {
+                    _game.PacketNotifier.NotifyWaypointGroup(CastInfo.Owner);
+                }
             }
 
             if (CastInfo.DesignerCastTime > 0)
@@ -698,10 +718,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                     {
-                        CastInfo.Owner.StopMovement();
-
-                        // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
-                        CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
+                        if (!SpellData.CanMoveWhileChanneling)
+                        {
+                            CastInfo.Owner.StopMovement();
+                            // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
+                        }
                     }
 
                     if (Script.ScriptMetadata.AutoFaceDirection)
@@ -774,7 +796,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 if (!CastInfo.IsAutoAttack)
                 {
+                    Vector3 originalTarget = CastInfo.TargetPosition;
+                    Vector3 originalTargetEnd = CastInfo.TargetPositionEnd;
+
+                    if (!Script.ScriptMetadata.AutoFaceDirection)
+                    {
+                        var owner = CastInfo.Owner;
+                        var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
+                        if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0);
+
+                        var fakePos = owner.Position + (forwardVec * 500.0f);
+                        var fakePos3D = new Vector3(fakePos.X, _game.Map.NavigationGrid.GetHeightAtLocation(fakePos), fakePos.Y);
+
+                        CastInfo.TargetPosition = fakePos3D;
+                        CastInfo.TargetPositionEnd = fakePos3D;
+                    }
                     _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+                    if (SpellData.CanMoveWhileChanneling && !CastInfo.Owner.IsPathEnded())
+                    {
+                        _game.PacketNotifier.NotifyWaypointGroup(CastInfo.Owner);
+                    }
                 }
 
                 if (CastInfo.DesignerCastTime > 0)
@@ -875,19 +916,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.StunnedOrSilencedOrTaunted);
             }
-
-            if (CastInfo.Targets.Count <= 0 || CastInfo.Targets[0].Unit == null)
+            if (SpellData.TargetingType == TargetingType.Target)
             {
-                CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.LostTarget);
-            }
+                if (CastInfo.Targets.Count <= 0 || CastInfo.Targets[0].Unit == null)
+                {
+                    CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.LostTarget);
+                }
 
+            }
             // Uncancellable
             if (SpellData.CantCancelWhileChanneling)
             {
                 return;
             }
 
-            if (CastInfo.Targets[0].Unit != null)
+            if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null)
             {
                 var spellTarget = CastInfo.Targets[0].Unit;
 
@@ -943,10 +986,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             if (condition == ChannelingStopCondition.Cancel)
             {
-                ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
-
                 // For some reason this is the packet used for manually cancelling channels.
                 _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+                ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
 
                 if (CastInfo.Owner.ChannelSpell == this)
                 {
@@ -1055,8 +1097,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             else
             {
-                // TODO: Verify
-                CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
+                if (!willChannel || !SpellData.CanMoveWhileChanneling)
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                }
             }
 
             if (Script.ScriptMetadata.TriggersSpellCasts)
@@ -1593,7 +1638,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 champ.AddToolTipChange(ToolTipData);
             }
         }
+        public void UpdateCharge(Vector3 position, bool forceStop)
+        {
+            if (State != SpellState.STATE_CHANNELING)
+            {
+                return;
+            }
 
+            CastInfo.TargetPosition = position;
+            CastInfo.TargetPositionEnd = position;
+
+            Script.OnSpellChannelUpdate(this, position, forceStop);
+
+            if (forceStop)
+            {
+                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
+            }
+        }
         /// <summary>
         /// Called every diff milliseconds to update the spell
         /// </summary>
@@ -1658,9 +1719,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         CurrentChannelDuration -= diff / 1000.0f;
                         ChannelCancelCheck();
-                        if (CurrentChannelDuration <= 0)
+                        if (State == SpellState.STATE_CHANNELING && CurrentChannelDuration <= 0)
                         {
-                            FinishChanneling();
+                            StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.TimeCompleted);//FinishChanneling();
                         }
                         break;
                     }

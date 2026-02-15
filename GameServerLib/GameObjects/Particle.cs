@@ -77,6 +77,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public override bool SpawnShouldBeHidden => true;
         public bool isInfinite = false;
         public bool IgnoreCasterVisibility { get; }
+        public float OverrideTargetHeight { get; }
 
         /// <summary>
         /// Prepares the Particle, setting up the information required for networking it to clients.
@@ -97,7 +98,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
-        public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
+        public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
                : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -114,6 +115,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
+            OverrideTargetHeight = overrideTargetHeight;
 
             if (bindObj != null)
             {
@@ -155,7 +157,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
-        public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
+        public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
                : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -178,6 +180,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
+            OverrideTargetHeight = overrideTargetHeight;
 
             if (bindObj != null)
             {
@@ -219,12 +222,12 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="teamOnly">The only team that should be able to see this particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <param name="ignoreCasterVisibility">If true, the particle will be visible even if the caster is not.</param>
-        public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false)
+        public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName, float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0, Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
                : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
 
-            BindObject = null;
+            BindObject = unitOnly;
             TargetObject = null;
             StartPosition = startPos;
             EndPosition = endPos;
@@ -238,6 +241,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
+            OverrideTargetHeight = overrideTargetHeight;
 
             if (caster != null)
             {
@@ -290,6 +294,11 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
         public override void Sync(int userId, TeamId team, bool visible, bool forceSpawn = false)
         {
+            if (SpecificTeam != TeamId.TEAM_NEUTRAL && SpecificTeam != team)
+            {
+                return;
+            }
+
             bool finalVisibility = visible;
 
             if (Caster is AttackableUnit casterUnit && !IgnoreCasterVisibility)

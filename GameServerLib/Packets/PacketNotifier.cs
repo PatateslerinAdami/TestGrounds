@@ -1,37 +1,38 @@
-using LENet;
+using Force.Crc32;
 using GameServerCore;
 using GameServerCore.Content;
 using GameServerCore.Enums;
 using GameServerCore.NetInfo;
+using GameServerCore.Packets.Enums;
+using GameServerLib.GameObjects;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets;
+using LeaguePackets.Common;
 using LeaguePackets.Game;
+using LeaguePackets.Game.Common;
+using LeaguePackets.Game.Events;
+using LeaguePackets.LoadScreen;
+using LeagueSandbox.GameServer.Content.Navigation;
+using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Inventory;
+using LeagueSandbox.GameServer.Logging;
+using LENet;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using System.Text;
+using static GameServerCore.Content.HashFunctions;
+using Channel = GameServerCore.Packets.Enums.Channel;
 using PingLoadInfoRequest = GameServerCore.Packets.PacketDefinitions.Requests.PingLoadInfoRequest;
 using ViewRequest = GameServerCore.Packets.PacketDefinitions.Requests.ViewRequest;
-using LeaguePackets.Game.Common;
-using LeaguePackets.Common;
-using static GameServerCore.Content.HashFunctions;
-using System.Text;
-using Force.Crc32;
-using System.Linq;
-using LeaguePackets;
-using LeaguePackets.LoadScreen;
-using LeaguePackets.Game.Events;
-using Channel = GameServerCore.Packets.Enums.Channel;
-using GameServerCore.Packets.Enums;
-using LeagueSandbox.GameServer.Content.Navigation;
-using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.Inventory;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
-using GameServerLib.GameObjects;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace PacketDefinitions420
 {
@@ -265,6 +266,11 @@ namespace PacketDefinitions420
             var higherValue = Math.Max(targetHeight, particle.GetHeight());
 
             // TODO: implement option for multiple particles instead of hardcoding one
+            var customHeight = higherValue;
+            if (particle.OverrideTargetHeight != 0f)
+            {
+                customHeight = particle.OverrideTargetHeight;
+            }
             var fxData1 = new FXCreateData
             {
                 NetAssignedNetID = particle.NetId,
@@ -276,7 +282,7 @@ namespace PacketDefinitions420
                 PositionZ = (short)((position.Z - _navGrid.MapHeight / 2) / 2),
 
                 TargetPositionX = (short)((targetPos.X - _navGrid.MapWidth / 2) / 2),
-                TargetPositionY = higherValue,
+                TargetPositionY = customHeight,
                 TargetPositionZ = (short)((targetPos.Y - _navGrid.MapHeight / 2) / 2),
 
                 OwnerPositionX = (short)((ownerPos.X - _navGrid.MapWidth / 2) / 2),

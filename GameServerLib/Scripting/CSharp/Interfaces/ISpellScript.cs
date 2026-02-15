@@ -43,8 +43,12 @@ namespace GameServerCore.Scripting.CSharp
         {
         }
 
+        void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
+        {
+        }
+
         void OnUpdate(float diff)
-        {            
+        {
         }
     }
 }

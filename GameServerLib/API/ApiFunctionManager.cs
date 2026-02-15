@@ -1,16 +1,19 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets.Game;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net;
+using PacketDefinitions420;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -377,9 +380,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false)
+        public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
         {
-            var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility);
+            var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
             return p;
         }
 
@@ -400,9 +403,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false)
+        public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
         {
-            return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility);
+            return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
         }
 
         /// <summary>
@@ -423,9 +426,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle, GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false)
+        public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle, GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
         {
-            var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility);
+            var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
             return p;
         }
 
@@ -1222,6 +1225,14 @@ namespace LeagueSandbox.GameServer.API
             }
 
             return GlobalData.ObjAIBaseVariables.DefaultPetReturnRadius;
+        }
+        public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
+        {
+            _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
+        }
+        public static void NotifyWaypointGroup(AttackableUnit unit)
+        {
+            _game.PacketNotifier.NotifyWaypointGroup(unit);
         }
     }
 }

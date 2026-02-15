@@ -14,6 +14,7 @@
         Move,
         Attack,
         Casting,
+        PlayerCommand,
         Unknown
     }
 }
