@@ -15,8 +15,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateUint((uint)(Stats.SpellsEnabled >> 32), 0, 3); //mReplicatedSpellCanCastBitsUpper1
             UpdateUint((uint)Stats.SummonerSpellsEnabled, 0, 4); //mReplicatedSpellCanCastBitsLower2
             UpdateUint((uint)(Stats.SummonerSpellsEnabled >> 32), 0, 5); //mReplicatedSpellCanCastBitsUpper2
-            // UpdateUint(Stats.EvolvePoints, 0, 6); //mEvolvePoints
-            // UpdateUint(Stats.EvolveFlags, 0, 7); //mEvolveFlag
+            UpdateUint(Stats.EvolvePoints, 0, 6); //mEvolvePoints
+            UpdateUint(Stats.EvolveFlags, 0, 7); //mEvolveFlag
             for (var i = 0; i < 4; i++)
             {
                 UpdateFloat(Stats.ManaCost[i], 0, 8 + i); //ManaCost_{i}

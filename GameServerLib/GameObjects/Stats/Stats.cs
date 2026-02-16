@@ -62,6 +62,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public byte Level { get; set; }
         public float Experience { get; set; }
         public float Points { get; set; }
+        public uint EvolvePoints { get; set; }
+        public uint EvolveFlags { get; set; }
         public float SlowResistPercent { get; set; }
         public float MultiplicativeSpeedBonus { get; set; }
         private List<float> _slows = new List<float>();

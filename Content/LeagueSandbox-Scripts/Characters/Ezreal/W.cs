@@ -14,7 +14,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells
 {
-    public class EzrealMysticShot : ISpellScript
+    public class EzrealEssenceFlux : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
@@ -30,15 +30,13 @@ namespace Spells
         {
             _owner = owner;
             _spell = spell;
-            ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate, false);
         }
 
         public void OnSpellCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner;
-            AddParticleTarget(owner, owner, "ezreal_bow", owner, bone: "L_HAND");
+            AddParticleTarget(owner, owner, "ezreal_bow_yellow", owner, bone: "L_HAND");
         }
-
         public void OnSpellPostCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner as Champion;
@@ -50,21 +48,11 @@ namespace Spells
             {
                 targetPos = GetPointFromUnit(owner, 1150.0f);
             }
-            SpellCast(owner, 0, SpellSlotType.ExtraSlots, targetPos, targetPos, false, Vector2.Zero);
-        }
-
-        private void OnStatsUpdate(AttackableUnit _unit, float diff)
-        {
-            float bonusAd = _owner.Stats.AttackDamage.Total * _spell.SpellData.AttackDamageCoefficient;
-            if (_bonusAd != bonusAd)
-            {
-                _bonusAd = bonusAd;
-                SetSpellToolTipVar(_owner, 2, bonusAd, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
-            }
+            SpellCast(owner, 2, SpellSlotType.ExtraSlots, targetPos, targetPos, false, Vector2.Zero);
         }
     }
 
-    public class EzrealMysticShotMissile : ISpellScript
+    public class EzrealEssenceFluxMissile : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
@@ -87,17 +75,17 @@ namespace Spells
             var ap = owner.Stats.AbilityPower.Total * spell.SpellData.MagicDamageCoefficient;
             var damage = 15 + spell.CastInfo.SpellLevel * 20 + ad + ap;
 
-            var spellO = owner.GetSpell("EzrealMysticShot");
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
-
-            for (byte i = 0; i < 4; i++)
+            var spellO = owner.GetSpell("EzrealEssenceFlux");
+            if(target.Team != owner.Team)
             {
-                owner.Spells[i].LowerCooldown(1);
+                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
+                AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
             }
-
-            AddParticleTarget(owner, target, "Ezreal_mysticshot_tar", target);
-            AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
-            missile.SetToRemove();
+            else if(target.Team == owner.Team)
+            {
+                
+                AddBuff("EzrealEssenceFlux", 5.0f, 1, owner.GetSpell("EzrealEssenceFlux"), target, owner);
+            }
         }
     }
 }
