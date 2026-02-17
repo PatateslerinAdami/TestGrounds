@@ -1477,5 +1477,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
         }
+        public bool ChangeModelTo(string model)
+        {
+            if (Model.Equals(model))
+            {
+                return false;
+            }
+            Model = model;
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this,skinID:(uint)SkinID);
+            return true;
+        }
     }
 }
