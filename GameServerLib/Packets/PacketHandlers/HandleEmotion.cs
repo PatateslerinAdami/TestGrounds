@@ -23,6 +23,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
         {
             var champion = _playerManager.GetPeerInfo(userId).Champion;
             champion.StopMovement();
+            //API.ApiFunctionManager.NotifyWaypointGroup(champion);
             champion.UpdateMoveOrder(GameServerCore.Enums.OrderType.Taunt);
             //for later use -> tracking, etc.
             var playerName = _playerManager.GetPeerInfo(userId).Champion.Model;

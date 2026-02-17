@@ -99,7 +99,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Vector2 OldPoint = new Vector2(0, 0);
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
-
+        private bool _isInGrass = false;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
@@ -214,7 +214,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             Position = vec;
             _movementUpdated = true;
-
+            UpdateGrassState();
             // TODO: Verify how dashes are affected by teleports.
             //       Typically follow dashes are unaffected, but there may be edge cases e.g. LeeSin
             if (MovementParameters != null)
@@ -272,13 +272,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (CanMove())
             {
                 float remainingFrameTime = diff;
+                bool moved = false;
                 if (MovementParameters != null)
                 {
                     remainingFrameTime = DashMove(diff);
+                    moved = true;
                 }
                 if (MovementParameters == null)
                 {
-                    Move(remainingFrameTime);
+                    moved = Move(remainingFrameTime);
+                }
+                if (moved)
+                {
+                    UpdateGrassState();
                 }
             }
             UpdateFacing();
@@ -494,6 +500,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public void AddStatModifier(StatsModifier statModifier)
         {
             Stats.AddModifier(statModifier);
+            ApiEventManager.OnStatModified.Publish(this, statModifier);
         }
 
         /// <summary>
@@ -503,6 +510,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public void RemoveStatModifier(StatsModifier statModifier)
         {
             Stats.RemoveModifier(statModifier);
+            ApiEventManager.OnStatModified.Publish(this, statModifier);
         }
 
         public virtual void TakeHeal(AttackableUnit caster, float amount, IEventSource sourceScript = null)
@@ -1098,6 +1106,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             ResetWaypoints();
+            _game.PacketNotifier.NotifyWaypointGroup(this);
         }
 
         /// <summary>
@@ -1470,8 +1479,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="buffName">Internal buff name to remove.</param>
         public void RemoveBuffsWithName(string buffName)
         {
-            foreach (Buff b in BuffList)
+            for (int i = BuffList.Count - 1; i >= 0; i--)
             {
+                Buff b = BuffList[i];
                 if (b.IsBuffSame(buffName))
                 {
                     b.DeactivateBuff();
@@ -1611,9 +1621,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                 string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";
 
-                animOverrides[key] = activeVal;
-
-                changesToSend[key] = activeVal;
+                string currentActive = animOverrides.ContainsKey(key) ? animOverrides[key] : "";
+                if (currentActive != activeVal)
+                {
+                    animOverrides[key] = activeVal;
+                    changesToSend[key] = activeVal;
+                }
             }
 
             if (changesToSend.Count > 0)
@@ -1629,24 +1642,41 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             if (source == null) return;
 
-            var fullStatePacket = new Dictionary<string, string>();
+            Dictionary<string, string> changesToSend = null;
 
-            foreach (var key in _animOverrideStack.Keys.ToList())
+            foreach (var kvp in _animOverrideStack)
             {
-                var list = _animOverrideStack[key];
+                string key = kvp.Key;
+                List<AnimOverrideInfo> list = kvp.Value;
 
-                list.RemoveAll(x => x.Source == source);
+                if (list.Count == 0) continue;
 
-                string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";
+                int itemsRemoved = list.RemoveAll(x => x.Source == source);
 
-                animOverrides[key] = activeVal;
+                if (itemsRemoved > 0)
+                {
+                    string newActiveVal = list.Count > 0 ? list.Last().OverrideValue : "";
+                    string currentActive = "";
+                    if (animOverrides.TryGetValue(key, out string val))
+                    {
+                        currentActive = val;
+                    }
 
-                fullStatePacket[key] = activeVal;
+                    if (newActiveVal != currentActive)
+                    {
+                        animOverrides[key] = newActiveVal;
+
+                        if (changesToSend == null)
+                        {
+                            changesToSend = new Dictionary<string, string>();
+                        }
+                        changesToSend[key] = newActiveVal;
+                    }
+                }
             }
-
-            if (fullStatePacket.Count > 0)
+            if (changesToSend != null && changesToSend.Count > 0)
             {
-                _game.PacketNotifier.NotifyS2C_SetAnimStates(this, fullStatePacket);
+                _game.PacketNotifier.NotifyS2C_SetAnimStates(this, changesToSend);
             }
         }
         /// <summary>
@@ -1776,6 +1806,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             float remainingDamage = incomingDamage + effectiveChange;
 
             return (effectiveChange, remainingDamage);
+        }
+        protected void UpdateGrassState()
+        {
+            var navGrid = _game.Map.NavigationGrid;
+
+            bool currentlyInGrass = navGrid.HasFlag(Position, NavigationGridCellFlags.HAS_GRASS);
+
+            if (currentlyInGrass != _isInGrass)
+            {
+                _isInGrass = currentlyInGrass;
+
+                if (_isInGrass)
+                {
+                    ApiEventManager.OnEnterGrass.Publish(this);
+                }
+                else
+                {
+                    ApiEventManager.OnLeaveGrass.Publish(this);
+                }
+            }
         }
     }
 }

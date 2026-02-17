@@ -1234,5 +1234,9 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyWaypointGroup(unit);
         }
+        public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot, GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false, TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0, float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0, List<uint> offsetTargets = null)
+        {
+            _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell, targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
+        }
     }
 }

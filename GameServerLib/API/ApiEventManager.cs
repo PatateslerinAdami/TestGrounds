@@ -1,11 +1,12 @@
-﻿using LeagueSandbox.GameServer.GameObjects;
+﻿using GameServerCore.Enums;
 using            GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using GameServerCore.Enums;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
 using System;
@@ -179,7 +180,12 @@ namespace LeagueSandbox.GameServer.API
                 = new Dispatcher<AttackableUnit, float>();
         public static Dispatcher<Spell, SpellCastInfo> OnSpellPress
                 = new Dispatcher<Spell, SpellCastInfo>();
-
+        public static Dispatcher<AttackableUnit, StatsModifier> OnStatModified
+                = new Dispatcher<AttackableUnit, StatsModifier>();
+        public static Dispatcher<AttackableUnit> OnEnterGrass
+                = new Dispatcher<AttackableUnit>();
+        public static Dispatcher<AttackableUnit> OnLeaveGrass
+                = new Dispatcher<AttackableUnit>();
         public abstract class DispatcherBase
         {
             public DispatcherBase()
