@@ -24,7 +24,7 @@ namespace Spells
         private AttackableUnit _target;
         private int _currentQStage = 0;
         Spell _spell;
-        public void OnActivate(ObjAIBase owner, Spell spell) 
+        public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _spell = spell;
             _owner = owner;
@@ -90,8 +90,7 @@ namespace Spells
                 AddParticle(_owner, _owner, trailParticle, _owner.Position, size: (_currentQStage == 3 ? -1 : 1), bone: "chest");
             }
         }
-
-        public void OnDashFinished(AttackableUnit unit)
+        public void OnDashFinished(AttackableUnit unit, ForceMovementParameters parameters)
         {
             if (!(unit is ObjAIBase owner)) return;
 

@@ -219,7 +219,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             //       Typically follow dashes are unaffected, but there may be edge cases e.g. LeeSin
             if (MovementParameters != null)
             {
-                SetDashingState(false);
+                SetDashingState(false, MoveStopReason.ForceMovement);
             }
             else if (IsPathEnded())
             {
@@ -1094,14 +1094,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Forces this unit to stop moving.
         /// </summary>
-        public virtual void StopMovement()
+        public virtual void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl)
         {
             // Stop movements are always networked.
             _movementUpdated = true;
 
             if (MovementParameters != null)
             {
-                SetDashingState(false);
+                SetDashingState(false, reason);
                 return;
             }
 
@@ -1512,8 +1512,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true)
+        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null)
         {
+            if (MovementParameters != null)
+            {
+                SetDashingState(false, MoveStopReason.ForceMovement);
+            }
             var newCoords = _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
             // False because we don't want this to be networked as a normal movement.
@@ -1531,7 +1535,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 FollowNetID = 0,
                 FollowDistance = 0,
                 FollowBackDistance = 0,
-                FollowTravelTime = 0
+                FollowTravelTime = 0,
+                MovementName = movementName,
+                Caster = caster ?? this
             };
 
             if (consideredCC)
@@ -1539,7 +1545,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
             }
 
-            SetDashingState(true);
+            SetDashingState(true, MoveStopReason.ForceMovement);
 
             if (animation != null && animation != "")
             {
@@ -1572,17 +1578,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (MovementParameters != null && state == false)
             {
                 RemoveAnimStates(MovementParameters);
+                var movementParams = MovementParameters;
                 MovementParameters = null;
 
-                ApiEventManager.OnMoveEnd.Publish(this);
+                ApiEventManager.OnMoveEnd.Publish(this, movementParams);
 
                 if (reason == MoveStopReason.Finished)
                 {
-                    ApiEventManager.OnMoveSuccess.Publish(this);
+                    ApiEventManager.OnMoveSuccess.Publish(this, movementParams);
                 }
                 else if (reason != MoveStopReason.Finished)
                 {
-                    ApiEventManager.OnMoveFailure.Publish(this);
+                    ApiEventManager.OnMoveFailure.Publish(this, movementParams);
                 }
 
                 ResetWaypoints();

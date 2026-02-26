@@ -6,6 +6,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
     public class ForceMovementParameters
     {
         /// <summary>
+        /// Name of the movement, useful for identifying specific dashes in events.
+        /// </summary>
+        public string MovementName { get; set; } = "";
+        /// <summary>
+        /// The unit that caused this forced movement.
+        /// </summary>
+        public AttackableUnit Caster { get; set; }
+        /// <summary>
         /// Status flags which are disabled while dashing.
         /// </summary>
         public StatusFlags SetStatus { get; set; } = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;

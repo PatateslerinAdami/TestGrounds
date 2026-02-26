@@ -53,8 +53,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             string AIScript = "",
             int damageBonus = 0,
             int healthBonus = 0,
-            int initialLevel = 1
-        ) : base(game, model, name, 40, position, 1100, skinId, netId, team, stats, AIScript)
+            int initialLevel = 1,
+            bool enableScripts = true
+        ) : base(game, model, name, 40, position, 1100, skinId, netId, team, stats, AIScript, enableScripts)
         {
             Owner = owner;
 

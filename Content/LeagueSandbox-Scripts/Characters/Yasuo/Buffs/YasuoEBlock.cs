@@ -45,7 +45,8 @@ namespace Buffs
             var to = Vector2.Normalize(target.Position - owner.Position);
             ForceMovement(owner, "Spell3", new Vector2(owner.Position.X + to.X * 375f, owner.Position.Y + to.Y * 375f), 750f + owner.Stats.GetTrueMoveSpeed() * 0.6f, 0, 0, 0, consideredAsCC: false);
         }
-        public void OnMoveSuccess(AttackableUnit unit)
+
+        public void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)
         {
             if (doSpin)
             {

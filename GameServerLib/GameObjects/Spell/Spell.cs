@@ -90,7 +90,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// </summary>
         public ToolTipData ToolTipData { get; protected set; }
 
-        public Spell(Game game, ObjAIBase owner, string spellName, byte slot)
+        public Spell(Game game, ObjAIBase owner, string spellName, byte slot, bool enableScripts = true)
         {
             _game = game;
             _networkIdManager = game.NetworkIdManager;
@@ -123,17 +123,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 SpellData = new SpellData();
             }
-            
-            //Checks if the spell is in the passive slot, so it doesn't try to load it twice under the "Spells" and "Passives" namespaces
-            if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
+            if (enableScripts)
             {
-                //Set the game script for the spell
-                LoadScript();
-                HasEmptyScript = Script.GetType() == typeof(SpellScriptEmpty);
+                //Checks if the spell is in the passive slot, so it doesn't try to load it twice under the "Spells" and "Passives" namespaces
+                if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
+                {
+                    LoadScript();
+                    HasEmptyScript = Script.GetType() == typeof(SpellScriptEmpty);
+                }
+                else
+                {
+                    owner.LoadCharScript(this);
+                }
             }
             else
             {
-                owner.LoadCharScript(this);
+                Script = new SpellScriptEmpty();
+                HasEmptyScript = true;
             }
             
             ScriptNameHash = HashString(SpellName);
@@ -257,9 +263,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
 
                 // Regular auto attacks can lose their target due to untargetability and distance.
+                float cancelBuffer = 300.0f;
+                float maxCancelRange = CastInfo.Owner.Stats.Range.Total + spellTarget.CollisionRadius + CastInfo.Owner.CollisionRadius + cancelBuffer;
                 if (CastInfo.IsAutoAttack
                 && (spellTarget != CastInfo.Owner.TargetUnit
-                || Vector2.Distance(spellTarget.Position, CastInfo.Owner.Position) > (CastInfo.Owner.Stats.Range.Total + spellTarget.CollisionRadius) // TODO: Verify if edge-to-edge
+                || Vector2.Distance(spellTarget.Position, CastInfo.Owner.Position) > maxCancelRange // TODO: Verify if edge-to-edge
                 || CastInfo.Owner.GetCastSpell() != null
                 || CastInfo.Owner.ChannelSpell != null))
                 {

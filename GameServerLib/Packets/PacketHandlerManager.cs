@@ -24,6 +24,7 @@ namespace PacketDefinitions420
         private delegate ICoreRequest RequestConvertor(byte[] data);
         private readonly Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor> _gameConvertorTable;
         private readonly Dictionary<LoadScreenPacketID, RequestConvertor> _loadScreenConvertorTable;
+        private readonly Dictionary<GamePacketID, RequestConvertor> _fallbackConvertorTable;
         // should be one-to-one, no two users for the same Peer
         private readonly Peer[] _peers;
         private readonly PlayerManager _playerManager;
@@ -45,6 +46,7 @@ namespace PacketDefinitions420
             _netResp = netResp;
             _gameConvertorTable = new Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor>();
             _loadScreenConvertorTable = new Dictionary<LoadScreenPacketID, RequestConvertor>();
+            _fallbackConvertorTable = new Dictionary<GamePacketID, RequestConvertor>();
             InitializePacketConvertors();
         }
 
@@ -66,6 +68,10 @@ namespace PacketDefinitions420
                             var key = new Tuple<GamePacketID, Channel>(((PacketType)attr).GamePacketId, ((PacketType)attr).ChannelId);
                             var method = (RequestConvertor)Delegate.CreateDelegate(typeof(RequestConvertor), m);
                             _gameConvertorTable.Add(key, method);
+                            if (!_fallbackConvertorTable.ContainsKey(key.Item1))
+                            {
+                                _fallbackConvertorTable.Add(key.Item1, method);
+                            }
                         }
                     }
                 }
@@ -129,7 +135,10 @@ namespace PacketDefinitions420
             {
                 return _gameConvertorTable[key];
             }
-
+            if (_fallbackConvertorTable.ContainsKey(packetId))
+            {
+                return _fallbackConvertorTable[packetId];
+            }
             return null;
         }
 

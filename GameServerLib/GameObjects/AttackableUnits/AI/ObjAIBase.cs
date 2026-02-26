@@ -102,11 +102,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public IAIScript AIScript { get; protected set; }
         public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
         private bool invisSent = false;
+        private bool _scriptsEnabled = true;
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
-            Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "") :
+            Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "", bool enableScripts = true) :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
         {
             _itemManager = game.ItemManager;
+            _scriptsEnabled = enableScripts;
 
             Name = name;
             SkinID = skinId;
@@ -166,39 +168,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     if (!string.IsNullOrEmpty(CharData.SpellNames[i]))
                     {
-                        Spells[i] = new Spell(game, this, CharData.SpellNames[i], (byte)i);
+                        Spells[i] = new Spell(game, this, CharData.SpellNames[i], (byte)i, enableScripts);
                     }
                 }
 
                 //If character has a passive spell, it'll initialize the CharScript with it
                 if (!string.IsNullOrEmpty(CharData.PassiveData.PassiveLuaName))
                 {
-                    Spells[(int)SpellSlotType.PassiveSpellSlot] = new Spell(game, this, CharData.PassiveData.PassiveLuaName, (int)SpellSlotType.PassiveSpellSlot);
+                    Spells[(int)SpellSlotType.PassiveSpellSlot] = new Spell(game, this, CharData.PassiveData.PassiveLuaName, (int)SpellSlotType.PassiveSpellSlot, enableScripts);
                 }
                 //If there's no passive spell, it'll just initialize the CharScript with Spell = null
-                else
+                else if (enableScripts)
                 {
                     LoadCharScript();
                 }
 
-                Spells[(int)SpellSlotType.SummonerSpellSlots] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.SummonerSpellSlots);
-                Spells[(int)SpellSlotType.SummonerSpellSlots + 1] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.SummonerSpellSlots + 1);
+                Spells[(int)SpellSlotType.SummonerSpellSlots] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.SummonerSpellSlots, enableScripts);
+                Spells[(int)SpellSlotType.SummonerSpellSlots + 1] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.SummonerSpellSlots + 1, enableScripts);
 
                 // InventorySlots
                 // 6 - 12 (12 = TrinketSlot)
                 for (byte i = (int)SpellSlotType.InventorySlots; i < (int)SpellSlotType.BluePillSlot; i++)
                 {
-                    Spells[i] = new Spell(game, this, "BaseSpell", i);
+                    Spells[i] = new Spell(game, this, "BaseSpell", i, enableScripts);
                 }
 
-                Spells[(int)SpellSlotType.BluePillSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.BluePillSlot);
-                Spells[(int)SpellSlotType.TempItemSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.TempItemSlot);
+                Spells[(int)SpellSlotType.BluePillSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.BluePillSlot, enableScripts);
+                Spells[(int)SpellSlotType.TempItemSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.TempItemSlot, enableScripts);
 
                 // RuneSlots
                 // 15 - 44
                 for (short i = (int)SpellSlotType.RuneSlots; i < (int)SpellSlotType.ExtraSlots; i++)
                 {
-                    Spells[(byte)i] = new Spell(game, this, "BaseSpell", (byte)i);
+                    Spells[(byte)i] = new Spell(game, this, "BaseSpell", (byte)i, enableScripts);
                 }
 
                 // ExtraSpells
@@ -212,12 +214,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     }
 
                     var slot = i + (int)SpellSlotType.ExtraSlots;
-                    Spells[(byte)slot] = new Spell(game, this, extraSpellName, (byte)slot);
+                    Spells[(byte)slot] = new Spell(game, this, extraSpellName, (byte)slot, enableScripts);
                     Spells[(byte)slot].LevelUp();
                 }
 
-                Spells[(int)SpellSlotType.RespawnSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.RespawnSpellSlot);
-                Spells[(int)SpellSlotType.UseSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.UseSpellSlot);
+                Spells[(int)SpellSlotType.RespawnSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.RespawnSpellSlot, enableScripts);
+                Spells[(int)SpellSlotType.UseSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.UseSpellSlot, enableScripts);
 
                 // BasicAttackNormalSlots & BasicAttackCriticalSlots
                 // 64 - 72 & 73 - 81
@@ -226,7 +228,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     if (!string.IsNullOrEmpty(CharData.BasicAttacks[i].Name))
                     {
                         int slot = i + (int)SpellSlotType.BasicAttackNormalSlots;
-                        Spells[(byte)slot] = new Spell(game, this, CharData.BasicAttacks[i].Name, (byte)slot);
+                        Spells[(byte)slot] = new Spell(game, this, CharData.BasicAttacks[i].Name, (byte)slot, enableScripts);
                     }
                 }
 
@@ -237,31 +239,43 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsMelee = true;
             }
 
-            AIScript = game.ScriptEngine.CreateObject<IAIScript>($"AIScripts", aiScript) ?? new EmptyAIScript();
-            try
+            // Ensure CharScript is initialized if it wasn't loaded (e.g. enableScripts=false or no model)
+            if (CharScript == null)
             {
-                AIScript.OnActivate(this);
+                CharScript = new CharScriptEmpty();
             }
-            catch (Exception e)
+
+            AIScript = game.ScriptEngine.CreateObject<IAIScript>($"AIScripts", aiScript) ?? new EmptyAIScript();
+            if (enableScripts)
             {
-                _logger.Error(null, e);
+                try
+                {
+                    AIScript.OnActivate(this);
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(null, e);
+                }
             }
         }
 
         public override void OnAdded()
         {
             base.OnAdded();
-            try
+            if (_scriptsEnabled)
             {
-                CharScript.OnActivate(
-                    this, Spells.GetValueOrDefault<short, Spell>(
-                        (int)SpellSlotType.PassiveSpellSlot
-                    )
-                );
-            }
-            catch (Exception e)
-            {
-                _logger.Error(null, e);
+                try
+                {
+                    CharScript.OnActivate(
+                        this, Spells.GetValueOrDefault<short, Spell>(
+                            (int)SpellSlotType.PassiveSpellSlot
+                        )
+                    );
+                }
+                catch (Exception e)
+                {
+                    _logger.Error(null, e);
+                }
             }
         }
 
@@ -533,9 +547,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             float followTargetMaxDistance = 0,
             float backDistance = 0,
             float travelTime = 0,
-            bool consideredCC = true
+            bool consideredCC = true,
+            string movementName = "",
+            AttackableUnit caster = null
         )
         {
+            if (MovementParameters != null)
+            {
+                SetDashingState(false, MoveStopReason.ForceMovement);
+            }
+
             SetWaypoints(new List<Vector2> { Position, target.Position });
 
             SetTargetUnit(target, true);
@@ -552,7 +573,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 FollowNetID = target.NetId,
                 FollowDistance = followTargetMaxDistance,
                 FollowBackDistance = backDistance,
-                FollowTravelTime = travelTime
+                FollowTravelTime = travelTime,
+                MovementName = movementName,
+                Caster = caster ?? this
             };
 
             if (consideredCC)
@@ -560,8 +583,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
             }
 
-            _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
-
+            _game.PacketNotifier.NotifyWaypointListWithSpeed(
+                this,
+                dashSpeed,
+                leapGravity,
+                keepFacingLastDirection,
+                target,
+                followTargetMaxDistance,
+                backDistance,
+                travelTime
+            );
+            if (target != null)
+            {
+                _game.PacketNotifier.NotifyMovementDriverReplication(this);
+            }
             SetDashingState(true);
 
             if (animation != null && animation != "")
@@ -569,7 +604,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 var animPairs = new Dictionary<string, string> { { "RUN", animation } };
                 SetAnimStates(animPairs, MovementParameters);
             }
-
+            _movementUpdated = false;
             // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
         }
 
@@ -828,7 +863,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell SetAutoAttackSpell(string name, bool isReset)
         {
             AutoAttackSpell = GetSpell(name);
-            CancelAutoAttack(isReset);
+            if(isReset) CancelAutoAttack(isReset);
 
             return AutoAttackSpell;
         }
@@ -1259,7 +1294,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
             else if (IsAttacking)
             {
-                if (Vector2.Distance(TargetUnit.Position, Position) > (Stats.Range.Total + TargetUnit.CollisionRadius)
+                float cancelBuffer = 300.0f;
+                float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius + cancelBuffer;
+                if (Vector2.Distance(TargetUnit.Position, Position) > maxCancelRange
                         && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
                 {
                     CancelAutoAttack(!HasAutoAttacked, true);
@@ -1299,7 +1336,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // TODO: Verify if there are any other cases we want to avoid.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
                 {
-                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius;
+                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius;
 
                     if (Vector2.DistanceSquared(Position, TargetUnit.Position) <= idealRange * idealRange && MovementParameters == null)
                     {
@@ -1341,6 +1378,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         else if (IsAttacking && AutoAttackSpell.CastInfo.Targets[0].Unit != TargetUnit && !(Vector2.Distance(TargetUnit.Position, Position) > (Stats.Range.Total + TargetUnit.CollisionRadius)))
                         {
                             AutoAttackSpell.SetCurrentTarget(TargetUnit);
+                        }
+                        else if (!IsAttacking)
+                        {
+                            RefreshWaypoints(idealRange);
                         }
                     }
                     else
@@ -1484,7 +1525,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return false;
             }
             Model = model;
-            _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this,skinID:(uint)SkinID);
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this, skinID: (uint)SkinID);
             return true;
         }
     }

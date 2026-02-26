@@ -473,10 +473,11 @@ namespace LeagueSandbox.GameServer.API
             SpellDataFlags targetingFlags = 0,
             ObjAIBase visibilityOwner = null,
             bool isVisible = true,
-            bool aiPaused = true
+            bool aiPaused = true,
+            bool useSpells = true
         )
         {
-            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable, isWard, visibilityOwner);
+            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable, isWard, visibilityOwner, enableScripts: useSpells);
             m.Stats.IsTargetableToTeam = targetingFlags;
             _game.ObjectManager.AddObject(m);
             if (owner != null)
@@ -796,14 +797,16 @@ namespace LeagueSandbox.GameServer.API
             bool consideredAsCC = true,
             ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION)
+            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
+            string movementName = "",
+            AttackableUnit caster = null)
         {
             var keepFacingLastDirection = false;
             if (movementOrdersFacing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING)
             {
                 keepFacingLastDirection = true;
             }
-            unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC);
+            unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC, movementName, caster);
         }
 
         /// <summary>
@@ -835,14 +838,16 @@ namespace LeagueSandbox.GameServer.API
             bool consideredAsCC = true,
             ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION)
+            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
+             string movementName = "",
+             AttackableUnit caster = null)
         {
             var keepFacingLastDirection = false;
             if (movementOrdersFacing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING)
             {
                 keepFacingLastDirection = true;
             }
-            unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy, maxTravelTime, consideredAsCC);
+            unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy, maxTravelTime, consideredAsCC, movementName, caster);
         }
 
         /// <summary>
