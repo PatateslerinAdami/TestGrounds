@@ -1074,6 +1074,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Spells[slot1] = Spells[slot2];
 
             Spells[slot2] = buffer;
+
+            Spells[slot1].CastInfo.SpellSlot = slot1;
+            Spells[slot2].CastInfo.SpellSlot = slot2;
+
             Stats.SetSpellEnabled(slot1, Stats.GetSpellEnabled(slot2));
             Stats.SetSpellEnabled(slot2, enabledBuffer);
 
@@ -1082,6 +1086,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 int clientId = _game.PlayerManager.GetClientInfoByChampion(champion).ClientId;
                 _game.PacketNotifier.NotifyS2C_SetSpellData(clientId, NetId, slot2Name, slot1);
                 _game.PacketNotifier.NotifyS2C_SetSpellData(clientId, NetId, slot1Name, slot2);
+
+                _game.PacketNotifier.NotifyS2C_SetSpellLevel(clientId, NetId, slot1, Spells[slot1].CastInfo.SpellLevel);
+                _game.PacketNotifier.NotifyS2C_SetSpellLevel(clientId, NetId, slot2, Spells[slot2].CastInfo.SpellLevel);
             }
         }
 

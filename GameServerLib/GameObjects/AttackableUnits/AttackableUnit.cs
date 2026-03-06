@@ -1094,11 +1094,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Forces this unit to stop moving.
         /// </summary>
-        public virtual void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl)
+        public virtual void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl, bool networked = true)
         {
-            // Stop movements are always networked.
-            _movementUpdated = true;
-
+            if (Waypoints.Count == 1) return;
             if (MovementParameters != null)
             {
                 SetDashingState(false, reason);
@@ -1106,7 +1104,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             ResetWaypoints();
-            _game.PacketNotifier.NotifyWaypointGroup(this);
+            if (networked)
+            {
+                _movementUpdated = true;
+                _game.PacketNotifier.NotifyWaypointGroup(this);
+            }
         }
 
         /// <summary>

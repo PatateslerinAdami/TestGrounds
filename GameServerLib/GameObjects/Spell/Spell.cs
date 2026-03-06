@@ -482,7 +482,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     if (!SpellData.CanMoveWhileChanneling)
                     {
-                        CastInfo.Owner.StopMovement();
+                        CastInfo.Owner.StopMovement(networked:false);
                         // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                         CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                     }
@@ -728,7 +728,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         if (!SpellData.CanMoveWhileChanneling)
                         {
-                            CastInfo.Owner.StopMovement();
+                            CastInfo.Owner.StopMovement(networked:false);
                             // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                             CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                         }
@@ -1108,9 +1108,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
                 if (!willChannel || !SpellData.CanMoveWhileChanneling)
                 {
-                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                        CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                    }
                 }
-            }
 
             if (Script.ScriptMetadata.TriggersSpellCasts)
             {
@@ -1127,7 +1127,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.SetChannelSpell(null);
             }
 
-            CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
 
             ApiEventManager.OnSpellPostChannel.Publish(this);
 
@@ -1662,6 +1662,67 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
             }
+        }
+        public SpellMissile CreateCustomMissile(Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null)
+        {
+            var netId = _networkIdManager.GetNewNetId();
+            var castInfoClone = CastInfo.Clone();
+
+            float heightOffset = customHeightOffset ?? SpellData.MissileTargetHeightAugment;
+
+            float targetHeight = CastInfo.Owner.GetHeight() + heightOffset;
+
+            castInfoClone.TargetPosition = new Vector3(end.X, targetHeight, end.Y);
+            castInfoClone.TargetPositionEnd = new Vector3(end.X, targetHeight, end.Y);
+
+            if (start == CastInfo.Owner.Position)
+            {
+                var pos3D = CastInfo.Owner.GetPosition3D();
+                castInfoClone.SpellCastLaunchPosition = new Vector3(pos3D.X, pos3D.Y + heightOffset, pos3D.Z);
+            }
+            else
+            {
+                float startGroundHeight = _game.Map.NavigationGrid.GetHeightAtLocation(start);
+                castInfoClone.SpellCastLaunchPosition = new Vector3(start.X, startGroundHeight + heightOffset, start.Y);
+            }
+
+            if (castInfoClone.Targets == null) castInfoClone.Targets = new List<CastTarget>();
+            if (castInfoClone.Targets.Count == 0) castInfoClone.Targets.Add(new CastTarget(null, HitResult.HIT_Normal));
+
+            castInfoClone.IsForceCastingOrChannel = isForceCastingOrChannel;
+            castInfoClone.IsOverrideCastPosition = isOverrideCastPosition;
+
+            castInfoClone.MissileNetID = netId;
+
+            bool isServerOnly = SpellData.MissileEffect != "";
+
+            SpellMissile p = null;
+
+            switch (parameters.Type)
+            {
+                case MissileType.Target:
+                    p = new SpellMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, SpellData.Flags, netId, isServerOnly);
+                    break;
+                case MissileType.Chained:
+                    p = new SpellChainMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, parameters, SpellData.MissileSpeed, SpellData.Flags, netId, isServerOnly);
+                    break;
+                case MissileType.Circle:
+                    p = new SpellCircleMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, end, SpellData.Flags, netId, isServerOnly);
+                    break;
+                case MissileType.Arc:
+                    p = new SpellLineMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, end, SpellData.Flags, netId, isServerOnly);
+                    break;
+            }
+
+            if (p == null || (p is SpellCircleMissile c && c.Position == c.Destination) || p.Position == p.GetTargetPosition())
+            {
+                return null;
+            }
+
+            _game.ObjectManager.AddObject(p);
+            ApiEventManager.OnLaunchMissile.Publish(this, p);
+
+            return p;
         }
         /// <summary>
         /// Called every diff milliseconds to update the spell

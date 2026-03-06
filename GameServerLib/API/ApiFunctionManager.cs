@@ -1243,5 +1243,41 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell, targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
         }
+        /// <summary>
+        /// Directly creates a missile for a specific spell slot without triggering a SpellCast.
+        /// Prevents client-side animation jittering.
+        /// </summary>
+        public static SpellMissile CreateCustomMissile(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null)
+        {
+            slot = ConvertAPISlot(slotType, slot);
+
+            if (slot == -1) return null;
+
+            Spell spell = caster.Spells[(short)slot];
+            if (spell == null) return null;
+
+            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition, customHeightOffset);
+        }
+
+        /// <summary>
+        /// Directly creates a missile for a specific spell name without triggering a SpellCast.
+        /// Prevents client-side animation jittering.
+        /// </summary>
+        public static SpellMissile CreateCustomMissile(ObjAIBase caster, string spellName, Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null)
+        {
+            Spell spell = caster.GetSpell(spellName);
+
+            if (spell == null)
+            {
+                LogDebug($"CreateCustomMissile Error: Could not find spell with name '{spellName}' on {caster.Name}");
+                return null;
+            }
+
+            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition, customHeightOffset);
+        }
+        public static Vector2 GetClosestTerrainExit(Vector2 location, float distanceThreshold = 0)
+        {
+            return _game.Map.NavigationGrid.GetClosestTerrainExit(location, distanceThreshold);
+        }
     }
 }
