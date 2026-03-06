@@ -1663,7 +1663,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
             }
         }
-        public SpellMissile CreateCustomMissile(Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null)
+        public SpellMissile CreateCustomMissile(Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)
         {
             var netId = _networkIdManager.GetNewNetId();
             var castInfoClone = CastInfo.Clone();
@@ -1687,7 +1687,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             if (castInfoClone.Targets == null) castInfoClone.Targets = new List<CastTarget>();
-            if (castInfoClone.Targets.Count == 0) castInfoClone.Targets.Add(new CastTarget(null, HitResult.HIT_Normal));
+            if (castInfoClone.Targets.Count == 0)
+            {
+                castInfoClone.Targets.Add(new CastTarget(target, HitResult.HIT_Normal));
+            }
+            else
+            {
+                castInfoClone.Targets[0] = new CastTarget(target, HitResult.HIT_Normal);
+            }
 
             castInfoClone.IsForceCastingOrChannel = isForceCastingOrChannel;
             castInfoClone.IsOverrideCastPosition = isOverrideCastPosition;

@@ -81,5 +81,75 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             Replication = new ReplicationMinion(this);
         }
+
+        public override void OnCollision(GameObject collider, bool isTerrain = false)
+        {
+            base.OnCollision(collider, isTerrain);
+            if (isTerrain) return;
+
+            if (IsDead || MovementParameters != null || Status.HasFlag(StatusFlags.Ghosted)) return;
+
+            if (collider is AttackableUnit otherUnit)
+            {
+                if (otherUnit.MovementParameters != null || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) return;
+
+                if (IsAttacking || GetCastSpell() != null || ChannelSpell != null || MoveOrder == OrderType.Hold || MoveOrder == OrderType.Stop)
+                {
+                    return;
+                }
+
+                bool otherIsHuman = otherUnit is Champion && (otherUnit as ObjAIBase)?.IsBot == false;
+
+                bool otherIsBusyAI = false;
+                if (otherUnit is ObjAIBase otherAI)
+                {
+                    otherIsBusyAI = otherAI.IsAttacking || otherAI.GetCastSpell() != null || otherAI.ChannelSpell != null || otherAI.MoveOrder == OrderType.Hold || otherAI.MoveOrder == OrderType.Stop;
+                }
+
+                if (collider.Position != Position)
+                {
+                    Vector2 toCollider = collider.Position - Position;
+                    float distSq = toCollider.LengthSquared();
+                    float combinedRadius = CollisionRadius + otherUnit.CollisionRadius;
+
+                    if (distSq < (combinedRadius * combinedRadius) && distSq > 0.0001f)
+                    {
+                        float distance = (float)Math.Sqrt(distSq);
+                        float overlap = combinedRadius - distance;
+
+                        Vector2 pushDirection = -(toCollider / distance);
+
+                        Vector2 myDir = Waypoints.Count > CurrentWaypointKey ? (Waypoints[CurrentWaypointKey] - Position) : Vector2.Zero;
+                        if (myDir != Vector2.Zero) myDir = Vector2.Normalize(myDir); 
+
+                        Vector2 otherDir = otherUnit.Waypoints.Count > otherUnit.CurrentWaypointKey ? (otherUnit.Waypoints[otherUnit.CurrentWaypointKey] - otherUnit.Position) : Vector2.Zero;
+                        if (otherDir != Vector2.Zero) otherDir = Vector2.Normalize(otherDir);
+
+                        bool headingSameWay = Vector2.Dot(myDir, otherDir) > 0.7f;
+
+                        if (headingSameWay && !otherIsBusyAI && !otherIsHuman)
+                        {
+                            Vector2 tangentRight = new Vector2(-myDir.Y, myDir.X);
+                            Vector2 tangentLeft = new Vector2(myDir.Y, -myDir.X);
+
+                            pushDirection = Vector2.Dot(pushDirection, tangentRight) > 0 ? tangentRight : tangentLeft;
+                            overlap *= 0.2f;
+                        }
+                        else
+                        {
+                            overlap *= (otherIsBusyAI || otherIsHuman) ? 1.0f : 0.5f;
+                        }
+                        overlap = Math.Min(overlap, 15.0f);
+
+                        Vector2 newPos = Position + (pushDirection * overlap);
+
+                        if (_game.Map.PathingHandler.IsWalkable(newPos, PathfindingRadius))
+                        {
+                            SetPosition(newPos, false);
+                        }
+                    }
+                }
+            }
+        }
     }
 }

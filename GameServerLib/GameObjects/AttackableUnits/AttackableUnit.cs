@@ -313,7 +313,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="isTerrain">Whether or not this AI collided with terrain.</param>
         public override void OnCollision(GameObject collider, bool isTerrain = false)
         {
-            // We do not want to teleport out of missiles, sectors, owned regions, or buildings. Buildings in particular are already baked into the Navigation Grid.
             if (collider is SpellMissile || collider is SpellSector || collider is ObjBuilding || (collider is Region region && region.CollisionUnit == this))
             {
                 return;
@@ -322,38 +321,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (isTerrain)
             {
                 ApiEventManager.OnCollisionTerrain.Publish(this);
+                if (MovementParameters != null) return;
 
-                if (MovementParameters != null)
-                {
-                    return;
-                }
-
-                // only time we would collide with terrain is if we are inside of it, so we should teleport out of it.
                 Vector2 exit = _game.Map.NavigationGrid.GetClosestTerrainExit(Position, PathfindingRadius + 1.0f);
                 SetPosition(exit, false);
             }
             else
             {
                 ApiEventManager.OnCollision.Publish(this, collider);
-
-                if (MovementParameters != null || Status.HasFlag(StatusFlags.Ghosted)
-                    || (collider is AttackableUnit unit &&
-                    (unit.MovementParameters != null || unit.Status.HasFlag(StatusFlags.Ghosted))))
-                {
-                    return;
-                }
-
-                // We should not teleport here because Pathfinding should handle it.
-                // TODO: Implement a PathfindingHandler, and remove currently implemented manual pathfinding.
-                Vector2 exit = Extensions.GetCircleEscapePoint(Position, PathfindingRadius + 1, collider.Position, collider.PathfindingRadius);
-                if (!_game.Map.PathingHandler.IsWalkable(exit, PathfindingRadius))
-                {
-                    exit = _game.Map.NavigationGrid.GetClosestTerrainExit(exit, PathfindingRadius + 1.0f);
-                }
-                SetPosition(exit, false);
             }
         }
-
         public override void Sync(int userId, TeamId team, bool visible, bool forceSpawn = false)
         {
             base.Sync(userId, team, visible, forceSpawn);
