@@ -64,6 +64,11 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     return true;
                 }
             }
+            if (s != null && ownerCastingSpell != null)
+            {
+                owner.TryQueueSpell(s, req.Position, req.EndPosition, targetUnit);
+            }
+
             cs.CouldCast = false;
             ApiEventManager.OnSpellPress.Publish(s, cs);
 

@@ -1,4 +1,7 @@
-﻿using Buffs;
+﻿using System;
+using System.Numerics;
+using System.Collections.Generic;
+using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
@@ -46,7 +49,11 @@ namespace Spells
         };
 
         private ObjAIBase _owner;
+        private Vector2 _shadowDestination;
+
         public Minion shadow;
+        public bool MissileInFlight { get; private set; }
+        public List<Action> PendingShadowCasts { get; } = new List<Action>();
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
@@ -56,23 +63,30 @@ namespace Spells
             shadow = AddMinion(owner, "ZedShadow", "ZedShadow", default, owner.Team, owner.SkinID, true, false, false, default, default, true, true, true);
             shadow.SetStatus(StatusFlags.NoRender, true);
 
-            spell.SpellData.MissileSpeed = 2500;
+            //spell.SpellData.MissileSpeed = 2500;
         }
 
         public void OnLaunch(Spell spell, SpellMissile missile)
         {
             ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
 
-            var endPos = new Vector2(missile.CastInfo.TargetPositionEnd.X, missile.CastInfo.TargetPositionEnd.Z);
-            shadow.TeleportTo(endPos.X, endPos.Y);
-
-            AddBuff("ZedWQue", 1f, 1, missile.SpellOrigin, missile.CastInfo.Owner, missile.CastInfo.Owner);
-            shadow.PlayAnimation("Idle1", timeScale: 0.8f);
+            _shadowDestination = new Vector2(missile.CastInfo.TargetPositionEnd.X, missile.CastInfo.TargetPositionEnd.Z);
+            MissileInFlight = true;
         }
 
         public void OnMissileEnd(SpellMissile missile)
         {
+            MissileInFlight = false;
             var owner = missile.CastInfo.Owner;
+
+            shadow.TeleportTo(_shadowDestination.X, _shadowDestination.Y);
+            shadow.PlayAnimation("Idle1", timeScale: 0.8f);
+
+            foreach (var action in PendingShadowCasts)
+            {
+                action();
+            }
+            PendingShadowCasts.Clear();
 
             AddBuff(new ZedWHandler { shadow = shadow }, "ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner);
             AddBuff(new ZedWHandler2 { shadow = shadow }, "ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner);

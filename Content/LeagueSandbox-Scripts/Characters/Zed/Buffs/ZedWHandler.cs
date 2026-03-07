@@ -26,19 +26,17 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = ownerSpell.CastInfo.Owner;
+            _owner = unit as ObjAIBase;
 
             byte wLevel = _owner.Spells[1].CastInfo.SpellLevel;
             var w2 = _owner.GetSpell("ZedW2");
             w2?.SetLevel(wLevel);
-            
+
             _owner.SwapSpells(1, 48);
             SealSpellSlot(_owner, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);
 
             if (shadow != null)
-            {
                 shadow.SetStatus(StatusFlags.NoRender, false);
-            }
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
@@ -51,11 +49,10 @@ namespace Buffs
             SealSpellSlot(_owner, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, isShadowStillActive);
 
             if (_owner.Spells[1].CurrentCooldown > 0)
-            {
                 _owner.Spells[1].SetCooldown(_owner.Spells[1].CurrentCooldown, true);
-            }
         }
     }
+
     internal class ZedWHandler2 : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
@@ -72,29 +69,15 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = ownerSpell.CastInfo.Owner;
+            _owner = unit as ObjAIBase;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             if (shadow != null)
-            {
                 shadow.SetStatus(StatusFlags.NoRender, true);
-            }
-            
+
             SealSpellSlot(_owner, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);
         }
-    }
-    internal class ZedWQue : IBuffGameScript
-    {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
-        {
-            BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            IsHidden = true,
-            MaxStacks = 1
-        };
-
-        public StatsModifier StatsModifier { get; private set; }
     }
 }

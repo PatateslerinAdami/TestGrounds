@@ -1092,25 +1092,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // Updates move order before script PostCast so teleports are sent to clients correctly (not sent if MoveOrder == CastSpell).
-            if (SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
+            if (CastInfo.Owner.GetCastSpell() == null && CastInfo.Owner.MovementParameters == null)
             {
-                if (!CastInfo.Owner.IsPathEnded())
+                if (SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                 {
-                    CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                    if (!CastInfo.Owner.IsPathEnded())
+                    {
+                        CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                    }
+                    if (CastInfo.Owner.TargetUnit != null)
+                    {
+                        CastInfo.Owner.UpdateMoveOrder(OrderType.AttackTo, true);
+                    }
                 }
-                if (CastInfo.Owner.TargetUnit != null)
+                else
                 {
-                    CastInfo.Owner.UpdateMoveOrder(OrderType.AttackTo, true);
-                }
-            }
-            else
-            {
-                bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
-                if (!willChannel || !SpellData.CanMoveWhileChanneling)
-                {
+                    bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
+                    if (!willChannel || !SpellData.CanMoveWhileChanneling)
+                    {
                         CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
                     }
                 }
+            }
 
             if (Script.ScriptMetadata.TriggersSpellCasts)
             {

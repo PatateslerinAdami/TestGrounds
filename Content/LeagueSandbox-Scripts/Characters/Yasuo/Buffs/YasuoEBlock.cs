@@ -48,6 +48,7 @@ namespace Buffs
 
         public void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)
         {
+            AddBuff("YasoAnimTest", 4f, 1, origSpell, owner, owner);
             if (doSpin)
             {
                 knockUp = false;

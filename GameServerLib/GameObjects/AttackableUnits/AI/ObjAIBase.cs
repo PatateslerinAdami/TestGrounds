@@ -29,6 +29,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             CreationTime = creationTime;
         }
     }
+    public class SpellQueueEntry
+    {
+        public Spell Spell { get; }
+        public Vector2 Start { get; }
+        public Vector2 End { get; }
+        public AttackableUnit TargetUnit { get; }
+
+        public SpellQueueEntry(Spell spell, Vector2 start, Vector2 end, AttackableUnit targetUnit)
+        {
+            Spell = spell;
+            Start = start;
+            End = end;
+            TargetUnit = targetUnit;
+        }
+    }
     /// <summary>
     /// Base class for all moving, attackable, and attacking units.
     /// ObjAIBases normally follow these guidelines of functionality: Self movement, Inventory, Targeting, Attacking, and Spells.
@@ -40,6 +55,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private bool _skipNextAutoAttack;
         private Spell _castingSpell;
         private Spell _lastAutoAttack;
+        private SpellQueueEntry _queuedSpellCast;
         private Random _random = new Random();
         protected ItemManager _itemManager;
         protected AIState _aiState = AIState.AI_IDLE;
@@ -863,7 +879,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell SetAutoAttackSpell(string name, bool isReset)
         {
             AutoAttackSpell = GetSpell(name);
-            if(isReset) CancelAutoAttack(isReset);
+            if (isReset) CancelAutoAttack(isReset);
 
             return AutoAttackSpell;
         }
@@ -987,12 +1003,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Sets the spell that this unit is currently casting.
+        /// Sets the spell this unit is currently casting.
+        /// When clearing the cast (s == null), automatically attempts to fire any buffered spell.
         /// </summary>
-        /// <param name="s">Spell that is being cast.</param>
+        /// <param name="s">Spell that is being cast, or null when the cast ends.</param>
         public void SetCastSpell(Spell s)
         {
             _castingSpell = s;
+
+            if (s == null && _queuedSpellCast != null)
+            {
+                var queued = _queuedSpellCast;
+                _queuedSpellCast = null;
+
+                if (CanCast(queued.Spell) && queued.Spell.State == SpellState.STATE_READY)
+                {
+                    queued.Spell.Cast(queued.Start, queued.End, queued.TargetUnit);
+                }
+            }
         }
 
         /// <summary>
@@ -1002,6 +1030,49 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell GetCastSpell()
         {
             return _castingSpell;
+        }
+
+        /// <summary>
+        /// Buffers a spell cast to be fired once the current cast ends.
+        /// Only valid when blocked solely by an active cast — CC/silence/etc. should be checked before calling.
+        /// Newer input overwrites older input (one-slot buffer).
+        /// </summary>
+        /// <param name="s">Spell to queue.</param>
+        /// <param name="start">Start position of the cast.</param>
+        /// <param name="end">End position of the cast.</param>
+        /// <param name="unit">Target unit, if any.</param>
+        /// <returns>True if the spell was successfully queued; false if conditions don't allow buffering.</returns>
+        public bool TryQueueSpell(Spell s, Vector2 start, Vector2 end, AttackableUnit unit)
+        {
+            if (_castingSpell == null)
+            {
+                return false;
+            }
+
+            if (!Status.HasFlag(StatusFlags.CanCast)
+                || Status.HasFlag(StatusFlags.Charmed)
+                || Status.HasFlag(StatusFlags.Feared)
+                || Status.HasFlag(StatusFlags.Pacified)
+                || Status.HasFlag(StatusFlags.Silenced)
+                || Status.HasFlag(StatusFlags.Sleep)
+                || Status.HasFlag(StatusFlags.Stunned)
+                || Status.HasFlag(StatusFlags.Suppressed)
+                || Status.HasFlag(StatusFlags.Taunted))
+            {
+                return false;
+            }
+
+            _queuedSpellCast = new SpellQueueEntry(s, start, end, unit);
+            return true;
+        }
+
+        /// <summary>
+        /// Discards any buffered spell cast.
+        /// Call this on move orders, CC application, death, or any state that should cancel buffered input.
+        /// </summary>
+        public void ClearQueuedSpell()
+        {
+            _queuedSpellCast = null;
         }
 
         /// <summary>
@@ -1478,6 +1549,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || MoveOrder == OrderType.Taunt)
             {
                 StopMovement();
+            }
+            if (MoveOrder == OrderType.MoveTo
+                || MoveOrder == OrderType.AttackMove
+                || MoveOrder == OrderType.Stop
+                || MoveOrder == OrderType.OrderNone
+                || MoveOrder == OrderType.Hold)
+            {
+                ClearQueuedSpell();
             }
         }
 

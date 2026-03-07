@@ -31,7 +31,7 @@ namespace Spells
             }
             AddBuff("KatarinaEReduction", 1.5f, 1, spell, owner, owner);
 
-            var tpLoc = target.Position - new Vector2(target.Direction.X, target.Direction.Z) * target.CollisionRadius;
+            var tpLoc = target.Position - new Vector2(target.Direction.X, target.Direction.Z) * (target.CollisionRadius + 90f);
             TeleportTo(owner, tpLoc.X, tpLoc.Y);
             spell.CastInfo.DesignerCastTime = 0f;
         }

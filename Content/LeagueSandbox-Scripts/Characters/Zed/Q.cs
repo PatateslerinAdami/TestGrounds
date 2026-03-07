@@ -1,5 +1,4 @@
-﻿using Buffs;
-using GameServerCore.Enums;
+﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -22,8 +21,8 @@ namespace Spells
         };
 
         private ObjAIBase _owner;
-        private Minion _wShadow;
 
+        private Minion _wShadow;
         private Minion wShadow
         {
             get
@@ -40,6 +39,16 @@ namespace Spells
             }
         }
 
+        private ZedShadowDashMissile GetInFlightMissile(ObjAIBase owner)
+        {
+            var sp = owner.GetSpell("ZedShadowDashMissile");
+            if (sp?.Script is ZedShadowDashMissile dashScript && dashScript.MissileInFlight)
+            {
+                return dashScript;
+            }
+            return null;
+        }
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _owner = owner;
@@ -47,9 +56,20 @@ namespace Spells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            owner.StopMovement(networked: false);// dont know why in ZedShuriken.ini haveCanMoveWhileChanneling = 1 but didnt wanna edit the ini.
+            owner.StopMovement(networked: false);
 
-            if (wShadow != null)
+            var dashScript = GetInFlightMissile(owner);
+
+            if (dashScript != null)
+            {
+                var capturedEnd = end;
+                dashScript.PendingShadowCasts.Add(() =>
+                {
+                    FaceDirection(capturedEnd, dashScript.shadow);
+                    dashScript.shadow.PlayAnimation("Spell1", timeScale: 1.5f);
+                });
+            }
+            else if (wShadow != null)
             {
                 FaceDirection(end, wShadow);
                 wShadow.PlayAnimation("Spell1", timeScale: 1.5f);
@@ -67,13 +87,30 @@ namespace Spells
 
             SpellCast(owner, 1, SpellSlotType.ExtraSlots, zedEndPos, zedEndPos, true, Vector2.Zero);
 
-            if (owner.HasBuff("ZedWQue") || owner.HasBuff("ZedWHandler2"))
+            var dashScript = GetInFlightMissile(owner);
+
+            if (dashScript != null)
             {
-                if (wShadow != null)
+                var capturedTargetPos = targetPos;
+                var capturedMaxRange = maxRange;
+                dashScript.PendingShadowCasts.Add(() =>
                 {
-                    var shadowDir = Vector2.Normalize(targetPos - wShadow.Position);
-                    var shadowEndPos = wShadow.Position + (shadowDir * maxRange);
-                    CreateCustomMissile(owner, "ZedShurikenMisOne", wShadow.Position, shadowEndPos, new MissileParameters { Type = MissileType.Circle });
+                    var sh = dashScript.shadow;
+                    var shadowDir = Vector2.Normalize(capturedTargetPos - sh.Position);
+                    var shadowEndPos = sh.Position + (shadowDir * capturedMaxRange);
+                    CreateCustomMissile(owner, "ZedShurikenMisOne", sh.Position, shadowEndPos,
+                        new MissileParameters { Type = MissileType.Circle });
+                });
+            }
+            else if (owner.HasBuff("ZedWHandler2"))
+            {
+                var sh = wShadow;
+                if (sh != null)
+                {
+                    var shadowDir = Vector2.Normalize(targetPos - sh.Position);
+                    var shadowEndPos = sh.Position + (shadowDir * maxRange);
+                    CreateCustomMissile(owner, "ZedShurikenMisOne", sh.Position, shadowEndPos,
+                        new MissileParameters { Type = MissileType.Circle });
                 }
             }
         }
