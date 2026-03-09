@@ -38,7 +38,30 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 return;
             }
 
+            if (SpellOrigin != null && SpellOrigin.SpellData != null)
+            {
+                float accel = SpellOrigin.SpellData.MissileAccel;
+                if (accel != 0)
+                {
+                    _moveSpeed += accel * (diff / 1000.0f);
+
+                    float minSpeed = SpellOrigin.SpellData.MissileMinSpeed;
+                    float maxSpeed = SpellOrigin.SpellData.MissileMaxSpeed;
+
+                    if (minSpeed > 0 && _moveSpeed < minSpeed)
+                    {
+                        _moveSpeed = minSpeed;
+                    }
+                    else if (maxSpeed > 0 && _moveSpeed > maxSpeed)
+                    {
+                        _moveSpeed = maxSpeed;
+                    }
+                }
+            }
+
             Move(diff);
+            _timeSinceCreation += diff;
+            API.ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)

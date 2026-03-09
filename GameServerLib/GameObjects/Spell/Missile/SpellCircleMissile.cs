@@ -80,6 +80,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             }
 
             Move(diff);
+            _timeSinceCreation += diff;
+            API.ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)

@@ -35,8 +35,6 @@ namespace Spells
             SetSpell(_owner, "YasuoQ2", SpellSlotType.ExtraSlots, 1, true);
             SetSpell(_owner, "YasuoQ3", SpellSlotType.ExtraSlots, 2, true);
             SetSpell(_owner, "YasuoQ3Mis", SpellSlotType.ExtraSlots, 3, true);
-
-            SetSpell(_owner, "YasuoWMovingWallMissile", SpellSlotType.ExtraSlots, 4, true);
             ApiEventManager.OnLevelUpSpell.RemoveListener(this, spell);
         }
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

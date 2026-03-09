@@ -1270,5 +1270,23 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.Map.NavigationGrid.GetClosestTerrainExit(location, distanceThreshold);
         }
+        public static void UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
+        {
+            _game.PacketNotifier.NotifyS2C_UnitSetLookAt(attacker, attacked, attackType);
+        }
+        public static List<SpellMissile> GetMissiles()
+        {
+            var returnList = new List<SpellMissile>();
+
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is SpellMissile missile)
+                {
+                    returnList.Add(missile);
+                }
+            }
+
+            return returnList;
+        }
     }
 }

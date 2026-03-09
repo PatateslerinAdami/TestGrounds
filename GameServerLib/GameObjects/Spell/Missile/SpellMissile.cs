@@ -10,7 +10,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
     {
         // Function Vars.
         protected float _moveSpeed;
-        private float _timeSinceCreation;
+        protected float _timeSinceCreation;
 
         /// <summary>
         /// Information about this missile's path.
