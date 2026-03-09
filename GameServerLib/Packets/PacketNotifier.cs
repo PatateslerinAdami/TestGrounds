@@ -266,10 +266,10 @@ namespace PacketDefinitions420
             var higherValue = Math.Max(targetHeight, particle.GetHeight());
 
             // TODO: implement option for multiple particles instead of hardcoding one
-            var customHeight = higherValue;
+            //var customHeight = higherValue;
             if (particle.OverrideTargetHeight != 0f)
             {
-                customHeight = particle.OverrideTargetHeight;
+                higherValue = higherValue + particle.OverrideTargetHeight;
             }
             var fxData1 = new FXCreateData
             {
@@ -282,7 +282,7 @@ namespace PacketDefinitions420
                 PositionZ = (short)((position.Z - _navGrid.MapHeight / 2) / 2),
 
                 TargetPositionX = (short)((targetPos.X - _navGrid.MapWidth / 2) / 2),
-                TargetPositionY = customHeight,
+                TargetPositionY = higherValue,
                 TargetPositionZ = (short)((targetPos.Y - _navGrid.MapHeight / 2) / 2),
 
                 OwnerPositionX = (short)((ownerPos.X - _navGrid.MapWidth / 2) / 2),
