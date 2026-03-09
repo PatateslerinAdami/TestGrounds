@@ -1,4 +1,6 @@
 {
 	"clientLocation": "C:\\LeagueSandbox\\League_Sandbox_Client",
+	"clientLaunchScriptPath": "",
+	"winePrefix": "",
 	"autoStartClient": true
 }
