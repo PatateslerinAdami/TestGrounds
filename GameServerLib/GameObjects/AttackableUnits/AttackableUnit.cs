@@ -262,7 +262,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             while (_statUpdateTimer >= 500)
             {
                 // update Stats (hpregen, manaregen) every 0.5 seconds
-                Stats.Update(_statUpdateTimer);
+                Stats.Update(this, _statUpdateTimer);
                 _statUpdateTimer -= 500;
                 API.ApiEventManager.OnUpdateStats.Publish(this, diff);
             }
@@ -490,9 +490,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ApiEventManager.OnStatModified.Publish(this, statModifier);
         }
 
-        public virtual void TakeHeal(AttackableUnit caster, float amount, IEventSource sourceScript = null)
-        {
-            Stats.CurrentHealth = Math.Clamp(Stats.CurrentHealth + amount, 0, Stats.HealthPoints.Total);
+        /// <summary>
+        /// Checks if healing can be received
+        /// </summary>
+        protected virtual bool CanReceiveHealing() {
+            return this is not ObjBuilding and not BaseTurret;
+        }
+        
+        /// <summary>
+        /// Applies healing to this unit.
+        /// </summary>
+        /// <param name="caster">Unit that is casting to heal.</param>
+        /// <param name="amount">The heal amount.</param>
+        /// <param name="healType">Type of heal received. </param>
+        public virtual void TakeHeal(AttackableUnit caster, float amount, HealType healType, IEventSource sourceScript = null) {
+            if (amount <= 0.0f || IsDead || Stats.CurrentHealth <= 0.0f || !CanReceiveHealing()) return;
+
+            var healer = caster ?? this;
+            var data = new HealData {
+                Healer                     = healer,
+                OriginalHealAmount         = amount,
+                HealAmount                 = amount,
+                PostModificationHealAmount = 0.0f,
+                HealType                   = healType,
+                Target                     = this
+            };
+
+            ApiEventManager.OnCastHeal.Publish(healer, data);
+            ApiEventManager.OnReceiveHeal.Publish(this, data);
+
+            var amountToApply = Math.Max(0.0f, data.HealAmount);
+            var previousHealth = Stats.CurrentHealth;
+            Stats.CurrentHealth = Math.Clamp(previousHealth + amountToApply, 0.0f, Stats.HealthPoints.Total);
+            data.PostModificationHealAmount = Stats.CurrentHealth - previousHealth;
         }
 
         /// <summary>

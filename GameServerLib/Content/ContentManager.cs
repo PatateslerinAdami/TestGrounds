@@ -80,6 +80,12 @@ namespace LeagueSandbox.GameServer.Content
         {
             string packagePath = GetPackagePath(packageName);
 
+            if (string.IsNullOrEmpty(packagePath))
+            {
+                _logger.Warn($"Unable to resolve package path for package: {packageName}");
+                return;
+            }
+
             Package dataPackage = new Package(packagePath, _game);
 
             dataPackage.LoadPackage(packageName);
@@ -94,7 +100,7 @@ namespace LeagueSandbox.GameServer.Content
 
         private string GetPackagePath(string packageName)
         {
-            return $"{ContentPath}/{packageName}";
+            return ResolvePackagePath(packageName, ContentPath);
         }
 
         public bool HasScripts()
@@ -232,7 +238,14 @@ namespace LeagueSandbox.GameServer.Content
         {
             List<string> dependencyList = new List<string>();
 
-            var dataPackageConfigurationPath = $"{contentPath}/{packageName}/packageInfo.json";
+            var dataPackagePath = ResolvePackagePath(packageName, contentPath);
+            if (string.IsNullOrEmpty(dataPackagePath))
+            {
+                _logger.Debug($"No package path found for dependency lookup: {packageName}");
+                return new List<string>();
+            }
+
+            var dataPackageConfigurationPath = $"{dataPackagePath}/packageInfo.json";
             JToken dataPackageConfiguration = null;
 
             try
@@ -240,6 +253,11 @@ namespace LeagueSandbox.GameServer.Content
                 dataPackageConfiguration = JToken.Parse(File.ReadAllText(dataPackageConfigurationPath));
             }
             catch (FileNotFoundException)
+            {
+                _logger.Debug($"{dataPackageConfigurationPath} not found, skipping...");
+                return new List<string>();
+            }
+            catch (DirectoryNotFoundException)
             {
                 _logger.Debug($"{dataPackageConfigurationPath} not found, skipping...");
                 return new List<string>();
@@ -282,6 +300,36 @@ namespace LeagueSandbox.GameServer.Content
             }
 
             return true;
+        }
+
+        private static string ResolvePackagePath(string packageName, string contentPath)
+        {
+            if (string.IsNullOrWhiteSpace(packageName) || string.IsNullOrWhiteSpace(contentPath))
+            {
+                return null;
+            }
+
+            var directPath = Path.Combine(contentPath, packageName);
+            if (Directory.Exists(directPath))
+            {
+                return directPath;
+            }
+
+            if (!Directory.Exists(contentPath))
+            {
+                return null;
+            }
+
+            foreach (var directory in Directory.EnumerateDirectories(contentPath))
+            {
+                var nestedPath = Path.Combine(directory, "Content", packageName);
+                if (Directory.Exists(nestedPath))
+                {
+                    return nestedPath;
+                }
+            }
+
+            return null;
         }
 
     }

@@ -1,6 +1,7 @@
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -61,7 +62,7 @@ namespace Spells
             {
                 healthGain *= 0.5f;
             }
-            target.TakeHeal(owner, healthGain, spell);
+            target.TakeHeal(owner, healthGain, target == owner ? HealType.SelfHeal : HealType.OutgoingHeal, spell);
             AddBuff("HealSpeed", 1.0f, 1, spell, target, owner);
             AddBuff("HealCheck", 35.0f, 1, spell, target, owner);
         }

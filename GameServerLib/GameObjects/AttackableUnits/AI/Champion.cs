@@ -557,17 +557,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return false;
         }
 
-        public override void TakeHeal(AttackableUnit caster, float amount, IEventSource sourceScript = null)
-        {
-            base.TakeHeal(caster, amount, sourceScript);
-
-            var e = CreateEventForHistory<OnCastHeal>(caster, sourceScript);
-            if(e != null)
-            {
-                e.HealAmmount = amount;
-            }
-        }
-
         public override void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
             base.TakeDamage(damageData, damageText, sourceScript);
