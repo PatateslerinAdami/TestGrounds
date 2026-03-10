@@ -7,7 +7,7 @@ namespace LeagueSandbox.GameServer.GameObjects
     public class Fountain
     {
         private Game _game;
-        private const float PERCENT_MAX_HEALTH_HEAL = 0.15f;
+        private const float PERCENT_MAX_HEALTH_HEAL = 0.021f;
         private const float PERCENT_MAX_MANA_HEAL = 0.15f;
         private const float HEAL_FREQUENCY = 1000f;
         private float _fountainSize;
@@ -42,9 +42,8 @@ namespace LeagueSandbox.GameServer.GameObjects
                     continue;
                 }
 
-                var hp = champion.Stats.CurrentHealth;
-                var maxHp = champion.Stats.HealthPoints.Total;
-                champion.Stats.CurrentHealth = Math.Min(hp + maxHp * PERCENT_MAX_HEALTH_HEAL, maxHp);
+                champion.TakeHeal(champion, champion.Stats.HealthPoints.Total * PERCENT_MAX_HEALTH_HEAL,
+                    HealType.HealthRegeneration);
 
                 if ((byte)champion.Stats.ParType > 1)
                 {

@@ -241,19 +241,12 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CalculateTrueMoveSpeed();
         }
 
-        public void Update(float diff)
+        public void Update(AttackableUnit? owner, float diff)
         {
-            if (HealthRegeneration.Total > 0 && CurrentHealth < HealthPoints.Total && CurrentHealth > 0)
-            {
-                var newHealth = CurrentHealth + HealthRegeneration.Total * diff * 0.001f;
-                newHealth = Math.Min(HealthPoints.Total, newHealth);
-                CurrentHealth = newHealth;
-            }
+            if (owner != null && HealthRegeneration.Total > 0 && CurrentHealth < HealthPoints.Total && CurrentHealth > 0)
+                owner.TakeHeal(owner, HealthRegeneration.Total * diff * 0.001f, HealType.HealthRegeneration);
 
-            if ((byte)ParType > 1)
-            {
-                return;
-            }
+            if ((byte)ParType > 1) return;
 
             if (ManaRegeneration.Total > 0 && CurrentMana < ManaPoints.Total)
             {

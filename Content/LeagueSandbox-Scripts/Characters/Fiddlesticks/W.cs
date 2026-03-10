@@ -108,7 +108,7 @@ namespace Spells
             float healAmount = damagePerTick * healPercent;
 
             _target.TakeDamage(_owner, damagePerTick, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
-            _owner.TakeHeal(_owner, healAmount);
+            _owner.TakeHeal(_owner, healAmount, HealType.Drain);
         }
 
         public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
