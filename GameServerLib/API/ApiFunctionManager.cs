@@ -509,7 +509,8 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default
+            RegionType regionType = RegionType.Default,
+            bool ignoresLoS = false
         )
         {
             return new Region
@@ -519,7 +520,9 @@ namespace LeagueSandbox.GameServer.API
                 visionRadius: radius,
                 revealStealth: revealStealthed,
                 collisionRadius: collisionArea,
-                lifetime: duration
+                lifetime: duration,
+                onlyShowTarget: revealSpecificUnitOnly != null,
+                ignoresLoS: ignoresLoS
             );
         }
 

@@ -455,7 +455,7 @@ namespace PacketDefinitions420
             var misPacket = new MissileReplication
             {
                 SenderNetID = m.CastInfo.Owner.NetId,
-                Position = m.GetPosition3D(),
+                Position = new Vector3(m.Position.X, m.CastInfo.SpellCastLaunchPosition.Y, m.Position.Y),
                 CasterPosition = m.CastInfo.Owner.GetPosition3D(),
                 // Not sure if we want to add height for these, but i did it anyway
                 Direction = m.Direction,
@@ -2318,6 +2318,7 @@ namespace PacketDefinitions420
         {
             if (u.Replication != null)
             {
+                u.Replication.Update();
                 var us = new OnReplication()
                 {
                     SyncID = (uint)Environment.TickCount,
@@ -4172,6 +4173,7 @@ namespace PacketDefinitions420
         /// <param name="partial">Whether or not the packet should only include stats marked as changed.</param>
         public void HoldReplicationDataUntilOnReplicationNotification(AttackableUnit u, int userId, bool partial = true)
         {
+            u.Replication.Update();
             var data = u.Replication.GetData(partial);
 
             List<ReplicationData> list = null;

@@ -74,6 +74,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (isTerrain)
             {
                 // TODO: Implement methods for isTerrain for projectiles such as Nautilus Q, ShyvanaDragon Q, or Ziggs Q.
+                API.ApiEventManager.OnCollisionTerrain.Publish(this);
                 return;
             }
 

@@ -384,7 +384,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             if (_slows.Count > 0)
             {
                 //Only takes into account the highest slow
-                speed *= 1 + _slows.Max(z => z) * (1 - SlowResistPercent);
+                speed *= 1 + _slows.Min(z => z) * (1 - SlowResistPercent);
             }
 
             _trueMoveSpeed = speed;
