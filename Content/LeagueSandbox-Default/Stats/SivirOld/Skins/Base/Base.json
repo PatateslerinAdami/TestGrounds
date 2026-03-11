@@ -1,0 +1,21 @@
+{
+    "MetaData": {
+        "ContentFormatVersion": 4,
+        "Id": "Base",
+        "Name": "Base",
+        "ResourcePath": "DATA/Characters/SivirOld/Skins/Base/Base.inibin"
+    },
+  "MeshSkin": {
+    "Animations": "Base.blnd",
+    "Body" : "Sivir.sco",
+    "ChampionSkinID": "15000",
+    "ChampionSkinName": "BaseSivir",
+    "SelfIllumination": 0.7,
+    "SimpleSkin": "Sivir.skn",
+    "Skeleton": "Sivir.skl",
+    "SkinScale": 0.900000036,
+    "Texture": "Sivir.dds",
+    "Weight": "Sivir.wgt"
+  }
+    }
+}
