@@ -1279,17 +1279,7 @@ namespace LeagueSandbox.GameServer.API
         }
         public static List<SpellMissile> GetMissiles()
         {
-            var returnList = new List<SpellMissile>();
-
-            foreach (var obj in _game.ObjectManager.GetObjects().Values)
-            {
-                if (obj is SpellMissile missile)
-                {
-                    returnList.Add(missile);
-                }
-            }
-
-            return returnList;
+            return _game.ObjectManager.GetAllMissiles();
         }
     }
 }

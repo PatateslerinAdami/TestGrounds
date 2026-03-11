@@ -1,14 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using GameServerCore;
+﻿using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.NetInfo;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 
 namespace LeagueSandbox.GameServer
 {
@@ -30,6 +31,7 @@ namespace LeagueSandbox.GameServer
         private Dictionary<uint, Champion> _champions;
         private Dictionary<uint, BaseTurret> _turrets;
         private Dictionary<uint, Inhibitor> _inhibitors;
+        private Dictionary<uint, SpellMissile> _missiles;
         private Dictionary<TeamId, List<GameObject>> _visionProviders;
 
         private bool _currentlyInUpdate = false;
@@ -59,6 +61,7 @@ namespace LeagueSandbox.GameServer
             _turrets = new Dictionary<uint, BaseTurret>();
             _inhibitors = new Dictionary<uint, Inhibitor>();
             _champions = new Dictionary<uint, Champion>();
+            _missiles = new Dictionary<uint, SpellMissile>();
             _visionProviders = new Dictionary<TeamId, List<GameObject>>();
             foreach (var team in Teams)
             {
@@ -210,6 +213,10 @@ namespace LeagueSandbox.GameServer
                 {
                     _objects.Add(o.NetId, o);
                 }
+                if (o is SpellMissile missile)
+                {
+                    _missiles.Add(missile.NetId, missile);
+                }
                 // TODO: This is a hack-fix for units which have packets being sent before spawning (ex: AscWarp minion)
                 // Instead, we need a dedicated packet queue system which takes all packets which are not vision/spawn related,
                 // and queues them if the object is not spawned yet for clients.
@@ -238,6 +245,11 @@ namespace LeagueSandbox.GameServer
                 else
                 {
                     _objects.Remove(o.NetId);
+                }
+
+                if (o is SpellMissile missile)
+                {
+                    _missiles.Remove(missile.NetId);
                 }
                 o.OnRemoved();
             }
@@ -669,6 +681,13 @@ namespace LeagueSandbox.GameServer
             {
                 UpdateVisionSpawnAndSync(obj, kv, forceSpawn: false);
             }
+        }
+        /// <summary>
+        /// Gets a new list of all active SpellMissiles in the game.
+        /// </summary>
+        public List<SpellMissile> GetAllMissiles()
+        {
+            return _missiles.Values.ToList();
         }
     }
 }

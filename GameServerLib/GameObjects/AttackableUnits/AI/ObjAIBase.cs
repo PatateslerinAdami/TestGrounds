@@ -1107,6 +1107,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="target">Unit to target.</param>
         public void SetTargetUnit(AttackableUnit target, bool networked = false)
         {
+            if (TargetUnit == target)
+            {
+                return;
+            }
+            bool wasTargetingChampion = TargetUnit is Champion;
             if (target == null && TargetUnit != null)
             {
                 ApiEventManager.OnTargetLost.Publish(this, TargetUnit);
@@ -1121,6 +1126,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 if (target is Champion c)
                 {
                     _game.PacketNotifier.NotifyAI_TargetHeroS2C(this, c);
+                }
+                else if (wasTargetingChampion)
+                {
+                    _game.PacketNotifier.NotifyAI_TargetHeroS2C(this, null);
                 }
             }
         }
