@@ -28,6 +28,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         ) : base(game, collisionRadius, originSpell, castInfo, moveSpeed, overrideEndPos, overrideFlags, netId, serverOnly)
         {
             // Basic functionality of end position is done already by SpellCircleMissile.
+            if (SpellOrigin?.SpellData != null && SpellOrigin.SpellData.MissileFixedTravelTime > 0)
+            {
+                float distance = Vector2.Distance(Position, Destination);
+                _moveSpeed = distance / SpellOrigin.SpellData.MissileFixedTravelTime;
+            }
         }
 
         public override void Update(float diff)

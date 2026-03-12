@@ -63,6 +63,7 @@ namespace Spells
         {
             var owner = spell.CastInfo.Owner;
 
+            if (!spell.SpellData.IsValidTarget(owner, target) || owner.Team == target.Team) return;
             float baseDamage = 125 + (100 * (spell.CastInfo.SpellLevel - 1));
             float apDamage = 0.45f * owner.Stats.AbilityPower.Total;
             float damagePerTick = (baseDamage + apDamage) / 2.0f;

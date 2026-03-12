@@ -573,7 +573,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 SetDashingState(false, MoveStopReason.ForceMovement);
             }
 
-            SetWaypoints(new List<Vector2> { Position, target.Position });
+            SetWaypoints(new List<Vector2> { Position, target.Position }, true);
 
             SetTargetUnit(target, true);
 
@@ -1397,7 +1397,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             var idealRange = Stats.Range.Total;
-            if (TargetUnit != null && SpellToCast != null && !IsAttacking && SpellToCast.SpellData.IsValidTarget(this, TargetUnit))
+            if (SpellToCast != null && !IsAttacking && (TargetUnit == null || SpellToCast.SpellData.IsValidTarget(this, TargetUnit)))
             {
                 // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
                 idealRange = SpellToCast.GetCurrentCastRange();
