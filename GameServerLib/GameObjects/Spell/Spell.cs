@@ -141,9 +141,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 Script = new SpellScriptEmpty();
                 HasEmptyScript = true;
             }
-            
+
             ScriptNameHash = HashString(SpellName);
-            
+
             ToolTipData = new ToolTipData(owner, this);
         }
 
@@ -287,13 +287,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             var status = CastInfo.Owner.Status;
 
-            if (status == StatusFlags.Charmed
-            || status == StatusFlags.Feared
-            || status == StatusFlags.Stunned
-            || status == StatusFlags.Suppressed
-            || status == StatusFlags.Taunted
-            || (CastInfo.IsAutoAttack && (status == StatusFlags.Disarmed || !status.HasFlag(StatusFlags.CanAttack)))
-            || (!CastInfo.IsAutoAttack && (status == StatusFlags.Silenced || !status.HasFlag(StatusFlags.CanCast))))
+            if (status.HasFlag(StatusFlags.Charmed)
+             || status.HasFlag(StatusFlags.Feared)
+             || status.HasFlag(StatusFlags.Stunned)
+             || status.HasFlag(StatusFlags.Suppressed)
+             || status.HasFlag(StatusFlags.Taunted)
+             || (CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Disarmed) || !status.HasFlag(StatusFlags.CanAttack)))
+             || (!CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Silenced) || !status.HasFlag(StatusFlags.CanCast))))
             {
                 ResetSpellCast();
                 return true;
@@ -482,7 +482,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     if (!SpellData.CanMoveWhileChanneling)
                     {
-                        CastInfo.Owner.StopMovement(networked:false);
+                        //CastInfo.Owner.StopMovement(networked:false);
                         // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                         CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                     }
@@ -573,9 +573,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     var owner = CastInfo.Owner;
                     var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
-                    if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0); 
+                    if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0);
 
-                    var fakePos = owner.Position + (forwardVec * 10.0f); 
+                    var fakePos = owner.Position + (forwardVec * 10.0f);
                     var fakePos3D = new Vector3(fakePos.X, _game.Map.NavigationGrid.GetHeightAtLocation(fakePos), fakePos.Y);
 
                     CastInfo.TargetPosition = fakePos3D;
@@ -620,6 +620,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             else
             {
                 FinishCasting();
+                if (SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                {
+                    Channel();
+                }
             }
 
             return true;
@@ -627,6 +631,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public bool Cast(CastInfo castInfo, bool cast)
         {
             CastInfo = castInfo;
+            /*
+            if (CastInfo.Targets == null)
+            {
+                CastInfo.Targets = new List<CastTarget>();
+            }
+            if (CastInfo.Targets.Count == 0)
+            {
+                CastInfo.Targets.Add(new CastTarget(null, HitResult.HIT_Normal));
+            }
+            */
             var start = new Vector2(CastInfo.TargetPosition.X, CastInfo.TargetPosition.Z);
             var end = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
 
@@ -722,13 +736,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         && !SpellData.Flags.HasFlag(SpellDataFlags.InstantCast)
                         && SpellData.CantCancelWhileWindingUp)))
             {
+                if (!CastInfo.IsAutoAttack && !SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
+                {
+                    CastInfo.Owner.SetCastSpell(this);
+                }
                 if (Script.ScriptMetadata.TriggersSpellCasts || SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
                 {
                     if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                     {
                         if (!SpellData.CanMoveWhileChanneling)
                         {
-                            CastInfo.Owner.StopMovement(networked:false);
+                            //CastInfo.Owner.StopMovement(networked:false);
                             // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                             CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                         }
@@ -858,6 +876,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 else
                 {
                     FinishCasting();
+                    if (SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                    {
+                        Channel();
+                    }
                 }
             }
             else
@@ -1081,6 +1103,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CreateSpellSector();
             }
 
+            bool shouldResumeWalking = !CastInfo.Owner.IsPathEnded();
+
             if (CastInfo.Owner.GetCastSpell() == this)
             {
                 CastInfo.Owner.SetCastSpell(null);
@@ -1090,17 +1114,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 CastInfo.Owner.SetSpellToCast(null, Vector2.Zero);
             }
-
-            // Updates move order before script PostCast so teleports are sent to clients correctly (not sent if MoveOrder == CastSpell).
-            if (CastInfo.Owner.GetCastSpell() == null && CastInfo.Owner.MovementParameters == null)
+            if (Script.ScriptMetadata.TriggersSpellCasts)
+            {
+                ApiEventManager.OnSpellPostCast.Publish(this);
+            }
+            if (CastInfo.Owner.GetCastSpell() != null)
+            {
+                return;
+            }
+            if (CastInfo.Owner.MovementParameters == null)
             {
                 if (SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                 {
-                    if (!CastInfo.Owner.IsPathEnded())
+                    if (shouldResumeWalking)
                     {
                         CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                        ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
                     }
-                    if (CastInfo.Owner.TargetUnit != null)
+                    else if (CastInfo.Owner.TargetUnit != null)
                     {
                         CastInfo.Owner.UpdateMoveOrder(OrderType.AttackTo, true);
                     }
@@ -1108,18 +1139,31 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 else
                 {
                     bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
-                    if (!willChannel || !SpellData.CanMoveWhileChanneling)
+
+                    if (!willChannel)
                     {
-                        CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                        if (shouldResumeWalking)
+                        {
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                            ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
+                        }
+                        else
+                        {
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                        }
+                    }
+                    else
+                    {
+                        if (!SpellData.CanMoveWhileChanneling)
+                        {
+                            CastInfo.Owner.StopMovement();
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                        }
                     }
                 }
             }
-
-            if (Script.ScriptMetadata.TriggersSpellCasts)
-            {
-                ApiEventManager.OnSpellPostCast.Publish(this);
-            }
         }
+
 
         public void FinishChanneling()
         {
@@ -1130,9 +1174,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.SetChannelSpell(null);
             }
 
-                CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+            bool shouldResumeWalking = !CastInfo.Owner.IsPathEnded();
 
             ApiEventManager.OnSpellPostChannel.Publish(this);
+            if (CastInfo.Owner.MovementParameters == null)
+            {
+                if (shouldResumeWalking)
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                    ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
+                }
+                else
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                }
+            }
 
             CurrentCooldown = GetCooldown();
 
@@ -1196,64 +1252,64 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             switch (parameters.Type)
             {
                 case MissileType.Target:
-                {
-                    p = new SpellMissile(
-                        _game,
-                        (int)SpellData.LineWidth,
-                        this,
-                        castInfoClone,
-                        SpellData.MissileSpeed,
-                        SpellData.Flags,
-                        netId,
-                        isServerOnly
-                    );
-                    break;
-                }
+                    {
+                        p = new SpellMissile(
+                            _game,
+                            (int)SpellData.LineWidth,
+                            this,
+                            castInfoClone,
+                            SpellData.MissileSpeed,
+                            SpellData.Flags,
+                            netId,
+                            isServerOnly
+                        );
+                        break;
+                    }
                 case MissileType.Chained:
-                {
-                    p = new SpellChainMissile(
-                        _game,
-                        (int)SpellData.LineWidth,
-                        this,
-                        castInfoClone,
-                        parameters,
-                        SpellData.MissileSpeed,
-                        SpellData.Flags,
-                        netId,
-                        isServerOnly
-                    );
-                    break;
-                }
+                    {
+                        p = new SpellChainMissile(
+                            _game,
+                            (int)SpellData.LineWidth,
+                            this,
+                            castInfoClone,
+                            parameters,
+                            SpellData.MissileSpeed,
+                            SpellData.Flags,
+                            netId,
+                            isServerOnly
+                        );
+                        break;
+                    }
                 case MissileType.Circle:
-                {
-                    p = new SpellCircleMissile(
-                        _game,
-                        (int)SpellData.LineWidth,
-                        this,
-                        castInfoClone,
-                        SpellData.MissileSpeed,
-                        parameters.OverrideEndPosition,
-                        SpellData.Flags,
-                        netId,
-                        isServerOnly
-                    );
-                    break;
-                }
+                    {
+                        p = new SpellCircleMissile(
+                            _game,
+                            (int)SpellData.LineWidth,
+                            this,
+                            castInfoClone,
+                            SpellData.MissileSpeed,
+                            parameters.OverrideEndPosition,
+                            SpellData.Flags,
+                            netId,
+                            isServerOnly
+                        );
+                        break;
+                    }
                 case MissileType.Arc:
-                {
-                    p = new SpellLineMissile(
-                        _game,
-                        (int)SpellData.LineWidth,
-                        this,
-                        castInfoClone,
-                        SpellData.MissileSpeed,
-                        parameters.OverrideEndPosition,
-                        SpellData.Flags,
-                        netId,
-                        isServerOnly
-                    );
-                    break;
-                }
+                    {
+                        p = new SpellLineMissile(
+                            _game,
+                            (int)SpellData.LineWidth,
+                            this,
+                            castInfoClone,
+                            SpellData.MissileSpeed,
+                            parameters.OverrideEndPosition,
+                            SpellData.Flags,
+                            netId,
+                            isServerOnly
+                        );
+                        break;
+                    }
             }
 
             // If the position is the same as the destination, the server will have destroyed the missile before notifying of creation, causing the client to crash.
@@ -1307,43 +1363,43 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             switch (parameters.Type)
             {
                 case SectorType.Area:
-                {
-                    s = new SpellSector(
-                        _game,
-                        parameters,
-                        this,
-                        castInfoClone,
-                        netId
-                    );
-                    break;
-                }
+                    {
+                        s = new SpellSector(
+                            _game,
+                            parameters,
+                            this,
+                            castInfoClone,
+                            netId
+                        );
+                        break;
+                    }
                 case SectorType.Cone:
-                {
-                    s = new SpellSectorCone(
-                        _game,
-                        parameters,
-                        this,
-                        castInfoClone,
-                        netId
-                    );
-                    break;
-                }
+                    {
+                        s = new SpellSectorCone(
+                            _game,
+                            parameters,
+                            this,
+                            castInfoClone,
+                            netId
+                        );
+                        break;
+                    }
                 case SectorType.Polygon:
-                {
-                    s = new SpellSectorPolygon(
-                        _game,
-                        parameters,
-                        this,
-                        castInfoClone,
-                        netId
-                    );
-                    break;
-                }
+                    {
+                        s = new SpellSectorPolygon(
+                            _game,
+                            parameters,
+                            this,
+                            castInfoClone,
+                            netId
+                        );
+                        break;
+                    }
                 case SectorType.Ring:
-                {
-                    // TODO
-                    break;
-                }
+                    {
+                        // TODO
+                        break;
+                    }
             }
 
             _game.ObjectManager.AddObject(s);

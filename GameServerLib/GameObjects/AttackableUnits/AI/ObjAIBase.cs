@@ -430,7 +430,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             Stats.LevelUp();
             _game.PacketNotifier.NotifyNPC_LevelUp(this);
-            _game.PacketNotifier.NotifyOnReplication(this, partial: false);
+            //_game.PacketNotifier.NotifyOnReplication(this, partial: false);
             ApiEventManager.OnLevelUp.Publish(this);
             return true;
         }
@@ -573,7 +573,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 SetDashingState(false, MoveStopReason.ForceMovement);
             }
 
-            SetWaypoints(new List<Vector2> { Position, target.Position });
+            SetWaypoints(new List<Vector2> { Position, target.Position }, true);
 
             SetTargetUnit(target, true);
 
@@ -1107,6 +1107,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="target">Unit to target.</param>
         public void SetTargetUnit(AttackableUnit target, bool networked = false)
         {
+            if (TargetUnit == target)
+            {
+                return;
+            }
+            bool wasTargetingChampion = TargetUnit is Champion;
             if (target == null && TargetUnit != null)
             {
                 ApiEventManager.OnTargetLost.Publish(this, TargetUnit);
@@ -1121,6 +1126,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 if (target is Champion c)
                 {
                     _game.PacketNotifier.NotifyAI_TargetHeroS2C(this, c);
+                }
+                else if (wasTargetingChampion)
+                {
+                    _game.PacketNotifier.NotifyAI_TargetHeroS2C(this, null);
                 }
             }
         }
@@ -1388,7 +1397,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             var idealRange = Stats.Range.Total;
-            if (TargetUnit != null && SpellToCast != null && !IsAttacking && SpellToCast.SpellData.IsValidTarget(this, TargetUnit))
+            if (SpellToCast != null && !IsAttacking && (TargetUnit == null || SpellToCast.SpellData.IsValidTarget(this, TargetUnit)))
             {
                 // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
                 idealRange = SpellToCast.GetCurrentCastRange();

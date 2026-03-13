@@ -1,0 +1,50 @@
+{
+    "MetaData": {
+        "ContentFormatVersion": 4,
+        "Id": "EnchantedCrystalArrowMissile",
+        "Name": "EnchantedCrystalArrowMissile",
+        "ResourcePath": "DATA/Characters/Ashe/Spells/EnchantedCrystalArrowMissile.inibin"
+    },
+    "Values": {
+        "SpellData": {
+            "AfterEffectName": "EnchantedCrystalArrow_tar.troy",
+            "AlternateName": "EnchantedCrystalArrowMissile",
+            "BounceRadius": "450.0000",
+            "CantCancelWhileWindingUp": 1,
+            "CastRadius": "100.0000",
+            "CastRange": "25000.0000",
+            "CastRange1": "25000.0000",
+            "CastRange2": "25000.0000",
+            "CastRange3": "25000.0000",
+            "CastRange4": "25000.0000",
+            "CastRange5": "25000.0000",
+            "CastRange6": "25000.0000",
+            "CastType": 3,
+            "Cooldown": "0.0000",
+            "Cooldown1": "0.0000",
+            "Cooldown2": "0.0000",
+            "Cooldown3": "0.0000",
+            "Cooldown4": "0.0000",
+            "Cooldown5": "0.0000",
+            "Cooldown6": "0.0000",
+            "Flags": "66560",
+            "HitEffectName": "Ashe_Base_R_tar.troy",
+            "ManaCost1": "0.0000",
+            "ManaCost2": "0.0000",
+            "ManaCost3": "0.0000",
+            "MinimapIcon": "Bowmaster_EnchantedArrow_Circle.dds",
+            "MinimapIconDisplayFlag": 1,
+            "MinimapIconRotation": 1,
+            "MissileBoneName": "R_hand",
+            "MissileEffect": "Ashe_Base_R_mis.troy",
+            "MissileMaxSpeed": "1600.0000",
+            "MissileMinSpeed": "1600.0000",
+            "MissilePerceptionBubbleRadius": "750.0000",
+            "MissileSpeed": "1600.0000",
+            "MissileTargetHeightAugment": "100.0000",
+            "Sound_CastName": "Chloenil_Attack_1b_Impact_1.wav",
+            "Sound_HitName": "Chloenil_Attack_1a_Release_1.wav",
+            "TargettingType": 6
+        }
+    }
+}

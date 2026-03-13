@@ -13,8 +13,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            //BuffType = BuffType.STUN,
-            BuffType = BuffType.KNOCKUP,
+            BuffType = BuffType.STUN,
             BuffAddType = BuffAddType.REPLACE_EXISTING
         };
 
@@ -24,13 +23,14 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            //buff.SetStatusEffect(StatusFlags.Stunned, true);
-            //stun = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
+            stun = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
+            unit.SetStatus(StatusFlags.Stunned, true);
+            unit.StopMovement();
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            //RemoveParticle(stun);
+            unit.SetStatus(StatusFlags.Stunned, false);
         }
     }
 }

@@ -944,8 +944,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     return frameTime;
                 }
                 dir = unitToFollow.Position - Position;
-                float combinedRadius = PathfindingRadius + unitToFollow.PathfindingRadius;
-                distToDest = Math.Max(0, dir.Length() - combinedRadius);
+                distToDest = Math.Max(0, dir.Length() - MP.FollowBackDistance);
                 if (MP.FollowDistance > 0)
                 {
                     distRemaining = MP.FollowDistance - MP.PassedDistance;
@@ -1078,13 +1077,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         /// <param name="newWaypoints">New path of Vector2 coordinates that the unit will move to.</param>
         /// <param name="networked">Whether or not clients should be notified of this change in waypoints at the next ObjectManager.Update.</param>
-        public bool SetWaypoints(List<Vector2> newWaypoints)
+        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
         {
             // Waypoints should always have an origin at the current position.
             // Dashes are excluded as their paths should be set before being applied.
             // TODO: Find out the specific cases where we shouldn't be able to set our waypoints. Perhaps CC?
             // Setting waypoints during auto attacks is allowed.
-            if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position || !CanChangeWaypoints())
+            if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position || (!isForced && !CanChangeWaypoints()))
             {
                 return false;
             }
@@ -1744,7 +1743,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
             // False because we don't want this to be networked as a normal movement.
-            SetWaypoints(new List<Vector2> { Position, newCoords });
+            SetWaypoints(new List<Vector2> { Position, newCoords }, true);
 
             // TODO: Take into account the rest of the arguments
             MovementParameters = new ForceMovementParameters

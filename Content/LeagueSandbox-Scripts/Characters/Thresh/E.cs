@@ -1,4 +1,6 @@
-﻿using GameServerCore.Enums;
+﻿using GameMaths;
+using GameServerCore;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
@@ -27,11 +29,20 @@ namespace Spells
             NotSingleTargetSpell = true,
             AutoFaceDirection = true
         };
+
+        ObjAIBase _owner;
+        Minion _toLookAt;
+
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _owner = owner;
+            _toLookAt = AddMinion(_owner, "testcuberender10vision", "testcuberender10vision", owner.Position, owner.Team, ignoreCollision: true, targetable: false, useSpells: false);
+        }
+
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            Vector2 dragStart = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-            Vector2 dragEnd = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
-            Vector2 direction = dragEnd - dragStart;
+            Vector2 targetPosEnd = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
+            Vector2 direction = targetPosEnd - owner.Position;
 
             if (direction.LengthSquared() > 0)
             {
@@ -42,36 +53,15 @@ namespace Spells
                 direction = new Vector2(owner.Direction.X, owner.Direction.Z);
             }
 
-            Vector2 facing = new Vector2(owner.Direction.X, owner.Direction.Z);
-            float castAngle = (float)Math.Atan2(direction.Y, direction.X);
-            float facingAngle = (float)Math.Atan2(facing.Y, facing.X);
-
-            float angle = (castAngle - facingAngle) * (180f / (float)Math.PI);
-
-            while (angle > 180f) angle -= 360f;
-            while (angle <= -180f) angle += 360f;
-            //makes me believe there is something wrong with the spell system.
-            string animName;
-            if (angle > -45f && angle <= 45f)
-                animName = "spell3_p0";        
-            else if (angle > 45f && angle <= 135f)
-                animName = "Spell3_pL90";     
-            else if (angle > -135f && angle <= -45f)
-                animName = "Spell3_p90";       
-            else if (angle > 135f)
-                animName = "spell3_pL180";     
-            else
-                animName = "Spell3_p180";       
-
-            OverrideAnimation(owner, animName, "Spell3");
+            var endPos = _owner.Position + direction * 400f;
+            _toLookAt.SetPosition(endPos);
+            UnitSetLookAt(_owner, _toLookAt, AttackType.ATTACK_TYPE_MELEE);
         }
+
         public void OnSpellCast(Spell spell)
         {
-            var owner = spell.CastInfo.Owner;
-
-            Vector2 dragStart = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-            Vector2 dragEnd = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
-            Vector2 direction = dragEnd - dragStart;
+            Vector2 targetPosEnd = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
+            Vector2 direction = targetPosEnd - _owner.Position;
 
             if (direction.LengthSquared() > 0)
             {
@@ -79,23 +69,16 @@ namespace Spells
             }
             else
             {
-                direction = new Vector2(owner.Direction.X, owner.Direction.Z);
+                direction = new Vector2(_owner.Direction.X, _owner.Direction.Z);
             }
 
-            Vector2 missileStart = owner.Position - (direction * 500f);
-            Vector2 missileEnd = owner.Position + (direction * 500f);
-            SpellCast(owner, 5, SpellSlotType.ExtraSlots, missileStart, missileEnd, true, missileStart);
+            Vector2 missileStart = _owner.Position - (direction * 500f);
+            Vector2 missileEnd = _owner.Position + (direction * 500f);
+            SpellCast(_owner, 5, SpellSlotType.ExtraSlots, missileStart, missileEnd, true, missileStart);
 
-        }
-
-        public void OnSpellPostCast(Spell spell)
-        {
-            var owner = spell.CastInfo.Owner;
-            owner.RegisterTimer(new GameScriptTimer(1.4f, () =>
-            {
-                //ClearOverrideAnimation(owner, "Spell3");
-            }));
-            
+            var dir3D = new Vector3(direction.X, 0, direction.Y);
+            AddParticlePos(_owner, "Thresh_E_Warn_green.troy", _owner.Position, missileEnd, teamOnly: _owner.Team, direction: dir3D);
+            AddParticlePos(_owner, "Thresh_E_Warn_red.troy", _owner.Position, default, teamOnly: CustomConvert.GetEnemyTeam(_owner.Team), ignoreCasterVisibility: true, direction:dir3D);
         }
     }
 

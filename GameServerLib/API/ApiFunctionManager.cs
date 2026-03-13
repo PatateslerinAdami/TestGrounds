@@ -503,7 +503,8 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default
+            RegionType regionType = RegionType.Default,
+            bool ignoresLoS = false
         )
         {
             return new Region
@@ -513,7 +514,9 @@ namespace LeagueSandbox.GameServer.API
                 visionRadius: radius,
                 revealStealth: revealStealthed,
                 collisionRadius: collisionArea,
-                lifetime: duration
+                lifetime: duration,
+                onlyShowTarget: revealSpecificUnitOnly != null,
+                ignoresLoS: ignoresLoS
             );
         }
 
@@ -1270,17 +1273,7 @@ namespace LeagueSandbox.GameServer.API
         }
         public static List<SpellMissile> GetMissiles()
         {
-            var returnList = new List<SpellMissile>();
-
-            foreach (var obj in _game.ObjectManager.GetObjects().Values)
-            {
-                if (obj is SpellMissile missile)
-                {
-                    returnList.Add(missile);
-                }
-            }
-
-            return returnList;
+            return _game.ObjectManager.GetAllMissiles();
         }
     }
 }

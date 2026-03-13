@@ -16,10 +16,12 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata => new()
         {
-            TriggersSpellCasts = true
+            TriggersSpellCasts = true,
+            AutoFaceDirection = true
         };
         public void OnSpellCast(Spell spell)
         {
+            spell.CastInfo.Owner.StopMovement(networked:false);
             var target = spell.CastInfo.Targets.FirstOrDefault()?.Unit;
             if (target != null)
             {

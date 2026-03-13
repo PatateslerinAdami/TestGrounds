@@ -103,7 +103,7 @@ namespace Spells
 
             AddParticleTarget(owner, target, "Thresh_Q_Pull_Sound.troy", target);
             AddParticleTarget(owner, target, "Thresh_Q_stab_tar.troy", target);
-            AddParticleTarget(owner, target, "Thresh_Q_whip_pull_beam.troy", owner, 1.5f, bone: "head", targetBone: "R_hand");
+            AddParticleTarget(owner, target, "Thresh_Q_whip_pull_beam.troy", owner, 2f, bone: "head", targetBone: "R_hand");
             AddBuff("ThreshQ", 1.5f, 1, spell, target, owner);
             AddUnitPerceptionBubble(target, 1f, 1.6f, owner.Team, false, target, ignoresLoS: true, onlyShowTarget: true);
             var spellA = owner.SetSpell("ThreshQLeap", 0, true);
