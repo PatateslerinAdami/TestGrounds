@@ -1275,5 +1275,10 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.ObjectManager.GetAllMissiles();
         }
+
+        public static void InstantStopTest(AttackableUnit unit, bool forceClient = true, bool keepAnimating = false)
+        {
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit,false, keepAnimating, false, true, forceClient, 0);
+        }
     }
 }

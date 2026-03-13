@@ -1018,7 +1018,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 // For some reason this is the packet used for manually cancelling channels.
                 _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
-                ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
+                if (reason != ChannelingStopSource.TimeCompleted)
+                {
+                    ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
+                }
 
                 if (CastInfo.Owner.ChannelSpell == this)
                 {
