@@ -19,14 +19,12 @@ namespace Buffs
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-        public float SlowPercent { get; set; } = 0.2f;
 
         Particle _slowParticle;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            StatsModifier.MoveSpeed.PercentBonus = -SlowPercent;
-
+            StatsModifier.MoveSpeed.PercentBonus = buff.Variables.GetFloat("slowPercent");
             unit.AddStatModifier(StatsModifier);
             _slowParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Slow", unit, buff.Duration, bone:"head");
         }
