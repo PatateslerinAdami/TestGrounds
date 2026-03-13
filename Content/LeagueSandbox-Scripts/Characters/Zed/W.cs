@@ -88,8 +88,8 @@ namespace Spells
             }
             PendingShadowCasts.Clear();
 
-            AddBuff(new ZedWHandler { shadow = shadow }, "ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner);
-            AddBuff(new ZedWHandler2 { shadow = shadow }, "ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner);
+            //AddBuff(new ZedWHandler { shadow = shadow }, "ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner);
+            //AddBuff(new ZedWHandler2 { shadow = shadow }, "ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner);
 
             AddParticle(_owner, null, "Zed_Base_W_tar.troy", missile.Position, lifetime: 1f);
         }

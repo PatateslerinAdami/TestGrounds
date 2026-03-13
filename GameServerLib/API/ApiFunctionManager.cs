@@ -275,30 +275,24 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="from">Owner of the buff.</param>
         /// <param name="infiniteduration">Whether or not the buff should last forever.</param>
         /// <returns>New buff instance.</returns>
-        public static Buff AddBuff(string buffName, float duration, byte stacks, Spell originspell, AttackableUnit onto, ObjAIBase from, bool infiniteduration = false, IEventSource parent = null)
+        public static Buff AddBuff(
+            string buffName,
+            float duration,
+            byte stacks,
+            Spell originspell,
+            AttackableUnit onto,
+            ObjAIBase from,
+            bool infiniteduration = false,
+            IEventSource parent = null,
+            BuffVariables buffVariables = null
+        )
         {
             Buff buff;
 
             try
             {
-                buff = new Buff(_game, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent);
-            }
-            catch (ArgumentException exception)
-            {
-                _logger.Error(exception);
-                return null;
-            }
-
-            onto.AddBuff(buff);
-            return buff;
-        }
-        public static Buff AddBuff(IBuffGameScript buffScript, string buffName, float duration, byte stacks, Spell originspell, AttackableUnit onto, ObjAIBase from, bool infiniteduration = false, IEventSource parent = null)
-        {
-            Buff buff;
-
-            try
-            {
-                buff = new Buff(_game, buffScript, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent);
+                buff = new Buff(_game, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent,
+                    buffVariables);
             }
             catch (ArgumentException exception)
             {

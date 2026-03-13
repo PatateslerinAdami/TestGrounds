@@ -22,7 +22,8 @@ namespace Spells
                 RandomDirection = true,
                 slowPercent = 0.5f
             };
-            AddBuff(fear, "Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
+            AddBuff("Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
+            //AddBuff(fear, "Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
 
         }
     }

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects.Other
 {
@@ -31,7 +30,7 @@ namespace LeagueSandbox.GameServer.GameObjects.Other
 
         public virtual void SetStacks(int newStacks)
         {
-            if (newStacks < 1 || newStacks > MaxStacks)
+            if (newStacks < 0 || newStacks > MaxStacks)
             {
                 throw new System.Exception($"Cannot set stack size out of bounds (max is {MaxStacks})");
             }
