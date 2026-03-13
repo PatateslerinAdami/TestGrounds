@@ -121,11 +121,10 @@ namespace Spells
                     float damage = 5f + (15f * level) + _owner.Stats.AttackDamage.Total;
 
                     target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
-                    var Slow = new Slow()
-                    {
-                        SlowPercent = 0.5f
-                    };
-                    AddBuff(Slow, "Slow", 2.0f, 1, spell, target, _owner);
+                    
+                    var buffVariables = new BuffVariables();
+                    buffVariables.Set("slowPercent", 0.5f);
+                    AddBuff( "Slow", 2.0f, 1, spell, target, _owner, buffVariables: buffVariables);
                 }
 
                 AddParticle(_owner, target, "ashe_base_w_tar.troy", default);
