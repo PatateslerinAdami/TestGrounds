@@ -250,9 +250,15 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             if (ManaRegeneration.Total > 0 && CurrentMana < ManaPoints.Total)
             {
-                var newMana = CurrentMana + ManaRegeneration.Total * diff * 0.001f;
-                newMana = Math.Min(ManaPoints.Total, newMana);
-                CurrentMana = newMana;
+                var regenAmount = ManaRegeneration.Total * diff * 0.001f;
+                if (owner != null)
+                {
+                    owner.IncreasePAR(owner, regenAmount);
+                }
+                else
+                {
+                    CurrentMana = Math.Min(ManaPoints.Total, CurrentMana + regenAmount);
+                }
             }
         }
 

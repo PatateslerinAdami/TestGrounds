@@ -358,6 +358,158 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Gets the target's current primary ability resource.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <returns>Current PAR value, or 0 if target is null.</returns>
+        public static float GetPAR(AttackableUnit target)
+        {
+            return target?.GetPAR() ?? 0.0f;
+        }
+
+        /// <summary>
+        /// Gets the target's current primary ability resource if the PAR type is compatible.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="parType">Required PAR type.</param>
+        /// <returns>Current PAR value, or 0 if target is null or type-incompatible.</returns>
+        public static float GetPAR(AttackableUnit target, PrimaryAbilityResourceType parType)
+        {
+            return target != null && target.HasCompatiblePARType(parType) ? target.GetPAR() : 0.0f;
+        }
+
+        /// <summary>
+        /// Gets the target's maximum primary ability resource.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <returns>Maximum PAR value, or 0 if target is null.</returns>
+        public static float GetMaxPAR(AttackableUnit target)
+        {
+            return target?.GetMaxPAR() ?? 0.0f;
+        }
+
+        /// <summary>
+        /// Gets the target's maximum primary ability resource if the PAR type is compatible.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="parType">Required PAR type.</param>
+        /// <returns>Maximum PAR value, or 0 if target is null or type-incompatible.</returns>
+        public static float GetMaxPAR(AttackableUnit target, PrimaryAbilityResourceType parType)
+        {
+            return target != null && target.HasCompatiblePARType(parType) ? target.GetMaxPAR() : 0.0f;
+        }
+
+        /// <summary>
+        /// Gets the target's current PAR ratio.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <returns>PAR ratio, or 0 if target is null.</returns>
+        public static float GetPARPercent(AttackableUnit target)
+        {
+            return target?.GetPARPercent() ?? 0.0f;
+        }
+
+        /// <summary>
+        /// Gets the target's current PAR ratio if the PAR type is compatible.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="parType">Required PAR type.</param>
+        /// <returns>PAR ratio, or 0 if target is null or type-incompatible.</returns>
+        public static float GetPARPercent(AttackableUnit target, PrimaryAbilityResourceType parType)
+        {
+            return target != null && target.HasCompatiblePARType(parType) ? target.GetPARPercent() : 0.0f;
+        }
+
+        /// <summary>
+        /// Checks whether the target uses the specified PAR type.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="parType">PAR type to compare against.</param>
+        /// <returns>True if target exists and matches the PAR type; otherwise false.</returns>
+        public static bool HasPARType(AttackableUnit target, PrimaryAbilityResourceType parType)
+        {
+            return target != null && target.HasPARType(parType);
+        }
+
+        /// <summary>
+        /// Checks whether the target is compatible with the specified PAR type.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="parType">PAR type requirement.</param>
+        /// <returns>True if target exists and PAR type is compatible; otherwise false.</returns>
+        public static bool HasCompatiblePARType(AttackableUnit target, PrimaryAbilityResourceType parType)
+        {
+            return target != null && target.HasCompatiblePARType(parType);
+        }
+
+        /// <summary>
+        /// Checks whether the target has enough PAR for the requested amount.
+        /// </summary>
+        /// <param name="target">Unit to query.</param>
+        /// <param name="amount">Required PAR amount.</param>
+        /// <returns>True if target exists and has enough PAR; otherwise false.</returns>
+        public static bool HasEnoughPAR(AttackableUnit target, float amount)
+        {
+            return target != null && target.HasEnoughPAR(amount);
+        }
+
+        /// <summary>
+        /// Increases the target's PAR by the given amount.
+        /// </summary>
+        /// <param name="target">Unit whose PAR will be increased.</param>
+        /// <param name="amount">Requested PAR amount to add.</param>
+        /// <param name="source">Unit credited as the source of the PAR gain.</param>
+        /// <returns>Actual PAR amount added, or 0 if target is null.</returns>
+        public static float IncreasePAR(AttackableUnit target, float amount, AttackableUnit source = null)
+        {
+            if (target == null)
+            {
+                return 0.0f;
+            }
+
+            return target.IncreasePAR(source ?? target, amount);
+        }
+
+        /// <summary>
+        /// Increases the target's PAR by the given amount when the requested PAR type is compatible.
+        /// </summary>
+        /// <param name="target">Unit whose PAR will be increased.</param>
+        /// <param name="amount">Requested PAR amount to add.</param>
+        /// <param name="parType">Required PAR type.</param>
+        /// <param name="source">Unit credited as the source of the PAR gain.</param>
+        /// <returns>Actual PAR amount added, or 0 if target is null or type-incompatible.</returns>
+        public static float IncreasePAR(
+            AttackableUnit target,
+            float amount,
+            PrimaryAbilityResourceType parType,
+            AttackableUnit source = null
+        )
+        {
+            if (target == null || !target.HasCompatiblePARType(parType))
+            {
+                return 0.0f;
+            }
+
+            return target.IncreasePAR(source ?? target, amount);
+        }
+
+        /// <summary>
+        /// Spends PAR from the target.
+        /// </summary>
+        /// <param name="target">Unit whose PAR will be spent.</param>
+        /// <param name="amount">Requested PAR amount to spend.</param>
+        /// <returns>Actual PAR amount spent, or 0 if target is null.</returns>
+        public static float SpendPAR(AttackableUnit target, float amount)
+        {
+            if (target == null)
+            {
+                return 0.0f;
+            }
+
+            return target.SpendPAR(amount);
+        }
+
+        /// <summary>
         /// Creates a new particle with the specified parameters.
         /// </summary>
         /// <param name="caster">GameObject that caused this particle to spawn.</param>

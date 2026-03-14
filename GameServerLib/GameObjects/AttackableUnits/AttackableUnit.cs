@@ -491,6 +491,126 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
+        /// Gets the current primary ability resource value for this unit.
+        /// </summary>
+        /// <returns>Current PAR value.</returns>
+        public virtual float GetPAR()
+        {
+            return Stats.CurrentMana;
+        }
+
+        /// <summary>
+        /// Gets the maximum primary ability resource value for this unit.
+        /// </summary>
+        /// <returns>Maximum PAR value.</returns>
+        public virtual float GetMaxPAR()
+        {
+            return Stats.ManaPoints.Total;
+        }
+
+        /// <summary>
+        /// Gets this unit's primary ability resource as a ratio of current to max.
+        /// </summary>
+        /// <returns>PAR ratio in range 0.0 to 1.0.</returns>
+        public virtual float GetPARPercent()
+        {
+            var maxPar = GetMaxPAR();
+            if (maxPar <= 0.0f)
+            {
+                return 0.0f;
+            }
+
+            return GetPAR() / maxPar;
+        }
+
+        /// <summary>
+        /// Checks whether this unit uses the specified primary ability resource type.
+        /// </summary>
+        /// <param name="parType">PAR type to compare against.</param>
+        /// <returns>True if this unit's PAR type matches; otherwise false.</returns>
+        public virtual bool HasPARType(PrimaryAbilityResourceType parType)
+        {
+            return Stats.ParType == parType;
+        }
+
+        /// <summary>
+        /// Checks whether this unit can be treated as using the specified PAR type.
+        /// </summary>
+        /// <param name="parType">PAR type requirement.</param>
+        /// <returns>True if the PAR type is compatible; otherwise false.</returns>
+        public virtual bool HasCompatiblePARType(PrimaryAbilityResourceType parType)
+        {
+            if (parType == PrimaryAbilityResourceType.Other)
+            {
+                return Stats.ParType != PrimaryAbilityResourceType.None;
+            }
+
+            return HasPARType(parType);
+        }
+
+        /// <summary>
+        /// Checks whether this unit has at least the specified PAR amount.
+        /// </summary>
+        /// <param name="amount">Required PAR amount.</param>
+        /// <returns>True if this unit has enough PAR; otherwise false.</returns>
+        public virtual bool HasEnoughPAR(float amount)
+        {
+            return amount <= 0.0f || GetPAR() >= amount;
+        }
+
+        /// <summary>
+        /// Increases this unit's PAR by the given amount up to the maximum value.
+        /// </summary>
+        /// <param name="source">Unit credited as the source of the PAR gain.</param>
+        /// <param name="amount">Requested PAR amount to add.</param>
+        /// <returns>Actual PAR amount added after clamping.</returns>
+        public virtual float IncreasePAR(AttackableUnit source, float amount)
+        {
+            if (amount <= 0.0f)
+            {
+                return 0.0f;
+            }
+
+            var maxPar = GetMaxPAR();
+            var previousPar = GetPAR();
+            if (maxPar <= 0.0f || previousPar >= maxPar)
+            {
+                return 0.0f;
+            }
+
+            Stats.CurrentMana = Math.Clamp(previousPar + amount, 0.0f, maxPar);
+            var actualGain = Stats.CurrentMana - previousPar;
+            if (actualGain > 0.0f)
+            {
+                ApiEventManager.OnAddPAR.Publish(this, source ?? this);
+            }
+
+            return actualGain;
+        }
+
+        /// <summary>
+        /// Spends this unit's PAR by the given amount down to zero.
+        /// </summary>
+        /// <param name="amount">Requested PAR amount to spend.</param>
+        /// <returns>Actual PAR amount spent after clamping.</returns>
+        public virtual float SpendPAR(float amount)
+        {
+            if (amount <= 0.0f)
+            {
+                return 0.0f;
+            }
+
+            var previousPar = GetPAR();
+            if (previousPar <= 0.0f)
+            {
+                return 0.0f;
+            }
+
+            Stats.CurrentMana = Math.Max(0.0f, previousPar - amount);
+            return previousPar - Stats.CurrentMana;
+        }
+
+        /// <summary>
         /// Checks if healing can be received
         /// </summary>
         protected virtual bool CanReceiveHealing() {
