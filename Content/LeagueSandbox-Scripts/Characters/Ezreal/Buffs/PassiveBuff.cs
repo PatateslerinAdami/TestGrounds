@@ -1,52 +1,68 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using LeaguePackets.Game.Events;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-
-namespace Buffs
-{
-    internal class EzrealRisingSpellForce : IBuffGameScript
-    {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
-        {
-            BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.STACKS_AND_RENEWS,
-            IsHidden = false,
-            MaxStacks = 5
-        };
-        int count = 0;
-        Buff _buff;
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-        public StatsModifier StatsModifier2 { get; private set; } = new StatsModifier();
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 
-        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            _buff = buff;
-            StatsModifier2.AttackSpeed.PercentBonus = 0.10f;
-            unit.AddStatModifier(StatsModifier2);
-            UpdateTooltip();
-        }
+namespace Buffs;
 
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            for (int i = 0; i < buff.StackCount; i++)
-            {
-                unit.RemoveStatModifier(StatsModifier2);
+internal class EzrealRisingSpellForce : IBuffGameScript {
+    private Particle _particle1;
+    private Particle _particle2;
+    private Particle _particle3;
+    private Particle _particle4;
+    private Particle _particle5;
+    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+        BuffType    = BuffType.COMBAT_ENCHANCER,
+        BuffAddType = BuffAddType.STACKS_AND_RENEWS,
+        MaxStacks = 5
+    };
+
+    public StatsModifier StatsModifier { get; } = new();
+
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        ObjAIBase owner = ownerSpell.CastInfo.Owner;
+        StatsModifier.AttackSpeed.PercentBonus = 0.1f;
+        buff.SetToolTipVar(0, buff.StackCount * 10f);
+        unit.AddStatModifier(StatsModifier);
+
+        if (buff.StackCount > 0) {
+            switch (buff.StackCount) {
+                case 1: _particle1 = AddParticle(owner,owner, "Ezreal_glow1",
+                                                owner.Position, bone: "L_hand", lifetime: 5f);
+                    break;
+                case 2: RemoveParticle(_particle1); 
+                    _particle2 = AddParticle(owner,owner, "Ezreal_glow2",
+                                             owner.Position, bone: "L_hand", lifetime: 5f);
+                    break;
+                case 3: RemoveParticle(_particle2);
+                    _particle3 = AddParticle(owner, owner, "Ezreal_glow3",
+                                                owner.Position, bone: "L_hand", lifetime: 5f);
+                    break;
+                case 4: RemoveParticle(_particle3);
+                    _particle4 = AddParticle(owner, owner, "Ezreal_glow4",
+                                                owner.Position, bone: "L_hand", lifetime: 5f);
+                    break;
+                default: RemoveParticle(_particle5);
+                    _particle5 = AddParticle(owner, owner, "Ezreal_glow5",
+                                                 owner.Position, bone: "L_hand", lifetime: 5f);
+                    break;
             }
-        }
-        private void UpdateTooltip()
-        {
-            if (_buff != null)
-            {
-                float value = 10f * _buff.StackCount;
-                _buff.SetToolTipVar(0, value);
-            }
-        }
+        } 
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        RemoveParticle(_particle1);
+        RemoveParticle(_particle2);
+        RemoveParticle(_particle3);
+        RemoveParticle(_particle4);
+        RemoveParticle(_particle5);
     }
 }
