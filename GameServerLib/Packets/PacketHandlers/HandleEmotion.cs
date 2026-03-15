@@ -1,6 +1,7 @@
 ﻿using GameServerCore.Packets.PacketDefinitions.Requests;
 using GameServerCore.Packets.Enums;
 using GameServerCore.Packets.Handlers;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
 using LeagueSandbox.GameServer.Players;
@@ -43,6 +44,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     break;
             }
 
+            ApiEventManager.OnEmote.Publish(champion, req.EmoteID);
             _game.PacketNotifier.NotifyS2C_PlayEmote((Emotions)req.EmoteID, champion.NetId);
             return true;
         }

@@ -11,6 +11,7 @@ using LeagueSandbox.GameServer.Logging;
 using log4net;
 using System;
 using System.Collections.Generic;
+using GameServerCore.Packets.Enums;
 
 /*
  * Possible Events:
@@ -31,6 +32,7 @@ using System.Collections.Generic;
 [OnDeath]
 [OnDisconnect]
 [OnDodge]
+[OnEmote]
 [OnHeal]
 [OnHitUnit]
 [OnKill]
@@ -211,6 +213,9 @@ namespace LeagueSandbox.GameServer.API
 
         public static DataOnlyDispatcher<ObjAIBase, AttackableUnit> OnTargetLost
             = new DataOnlyDispatcher<ObjAIBase, AttackableUnit>();
+
+        public static Dispatcher<ObjAIBase, Emotions> OnEmote
+            = new Dispatcher<ObjAIBase, Emotions>();
 
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
