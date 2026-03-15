@@ -115,6 +115,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Dictionary<short, Spell> Spells { get; }
         public ICharScript CharScript { get; private set; }
         public bool IsBot { get; set; }
+        public bool IgnoreMoveOrders { get; set; }
         public IAIScript AIScript { get; protected set; }
         public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
         private bool invisSent = false;
@@ -366,6 +367,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (IsDead)
                 return false;
 
+            if (IgnoreMoveOrders)
+                return false;
+
             if (!Status.HasFlag(StatusFlags.CanMoveEver))
                 return false;
 
@@ -373,7 +377,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || Status.HasFlag(StatusFlags.Suppressed)
                 || Status.HasFlag(StatusFlags.Sleep)
                 || Status.HasFlag(StatusFlags.Feared)
-                || Status.HasFlag(StatusFlags.Taunted))
+                || Status.HasFlag(StatusFlags.Taunted)
+                || !Status.HasFlag(StatusFlags.CanMove))
                 return false;
 
             return true;

@@ -1062,19 +1062,30 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="unit">Unit to set animation states on.</param>
         /// <param name="overrideAnim">Animation to use instead.</param>
         /// <param name="toOverrideAnim">Animation to override.</param>
-        public static void OverrideAnimation(AttackableUnit unit, string overrideAnim, string toOverrideAnim)
+        /// <param name="source">The object applying the override (usually `this` in a script).</param>
+        public static void OverrideAnimation(AttackableUnit unit, string overrideAnim, string toOverrideAnim, object source = null)
         {
-            unit.SetAnimStates(new Dictionary<string, string> { { toOverrideAnim, overrideAnim } });
+            unit.SetAnimStates(new Dictionary<string, string> { { toOverrideAnim, overrideAnim } }, source);
         }
 
         /// <summary>
-        /// Clears the given overridden animation, making it play its original animation.
+        /// Clears the given overridden animation for the specified source, falling back to the previous override in the stack or the original animation.
         /// </summary>
         /// <param name="unit">Unit to set animation states on.</param>
         /// <param name="overriddenAnim">Animation which has been overridden.</param>
-        public static void ClearOverrideAnimation(AttackableUnit unit, string overriddenAnim)
+        /// <param name="source">The object that applied the override.</param>
+        public static void ClearOverrideAnimation(AttackableUnit unit, string overriddenAnim, object source = null)
         {
-            unit.SetAnimStates(new Dictionary<string, string> { { overriddenAnim, "" } });
+            unit.SetAnimStates(new Dictionary<string, string> { { overriddenAnim, "" } }, source);
+        }
+        /// <summary>
+        /// Removes all animation overrides applied by a specific source.
+        /// </summary>
+        /// <param name="unit">Unit to clear animations on.</param>
+        /// <param name="source">The object that applied the overrides.</param>
+        public static void RemoveOverrideAnimations(AttackableUnit unit, object source)
+        {
+            unit.RemoveAnimStates(source);
         }
 
         /// <summary>

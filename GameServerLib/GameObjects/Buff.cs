@@ -224,6 +224,10 @@ namespace LeagueSandbox.GameServer.GameObjects
             Slot = slot;
             ToolTipData?.SetSlot(slot);
         }
+        public void SetToExpired()
+        {
+            TimeElapsed = Duration;
+        }
 
         public void Update(float diff)
         {
