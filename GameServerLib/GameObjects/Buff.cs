@@ -223,6 +223,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         {
             Slot = slot;
         }
+        public void SetToExpired()
+        {
+            TimeElapsed = Duration;
+        }
 
         public void Update(float diff)
         {

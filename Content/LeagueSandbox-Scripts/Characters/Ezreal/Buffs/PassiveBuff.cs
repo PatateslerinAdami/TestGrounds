@@ -19,6 +19,9 @@ internal class EzrealRisingSpellForce : IBuffGameScript {
     private Particle _particle3;
     private Particle _particle4;
     private Particle _particle5;
+    //a band-aid solution for the tooltip for now.
+    private int _lastStackCount = 0;
+    private Buff _buff;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.STACKS_AND_RENEWS,
@@ -28,9 +31,9 @@ internal class EzrealRisingSpellForce : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _buff = buff;
         ObjAIBase owner = ownerSpell.CastInfo.Owner;
         StatsModifier.AttackSpeed.PercentBonus = 0.1f;
-        buff.SetToolTipVar(0, buff.StackCount * 10f);
         unit.AddStatModifier(StatsModifier);
 
         if (buff.StackCount > 0) {
@@ -56,6 +59,18 @@ internal class EzrealRisingSpellForce : IBuffGameScript {
                     break;
             }
         } 
+    }
+    public void OnUpdate(float diff)
+    {
+        if (_buff != null && _buff.StackCount != _lastStackCount)
+        {
+            UpdateToolTip();
+        }
+    }
+    private void UpdateToolTip()
+    {
+        _lastStackCount = _buff.StackCount;
+        _buff.SetToolTipVar(0, _buff.StackCount * 10f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
