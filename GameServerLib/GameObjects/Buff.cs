@@ -222,6 +222,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public void SetSlot(byte slot)
         {
             Slot = slot;
+            ToolTipData?.SetSlot(slot);
         }
 
         public void Update(float diff)

@@ -127,6 +127,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             }
         }
 
+        public void SetSlot(byte slot)
+        {
+            Slot = slot;
+        }
+
         public static void Populate(ToolTipValue[] arr)
         {
             for (int i = 0; i < arr.Length; i++)
