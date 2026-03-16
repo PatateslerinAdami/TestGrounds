@@ -14,6 +14,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public StatModifier CooldownReduction { get; } = new StatModifier();
         public StatModifier CriticalChance { get; } = new StatModifier();
         public StatModifier CriticalDamage { get; } = new StatModifier();
+        public StatModifier ExpGivenOnDeath { get; } = new StatModifier();
         public StatModifier GoldGivenOnDeath { get; } = new StatModifier();
         public StatModifier GoldPerSecond { get; } = new StatModifier();
         public StatModifier HealthPoints { get; } = new StatModifier();

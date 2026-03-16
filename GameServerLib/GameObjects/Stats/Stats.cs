@@ -161,6 +161,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CooldownReduction.ApplyStatModifier(modifier.CooldownReduction);
             CriticalChance.ApplyStatModifier(modifier.CriticalChance);
             CriticalDamage.ApplyStatModifier(modifier.CriticalDamage);
+            ExpGivenOnDeath.ApplyStatModifier(modifier.ExpGivenOnDeath);
+            GoldGivenOnDeath.ApplyStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.ApplyStatModifier(modifier.GoldPerSecond);
             HealthPoints.ApplyStatModifier(modifier.HealthPoints);
             HealthRegeneration.ApplyStatModifier(modifier.HealthRegeneration);
@@ -198,6 +200,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CooldownReduction.RemoveStatModifier(modifier.CooldownReduction);
             CriticalChance.RemoveStatModifier(modifier.CriticalChance);
             CriticalDamage.RemoveStatModifier(modifier.CriticalDamage);
+            ExpGivenOnDeath.RemoveStatModifier(modifier.ExpGivenOnDeath);
+            GoldGivenOnDeath.RemoveStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.RemoveStatModifier(modifier.GoldPerSecond);
             HealthPoints.RemoveStatModifier(modifier.HealthPoints);
             HealthRegeneration.RemoveStatModifier(modifier.HealthRegeneration);
