@@ -35,7 +35,7 @@
             "GlobalExpGivenOnDeath": "0",
             "GlobalGoldGivenOnDeath": "0",
             "GoldGivenOnDeath": "150.0",
-            "IsMelee": "false",
+            "IsMelee": "true",
             "Metadata": "class:minion",
             "MoveSpeed": 325,
             "Name": "game_character_displayname_Red_Minion_MechMelee",

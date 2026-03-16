@@ -1,17 +1,24 @@
-﻿using LeaguePackets;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
-public class S2C_ToggleFoW : GamePacket // 0x7E
+namespace LeaguePackets.Game
 {
-    public override GamePacketID ID => GamePacketID.S2C_ToggleFoW;
-    public byte Enable { get; set; }
-
-    protected override void ReadBody(ByteReader reader)
+    public class S2C_ToggleFoW : GamePacket // 0x7E
     {
-        Enable = reader.ReadByte();
-    }
+        public override GamePacketID ID => GamePacketID.S2C_ToggleFoW;
+        public byte Enable { get; set; }
 
-    protected override void WriteBody(ByteWriter writer)
-    {
-        writer.WriteByte(Enable);
+        protected override void ReadBody(ByteReader reader)
+        {
+            Enable = reader.ReadByte();
+        }
+        protected override void WriteBody(ByteWriter writer) 
+        {
+            writer.WriteByte(Enable);
+        }
     }
 }

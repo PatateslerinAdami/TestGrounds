@@ -18,7 +18,6 @@ namespace LeaguePackets.Game
 
         protected override void ReadBody(ByteReader reader)
         {
-
             this.Item = reader.ReadItemPacket();
             this.Bitfield = reader.ReadByte();
         }
