@@ -781,6 +781,31 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Disables Fog of War (cheat).
+        public void NotifyToggleFoW(bool enable)
+        {
+            var targetPacket = new S2C_ToggleFoW
+            {
+                Enable = (byte)(enable ? 1 : 0)
+            };
+
+            _packetHandlerManager.BroadcastPacket(targetPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Enables Fog of War (cheat).
+        public void NotifySetFoWStatus(bool enable)
+        {
+            var targetPacket = new S2C_SetFoWStatus
+            {
+                Enabled = enable
+            };
+            _packetHandlerManager.BroadcastPacket(targetPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+
+
+        /// <summary>
         /// Sends a packet to all players detailing that the specified  unit is starting their next auto attack.
         /// </summary>
         /// <param name="attacker">Unit that is attacking.</param>

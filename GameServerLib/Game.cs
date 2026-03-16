@@ -388,6 +388,20 @@ namespace LeagueSandbox.GameServer
             }
         }
 
+        public float SetCurrentMinutes(float newMinutes)
+        {
+            // Convert minutes to milliseconds
+            GameTime = (long)(newMinutes * 1000f * 60f);
+            return GameTime;
+        }
+
+        public float GetCurrentMinutes()
+        {
+            // Convert milliseconds to minutes
+            float minutes = (float)(GameTime / (1000f * 60f));
+            return minutes;
+        }
+
         /// <summary>
         /// Function called every tick of the game.
         /// </summary>
