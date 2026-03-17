@@ -47,6 +47,7 @@ namespace LeagueSandbox.GameServer
         /// List of all possible teams in League of Legends. Normally there are only three.
         /// </summary>
         public List<TeamId> Teams { get; private set; }
+        public bool IsServerFoWDisabled { get; set; } = false;
 
         /// <summary>
         /// Instantiates all GameObject Dictionaries in ObjectManager.
@@ -172,7 +173,7 @@ namespace LeagueSandbox.GameServer
         {
             foreach (var team in Teams)
             {
-                obj.SetVisibleByTeam(team, !obj.IsAffectedByFoW || TeamHasVisionOn(team, obj));
+                obj.SetVisibleByTeam(team, IsServerFoWDisabled || !obj.IsAffectedByFoW || TeamHasVisionOn(team, obj));
             }
         }
 
@@ -186,7 +187,7 @@ namespace LeagueSandbox.GameServer
             Champion champion = clientInfo.Champion;
 
             bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
-            bool shouldBeVisibleForPlayer = !obj.IsAffectedByFoW || (
+            bool shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
                 nearSighted ?
                     UnitHasVisionOn(champion, obj) :
                     obj.IsVisibleByTeam(champion.Team)

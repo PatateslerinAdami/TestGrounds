@@ -51,7 +51,8 @@ namespace LeagueSandbox.GameServer.API
         public static GameObject CreateShop(string name, Vector2 position, TeamId team)
         {
             var shop = new GameObject(_game, position, team: team, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
-            _game.ObjectManager.SpawnObject(shop);
+            //_game.ObjectManager.SpawnObject(shop);
+            _game.ObjectManager.AddObject(shop);
             return shop;
         }
 

@@ -15,6 +15,12 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         public override void Execute(int userId, bool hasReceivedArguments, string arguments = "")
         {
             Game.PacketNotifier.NotifySetFoWStatus(true);
+
+            Game.ObjectManager.IsServerFoWDisabled = false;
+            foreach (var obj in Game.ObjectManager.GetObjects().Values)
+            {
+                Game.ObjectManager.RefreshUnitVision(obj);
+            }
         }
     }
 }
