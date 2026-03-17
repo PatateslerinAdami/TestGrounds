@@ -24,7 +24,10 @@ namespace ItemSpells
             SpellCastItem(owner, "DeathfireGraspSpell", true, target, Vector2.Zero);
         }
     }
+}
 
+namespace Spells
+{
     public class DeathfireGraspSpell : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
