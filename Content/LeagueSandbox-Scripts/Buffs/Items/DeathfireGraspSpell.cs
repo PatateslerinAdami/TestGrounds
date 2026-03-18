@@ -1,5 +1,7 @@
 ﻿using GameServerCore.Enums;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
@@ -25,10 +27,16 @@ namespace Buffs
         {
             var owner = ownerSpell.CastInfo.Owner;
             debuff = AddParticleTarget(owner, unit, "obj_DeathfireGrasp_debuff", unit);
-
-            // TODO: Implement damage amp. stat modifier or OnTakeDamage listener
+            ApiEventManager.OnPreDealDamage.AddListener(this, owner, OnPreDealDamage, false);
         }
 
+        public void OnPreDealDamage(DamageData data)
+        {
+            if (data.DamageType == DamageType.DAMAGE_TYPE_MAGICAL)
+            {
+                data.PostMitigationDamage *= 1.20f; // 20% AP dmg amp
+            }
+        }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             RemoveParticle(debuff);
