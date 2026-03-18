@@ -49,8 +49,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         ClientInfo clientInfo,
                         uint netId = 0,
                         TeamId team = TeamId.TEAM_BLUE,
-                        Stats stats = null)
-            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats)
+                        Stats stats = null,
+                        string AIScript = "")
+            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats, AIScript)
         {
             //TODO: Champion.ClientInfo?
             ClientId = clientInfo.ClientId;
