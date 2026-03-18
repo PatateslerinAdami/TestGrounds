@@ -27,14 +27,13 @@ namespace Buffs
         {
             var owner = ownerSpell.CastInfo.Owner;
             debuff = AddParticleTarget(owner, unit, "obj_DeathfireGrasp_debuff", unit);
-            ApiEventManager.OnPreDealDamage.AddListener(this, owner, OnPreDealDamage, false);
+            ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage, false);
         }
-
-        public void OnPreDealDamage(DamageData data)
+        public void OnPreTakeDamage(DamageData data)
         {
             if (data.DamageType == DamageType.DAMAGE_TYPE_MAGICAL)
             {
-                data.PostMitigationDamage *= 1.20f; // 20% AP dmg amp
+                data.PostMitigationDamage *= 1.2f;
             }
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
