@@ -101,6 +101,8 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 team: team
             );
 
+            clientInfo.IsDisconnected = false;
+            clientInfo.IsStartedClient = true;
             clientInfo.Champion = champion;
             champion.SetPosition(spawnPos, false);
             champion.StopMovement();
