@@ -16,7 +16,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         private readonly Game _game;
 
         public override string Command => "spawnbot";
-        public override string Syntax => $"{Command} <blue|purple> [championName]";
+        public override string Syntax => $"{Command} <blue|purple> [championName] [count]";
 
         public SpawnAICommand(ChatCommandManager chatCommandManager, Game game)
             : base(chatCommandManager, game)
@@ -64,6 +64,19 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             // Optional champion name — defaults to a fallback if not provided
             string championModel = split.Length > 2 ? split[2] : "Ezreal";
 
+            // Optional count — last parameter, defaults to 1
+            int count = 1;
+            if (split.Length > 3)
+            {
+                if (!int.TryParse(split[3], out count) || count < 1 || count > 100)
+                {
+                    ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.SYNTAXERROR,
+                        $"Invalid count '{split[3]}'. Must be a number between 1 and 100.");
+                    ShowSyntax();
+                    return;
+                }
+            }
+
             try
             {
                 Game.Config.ContentManager.GetCharData(championModel);
@@ -76,7 +89,10 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 return;
             }
 
-            SpawnChampForTeam(team, userId, championModel);
+            for (int i = 0; i < count; i++)
+            {
+                SpawnChampForTeam(team, userId, championModel);
+            }
         }
 
         public void SpawnChampForTeam(TeamId team, int userId, string model)

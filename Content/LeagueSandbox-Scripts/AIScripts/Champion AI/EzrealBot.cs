@@ -78,6 +78,7 @@ namespace AIScripts
         private DateTime _lastPokeTime = DateTime.MinValue;
         private readonly TimeSpan _pokeCooldown = TimeSpan.FromSeconds(3); // Adjust as needed
         private Champion _lastChaseTarget = null;
+        bool stillChasing = false;
 
 
 
@@ -175,7 +176,7 @@ namespace AIScripts
                 _currentState = BotState.DeadState;
                 return;
             }
-            if (!EzrealInstance.IsDead)
+            if (!EzrealInstance.IsDead && !isInCombat)
             {
                 _currentState = BotState.MovingToLane;
             }
@@ -187,7 +188,7 @@ namespace AIScripts
             switch (_currentState)
             {
                 case BotState.MovingToLane:
-                    if (IsInLane()) _currentState = BotState.Farming;
+                    _currentState = BotState.Farming;
                     break;
 
                 case BotState.Farming:
@@ -402,7 +403,7 @@ namespace AIScripts
             }
 
             // Rest of your existing farming logic...
-            var lowHealthMinions = units.OfType<Minion>()
+            var lowHealthMinions = units.OfType<LaneMinion>()
                 .Where(minion => minion.Team != EzrealInstance.Team &&
                        minion.Stats.CurrentHealth < EzrealInstance.Stats.AttackDamage.Total * 1.5f)
                 .OrderBy(minion => minion.Stats.CurrentHealth)
@@ -441,7 +442,7 @@ namespace AIScripts
 
             // Get nearby enemy minions
             var nearbyEnemyMinions = GetUnitsInRange(EzrealInstance.Position, 500f, true)
-                .OfType<Minion>()
+                .OfType<LaneMinion>()
                 .Where(minion => minion.Team != EzrealInstance.Team)
                 .ToList();
 
@@ -463,7 +464,7 @@ namespace AIScripts
         {
             // Check if attacking this champion will draw minion aggro
             var nearbyEnemyMinions = GetUnitsInRange(target.Position, 500f, true)
-                .OfType<Minion>()
+                .OfType<LaneMinion>()
                 .Where(minion => minion.Team != EzrealInstance.Team)
                 .ToList();
 
@@ -515,7 +516,8 @@ namespace AIScripts
 
                 if (_lastCastTime.TryGetValue(key, out float lastCastTime))
                 {
-                    float cooldown = spell.GetCooldown();
+                    // Match GetCooldown's indexing (SpellLevel-1)
+                    float cooldown = spell.SpellData.Cooldown[spell.CastInfo.SpellLevel - 1];
                     if (_gameTime < lastCastTime + cooldown)
                     {
                         return false;
@@ -656,8 +658,10 @@ namespace AIScripts
         private void Retreat()
         {
             // Move toward closest ally or tower
+            ClearTargetAndOrders();
             Vector2 safePosition = GetSafePosition();
             MoveToPosition(safePosition);
+            stillChasing = false;
 
             if (IsSpellAvailable(ESlot, SpellSlotType.SpellSlots))
             {
@@ -1409,12 +1413,6 @@ namespace AIScripts
             return _midLanePosition;
         }
 
-        private bool IsInLane()
-        {
-            // Implement to check if the bot is near mid lane position
-            float distance = Vector2.Distance(EzrealInstance.Position, _midLanePosition);
-            return distance < 1500f; // Example threshold
-        }
 
         private Vector2 GetIdealFarmingPosition()
         {
@@ -1422,8 +1420,8 @@ namespace AIScripts
             const float IDEAL_DISTANCE = 550f; // Ezreal's auto range
 
             // Find enemy minions
-            List<Minion> enemyMinions = GetUnitsInRange(EzrealInstance.Position, 1200f, true)
-                .OfType<Minion>()
+            List<LaneMinion> enemyMinions = GetUnitsInRange(EzrealInstance.Position, 1200f, true)
+                .OfType<LaneMinion>()
                 .Where(m => m.Team != EzrealInstance.Team)
                 .ToList();
 
@@ -1494,7 +1492,7 @@ namespace AIScripts
         private int CountNearbyMinions(Vector2 position, float range, TeamId team)
         {
             List<AttackableUnit> units = GetUnitsInRange(position, range, true);
-            return units.OfType<Minion>().Count(minion => minion.Team == team);
+            return units.OfType<LaneMinion>().Count(minion => minion.Team == team);
         }
 
         private void MoveToPosition(Vector2 targetPosition)
@@ -1609,8 +1607,8 @@ namespace AIScripts
             float distance = Vector2.Distance(botPos, targetPos);
 
             // Find minions that might be in the way
-            List<Minion> minionsInPath = GetUnitsInRange(botPos, distance, true)
-                .OfType<Minion>()
+            List<LaneMinion> minionsInPath = GetUnitsInRange(botPos, distance, true)
+                .OfType<LaneMinion>()
                 .Where(m => m.Team != EzrealInstance.Team && m != target)
                 .ToList();
 

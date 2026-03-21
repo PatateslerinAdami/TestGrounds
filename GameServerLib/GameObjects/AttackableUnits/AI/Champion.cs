@@ -301,6 +301,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             RespawnTimer = -1;
             SetDashingState(false, MoveStopReason.HeroReincarnate);
             ApiEventManager.OnResurrect.Publish(this);
+            SetCastSpell(null);
         }
 
         public bool OnDisconnect()
