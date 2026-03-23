@@ -904,10 +904,11 @@ namespace AIScripts
             {
                 if (enemy == null) continue;
 
-                // Consider an enemy vulnerable if their health is below certain threshold
+                // Base stats
                 float enemyHealthPct = enemy.Stats.CurrentHealth / enemy.Stats.HealthPoints.Total;
                 int nearbyAllies = GetNearbyAlliesOfTarget(enemy, 800f);
                 float distance = Vector2.Distance(EzrealInstance.Position, enemy.Position);
+                int levelDiff = EzrealInstance.Stats.Level - enemy.Stats.Level;
 
                 // Calculate a "vulnerability score" for this enemy
                 float score = 0f;
@@ -925,8 +926,14 @@ namespace AIScripts
                 // Closer targets are better (but not too much weight on this)
                 score += (1500f - distance) / 1500f;
 
+                // >>> GRANULAR LEVEL ADVANTAGE <<<
+                // Each level difference adds/subtracts 0.6, capped between -2 and +3
+                float levelScore = levelDiff * 0.6f;
+                score += Math.Min(Math.Max(levelScore, -2f), 3f);
+
                 // Debug output
-                _logger.Debug($"Enemy {enemy.Name}: health={enemyHealthPct:F2}, allies={nearbyAllies}, distance={distance:F0}, score={score:F2}");
+                _logger.Debug($"Enemy {enemy.Name}: health={enemyHealthPct:F2}, allies={nearbyAllies}, " +
+                             $"distance={distance:F0}, levelDiff={levelDiff}, score={score:F2}");
 
                 if (score > bestScore)
                 {

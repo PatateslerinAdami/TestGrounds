@@ -4,6 +4,7 @@ using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Players;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -16,7 +17,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         private readonly Game _game;
 
         public override string Command => "spawnbot";
-        public override string Syntax => $"{Command} <blue|purple> [championName] [count]";
+        public override string Syntax => $"{Command} <blue|purple> [championName] [count] [level]";
 
         public SpawnAICommand(ChatCommandManager chatCommandManager, Game game)
             : base(chatCommandManager, game)
@@ -77,6 +78,18 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 }
             }
 
+            int level = 1;
+            if (split.Length > 4)
+            {
+                if (!int.TryParse(split[4], out level) || level < 1 || level > 18)
+                {
+                    ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.SYNTAXERROR,
+                        $"Invalid level '{split[4]}'. Must be a number between 1 and 18.");
+                    ShowSyntax();
+                    return;
+                }
+            }
+
             try
             {
                 Game.Config.ContentManager.GetCharData(championModel);
@@ -91,11 +104,11 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
             for (int i = 0; i < count; i++)
             {
-                SpawnChampForTeam(team, userId, championModel);
+                SpawnChampForTeam(team, userId, championModel, level);
             }
         }
 
-        public void SpawnChampForTeam(TeamId team, int userId, string model)
+        public void SpawnChampForTeam(TeamId team, int userId, string model, int level = 1)
         {
             var spawnPos = _playerManager.GetPeerInfo(userId).Champion.Position;
             var clientInfo = new ClientInfo(
@@ -125,10 +138,19 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             champion.UpdateMoveOrder(OrderType.Stop);
             champion.LevelUp();
 
+            // LevelUp() increments by 1 each call, so loop to reach target level
+            for (int i = 0; i < level; i++)
+            {
+                while (champion.Stats.Level < level)
+                {
+                    champion.LevelUp(true);
+                }
+            }
+
             _game.ObjectManager.AddObject(champion);
 
             ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.INFO,
-                $"Spawned Bot '{champion.Name}' ({champion.Model}) on team {team} with NetID: {champion.NetId}.");
+                $"Spawned Bot '{champion.Name}' ({champion.Model}) on team {team} at level {level} with NetID: {champion.NetId}.");
         }
     }
 }
