@@ -1,15 +1,16 @@
-﻿using System;
-using System.Numerics;
-using System.Collections.Generic;
-using Buffs;
+﻿using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System;
+using System.Collections.Generic;
+using System.Numerics;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -88,8 +89,11 @@ namespace Spells
             }
             PendingShadowCasts.Clear();
 
-            //AddBuff(new ZedWHandler { shadow = shadow }, "ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner);
-            //AddBuff(new ZedWHandler2 { shadow = shadow }, "ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner);
+            var buffVariables = new BuffVariables();
+            buffVariables.Set("Shadow", shadow);
+
+            AddBuff("ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner, buffVariables: buffVariables);
+            AddBuff("ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner, buffVariables: buffVariables);
 
             AddParticle(_owner, null, "Zed_Base_W_tar.troy", missile.Position, lifetime: 1f);
         }

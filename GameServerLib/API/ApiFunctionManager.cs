@@ -1443,5 +1443,9 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit,false, keepAnimating, false, true, forceClient, 0);
         }
+        public static void CustomDashTest(AttackableUnit unit, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
+        {
+            _game.PacketNotifier.NotifyCustomDashTest(unit, targetPos, speed, gravity, parabolicStartPoint);
+        }
     }
 }

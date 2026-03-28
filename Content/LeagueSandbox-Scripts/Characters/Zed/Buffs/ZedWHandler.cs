@@ -26,7 +26,12 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = unit as ObjAIBase;
+            _owner = ownerSpell.CastInfo.Owner;
+
+            if (buff.Variables != null)
+            {
+                shadow = buff.Variables.Get<Minion>("Shadow");
+            }
 
             byte wLevel = _owner.Spells[1].CastInfo.SpellLevel;
             var w2 = _owner.GetSpell("ZedW2");
@@ -69,7 +74,12 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = unit as ObjAIBase;
+            _owner = ownerSpell.CastInfo.Owner;
+
+            if (buff.Variables != null)
+            {
+                shadow = buff.Variables.Get<Minion>("Shadow");
+            }
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

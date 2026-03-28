@@ -4503,5 +4503,17 @@ namespace PacketDefinitions420
             };
             _packetHandlerManager.BroadcastPacket(healthbarPacket.GetBytes(), Channel.CHL_S2C);
         }
+        public void NotifyCustomDashTest(AttackableUnit u, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
+        {
+            var md = PacketExtensions.CreateCustomMovementDataWithSpeed(u, _navGrid, targetPos, speed, gravity, parabolicStartPoint);
+
+            var speedWpGroup = new WaypointGroupWithSpeed
+            {
+                SyncID = Environment.TickCount,
+                Movements = new List<MovementDataWithSpeed> { md }
+            };
+
+            _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+        }
     }
 }

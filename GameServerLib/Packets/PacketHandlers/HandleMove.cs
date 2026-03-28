@@ -46,31 +46,47 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             return false;
                         }
-                        waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
-                        //TODO: Find the nearest point on the path and discard everything before it
-                        waypoints[0] = champion.Position;
-                        for(int i = 0; i < waypoints.Count - 1; i++)
+
+
+                        if (u != null)
                         {
-                            if(nav.CastCircle(waypoints[i], waypoints[i + 1], champion.PathfindingRadius, true))
-                            {
-                                var ithWaypoint = waypoints[i];
-                                var lastWaypoint = waypoints[waypoints.Count - 1];
-                                var path = nav.GetPath(ithWaypoint, lastWaypoint, champion.PathfindingRadius);
-                                waypoints.RemoveRange(i, waypoints.Count - i);
-                                if(path != null)
-                                {
-                                    waypoints.AddRange(path);
-                                }
-                                else
-                                {
-                                    waypoints.Add(ithWaypoint);
-                                }
-                                break;
-                            }
+                            champion.UpdateMoveOrder(req.OrderType, true);
+                            champion.SetTargetUnit(u);
                         }
-                        champion.UpdateMoveOrder(req.OrderType, true);
-                        champion.SetWaypoints(waypoints);
-                        champion.SetTargetUnit(u);
+                        else
+                        {
+                            waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
+
+                            if (Vector2.Distance(champion.Position, waypoints[0]) < 150f)
+                            {
+                                champion.SetPosition(waypoints[0], false);
+                            }
+
+                            waypoints[0] = champion.Position;
+
+                            for(int i = 0; i < waypoints.Count - 1; i++)
+                            {
+                                if(nav.CastCircle(waypoints[i], waypoints[i + 1], champion.PathfindingRadius, true))
+                                {
+                                    var ithWaypoint = waypoints[i];
+                                    var lastWaypoint = waypoints[waypoints.Count - 1];
+                                    var path = nav.GetPath(ithWaypoint, lastWaypoint, champion.PathfindingRadius);
+                                    waypoints.RemoveRange(i, waypoints.Count - i);
+                                    if(path != null)
+                                    {
+                                        waypoints.AddRange(path);
+                                    }
+                                    else
+                                    {
+                                        waypoints.Add(ithWaypoint);
+                                    }
+                                    break;
+                                }
+                            }
+                            champion.UpdateMoveOrder(req.OrderType, true);
+                            champion.SetWaypoints(waypoints);
+                            champion.SetTargetUnit(null);
+                        }
                         break;
                     case OrderType.PetHardAttack:
                     case OrderType.PetHardMove:

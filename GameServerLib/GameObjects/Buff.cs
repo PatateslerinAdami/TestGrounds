@@ -229,6 +229,64 @@ namespace LeagueSandbox.GameServer.GameObjects
             TimeElapsed = Duration;
         }
 
+        public override bool IncrementStackCount()
+        {
+            if (BuffAddType == BuffAddType.STACKS_AND_RENEWS ||
+                BuffAddType == BuffAddType.RENEW_EXISTING ||
+                BuffAddType == BuffAddType.STACKS_AND_CONTINUE)
+            {
+                ResetTimeElapsed();
+            }
+
+            var result = base.IncrementStackCount();
+
+            if (result)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+            }
+            return result;
+        }
+
+        public override bool DecrementStackCount()
+        {
+            var result = base.DecrementStackCount();
+
+            if (result)
+            {
+                if (StackCount <= 0)
+                {
+                    DeactivateBuff(); 
+                }
+                else
+                {
+                    _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+                }
+            }
+            return result;
+        }
+
+        public override void SetStacks(int newStacks)
+        {
+            SetStacks(newStacks, true);
+        }
+
+        public void SetStacks(int newStacks, bool sendPacket = true)
+        {
+            base.SetStacks(newStacks);
+            if (sendPacket)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+            }
+        }
+
+        public void Refresh()
+        {
+            ResetTimeElapsed();
+            if (!IsHidden)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffReplace(this);
+            }
+        }
         public void Update(float diff)
         {
             if (!_infiniteDuration)

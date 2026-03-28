@@ -201,5 +201,30 @@ namespace PacketDefinitions420
                 }
             };
         }
+        public static MovementDataWithSpeed CreateCustomMovementDataWithSpeed(AttackableUnit unit, NavigationGrid grid, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
+        {
+            var waypoints = new List<Vector2> { parabolicStartPoint, unit.Position };
+            var compressedWaypoints = waypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
+
+            return new MovementDataWithSpeed
+            {
+                SyncID = Environment.TickCount,
+                TeleportNetID = unit.NetId,
+                HasTeleportID = false,
+                TeleportID = 0,
+                Waypoints = compressedWaypoints,
+                SpeedParams = new SpeedParams
+                {
+                    PathSpeedOverride = speed,
+                    ParabolicGravity = gravity,
+                    ParabolicStartPoint = parabolicStartPoint, 
+                    Facing = false,
+                    FollowNetID = 0,
+                    FollowDistance = 0,
+                    FollowBackDistance = 0,
+                    FollowTravelTime = 0
+                }
+            };
+        }
     }
 }

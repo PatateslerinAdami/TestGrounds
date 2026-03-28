@@ -50,6 +50,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     /// </summary>
     public class ObjAIBase : AttackableUnit
     {
+        public int hitCount = 0;
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
         private bool _skipNextAutoAttack;
@@ -735,7 +736,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 if (Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange)
                 {
-                    UpdateMoveOrder(OrderType.Hold, true);
+                    bool isReadyToAttack = CanAttack() &&
+                       _autoAttackCurrentCooldown <= 0 &&
+                       AutoAttackSpell != null &&
+                       AutoAttackSpell.State == SpellState.STATE_READY;
+
+                    if (isReadyToAttack)
+                    {
+                        StopMovement(networked: false);
+                    }
+                    else
+                    {
+                        UpdateMoveOrder(OrderType.Hold, true);
+                    }
                 }
                 else
                 {

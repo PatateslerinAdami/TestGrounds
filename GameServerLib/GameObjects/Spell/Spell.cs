@@ -930,9 +930,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // TODO: Verify if this should only be checked at the start of channeling.
-            if (CastInfo.Owner.MovementParameters != null)
+            if (!SpellData.CanMoveWhileChanneling && CastInfo.Owner.MovementParameters != null)
             {
                 CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.Move);
+                return;
             }
 
             // TODO: Verify if Taunted should be handled by the Taunt buff script instead.
@@ -945,12 +946,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             || status.HasFlag(StatusFlags.Taunted))
             {
                 CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.StunnedOrSilencedOrTaunted);
+                return;
             }
             if (SpellData.TargetingType == TargetingType.Target)
             {
                 if (CastInfo.Targets.Count <= 0 || CastInfo.Targets[0].Unit == null)
                 {
                     CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.LostTarget);
+                    return;
                 }
 
             }
@@ -1036,7 +1039,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (reason != ChannelingStopSource.Move && reason != ChannelingStopSource.Attack &&
                     !isForcedMovement)
                 {
-                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                    if (!SpellData.CanMoveWhileChanneling)
+                    {
+                        if (!CastInfo.Owner.IsPathEnded())
+                        {
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                            ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
+                        }
+                        else
+                        {
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                        }
+                    }
                 }
                 // TODO: Find out how League calculates cooldown reduction for incomplete channels (assuming it isn't done in-script).
             }
@@ -1160,7 +1174,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         if (!SpellData.CanMoveWhileChanneling)
                         {
                             CastInfo.Owner.StopMovement();
-                            CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                            if (!shouldResumeWalking)
+                            {
+                                CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                            }
                         }
                     }
                 }
