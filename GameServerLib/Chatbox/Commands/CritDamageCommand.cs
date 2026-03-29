@@ -7,7 +7,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         private readonly PlayerManager _playerManager;
 
         public override string Command => "critdamage";
-        public override string Syntax => $"{Command} bonusCritChance";
+        public override string Syntax => $"{Command} bonusCritDamage";
 
         public CritDamageCommand(ChatCommandManager chatCommandManager, Game game)
             : base(chatCommandManager, game)
