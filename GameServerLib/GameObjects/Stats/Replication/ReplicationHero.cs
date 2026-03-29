@@ -41,7 +41,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.Range.Total, 1, 13); //mAttackRange
             UpdateFloat(Stats.AttackDamage.FlatBonus, 1, 14); //mFlatPhysicalDamageMod
             UpdateFloat(Stats.AttackDamage.PercentBonus, 1, 15); //mPercentPhysicalDamageMod
-            UpdateFloat(Stats.AbilityPower.FlatBonus, 1, 16); //mFlatMagicDamageMod
+            UpdateFloat(Stats.AbilityPower.Total - Stats.AbilityPower.BaseValue, 1, 16); //mFlatMagicDamageMod
             // UpdateFloat(Stats.MagicResist.FlatBonus, 1, 17); //mFlatMagicReduction
             // UpdateFloat(Stats.MagicResist.PercentBonus, 1, 18); //mPercentMagicReduction
             UpdateFloat(Stats.AttackSpeedMultiplier.Total, 1, 19); //mAttackSpeedMod

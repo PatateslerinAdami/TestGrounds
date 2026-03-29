@@ -310,8 +310,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public virtual void AutoAttackHit(AttackableUnit target)
         {
+            if (target == null || target.IsDead)
+            {
+                return;
+            }
+
             var damage = Stats.AttackDamage.Total;
-            if (IsNextAutoCrit)
+
+            // Apply crit BEFORE building damageData, so PostMitigationDamage is correct too
+            bool isCrit = IsNextAutoCrit;
+            if (isCrit)
             {
                 damage *= Stats.CriticalDamage.Total;
             }
@@ -325,6 +333,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 PostMitigationDamage = target.Stats.GetPostMitigationDamage(damage, DamageType.DAMAGE_TYPE_PHYSICAL, this),
                 DamageSource = DamageSource.DAMAGE_SOURCE_ATTACK,
                 DamageType = DamageType.DAMAGE_TYPE_PHYSICAL,
+                DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
             };
 
             ApiEventManager.OnHitUnit.Publish(this, damageData);
@@ -338,7 +347,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return;
             }
 
-            target.TakeDamage(damageData, IsNextAutoCrit);
+            target.TakeDamage(damageData, isCrit);
         }
 
         public override bool CanMove()

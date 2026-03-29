@@ -1,7 +1,7 @@
 ﻿using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.API;
-using            GameServerLib.GameObjects.AttackableUnits;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace ItemPassives
