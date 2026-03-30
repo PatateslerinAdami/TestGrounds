@@ -9,28 +9,29 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace Buffs
 {
-    internal class Silence : IBuffGameScript
+    internal class Root : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.SILENCE,
+            BuffType = BuffType.SNARE,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             IsHidden = true
         };
 
         public StatsModifier StatsModifier { get; private set; }
 
-        Particle silence;
+        Particle root;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, false);
+            root = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Root", unit, buff.Duration);
+            unit.SetStatus(StatusFlags.CanMove, false);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, true);
-
+            unit.SetStatus(StatusFlags.CanMove, true);
+            RemoveParticle(root);
         }
     }
 }

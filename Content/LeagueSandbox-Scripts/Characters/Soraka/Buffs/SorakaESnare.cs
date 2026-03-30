@@ -9,28 +9,28 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace Buffs
 {
-    internal class Silence : IBuffGameScript
+    internal class SorakaESnare : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.SILENCE,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            IsHidden = true
+            BuffType = BuffType.SNARE,
+            BuffAddType = BuffAddType.REPLACE_EXISTING
         };
 
         public StatsModifier StatsModifier { get; private set; }
 
-        Particle silence;
+        Particle root;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, false);
+            AddBuff("Root", float.MaxValue, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner);
+            root = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "soraka_base_e_snare_tar", unit, lifetime: buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, true);
-
+            RemoveBuff(unit, "Root");
+            RemoveParticle(root);
         }
     }
 }

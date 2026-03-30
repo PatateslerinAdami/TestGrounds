@@ -1,36 +1,33 @@
 using GameServerCore.Enums;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs
 {
-    internal class Silence : IBuffGameScript
+    public class Invisibility : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.SILENCE,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            IsHidden = true
+            BuffType = BuffType.INVISIBILITY,
+            BuffAddType = BuffAddType.RENEW_EXISTING,
+            MaxStacks = 1
         };
 
-        public StatsModifier StatsModifier { get; private set; }
-
-        Particle silence;
+        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, false);
+            unit.EnterStealth();
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanCast, true);
-
+            unit.ExitStealth();
         }
     }
 }
