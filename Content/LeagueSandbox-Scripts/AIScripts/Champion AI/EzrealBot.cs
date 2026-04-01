@@ -53,6 +53,14 @@ namespace AIScripts
         private Champion _followTarget;
         private const float CombatCooldownTime = 5.0f; // Time to consider out of combat (seconds)
 
+        // Personality seed for hive mind diversity
+        private int _personalitySeed;
+        private Random _personalityRandom;
+        private Vector2 _currentOffset = Vector2.Zero;
+        private float _offsetUpdateTime = 0f;
+        private const float OffsetUpdateInterval = 2.0f; // Update offset every 2 seconds
+        private const float MaxPositionOffset = 150f; // Maximum offset in units
+
         // Spell slots
         private readonly byte QSlot = 0;
         private readonly byte WSlot = 1;
@@ -61,6 +69,13 @@ namespace AIScripts
         private readonly byte IgniteSlot = 0; // Summoner spell slot
         private Dictionary<byte, float> _lastCastTime = new Dictionary<byte, float>();
 
+        // Attack weaving / Orbwalking fields
+        private float _autoAttackCooldownEndTime = 0f;
+        private bool _isAutoAttacking = false;
+        private Vector2 _orbwalkDirection = Vector2.Zero;
+        private float _lastOrbwalkTime = 0f;
+        private const float MinOrbwalkInterval = 0.3f; // Minimum time between direction changes
+        private const float OrbwalkMoveSpeedMultiplier = 0.7f; // Move at 70% speed during orbwalking
 
         // Constants for decision making
         private const float SafeDistance = 650f; // Safe distance to keep from enemies
@@ -80,6 +95,12 @@ namespace AIScripts
         private Champion _lastChaseTarget = null;
         bool stillChasing = false;
 
+        // Push and dive constants
+        private const float DiveHealthThreshold = 0.2f; // Enemy health below 20% for diving
+        private const float MinDiveScore = 2.0f; // Minimum score to consider diving
+        private const float TowerDiveSafeDistance = 775f; // Distance to stay from tower while diving
+        private Champion _diveTarget = null;
+
 
 
         // Enum for bot state
@@ -92,6 +113,8 @@ namespace AIScripts
             Defensive,
             Retreating,
             Chasing,
+            Pushing,
+            Diving,
             DeadState
         }
 
@@ -101,6 +124,11 @@ namespace AIScripts
             {
                 EzrealInstance = champion;
                 EzrealInstance.IsBot = true;
+
+                // Initialize personality seed for hive mind diversity
+                _personalitySeed = EzrealInstance.NetId.GetHashCode() + Environment.TickCount;
+                _personalityRandom = new Random(_personalitySeed);
+                _logger.Debug($"Ezreal Bot initialized with personality seed: {_personalitySeed}");
 
                 _currentState = BotState.MovingToLane;
                 ApiEventManager.OnTakeDamage.AddListener(this, EzrealInstance, OnTakeDamage, false);
@@ -122,6 +150,12 @@ namespace AIScripts
                 isInCombat = false;
             }
 
+            // Update personality offset periodically
+            UpdatePersonalityOffset();
+
+            // Track auto-attack state for orbwalking
+            UpdateAutoAttackState();
+
             // Level up skills when possible
             LevelUpSpells();
 
@@ -136,6 +170,36 @@ namespace AIScripts
 
             // Act based on the current state
             ActOnState();
+        }
+
+        /// <summary>
+        /// Updates the randomized positioning offset for hive mind diversity
+        /// </summary>
+        private void UpdatePersonalityOffset()
+        {
+            if (_gameTime - _offsetUpdateTime >= OffsetUpdateInterval)
+            {
+                _offsetUpdateTime = _gameTime;
+                // Generate random offset within circle
+                float angle = (float)(_personalityRandom.NextDouble() * 2 * Math.PI);
+                float distance = (float)(_personalityRandom.NextDouble() * MaxPositionOffset);
+                _currentOffset = new Vector2(
+                    (float)(distance * Math.Cos(angle)),
+                    (float)(distance * Math.Sin(angle))
+                );
+            }
+        }
+
+        /// <summary>
+        /// Tracks auto-attack state for orbwalking decision making
+        /// </summary>
+        private void UpdateAutoAttackState()
+        {
+            if (EzrealInstance.AutoAttackSpell != null)
+            {
+                var spellState = EzrealInstance.AutoAttackSpell.State;
+                _isAutoAttacking = (spellState == SpellState.STATE_CASTING);
+            }
         }
 
         private void OnTakeDamage(GameServerLib.GameObjects.AttackableUnits.DamageData damageData)
@@ -205,6 +269,12 @@ namespace AIScripts
                     {
                         _logger.Debug("Found vulnerable enemy - switching to chase mode");
                         _currentState = BotState.Chasing;
+                    }
+                    // Check for tower pushing opportunity
+                    else if (ShouldPushTower())
+                    {
+                        _logger.Debug("Tower push opportunity detected - switching to push mode");
+                        _currentState = BotState.Pushing;
                     }
                     break;
 
@@ -295,6 +365,29 @@ namespace AIScripts
                         _currentState = BotState.Retreating;
                     }
                     break;
+
+                case BotState.Pushing:
+                    // Check if we should stop pushing
+                    if (GetHealthPercentage() < DefensiveHealthThreshold)
+                    {
+                        _currentState = BotState.Defensive;
+                    }
+                    else if (nearbyEnemies.Count > 0)
+                    {
+                        // Enemies appeared - check if we should dive or retreat
+                        _currentState = BotState.Poking;
+                    }
+                    else if (!ShouldPushTower())
+                    {
+                        // No longer good pushing conditions
+                        _currentState = BotState.Farming;
+                    }
+                    // Dive evaluation happens in PushTower() method
+                    break;
+
+                case BotState.Diving:
+                    // Dive state is managed by ExecuteDive() which transitions out when appropriate
+                    break;
             }
         }
 
@@ -344,6 +437,14 @@ namespace AIScripts
 
                 case BotState.Retreating:
                     Retreat();
+                    break;
+
+                case BotState.Pushing:
+                    PushTower();
+                    break;
+
+                case BotState.Diving:
+                    ExecuteDive();
                     break;
             }
         }
@@ -412,8 +513,15 @@ namespace AIScripts
             if (lowHealthMinions.Any())
             {
                 Minion targetMinion = lowHealthMinions.First();
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
-                EzrealInstance.TargetUnit = targetMinion;
+                // Use orbwalking for minion attacks
+                if (IsInAutoAttackRange(targetMinion))
+                {
+                    PerformOrbwalk(GetIdealFarmingPosition(), targetMinion);
+                }
+                else
+                {
+                    MoveToPosition(GetIdealFarmingPosition());
+                }
             }
             else
             {
@@ -598,14 +706,13 @@ namespace AIScripts
             // If we can't poke with abilities, try to position better
             MoveToPosition(GetIdealPokingPosition());
 
-            // Only auto-attack if we're already in a good position and it's safe
+            // Only auto-attack with orbwalking if we're already in a good position and it's safe
             Champion nearbyTarget = GetClosestEnemyChampion();
-            if (nearbyTarget != null && IsInAutoAttackRange(nearbyTarget) && !IsSafeToEngageChampion(nearbyTarget))
+            if (nearbyTarget != null && IsInAutoAttackRange(nearbyTarget) && IsSafeToEngageChampion(nearbyTarget))
             {
-                _logger.Debug($"Auto attacking {nearbyTarget.Name} during poke");
+                _logger.Debug($"Auto attacking {nearbyTarget.Name} during poke with orbwalking");
                 _currentState = BotState.Poking;
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
-                EzrealInstance.TargetUnit = nearbyTarget;
+                PerformOrbwalk(GetIdealPokingPosition(), nearbyTarget);
             }
         }
 
@@ -641,11 +748,10 @@ namespace AIScripts
                 CastQ(target);
             }
 
-            // Auto attack if in range
+            // Auto attack with orbwalking if in range
             if (IsInAutoAttackRange(target))
             {
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
-                EzrealInstance.TargetUnit = target;
+                PerformOrbwalk(target.Position, target);
             }
 
             // Cast R if can kill
@@ -774,7 +880,7 @@ namespace AIScripts
                 Vector2 direction = Vector2.Normalize(EzrealInstance.Position - closestEnemy.Position);
                 Vector2 ePos = EzrealInstance.Position + direction * ERange;
 
-                // Engine requires at least one target in the list — pass self as a dummy
+                // Engine requires at least one target in the list ï¿½ pass self as a dummy
                 List<CastTarget> targets = new List<CastTarget>
         {
             new CastTarget(EzrealInstance, HitResult.HIT_Normal)
@@ -997,15 +1103,12 @@ namespace AIScripts
 
             if (IsInAutoAttackRange(target))
             {
-                _logger.Debug($"Auto attacking {target.Name} during chase");
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
-                EzrealInstance.TargetUnit = target;
+                _logger.Debug($"Auto attacking {target.Name} during chase with orbwalking");
+                PerformOrbwalk(GetPositionAtDistanceFromTarget(target, AutoAttackRange - 50), target);
             }
 
             if (!IsInAutoAttackRange(target))
             {
-
-
                 if (IsSpellAvailable(QSlot, SpellSlotType.SpellSlots))
                 {
                     // If Q is up, stay at Q range
@@ -1021,9 +1124,6 @@ namespace AIScripts
 
                 _logger.Debug($"Moving to position {idealChasePosition}");
                 MoveToPosition(idealChasePosition);
-                _logger.Debug($"Auto attacking {target.Name} during chase");
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
-                EzrealInstance.TargetUnit = target;
             }
 
             // If in Q range, cast Q
@@ -1531,12 +1631,19 @@ namespace AIScripts
             return units.OfType<LaneMinion>().Count(minion => minion.Team == team);
         }
 
-        private void MoveToPosition(Vector2 targetPosition)
+        private void MoveToPosition(Vector2 targetPosition, bool applyOffset = true)
         {
             Vector2 botPosition = EzrealInstance.Position;
 
+            // Apply personality offset for hive mind diversity (unless disabled)
+            Vector2 offsetTarget = targetPosition;
+            if (applyOffset)
+            {
+                offsetTarget = ApplyPersonalityOffset(targetPosition);
+            }
+
             // If the target itself isn't walkable, find the nearest walkable point
-            Vector2 safeTarget = FindNearestWalkable(targetPosition);
+            Vector2 safeTarget = FindNearestWalkable(offsetTarget);
 
             List<Vector2> waypoints = new List<Vector2> { botPosition, safeTarget };
             EzrealInstance.MoveOrder = OrderType.MoveTo;
@@ -1677,5 +1784,389 @@ namespace AIScripts
             // No minions blocking
             return false;
         }
+
+        #region Tower Pushing and Diving Logic
+
+        /// <summary>
+        /// Finds the best enemy tower to push based on proximity and safety
+        /// </summary>
+        private LaneTurret FindBestEnemyTower()
+        {
+            Vector2 botPosition = EzrealInstance.Position;
+            List<AttackableUnit> units = GetUnitsInRange(botPosition, TowerDetectionRange * 2, true);
+
+            var enemyTowers = units.OfType<LaneTurret>()
+                .Where(turret => turret.Team != EzrealInstance.Team && !turret.IsDead)
+                .OrderBy(turret => Vector2.Distance(botPosition, turret.Position))
+                .ToList();
+
+            if (enemyTowers.Any())
+            {
+                return enemyTowers.First();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if allied minions are under the tower's range to tank damage
+        /// </summary>
+        private bool AreMinionsUnderTower(LaneTurret tower)
+        {
+            if (tower == null) return false;
+
+            float towerRange = tower.Stats.Range.Total;
+            List<AttackableUnit> units = GetUnitsInRange(tower.Position, towerRange + 100f, true);
+
+            int alliedMinions = units.OfType<LaneMinion>()
+                .Where(minion => minion.Team == EzrealInstance.Team && !minion.IsDead)
+                .Count();
+
+            _logger.Debug($"Found {alliedMinions} allied minions under tower at {tower.Position}");
+            return alliedMinions >= 2; // Need at least 2 minions to tank
+        }
+
+        /// <summary>
+        /// Determines if conditions are favorable for pushing a tower
+        /// </summary>
+        private bool ShouldPushTower()
+        {
+            // Check if no enemies are nearby
+            List<Champion> nearbyEnemies = GetNearbyEnemyChampions(1500f);
+            if (nearbyEnemies.Count > 0)
+            {
+                return false;
+            }
+
+            // Find an enemy tower
+            LaneTurret tower = FindBestEnemyTower();
+            if (tower == null)
+            {
+                return false;
+            }
+
+            // Check if minions are under tower
+            if (!AreMinionsUnderTower(tower))
+            {
+                return false;
+            }
+
+            // Check if bot is healthy enough
+            if (GetHealthPercentage() < 0.4f)
+            {
+                return false;
+            }
+
+            // Check if we're not too far from tower
+            float distanceToTower = Vector2.Distance(EzrealInstance.Position, tower.Position);
+            if (distanceToTower > AutoAttackRange + 200f)
+            {
+                return false;
+            }
+
+            _logger.Debug($"Should push tower at {tower.Position} - {nearbyEnemies.Count} enemies nearby");
+            return true;
+        }
+
+        /// <summary>
+        /// Executes tower pushing behavior
+        /// </summary>
+        private void PushTower()
+        {
+            LaneTurret tower = FindBestEnemyTower();
+            if (tower == null)
+            {
+                _currentState = BotState.Farming;
+                return;
+            }
+
+            float distanceToTower = Vector2.Distance(EzrealInstance.Position, tower.Position);
+
+            // Move to attack range if needed
+            if (distanceToTower > AutoAttackRange)
+            {
+                Vector2 directionToTower = Vector2.Normalize(tower.Position - EzrealInstance.Position);
+                Vector2 attackPosition = tower.Position - (directionToTower * (AutoAttackRange - 50f));
+                MoveToPosition(attackPosition);
+            }
+            else
+            {
+                // In range - attack the tower
+                EzrealInstance.MoveOrder = OrderType.AttackTo;
+                EzrealInstance.TargetUnit = tower;
+                _logger.Debug($"Attacking tower at {tower.Position}");
+            }
+
+            // Check for dive opportunity while pushing
+            EvaluateDiveOpportunity();
+        }
+
+        /// <summary>
+        /// Evaluates if a dive opportunity exists while pushing
+        /// </summary>
+        private void EvaluateDiveOpportunity()
+        {
+            LaneTurret tower = FindBestEnemyTower();
+            if (tower == null) return;
+
+            // Look for enemies under their tower
+            List<Champion> enemiesUnderTower = GetNearbyEnemyChampions(tower.Stats.Range.Total + 200f)
+                .Where(enemy => Vector2.Distance(enemy.Position, tower.Position) <= tower.Stats.Range.Total)
+                .ToList();
+
+            foreach (var enemy in enemiesUnderTower)
+            {
+                float diveScore = CalculateDiveScore(enemy, tower);
+                if (diveScore >= MinDiveScore)
+                {
+                    _logger.Debug($"Dive opportunity detected on {enemy.Name} with score {diveScore:F2}");
+                    _diveTarget = enemy;
+                    _currentState = BotState.Diving;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculates a dive score for a target - smooth scoring instead of binary
+        /// </summary>
+        private float CalculateDiveScore(Champion target, LaneTurret tower)
+        {
+            float score = 0f;
+
+            // Enemy health factor (0.0 to 1.0, where lower is better)
+            float enemyHealthPct = target.Stats.CurrentHealth / target.Stats.HealthPoints.Total;
+            if (enemyHealthPct <= 0.15f)
+                score += 4.0f; // Very low health - excellent dive target
+            else if (enemyHealthPct <= 0.25f)
+                score += 3.0f; // Low health - good dive target
+            else if (enemyHealthPct <= 0.35f)
+                score += 1.5f; // Moderate health - risky but possible
+            else
+                score -= 2.0f; // High health - don't dive
+
+            // Number advantage factor
+            int nearbyAllies = GetNearbyEnemiesOfTarget(target, 1000f); // Allies of Ezreal near target
+            int nearbyEnemiesOfTarget = GetNearbyAlliesOfTarget(target, 1000f); // Enemy allies near target
+
+            if (nearbyAllies >= 2 && nearbyEnemiesOfTarget == 0)
+                score += 3.0f; // 2v1 or better - great dive
+            else if (nearbyAllies >= 1 && nearbyEnemiesOfTarget == 0)
+                score += 1.5f; // 1v1 - decent dive
+            else if (nearbyAllies == 0 && nearbyEnemiesOfTarget >= 1)
+                score -= 3.0f; // Outnumbered - dangerous
+
+            // Level difference factor
+            int levelDiff = EzrealInstance.Stats.Level - target.Stats.Level;
+            score += Math.Min(Math.Max(levelDiff * 0.6f, -2f), 3f); // +/- 0.6 per level, capped
+
+            // Tower factor - closer to tower edge is safer
+            float distToTowerEdge = Vector2.Distance(target.Position, tower.Position) - tower.Stats.Range.Total;
+            if (distToTowerEdge > 0)
+                score += 0.5f; // Target is outside tower range
+            else
+                score -= Math.Abs(distToTowerEdge) / 200f; // Penalty for being deeper in tower range
+
+            // Bot health factor
+            float botHealthPct = GetHealthPercentage();
+            if (botHealthPct > 0.7f)
+                score += 1.0f; // Healthy - safer dive
+            else if (botHealthPct > 0.5f)
+                score += 0.0f; // Moderate - neutral
+            else
+                score -= 1.5f; // Low health - risky dive
+
+            // Available cooldowns factor
+            if (IsSpellAvailable(ESlot, SpellSlotType.SpellSlots))
+                score += 1.0f; // Have escape ready
+            else
+                score -= 0.5f; // No escape available
+
+            if (IsSpellAvailable(QSlot, SpellSlotType.SpellSlots) && IsSpellAvailable(WSlot, SpellSlotType.SpellSlots))
+                score += 0.5f; // Have damage spells ready
+
+            _logger.Debug($"Dive score for {target.Name}: health={enemyHealthPct:F2}, allies={nearbyAllies}, " +
+                         $"enemies={nearbyEnemiesOfTarget}, levelDiff={levelDiff}, score={score:F2}");
+
+            return score;
+        }
+
+        /// <summary>
+        /// Executes diving behavior on a target under tower
+        /// </summary>
+        private void ExecuteDive()
+        {
+            if (_diveTarget == null || _diveTarget.IsDead)
+            {
+                _currentState = BotState.Pushing;
+                _diveTarget = null;
+                return;
+            }
+
+            LaneTurret tower = FindBestEnemyTower();
+            float distToTower = tower != null ? Vector2.Distance(EzrealInstance.Position, tower.Position) : float.MaxValue;
+
+            // Check if dive is still favorable
+            if (distToTower > tower.Stats.Range.Total + 300f)
+            {
+                _logger.Debug("Too far from tower to continue dive");
+                _currentState = BotState.Pushing;
+                _diveTarget = null;
+                return;
+            }
+
+            float currentDiveScore = CalculateDiveScore(_diveTarget, tower);
+            if (currentDiveScore < MinDiveScore * 0.7f)
+            {
+                _logger.Debug($"Dive score dropped to {currentDiveScore:F2}, aborting dive");
+                _currentState = BotState.Retreating;
+                _diveTarget = null;
+                return;
+            }
+
+            // Execute dive combo
+            float distance = Vector2.Distance(EzrealInstance.Position, _diveTarget.Position);
+
+            // Cast W for damage boost
+            if (IsSpellAvailable(WSlot, SpellSlotType.SpellSlots) && distance <= WRange)
+            {
+                CastW(_diveTarget);
+            }
+
+            // Cast Q for damage
+            if (IsSpellAvailable(QSlot, SpellSlotType.SpellSlots) && distance <= QRange)
+            {
+                CastQ(_diveTarget);
+            }
+
+            // Auto attack
+            if (IsInAutoAttackRange(_diveTarget))
+            {
+                EzrealInstance.MoveOrder = OrderType.AttackTo;
+                EzrealInstance.TargetUnit = _diveTarget;
+            }
+            else
+            {
+                // Move closer
+                MoveToPosition(_diveTarget.Position);
+            }
+
+            // Use E aggressively if safe and needed
+            if (distance > AutoAttackRange + 100 && IsSpellAvailable(ESlot, SpellSlotType.SpellSlots))
+            {
+                if (IsSafeToUseAggressiveE(_diveTarget))
+                {
+                    CastAggressiveE(_diveTarget);
+                }
+            }
+
+            // Use R for execution
+            float targetHealthPct = _diveTarget.Stats.CurrentHealth / _diveTarget.Stats.HealthPoints.Total;
+            if (targetHealthPct < 0.15f && IsSpellAvailable(RSlot, SpellSlotType.SpellSlots))
+            {
+                CastR(_diveTarget);
+            }
+
+            // Prepare to retreat after kill or if target escapes
+            if (_diveTarget.IsDead || targetHealthPct > 0.5f)
+            {
+                _currentState = BotState.Retreating;
+                _diveTarget = null;
+            }
+        }
+
+        #endregion
+
+        #region Attack Weaving and Orbwalking
+
+        /// <summary>
+        /// Gets the current auto-attack cooldown based on attack speed
+        /// </summary>
+        private float GetAutoAttackCooldown()
+        {
+            float attackSpeed = EzrealInstance.Stats.GetTotalAttackSpeed();
+            return 1.0f / attackSpeed;
+        }
+
+        /// <summary>
+        /// Checks if basic attack is currently casting (can't move)
+        /// </summary>
+        private bool IsBasicAttackCasting()
+        {
+            if (EzrealInstance.AutoAttackSpell == null) return false;
+            return EzrealInstance.AutoAttackSpell.State == SpellState.STATE_CASTING;
+        }
+
+        /// <summary>
+        /// Checks if basic attack is on cooldown (can move)
+        /// </summary>
+        private bool IsBasicAttackOnCooldown()
+        {
+            if (EzrealInstance.AutoAttackSpell == null) return false;
+            return EzrealInstance.AutoAttackSpell.State == SpellState.STATE_COOLDOWN;
+        }
+
+        /// <summary>
+        /// Performs orbwalking movement during auto-attack cooldown
+        /// </summary>
+        private void PerformOrbwalk(Vector2 targetPosition, AttackableUnit attackTarget = null)
+        {
+            // If casting, stand still
+            if (IsBasicAttackCasting())
+            {
+                EzrealInstance.UpdateMoveOrder(OrderType.Stop);
+                return;
+            }
+
+            // If on cooldown, move unpredictably
+            if (IsBasicAttackOnCooldown())
+            {
+                // Update orbwalk direction periodically
+                if (_gameTime - _lastOrbwalkTime >= MinOrbwalkInterval)
+                {
+                    _lastOrbwalkTime = _gameTime;
+
+                    // Generate random movement direction (Â±90 degrees from target)
+                    Vector2 toTarget = targetPosition - EzrealInstance.Position;
+                    if (toTarget == Vector2.Zero) toTarget = Vector2.UnitX;
+
+                    float baseAngle = MathF.Atan2(toTarget.Y, toTarget.X);
+                    float randomAngle = baseAngle + ((float)(_personalityRandom.NextDouble() * Math.PI) - MathF.PI / 2);
+
+                    _orbwalkDirection = new Vector2(
+                        MathF.Cos(randomAngle),
+                        MathF.Sin(randomAngle)
+                    );
+                }
+
+                // Move in the chosen direction at reduced speed
+                Vector2 moveTarget = EzrealInstance.Position + (_orbwalkDirection * 100f);
+                Vector2 safeMoveTarget = FindNearestWalkable(moveTarget);
+
+                EzrealInstance.MoveOrder = OrderType.MoveTo;
+                List<Vector2> waypoints = new List<Vector2> { EzrealInstance.Position, safeMoveTarget };
+                EzrealInstance.SetWaypoints(waypoints);
+            }
+            else if (attackTarget != null && IsInAutoAttackRange(attackTarget))
+            {
+                // Attack is ready and target in range - attack
+                EzrealInstance.MoveOrder = OrderType.AttackTo;
+                EzrealInstance.TargetUnit = attackTarget;
+            }
+        }
+
+        /// <summary>
+        /// Applies personality offset to a position for hive mind diversity
+        /// </summary>
+        private Vector2 ApplyPersonalityOffset(Vector2 position)
+        {
+            // Add current offset to position
+            Vector2 offsetPosition = position + _currentOffset;
+
+            // Ensure the offset position is walkable
+            return FindNearestWalkable(offsetPosition);
+        }
+
+        #endregion
     }
 }
