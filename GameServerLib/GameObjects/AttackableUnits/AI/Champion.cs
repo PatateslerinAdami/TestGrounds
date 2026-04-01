@@ -82,7 +82,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (clientInfo.PlayerId == -1)
             {
-                IsBot = true;
+                IsBot = false; // This change was necessary for my customized bot names to work. If you are going to be serious about bot dev and the true value of this is needed somewhere, feel free to revert it
             }
         }
 
