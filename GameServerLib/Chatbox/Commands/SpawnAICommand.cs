@@ -113,7 +113,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             var spawnPos = _playerManager.GetPeerInfo(userId).Champion.Position;
             var clientInfo = new ClientInfo(
                 "", team, 0, 0, 0,
-                $"{model} Bot",
+                GenerateBotName(),
                 new string[] { "SummonerHeal", "SummonerFlash" },
                 -1
             );
@@ -151,6 +151,63 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
             ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.INFO,
                 $"Spawned Bot '{champion.Name}' ({champion.Model}) on team {team} at level {level} with NetID: {champion.NetId}.");
+        }
+
+
+        private static readonly Random _random = new Random();
+
+        private static readonly string[] _prefixes =
+        {
+    "xX", "XX", "x_", "XX_", "[ ", "# ", "- ", "« ", "★ ", "",
+    "", "", "", "" // weighted toward no prefix
+};
+
+        private static readonly string[] _adjectives =
+        {
+    "Dark", "Shadow", "Hyper", "Ultra", "Turbo", "Mega", "Epic", "Pro",
+    "Elite", "Toxic", "Stealth", "Raging", "Silent", "Blazing", "Frozen",
+    "Neon", "Cyber", "Omega", "Alpha", "Delta", "Bloody", "Savage", "Crispy",
+    "Sweaty", "Tryhard", "Cracked", "Goated", "Based", "Cursed", "Speedy"
+};
+
+        private static readonly string[] _nouns =
+        {
+    "Wolf", "Sniper", "Dragon", "Slayer", "Killer", "Hunter", "Reaper",
+    "Ninja", "Wizard", "Beast", "Demon", "Phoenix", "Viper", "Raven",
+    "Storm", "Ghost", "Titan", "Legend", "Gamer", "Warrior", "Noob",
+    "Blade", "Hawk", "Fox", "Bear", "Shark", "Rage", "God", "King", "Bot"
+};
+
+        private static readonly string[] _suffixes =
+        {
+    "Xx", "XX", "_x", "_XX", " ]", " #", " -", " »", " ★", "",
+    "", "", "", "" // weighted toward no suffix
+};
+
+        private static readonly string[] _separators =
+        {
+    "_", "-", ".", "", "", "" // weighted toward no separator
+};
+
+        private static string GenerateBotName()
+        {
+            string prefix = _prefixes[_random.Next(_prefixes.Length)];
+            string adjective = _adjectives[_random.Next(_adjectives.Length)];
+            string separator = _separators[_random.Next(_separators.Length)];
+            string noun = _nouns[_random.Next(_nouns.Length)];
+            string suffix = _suffixes[_random.Next(_suffixes.Length)];
+
+            // 60% chance to add a number at the end
+            string number = _random.NextDouble() < 0.6
+                ? _random.Next(1, 9999).ToString()
+                : "";
+
+            // 30% chance to add a second separator + number block like "_420"
+            string extraNumber = _random.NextDouble() < 0.3
+                ? $"_{_random.Next(1, 999)}"
+                : "";
+
+            return $"{prefix}{adjective}{separator}{noun}{number}{extraNumber}{suffix}";
         }
     }
 }
