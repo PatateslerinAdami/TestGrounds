@@ -906,22 +906,31 @@ namespace AIScripts
 
                 // Base stats
                 float enemyHealthPct = enemy.Stats.CurrentHealth / enemy.Stats.HealthPoints.Total;
-                int nearbyAllies = GetNearbyAlliesOfTarget(enemy, 800f);
+                int nearbyAlliesOfTarget = GetNearbyAlliesOfTarget(enemy, 800f);
+                int nearbyEnemiesOfTarget = GetNearbyEnemiesOfTarget(enemy, 800f); // So basically allies of Ezreal in relation to the target.
                 float distance = Vector2.Distance(EzrealInstance.Position, enemy.Position);
                 int levelDiff = EzrealInstance.Stats.Level - enemy.Stats.Level;
 
                 // Calculate a "vulnerability score" for this enemy
                 float score = 0f;
 
-                // Low health is good
-                if (enemyHealthPct < 0.3f)
-                    score += 3.0f;
+                // Low health is good - add critical tier
+                if (enemyHealthPct <= 0.15f)          // NEW: Critical threshold
+                    score += 4.5f;                    // Highest priority - execution territory
+                else if (enemyHealthPct < 0.3f)
+                    score += 3.0f;                    // Still very good
                 else if (enemyHealthPct < 0.5f)
-                    score += 1.5f;
+                    score += 1.5f;                    // Moderate
 
-                // Isolated targets are good
-                if (nearbyAllies == 0)
-                    score += 1.0f;
+                // Gang up bonus: many allies vs isolated enemy = great target
+                if (nearbyEnemiesOfTarget >= 2 && nearbyAlliesOfTarget == 0)
+                    score += 2.0f; // Free kill, jump on it!
+                else if (nearbyEnemiesOfTarget >= 1 && nearbyAlliesOfTarget == 0)
+                    score += 1.0f; // 2v1 advantage
+
+                // Avoid grouped enemies
+                if (nearbyAlliesOfTarget >= 2 && nearbyEnemiesOfTarget == 0)
+                    score -= 1.0f; // You'll get collapsed on
 
                 // Closer targets are better (but not too much weight on this)
                 score += (1500f - distance) / 1500f;
@@ -932,7 +941,7 @@ namespace AIScripts
                 score += Math.Min(Math.Max(levelScore, -2f), 3f);
 
                 // Debug output
-                _logger.Debug($"Enemy {enemy.Name}: health={enemyHealthPct:F2}, allies={nearbyAllies}, " +
+                _logger.Debug($"Enemy {enemy.Name}: health={enemyHealthPct:F2}, EnemiesOfChoosenTarget={nearbyEnemiesOfTarget}, " +
                              $"distance={distance:F0}, levelDiff={levelDiff}, score={score:F2}");
 
                 if (score > bestScore)
@@ -1345,9 +1354,29 @@ namespace AIScripts
 
         private int GetNearbyAlliesOfTarget(Champion target, float range)
         {
-            // Return number of allies near the target
-            // Implementation depends on your game engine
-            return 0;
+            Vector2 enemyPosition = target.Position;
+
+            List<AttackableUnit> units = GetUnitsInRange(enemyPosition, range, true);
+
+            var enemyTeammatesNearTarget = units.OfType<Champion>()
+                .Where(champion => champion.Team != EzrealInstance.Team && !champion.IsDead && champion != target)
+                .ToList();
+
+            return enemyTeammatesNearTarget.Count;
+        }
+
+        private int GetNearbyEnemiesOfTarget(Champion target, float range)
+        {
+            // Get allies near the TARGET (not near the bot), so we know how many friends are near the enemy
+            Vector2 enemyPosition = target.Position;
+
+            List<AttackableUnit> units = GetUnitsInRange(enemyPosition, range, true); // Use enemyPosition, not botPosition
+
+            var alliesNearTarget = units.OfType<Champion>()
+                .Where(champion => champion.Team == EzrealInstance.Team && !champion.IsDead && champion != EzrealInstance)
+                .ToList();
+
+            return alliesNearTarget.Count; // Return the actual count
         }
 
         private List<Champion> GetNearbyAllyChampions(float range)

@@ -84,7 +84,7 @@ namespace Spells
             AddParticleTarget(owner, target, "soraka_base_e_enemy_tar.troy", target, 1f);
             if (target is Champion && target.Team != owner.Team)
             {
-                AddBuff("SorakaEPacify", 1f, 1, spell, target, owner);
+                AddBuff("SorakaEPacify", 1.5f, 1, spell, target, owner);
             }
         }
 
