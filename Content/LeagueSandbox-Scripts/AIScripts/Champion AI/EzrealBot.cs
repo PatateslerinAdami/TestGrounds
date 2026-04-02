@@ -1,35 +1,38 @@
+using GameMaths;
+using GameServerCore;
 using GameServerCore.Enums;
+using GameServerCore.NetInfo;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Collections.Generic;
-using System.Numerics;
-using System;
-using System.Linq;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using LeagueSandbox.GameServer.Chatbox;
-using LeagueSandbox.GameServer.Players;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
-using LeagueSandbox.GameServer.Logging;
-using log4net;
-using LeagueSandbox.GameServer;
-using Timer = System.Timers.Timer;
-using LeagueSandbox.GameServer.Inventory;
-using Spells;
-using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using System.Threading.Tasks;
-using GameServerCore.NetInfo;
-using LeagueSandbox.GameServer.GameObjects;
-using GameMaths;
-using System.Diagnostics;
-using static GameServerLib.GameObjects.AttackableUnits.DamageData;
-using LeagueSandbox.GameServer.Content.Navigation;
 using LeaguePackets.Game.Events;
+using LeagueSandbox.GameServer;
+using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.Chatbox;
+using LeagueSandbox.GameServer.Content.Navigation;
+using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Inventory;
+using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Players;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using log4net;
+using Newtonsoft.Json.Bson;
+using PacketDefinitions420;
+using Spells;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Numerics;
+using System.Threading.Tasks;
+using static GameServerLib.GameObjects.AttackableUnits.DamageData;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using static LENet.Protocol;
+using Timer = System.Timers.Timer;
 
 namespace AIScripts
 {
@@ -132,6 +135,11 @@ namespace AIScripts
 
                 _currentState = BotState.MovingToLane;
                 ApiEventManager.OnTakeDamage.AddListener(this, EzrealInstance, OnTakeDamage, false);
+                ApiEventManager.OnDeath.AddListener(this, EzrealInstance, OnDeath, false);
+                ApiEventManager.OnKill.AddListener(this, EzrealInstance, OnKillChampion, false);
+
+                // Initialize trash talk system with randomized cooldown
+                InitializeTrashTalk();
 
                 // Initialize with first skill point
                 EzrealInstance.LevelUpSpell(QSlot); // Start with Q for lane poke
@@ -140,8 +148,43 @@ namespace AIScripts
             }
         }
 
+        public void OnDeath(DeathData deathData)
+        {
+            // deathData.Unit is the unit that died (the victim)
+            // Check if this bot is the one who died
+            if (deathData.Unit == EzrealInstance)
+            {
+                _deathCount++;
+                _logger.Debug($"EzrealBot died! Total deaths: {_deathCount}");
+                // Queue delayed reaction instead of immediate trash talk
+                QueueReactionMessage(_dyingTaunts);
+            }
+        }
+
+        public void OnKillChampion(DeathData deathData)
+        {
+            // Only process if this bot is the killer
+            if (deathData.Killer == EzrealInstance && deathData.Unit is Champion && deathData.Unit is not LaneMinion)
+            {
+                _killCount++;
+                _logger.Debug($"EzrealBot got a kill! Total kills: {_killCount}");
+                // Queue delayed reaction instead of immediate trash talk
+                QueueReactionMessage(_killingTaunts);
+            }
+        }
+
+
+
+
         public void OnUpdate(float diff)
         {
+            // Guard every field that could be null
+            if (EzrealInstance == null)
+            {
+                _logger.Debug("[EzrealBot] OnUpdate called but EzrealInstance is null, skipping.");
+                return;
+            }
+
             _gameTime += diff / 1000f; // Convert to seconds
 
             // Check if combat state has expired
@@ -152,6 +195,11 @@ namespace AIScripts
 
             // Update personality offset periodically
             UpdatePersonalityOffset();
+
+            // Process any pending delayed reaction messages (kill/death taunts)
+            ProcessDelayedMessages();
+
+            TryTrashTalk();
 
             // Track auto-attack state for orbwalking
             UpdateAutoAttackState();
@@ -2168,5 +2216,265 @@ namespace AIScripts
         }
 
         #endregion
+
+        // Trash talk toggle — set to false to disable entirely
+        private const bool TrashTalkEnabled = true;
+
+        // Use personality random (unique per bot) instead of static random (shared)
+        // This prevents all bots from spamming at the same time
+
+        // How often the bot can trash talk (seconds) - randomized per bot
+        private float _trashTalkCooldown = 30f;
+        private float _lastTrashTalkTime = -999f;
+
+        // Thresholds that trigger specific trash talk categories
+        private const float KillStreakThreshold = 2f;  // kills before bragging
+        private const float DeathStreakThreshold = 2f;  // deaths before raging
+        private int _killCount = 0;
+        private int _deathCount = 0;
+
+        // Delayed message queue for kills/deaths - bypasses normal cooldown
+        private class DelayedMessage
+        {
+            public string Message { get; set; }
+            public float SendTime { get; set; }
+            public float BaseDelay { get; set; } // Base delay before sending
+            public float ReadTime { get; set; } // Additional time based on message length (time to "type")
+        }
+        private List<DelayedMessage> _delayedMessages = new List<DelayedMessage>();
+        private const float BaseReactionDelay = 3f; // 3-8 seconds base delay
+        private const float MaxReactionDelay = 8f;
+        private const float TypingSpeed = 15f; // Characters per second typing speed
+
+
+        private static readonly string[] _generalTaunts =
+        {
+    "report my team",
+    "gg ez",
+    "this team is holding me back",
+    "hardstuck players smh",
+    "i cant carry any harder",
+    "anyone else on my team even trying?",
+    "ff 15 my team is inting",
+    "i am literally 1v9 right now",
+    "where is my team lol",
+    "this is why i have trust issues",
+    "uninstall please",
+    "my goldfish could play better",
+    "i need better teammates",
+    "actual bots on my team (no offense to me)",
+    "alt f4 for a free skin"
+};
+
+        private static readonly string[] _dyingTaunts =
+        {
+    "LAG",
+    "my mouse slipped",
+    "i wasnt even trying",
+    "this keyboard is trash",
+    "didnt want that kill anyway",
+    "that was definitely a misplay on my part... jk report jungle",
+    "nice hack",
+    "reported",
+    "my cat walked on my keyboard",
+    "whatever i have 400 ping",
+    "open mid",
+    "OMG REPORT THIS TROLL I SWEAR ON MY MOMS LIFE I WILL FIND YOU I HAVE YOUR IP I AM A HACKER IN REAL LIFE I WORK FOR THE PENTAGON YOU ARE FINISHED DOG.",
+    "My team is doing 0 dmg report them all",
+    "Better nerf irelia",
+    "My team is feeders",
+    "You are playing a braindead champion, of course you're winning",
+    "Omg this team 0 vision wtf",
+    "WHAT IS THIS BULLSHIT",
+    "ARE YOU KIDDING ME?",
+    "Ooh I got rekt yeah yeah. Go tell your mom",
+    "Wtf that was a bug, it doesn't count",
+    "Just end this"
+
+
+
+
+
+};
+
+        private static readonly string[] _killingTaunts =
+        {
+    "too easy",
+    "did you even go to practice tool?",
+    "LOL",
+    "get rekt",
+    "skill diff",
+    "come back when you hit gold",
+    "you should switch to a simpler game",
+    "EZ Clap",
+    "i was shopping that fight btw",
+    "delete this game bro",
+    "go play animal crossing",
+    "thank you for the gold very generous",
+    "you are finished dog",
+    "your father left because of your positioning",
+    "stick to minecraft",
+    "try turning on your monitor",
+    "nice flash",
+    "ez",
+    "I’ve seen better mechanics in a 2008 Honda Civic.",
+    "thanks for the free lp",
+    "That was a nice attempt. Emphasis on attempt.",
+    "I see you're playing the new tutorial difficulty",
+    "You're doing great! ...at feeding",
+    "Your mechanics are sponsored by PowerPoint",
+    "You mad cuz bad",
+    "Git gud",
+    "Do you have are stupid",
+    "RIP bozo",
+    "Get pwned n00b",
+    "This is the worst team I've ever had in my entire life",
+    "You are so bad it's not even funny LMAO",
+    "Boosted bonobo",
+    "I'm not like the rest of you. I'm stronger, I'm smarter, I'm better",
+    "Survival instinct of an orange cat",
+    "Sell your items, it gives you more damage btw",
+    "Do you even know how to move?",
+    "lmao skill issue",
+    "Your positioning is avant-garde",
+    "your skills are trash",
+    "Impressive skill issue",
+    "I respect the confidence more than the execution"
+
+};
+
+        private static readonly string[] _lowHealthTaunts =
+        {
+    "YOLO",
+    "this is fine",
+    "i play better when im tilted",
+    "dont worry i meant to do that",
+    "low health = more damage everyone knows this",
+};
+
+        private static readonly string[] _generalGameTaunts =
+        {
+    "mid diff",
+    "jungle diff",
+    "support diff",
+    "this is a skill based game and it shows",
+    "i peaked plat and it wasnt even hard",
+    "diamond is literally elo hell",
+    "bro think he's faker",
+    "just ward bro its not that hard",
+    "how are you level 4 right now",
+    "you built that?",
+};
+
+        private void InitializeTrashTalk()
+        {
+            // Randomize cooldown per bot (25-45 seconds) to prevent synchronized spam
+            _trashTalkCooldown = 25f + (float)(_personalityRandom.NextDouble() * 20f);
+            _logger.Debug($"Trash talk cooldown set to {_trashTalkCooldown:F1} seconds for {EzrealInstance.Model}");
+        }
+
+        private void TryTrashTalk(string[] pool = null)
+        {
+            if (!TrashTalkEnabled) return;
+            if (_gameTime - _lastTrashTalkTime < _trashTalkCooldown) return;
+
+            // Pick the pool based on context if none is forced
+            if (pool == null)
+                pool = PickContextualPool();
+
+            string message = pool[_personalityRandom.Next(pool.Length)];
+            SendChatMessage(message);
+
+            _lastTrashTalkTime = _gameTime;
+            // Randomize next cooldown slightly
+            _trashTalkCooldown = 25f + (float)(_personalityRandom.NextDouble() * 20f);
+        }
+
+        /// <summary>
+        /// Queues a kill/death reaction message to be sent after a realistic delay.
+        /// This bypasses the normal cooldown and considers message length for typing time.
+        /// </summary>
+        private void QueueReactionMessage(string[] pool)
+        {
+            if (!TrashTalkEnabled || pool == null || pool.Length == 0) return;
+
+            string message = pool[_personalityRandom.Next(pool.Length)];
+
+            // Calculate base delay (3-8 seconds)
+            float baseDelay = BaseReactionDelay + (float)(_personalityRandom.NextDouble() * (MaxReactionDelay - BaseReactionDelay));
+
+            // Calculate typing time based on message length (longer messages = more time to "type")
+            float typingTime = message.Length / TypingSpeed;
+
+            // Total delay = base reaction time + typing time
+            float totalDelay = baseDelay + typingTime;
+
+            var delayedMsg = new DelayedMessage
+            {
+                Message = message,
+                SendTime = _gameTime + totalDelay,
+                BaseDelay = baseDelay,
+                ReadTime = typingTime
+            };
+
+            _delayedMessages.Add(delayedMsg);
+            _logger.Debug($"[TrashTalk] Queued reaction message (delay: {totalDelay:F1}s - base: {baseDelay:F1}s, typing: {typingTime:F1}s): {message}");
+        }
+
+        /// <summary>
+        /// Processes any pending delayed messages. Call this in OnUpdate.
+        /// </summary>
+        private void ProcessDelayedMessages()
+        {
+            if (!TrashTalkEnabled || _delayedMessages.Count == 0) return;
+
+            // Find messages that are ready to send
+            var readyMessages = _delayedMessages.Where(m => _gameTime >= m.SendTime).ToList();
+
+            foreach (var msg in readyMessages)
+            {
+                SendChatMessage(msg.Message);
+                _delayedMessages.Remove(msg);
+                _logger.Debug($"[TrashTalk] Sent delayed message after {msg.BaseDelay + msg.ReadTime:F1}s delay");
+            }
+        }
+
+        private string[] PickContextualPool()
+        {
+            if (GetHealthPercentage() < 0.2f)
+                return _lowHealthTaunts;
+
+            if (_killCount >= KillStreakThreshold)
+                return _killingTaunts;
+
+            if (_deathCount >= DeathStreakThreshold)
+                return _dyingTaunts;
+
+            // Alternate between general pools using personality random
+            return _personalityRandom.NextDouble() < 0.5 ? _generalTaunts : _generalGameTaunts;
+        }
+
+        /// <summary>
+        /// Sends a chat message formatted like a real player message.
+        /// Shows proper team colors (green for allies, red for enemies) and champion name.
+        /// </summary>
+        private void SendChatMessage(string message, bool allChat = true)
+        {
+            if (!TrashTalkEnabled || EzrealInstance == null) return;
+
+            // Use the new team-specific chat method
+            // This sends the message with proper formatting:
+            // - Green [All] prefix and champion name to own team
+            // - Red [All] prefix and champion name to enemy team
+            ApiFunctionManager.PrintPlayerChat(
+                EzrealInstance.Name,
+                EzrealInstance.Model,
+                EzrealInstance.Team,
+                message,
+                allChat
+            );
+
+            _logger.Debug($"[TrashTalk] {EzrealInstance.Name} ({EzrealInstance.Model}): {message}");
+        }
     }
 }

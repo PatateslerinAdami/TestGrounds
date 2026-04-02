@@ -722,6 +722,63 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Broadcasts a message to all players on a specific team.
+        /// </summary>
+        /// <param name="team">Team to send message to (BLUE or PURPLE).</param>
+        /// <param name="msg">Message to send (supports HTML formatting).</param>
+        public static void PrintChatTeam(TeamId team, string msg)
+        {
+            _game.PacketNotifier.NotifyS2C_SystemMessage(team, msg);
+        }
+
+        /// <summary>
+        /// Broadcasts a message to all players except those on the specified team.
+        /// </summary>
+        /// <param name="excludedTeam">Team to exclude from the broadcast.</param>
+        /// <param name="msg">Message to send (supports HTML formatting).</param>
+        public static void PrintChatAllExceptTeam(TeamId excludedTeam, string msg)
+        {
+            var enemyTeam = excludedTeam == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+            _game.PacketNotifier.NotifyS2C_SystemMessage(enemyTeam, msg);
+        }
+
+        /// <summary>
+        /// Sends a chat message formatted like a player message to all teams.
+        /// Shows proper team colors (green for allies, red for enemies).
+        /// </summary>
+        /// <param name="senderName">Name of the sender (champion name).</param>
+        /// <param name="senderModel">Model name of the sender (e.g., "Ezreal").</param>
+        /// <param name="senderTeam">Team of the sender.</param>
+        /// <param name="message">Message content.</param>
+        /// <param name="isAllChat">Whether this is an all-chat message or team-only.</param>
+        public static void PrintPlayerChat(string senderName, string senderModel, TeamId senderTeam, string message, bool isAllChat = true)
+        {
+            var ownTeamColor = "#00FF00"; // Green
+            var enemyTeamColor = "#FF0000"; // Red
+            var enemyTeam = senderTeam == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+
+            // Format: "[All] Name (Model): message"
+            var formattedMessage = $"{senderName} ({senderModel}): </font><font color=\"#FFFFFF\">{message}";
+
+            if (isAllChat)
+            {
+                // Send green message to own team
+                var ownTeamMsg = $"<font color=\"{ownTeamColor}\">[All] " + formattedMessage;
+                _game.PacketNotifier.NotifyS2C_SystemMessage(senderTeam, ownTeamMsg);
+
+                // Send red message to enemy team
+                var enemyTeamMsg = $"<font color=\"{enemyTeamColor}\">[All] " + formattedMessage;
+                _game.PacketNotifier.NotifyS2C_SystemMessage(enemyTeam, enemyTeamMsg);
+            }
+            else
+            {
+                // Team-only chat
+                var teamMsg = $"<font color=\"{ownTeamColor}\">[Team] " + formattedMessage;
+                _game.PacketNotifier.NotifyS2C_SystemMessage(senderTeam, teamMsg);
+            }
+        }
+
+        /// <summary>
         /// Checks if the AttackableUnit is within the specified range of a target position.
         /// </summary>
         /// <param name="unit">Unit to check.</param>
