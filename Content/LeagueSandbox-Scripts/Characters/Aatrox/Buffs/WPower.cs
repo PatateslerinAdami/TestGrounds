@@ -26,7 +26,7 @@ namespace Buffs
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.AURA,
+            BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1,
         };
