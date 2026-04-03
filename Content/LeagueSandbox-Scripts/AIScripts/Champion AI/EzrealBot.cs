@@ -296,7 +296,7 @@ namespace AIScripts
                 _currentState = BotState.DeadState;
                 return;
             }
-            if (!EzrealInstance.IsDead && !isInCombat)
+            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower())
             {
                 _currentState = BotState.MovingToLane;
             }
@@ -312,11 +312,7 @@ namespace AIScripts
                     break;
 
                 case BotState.Farming:
-                    if (isUnderTower && !IsAllyTower())
-                    {
-                        _currentState = BotState.Retreating;
-                    }
-                    else if (nearbyEnemies.Count > 0 && CanPoke())
+                    if (nearbyEnemies.Count > 0 && CanPoke())
                     {
                         _currentState = BotState.Poking;
                     }
@@ -399,7 +395,7 @@ namespace AIScripts
                     }
                     else if (isUnderTower && !IsAllyTower())
                     {
-                        _currentState = BotState.Retreating;
+                        // _currentState = BotState.Retreating;
                     }
                     break;
 
@@ -661,6 +657,14 @@ namespace AIScripts
             Vector2 botPosition = EzrealInstance.Position;
             List<AttackableUnit> units = GetUnitsInRange(botPosition, 800f, true);
 
+            if (ShouldPushTower())
+            {
+                _logger.Debug("Should push tower - pushing");
+                _currentState = BotState.Pushing;
+                PushTower();
+                return;
+            }
+
             // Check if we're taking minion damage and should back off
             if (IsTakingMinionDamage())
             {
@@ -720,7 +724,7 @@ namespace AIScripts
             }
             else
             {
-                var qKillableMinions = GetUnitsInRange(botPosition, QRange, true).OfType<Minion>()
+                var qKillableMinions = GetUnitsInRange(botPosition, QRange, true).OfType<LaneMinion>()
                     .Where(minion => minion.Team != EzrealInstance.Team &&
                            minion.Stats.CurrentHealth < CalculateQDamage(minion) &&
                            !IsInAutoAttackRange(minion))
@@ -744,7 +748,7 @@ namespace AIScripts
         {
             // First check for enemy towers - don't advance past them
             LaneTurret enemyTower = GetNearbyEnemyTower(1000f);
-            if (enemyTower != null)
+            if (enemyTower != null && !ShouldPushTower())
             {
                 float distanceToTower = Vector2.Distance(EzrealInstance.Position, enemyTower.Position);
                 _logger.Debug($"Not advancing waypoint - enemy tower nearby at distance {distanceToTower:F0}");
@@ -1807,7 +1811,7 @@ namespace AIScripts
                 Vector2 ourBase = EzrealInstance.Team == TeamId.TEAM_BLUE ?
                     new Vector2(1000f, 1000f) : new Vector2(14000f, 14000f);
 
-                Minion frontMinion = enemyMinions
+                LaneMinion frontMinion = enemyMinions
                     .OrderBy(m => Vector2.Distance(m.Position, ourBase))
                     .FirstOrDefault();
 
@@ -2353,6 +2357,11 @@ namespace AIScripts
         /// </summary>
         private void PerformOrbwalk(Vector2 targetPosition, AttackableUnit attackTarget = null)
         {
+            if (ShouldPushTower())
+            {
+                return;
+            }
+
             // If casting, stand still
             if (IsBasicAttackCasting())
             {
