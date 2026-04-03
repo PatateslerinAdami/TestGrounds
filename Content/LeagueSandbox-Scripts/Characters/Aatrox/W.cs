@@ -28,7 +28,7 @@ namespace Spells
 
         private void OnLevelUpSpell(Spell spell)
         {
-            AddBuff("AatroxWLife", 1f, 1, spell, _owner, _owner, true);
+            AddBuff("AatroxWLife", 25000f, 1, spell, _owner, _owner, true);
             ApiEventManager.OnLevelUpSpell.RemoveListener(this, spell);
         }
 
@@ -41,7 +41,7 @@ namespace Spells
 
             _owner.RegisterTimer(new GameScriptTimer(0.01f, () =>
             {
-                AddBuff("AatroxWPower", 1f, 1, spell, _owner, _owner, true);
+                AddBuff("AatroxWPower", 25000f, 1, spell, _owner, _owner, true);
                 _owner.GetSpell("AatroxW2").SetCooldown(0.5f, true);
             }));
         }
