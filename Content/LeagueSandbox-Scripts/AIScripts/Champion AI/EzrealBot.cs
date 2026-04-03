@@ -43,10 +43,18 @@ namespace AIScripts
 
         private Champion EzrealInstance;
         private static ILog _logger = LoggerProvider.GetLogger();
-        private Vector2 _midLanePosition = new Vector2(7500f, 7500f);
-
-
-        // State management
+        // Mid lane waypoints (matching minion path from Map1)
+        private List<Vector2> _midLaneWaypoints = new List<Vector2>
+        {
+            new Vector2(1418.0f, 1686.0f),
+            new Vector2(2997.0f, 2781.0f),
+            new Vector2(4472.0f, 4727.0f),
+            new Vector2(8375.0f, 8366.0f),
+            new Vector2(10948.0f, 10821.0f),
+            new Vector2(12511.0f, 12776.0f)
+        };
+        private int _currentWaypointIndex = 0;
+        private const float WaypointReachedThreshold = 300f; // Distance to consider waypoint reached
         private BotState _currentState;
         private float _gameTime;
         private float _lastDamageTakenTime;
@@ -500,10 +508,90 @@ namespace AIScripts
         // Movement and positioning
         private void MoveToLane()
         {
-            // Movement code to go to lane
-            Vector2 lanePosition = GetLanePosition();
-            MoveToPosition(_midLanePosition);
+            // Check if there are ally minions nearby to follow
+            LaneMinion allyMinionToFollow = GetNearbyAllyMinion();
+            if (allyMinionToFollow != null)
+            {
+                // Follow the ally minion
+                _logger.Debug($"Following ally minion at {allyMinionToFollow.Position}");
+                MoveToPosition(allyMinionToFollow.Position);
+                MovingToLane = true;
+                return;
+            }
+
+            // Use waypoint system to progress through mid lane
+            Vector2 currentWaypoint = GetCurrentWaypoint();
+            
+            // Check if we've reached the current waypoint
+            float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
+            if (distanceToWaypoint < WaypointReachedThreshold)
+            {
+                // Advance to next waypoint
+                _currentWaypointIndex++;
+                if (_currentWaypointIndex >= _midLaneWaypoints.Count)
+                {
+                    _currentWaypointIndex = _midLaneWaypoints.Count - 1; // Stay at last waypoint
+                }
+                _logger.Debug($"Reached waypoint {_currentWaypointIndex}, advancing to next");
+            }
+            
+            // Move to current waypoint
+            currentWaypoint = GetCurrentWaypoint();
+            MoveToPosition(currentWaypoint);
+            _logger.Debug($"Moving to waypoint {_currentWaypointIndex} at {currentWaypoint}, distance: {distanceToWaypoint:F0}");
             MovingToLane = true;
+        }
+
+        private Vector2 GetCurrentWaypoint()
+        {
+            if (_currentWaypointIndex >= 0 && _currentWaypointIndex < _midLaneWaypoints.Count)
+            {
+                return _midLaneWaypoints[_currentWaypointIndex];
+            }
+            // Fallback to center
+            return new Vector2(7500f, 7500f);
+        }
+
+        private LaneMinion GetNearbyAllyMinion()
+        {
+            // Look for ally minions within range
+            List<AttackableUnit> units = GetUnitsInRange(EzrealInstance.Position, 800f, true);
+            LaneMinion closestMinion = null;
+            float closestDistance = float.MaxValue;
+            
+            foreach (var unit in units)
+            {
+                if (unit is LaneMinion minion && minion.Team == EzrealInstance.Team)
+                {
+                    float dist = Vector2.Distance(EzrealInstance.Position, minion.Position);
+                    // Prefer minions that are ahead of us (closer to enemy base)
+                    Vector2 enemyBaseDir = GetEnemyBaseDirection();
+                    Vector2 toMinion = Vector2.Normalize(minion.Position - EzrealInstance.Position);
+                    float dot = Vector2.Dot(enemyBaseDir, toMinion);
+                    
+                    // If minion is roughly ahead of us or very close
+                    if ((dot > 0.3f || dist < 300f) && dist < closestDistance)
+                    {
+                        closestMinion = minion;
+                        closestDistance = dist;
+                    }
+                }
+            }
+            
+            return closestMinion;
+        }
+
+        private Vector2 GetEnemyBaseDirection()
+        {
+            // Return normalized direction toward enemy base
+            if (EzrealInstance.Team == TeamId.TEAM_BLUE)
+            {
+                return Vector2.Normalize(new Vector2(12511f, 12776f) - EzrealInstance.Position);
+            }
+            else
+            {
+                return Vector2.Normalize(new Vector2(1418f, 1686f) - EzrealInstance.Position);
+            }
         }
 
         private void Farm()
@@ -586,8 +674,27 @@ namespace AIScripts
                 }
                 else
                 {
+                    // No minions to farm - continue pushing forward using waypoints
+                    AdvanceWaypointIfNeeded();
                     MoveToPosition(GetIdealFarmingPosition());
                 }
+            }
+        }
+
+        private void AdvanceWaypointIfNeeded()
+        {
+            // Check if we've reached current waypoint and should advance
+            Vector2 currentWaypoint = GetCurrentWaypoint();
+            float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
+            
+            if (distanceToWaypoint < WaypointReachedThreshold)
+            {
+                _currentWaypointIndex++;
+                if (_currentWaypointIndex >= _midLaneWaypoints.Count)
+                {
+                    _currentWaypointIndex = _midLaneWaypoints.Count - 1;
+                }
+                _logger.Debug($"Advanced to waypoint {_currentWaypointIndex} while farming");
             }
         }
 
@@ -1593,8 +1700,12 @@ namespace AIScripts
 
         private Vector2 GetLanePosition()
         {
-            // Just return mid lane position
-            return _midLanePosition;
+            // Return current waypoint or first waypoint
+            if (_currentWaypointIndex < _midLaneWaypoints.Count)
+            {
+                return _midLaneWaypoints[_currentWaypointIndex];
+            }
+            return _midLaneWaypoints[0];
         }
 
 
@@ -1627,7 +1738,7 @@ namespace AIScripts
                 }
             }
 
-            return _midLanePosition;
+            return GetLanePosition();
         }
 
         private Vector2 GetIdealPokingPosition()
