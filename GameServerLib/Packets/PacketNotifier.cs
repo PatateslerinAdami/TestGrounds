@@ -2050,6 +2050,22 @@ namespace PacketDefinitions420
         /// <param name="s">Spell being cast.</param>
         public void NotifyNPC_CastSpellAns(Spell s)
         {
+            var packetDesignerCastTime = s.CastInfo.DesignerCastTime;
+            var packetDesignerTotalTime = s.CastInfo.DesignerTotalTime;
+            var packetExtraCastTime = s.CastInfo.ExtraCastTime;
+            var packetStartCastTime = s.CastInfo.StartCastTime;
+
+            // Auto attacks in non-basic slots are sent through cast packets for custom animations.
+            // Scale cast timing here so client playback matches attack-speed-scaled server timing.
+            if (s.CastInfo.IsAutoAttack && s.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
+            {
+                var safeAttackSpeed = Math.Max(0.0001f, s.CastInfo.AttackSpeedModifier);
+                packetDesignerCastTime /= safeAttackSpeed;
+                packetDesignerTotalTime /= safeAttackSpeed;
+                packetExtraCastTime /= safeAttackSpeed;
+                packetStartCastTime /= safeAttackSpeed;
+            }
+
             var castInfo = new LeaguePackets.Game.Common.CastInfo
             {
                 SpellHash = (uint)s.GetId(),
@@ -2062,11 +2078,11 @@ namespace PacketDefinitions420
                 MissileNetID = s.CastInfo.MissileNetID,
                 TargetPosition = s.CastInfo.TargetPosition,
                 TargetPositionEnd = s.CastInfo.TargetPositionEnd,
-                DesignerCastTime = s.CastInfo.DesignerCastTime,
-                ExtraCastTime = s.CastInfo.ExtraCastTime,
-                DesignerTotalTime = s.CastInfo.DesignerTotalTime,
+                DesignerCastTime = packetDesignerCastTime,
+                ExtraCastTime = packetExtraCastTime,
+                DesignerTotalTime = packetDesignerTotalTime,
                 Cooldown = s.CastInfo.Cooldown,
-                StartCastTime = s.CastInfo.StartCastTime,
+                StartCastTime = packetStartCastTime,
                 IsAutoAttack = s.CastInfo.IsAutoAttack,
                 IsSecondAutoAttack = s.CastInfo.IsSecondAutoAttack,
                 IsForceCastingOrChannel = s.CastInfo.IsForceCastingOrChannel,

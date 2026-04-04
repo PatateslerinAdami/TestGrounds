@@ -6,6 +6,8 @@ using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
@@ -41,9 +43,9 @@ namespace LeagueSandbox.GameServer.API
         {
             hex = hex.Replace(" ", string.Empty);
             return Enumerable.Range(0, hex.Length)
-                             .Where(x => x % 2 == 0)
-                             .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
-                             .ToArray();
+                .Where(x => x % 2 == 0)
+                .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
+                .ToArray();
         }
 
         /// <summary>
@@ -221,7 +223,8 @@ namespace LeagueSandbox.GameServer.API
             unit.TeleportTo(x, y);
         }
 
-        public static void FaceDirection(Vector2 location, GameObject target, bool isInstant = false, float turnTime = 0.08333f)
+        public static void FaceDirection(Vector2 location, GameObject target, bool isInstant = false,
+            float turnTime = 0.08333f)
         {
             if (location == target.Position)
             {
@@ -248,6 +251,7 @@ namespace LeagueSandbox.GameServer.API
             {
                 dir = GameServerCore.Extensions.Rotate(dir, offsetAngle);
             }
+
             return pos + (dir * distance);
         }
 
@@ -526,9 +530,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
+        public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end,
+            float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            float overrideTargetHeight = 0f)
         {
-            var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+            var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
             return p;
         }
 
@@ -549,9 +558,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
+        public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position,
+            float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            float overrideTargetHeight = 0f)
         {
-            return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+            return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
         }
 
         /// <summary>
@@ -572,9 +586,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="teamOnly">The only team which should be able to see the particle.</param>
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
-        public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle, GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "", Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false, float overrideTargetHeight = 0f)
+        public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle,
+            GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            float overrideTargetHeight = 0f)
         {
-            var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction, followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+            var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
             return p;
         }
 
@@ -623,13 +642,15 @@ namespace LeagueSandbox.GameServer.API
             bool useSpells = true
         )
         {
-            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable, isWard, visibilityOwner, enableScripts: useSpells);
+            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable,
+                isWard, visibilityOwner, enableScripts: useSpells);
             m.Stats.IsTargetableToTeam = targetingFlags;
             _game.ObjectManager.AddObject(m);
             if (owner != null)
             {
                 m.SetVisibleByTeam(owner.Team, isVisible);
             }
+
             m.PauseAI(aiPaused);
             return m;
         }
@@ -718,7 +739,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="msg">String to print.</param>
         public static void PrintChat(string msg)
         {
-            _game.PacketNotifier.NotifyS2C_SystemMessage(msg); // TODO: Move PacketNotifier usage to less abstract classes
+            _game.PacketNotifier
+                .NotifyS2C_SystemMessage(msg); // TODO: Move PacketNotifier usage to less abstract classes
         }
 
         /// <summary>
@@ -751,7 +773,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="senderTeam">Team of the sender.</param>
         /// <param name="message">Message content.</param>
         /// <param name="isAllChat">Whether this is an all-chat message or team-only.</param>
-        public static void PrintPlayerChat(string senderName, string senderModel, TeamId senderTeam, string message, bool isAllChat = true)
+        public static void PrintPlayerChat(string senderName, string senderModel, TeamId senderTeam, string message,
+            bool isAllChat = true)
         {
             var ownTeamColor = "#00FF00"; // Green
             var enemyTeamColor = "#FF0000"; // Red
@@ -816,7 +839,8 @@ namespace LeagueSandbox.GameServer.API
         /// <returns>List of AttackableUnits.</returns>
         public static IEnumerable<AttackableUnit> EnumerateUnitsInRange(Vector2 targetPos, float range, bool isAlive)
         {
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(targetPos, range)))
+            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
+                         new System.Activities.Presentation.View.Circle(targetPos, range)))
             {
                 if (obj is AttackableUnit u && (!isAlive || !u.IsDead))
                 {
@@ -834,29 +858,58 @@ namespace LeagueSandbox.GameServer.API
         public static List<AttackableUnit> GetUnitsInRange(Vector2 targetPos, float range, bool isAlive)
         {
             var returnList = new List<AttackableUnit>();
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(targetPos, range)))
+            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
+                         new System.Activities.Presentation.View.Circle(targetPos, range)))
             {
                 if (obj is AttackableUnit u && (!isAlive || !u.IsDead))
                 {
                     returnList.Add(u);
                 }
             }
+
             returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos));
             return returnList;
         }
-        public static List<AttackableUnit> GetUnitsInRangeDiffTeam(Vector2 targetPos, float range, bool isAlive, AttackableUnit OurGuy)
+        
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInRange(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            SpellDataFlags useFlags
+        ) {
+            return EnumerateUnitsInRange(targetPos, range, isAlive)
+                .Where(unit => IsValidTarget(self, unit, useFlags))
+                .OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos))
+                .ToList();
+        }
+
+        public static List<AttackableUnit> GetUnitsInRangeDiffTeam(Vector2 targetPos, float range, bool isAlive,
+            AttackableUnit OurGuy)
         {
             var returnList = new List<AttackableUnit>();
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(targetPos, range)))
+            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
+                         new System.Activities.Presentation.View.Circle(targetPos, range)))
             {
                 if (obj is AttackableUnit u && (!isAlive || !u.IsDead) && u.Team != OurGuy.Team)
                 {
                     returnList.Add(u);
                 }
             }
+
             returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, OurGuy.Position));
             return returnList;
         }
+
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position.
         /// </summary>
@@ -871,6 +924,7 @@ namespace LeagueSandbox.GameServer.API
 
             return orderedUnits.First();
         }
+
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position
         /// that belongs to the specified team.
@@ -880,7 +934,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
         /// <param name="teamId">Team the unit must belong to.</param>
         /// <returns>Closest AttackableUnit.</returns>
-        public static AttackableUnit GetClosestTeamUnitInRange(Vector2 targetPos, float range, bool isAlive, TeamId teamId)
+        public static AttackableUnit GetClosestTeamUnitInRange(Vector2 targetPos, float range, bool isAlive,
+            TeamId teamId)
         {
             var units = GetUnitsInRange(targetPos, range, isAlive)
                 .Where(unit => unit.Team == teamId);
@@ -910,6 +965,49 @@ namespace LeagueSandbox.GameServer.API
             return orderedUnits.First();
         }
 
+        public static bool IsValidTarget(AttackableUnit self, AttackableUnit target, SpellDataFlags useFlags)
+        {
+            return (!target.Model.Contains("Shrine")
+                ) && (
+                    ((useFlags & SpellDataFlags.AlwaysSelf) != 0 && target == self) //TODO: Verify
+                    || (
+                        ((useFlags & SpellDataFlags.AffectMinions) != 0 && target is Minion) //TODO: Verify
+                        || ((useFlags & SpellDataFlags.AffectHeroes) != 0 &&
+                            (target is Champion || (target is Pet p1 && p1.IsClone))
+                        )
+                        || ((useFlags & SpellDataFlags.AffectWards) != 0 && target is Minion m && m.IsWard)
+                        || ((useFlags & SpellDataFlags.AffectTurrets) != 0 &&
+                            (target is BaseTurret || target is ObjBuilding || target is Inhibitor))
+                        || ((useFlags & SpellDataFlags.AffectBuildings) != 0 && target is ObjBuilding)
+                        || ((useFlags & SpellDataFlags.AffectBarracksOnly) != 0 &&
+                            target is Inhibitor) //TODO: Verify
+                        // It is assumed that the monsters are always in the neutral team
+                        || ((useFlags & SpellDataFlags.AffectNeutral) != 0 && target is Monster) //TODO: Verify
+                        || ((useFlags & SpellDataFlags.AffectUseable) != 0 && target.CharData.IsUseable)
+                    )
+                    && (
+                        ((useFlags & SpellDataFlags.AffectFriends) != 0 && target.Team == self.Team)
+                        || ((useFlags & SpellDataFlags.AffectEnemies) != 0 && target.Team != self.Team &&
+                            target.Team != TeamId.TEAM_NEUTRAL)
+                        || ((useFlags & SpellDataFlags.AffectNeutral) != 0 && target.Team == TeamId.TEAM_NEUTRAL)
+                    )
+                    && !(
+                        ((useFlags & SpellDataFlags.NotAffectSelf) != 0 && target == self)
+                        || ((useFlags & SpellDataFlags.AffectNotPet) != 0 && target is Pet) //TODO: Verify
+                        || ((useFlags & SpellDataFlags.IgnoreLaneMinion) != 0 && target is LaneMinion)
+                        || ((useFlags & SpellDataFlags.IgnoreAllyMinion) != 0 && target.Team == self.Team &&
+                            target is Minion)
+                        || ((useFlags & SpellDataFlags.IgnoreEnemyMinion) != 0 && target.Team != self.Team &&
+                            target is Minion)
+                        || ((useFlags & SpellDataFlags.IgnoreClones) != 0 && target is Pet p2 && p2.IsClone)
+                        //|| ((useFlags & SpellDataFlags.NOT_AFFECT_ZOMBIE) != 0 && target.IsDead)
+                    )
+                    && ((useFlags & SpellDataFlags.AffectDead) != 0 || !(target.IsDead))
+                    && ((useFlags & SpellDataFlags.AffectUntargetable) != 0 ||
+                        (target.Status & StatusFlags.Targetable) != 0)
+                );
+        }
+
         /// <summary>
         /// Acquires all alive or dead Champions within the specified range of a target position.
         /// </summary>
@@ -921,10 +1019,13 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.ObjectManager.GetChampionsInRange(targetPos, range, isAlive);
         }
-        public static bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
+
+        public static bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team,
+            bool onlyAlive = false)
         {
             return _game.ObjectManager.CheckChampionsInRangeFromTeam(checkPos, range, team, onlyAlive);
         }
+
         /// <summary>
         /// Counts the number of units attacking a specified GameObject of type AttackableUnit.
         /// </summary>
@@ -948,6 +1049,7 @@ namespace LeagueSandbox.GameServer.API
             {
                 toreturn.Add(player.Champion);
             }
+
             return toreturn;
         }
 
@@ -1012,7 +1114,9 @@ namespace LeagueSandbox.GameServer.API
             {
                 keepFacingLastDirection = true;
             }
-            unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC, movementName, caster);
+
+            unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC,
+                movementName, caster);
         }
 
         /// <summary>
@@ -1045,15 +1149,17 @@ namespace LeagueSandbox.GameServer.API
             ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
             ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
-             string movementName = "",
-             AttackableUnit caster = null)
+            string movementName = "",
+            AttackableUnit caster = null)
         {
             var keepFacingLastDirection = false;
             if (movementOrdersFacing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING)
             {
                 keepFacingLastDirection = true;
             }
-            unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy, maxTravelTime, consideredAsCC, movementName, caster);
+
+            unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy,
+                maxTravelTime, consideredAsCC, movementName, caster);
         }
 
         /// <summary>
@@ -1067,7 +1173,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
         /// TODO: Implement AnimationFlags enum for this and fill it in.
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        public static void PlayAnimation(GameObject obj, string animName, float timeScale = 1.0f, float startTime = 0, float speedScale = 0, AnimationFlags flags = 0)
+        public static void PlayAnimation(GameObject obj, string animName, float timeScale = 1.0f, float startTime = 0,
+            float speedScale = 0, AnimationFlags flags = 0)
         {
             obj.PlayAnimation(animName, timeScale, startTime, speedScale, flags);
         }
@@ -1089,12 +1196,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="stopAll">Whether or not to stop all animations. Only works if animation is empty/null.</param>
         /// <param name="fade">Whether or not the animation should fade before stopping.</param>
         /// <param name="ignoreLock">Whether or not locked animations should still be stopped.</param>
-        public static void StopAnimation(GameObject obj, string animation, bool stopAll = false, bool fade = false, bool ignoreLock = true)
+        public static void StopAnimation(GameObject obj, string animation, bool stopAll = false, bool fade = false,
+            bool ignoreLock = true)
         {
             obj.StopAnimation(animation, stopAll, fade, ignoreLock);
         }
 
-        public static void SealSpellSlot(ObjAIBase target, SpellSlotType slotType, int slot, SpellbookType spellbookType, bool seal)
+        public static void SealSpellSlot(ObjAIBase target, SpellSlotType slotType, int slot,
+            SpellbookType spellbookType, bool seal)
         {
             slot = ConvertAPISlot(spellbookType, slotType, slot);
 
@@ -1120,7 +1229,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="overrideAnim">Animation to use instead.</param>
         /// <param name="toOverrideAnim">Animation to override.</param>
         /// <param name="source">The object applying the override (usually `this` in a script).</param>
-        public static void OverrideAnimation(AttackableUnit unit, string overrideAnim, string toOverrideAnim, object source = null)
+        public static void OverrideAnimation(AttackableUnit unit, string overrideAnim, string toOverrideAnim,
+            object source = null)
         {
             unit.SetAnimStates(new Dictionary<string, string> { { toOverrideAnim, overrideAnim } }, source);
         }
@@ -1135,6 +1245,7 @@ namespace LeagueSandbox.GameServer.API
         {
             unit.SetAnimStates(new Dictionary<string, string> { { overriddenAnim, "" } }, source);
         }
+
         /// <summary>
         /// Removes all animation overrides applied by a specific source.
         /// </summary>
@@ -1175,7 +1286,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="slot">Index of the spell slot to change.</param>
         /// <param name="fullReplace">Whether or not the spell should be entirely replaced, or just the name. Typically used for transformations.</param>
         /// <returns>Newly created spell or existing spell with the given name. Null for failure.</returns>
-        public static Spell SetSpell(ObjAIBase target, string newName, SpellSlotType slotType, int slot, bool fullReplace = false)
+        public static Spell SetSpell(ObjAIBase target, string newName, SpellSlotType slotType, int slot,
+            bool fullReplace = false)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -1220,7 +1332,8 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
-        public static void SetSpellToolTipVar<T>(AttackableUnit unit, int tipIndex, T value, SpellbookType book, byte slot, SpellSlotType slotType)
+        public static void SetSpellToolTipVar<T>(AttackableUnit unit, int tipIndex, T value, SpellbookType book,
+            byte slot, SpellSlotType slotType)
             where T : struct
         {
             if (unit is Champion champ)
@@ -1237,7 +1350,10 @@ namespace LeagueSandbox.GameServer.API
             buff.SetToolTipVar(tipIndex, value);
         }
 
-        public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 pos, Vector2 endPos, bool fireWithoutCasting, Vector2 overrideCastPos, List<CastTarget> targets = null, bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
+        public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 pos, Vector2 endPos,
+            bool fireWithoutCasting, Vector2 overrideCastPos, List<CastTarget> targets = null,
+            bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false,
+            bool useAutoAttackSpell = false)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -1277,7 +1393,8 @@ namespace LeagueSandbox.GameServer.API
             if (overrideCastPos != Vector2.Zero)
             {
                 castInfo.IsOverrideCastPosition = true;
-                castInfo.SpellCastLaunchPosition = new Vector3(overrideCastPos.X, caster.GetHeight(), overrideCastPos.Y);
+                castInfo.SpellCastLaunchPosition =
+                    new Vector3(overrideCastPos.X, caster.GetHeight(), overrideCastPos.Y);
 
                 if (endPos == Vector2.Zero)
                 {
@@ -1293,28 +1410,40 @@ namespace LeagueSandbox.GameServer.API
             spell.Cast(castInfo, !fireWithoutCasting);
         }
 
-        public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, bool fireWithoutCasting, AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
+        public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, bool fireWithoutCasting,
+            AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false,
+            int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
         {
-            CastTarget castTarget = new CastTarget(target, CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit));
+            CastTarget castTarget = new CastTarget(target,
+                CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit));
 
-            SpellCast(caster, slot, slotType, target.Position, target.Position, fireWithoutCasting, overrideCastPos, new List<CastTarget> { castTarget }, isForceCastingOrChanneling, overrideForceLevel, updateAutoAttackTimer, useAutoAttackSpell);
+            SpellCast(caster, slot, slotType, target.Position, target.Position, fireWithoutCasting, overrideCastPos,
+                new List<CastTarget> { castTarget }, isForceCastingOrChanneling, overrideForceLevel,
+                updateAutoAttackTimer, useAutoAttackSpell);
         }
 
-        public static void SpellCastItem(ObjAIBase caster, string itemSpellName, bool fireWithoutCasting, AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
+        public static void SpellCastItem(ObjAIBase caster, string itemSpellName, bool fireWithoutCasting,
+            AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false,
+            int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
         {
             // Apply the spell to the TempItemSlot.
             caster.SetSpell(itemSpellName, (byte)SpellSlotType.TempItemSlot, true);
-            SpellCast(caster, 0, SpellSlotType.TempItemSlot, fireWithoutCasting, target, overrideCastPos, isForceCastingOrChanneling, overrideForceLevel, updateAutoAttackTimer, useAutoAttackSpell);
+            SpellCast(caster, 0, SpellSlotType.TempItemSlot, fireWithoutCasting, target, overrideCastPos,
+                isForceCastingOrChanneling, overrideForceLevel, updateAutoAttackTimer, useAutoAttackSpell);
         }
 
-        public static void SpellCastItem(ObjAIBase caster, string itemSpellName, Vector2 pos, Vector2 endPos, bool fireWithoutCasting, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
+        public static void SpellCastItem(ObjAIBase caster, string itemSpellName, Vector2 pos, Vector2 endPos,
+            bool fireWithoutCasting, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false,
+            int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
         {
             // Apply the spell to the TempItemSlot.
             caster.SetSpell(itemSpellName, (byte)SpellSlotType.TempItemSlot, true);
-            SpellCast(caster, 0, SpellSlotType.TempItemSlot, pos, endPos, fireWithoutCasting, overrideCastPos, null, isForceCastingOrChanneling, overrideForceLevel, updateAutoAttackTimer, useAutoAttackSpell);
+            SpellCast(caster, 0, SpellSlotType.TempItemSlot, pos, endPos, fireWithoutCasting, overrideCastPos, null,
+                isForceCastingOrChanneling, overrideForceLevel, updateAutoAttackTimer, useAutoAttackSpell);
         }
 
-        public static void StopChanneling(ObjAIBase target, ChannelingStopCondition stopCondition, ChannelingStopSource stopSource)
+        public static void StopChanneling(ObjAIBase target, ChannelingStopCondition stopCondition,
+            ChannelingStopSource stopSource)
         {
             target.StopChanneling(stopCondition, stopSource);
         }
@@ -1330,7 +1459,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="dmgSource">Source of the damage that caused the death.</param>
         /// <param name="duration">Time until the death completes (fade-out?).</param>
         /// <returns></returns>
-        public static DeathData CreateDeathData(bool zombify, byte deathType, AttackableUnit unit, AttackableUnit killer, DamageType dmgType, DamageSource dmgSource, float duration)
+        public static DeathData CreateDeathData(bool zombify, byte deathType, AttackableUnit unit,
+            AttackableUnit killer, DamageType dmgType, DamageSource dmgSource, float duration)
         {
             return new DeathData
             {
@@ -1377,10 +1507,12 @@ namespace LeagueSandbox.GameServer.API
             return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold);
         }
 
-        public static void OverrideUnitAttackSpeedCap(AttackableUnit unit, bool doOverrideMax, float maxAttackSpeedOverride, bool doOverrideMin, float minAttackSpeedOverride)
+        public static void OverrideUnitAttackSpeedCap(AttackableUnit unit, bool doOverrideMax,
+            float maxAttackSpeedOverride, bool doOverrideMin, float minAttackSpeedOverride)
         {
             //Investigate if we wanna update the stats here too
-            _game.PacketNotifier.NotifyS2C_UpdateAttackSpeedCapOverrides(doOverrideMax, maxAttackSpeedOverride, doOverrideMin, minAttackSpeedOverride, unit);
+            _game.PacketNotifier.NotifyS2C_UpdateAttackSpeedCapOverrides(doOverrideMax, maxAttackSpeedOverride,
+                doOverrideMin, minAttackSpeedOverride, unit);
         }
 
         public static ItemData GetItemData(int Id)
@@ -1414,10 +1546,10 @@ namespace LeagueSandbox.GameServer.API
             bool isClone = true,
             Stats stats = null,
             string aiScript = "Pet"
-
         )
         {
-            return new Pet(_game, owner, spell, position, name, model, buffName, lifeTime, stats, cloneInventory, showMinimapIfClone, disallowPlayerControl, doFade, isClone, aiScript);
+            return new Pet(_game, owner, spell, position, name, model, buffName, lifeTime, stats, cloneInventory,
+                showMinimapIfClone, disallowPlayerControl, doFade, isClone, aiScript);
         }
 
         public static Pet CreateClonePet
@@ -1436,7 +1568,8 @@ namespace LeagueSandbox.GameServer.API
             string AIScript = "Pet"
         )
         {
-            return new Pet(_game, owner, spell, cloned, position, buffName, lifeTime, stats, cloneInventory, showMinimapIfClone, disallowPlayerControl, doFade, AIScript);
+            return new Pet(_game, owner, spell, cloned, position, buffName, lifeTime, stats, cloneInventory,
+                showMinimapIfClone, disallowPlayerControl, doFade, AIScript);
         }
 
         public static float GetPetReturnRadius(Minion minion = null)
@@ -1448,19 +1581,30 @@ namespace LeagueSandbox.GameServer.API
 
             return GlobalData.ObjAIBaseVariables.DefaultPetReturnRadius;
         }
+
         public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
         }
+
         public static void NotifyWaypointGroup(AttackableUnit unit)
         {
             _game.PacketNotifier.NotifyWaypointGroup(unit);
         }
-        public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot, GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false, TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0, float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0, List<uint> offsetTargets = null)
+
+        public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot,
+            GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
+            TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0,
+            float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0,
+            List<uint> offsetTargets = null)
         {
-            _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell, targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
+            _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell,
+                targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
         }
-        public static SpellMissile CreateCustomMissile(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)
+
+        public static SpellMissile CreateCustomMissile(ObjAIBase caster, int slot, SpellSlotType slotType,
+            Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false,
+            bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -1469,9 +1613,13 @@ namespace LeagueSandbox.GameServer.API
             Spell spell = caster.Spells[(short)slot];
             if (spell == null) return null;
 
-            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition, customHeightOffset, target);
+            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition,
+                customHeightOffset, target);
         }
-        public static SpellMissile CreateCustomMissile(ObjAIBase caster, string spellName, Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)
+
+        public static SpellMissile CreateCustomMissile(ObjAIBase caster, string spellName, Vector2 start, Vector2 end,
+            MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true,
+            float? customHeightOffset = null, AttackableUnit target = null)
         {
             Spell spell = caster.GetSpell(spellName);
 
@@ -1481,16 +1629,20 @@ namespace LeagueSandbox.GameServer.API
                 return null;
             }
 
-            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition, customHeightOffset, target);
+            return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition,
+                customHeightOffset, target);
         }
+
         public static Vector2 GetClosestTerrainExit(Vector2 location, float distanceThreshold = 0)
         {
             return _game.Map.NavigationGrid.GetClosestTerrainExit(location, distanceThreshold);
         }
+
         public static void UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
         {
             _game.PacketNotifier.NotifyS2C_UnitSetLookAt(attacker, attacked, attackType);
         }
+
         public static List<SpellMissile> GetMissiles()
         {
             return _game.ObjectManager.GetAllMissiles();
@@ -1498,9 +1650,11 @@ namespace LeagueSandbox.GameServer.API
 
         public static void InstantStopTest(AttackableUnit unit, bool forceClient = true, bool keepAnimating = false)
         {
-            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit,false, keepAnimating, false, true, forceClient, 0);
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, false, keepAnimating, false, true, forceClient, 0);
         }
-        public static void CustomDashTest(AttackableUnit unit, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
+
+        public static void CustomDashTest(AttackableUnit unit, Vector2 targetPos, float speed, float gravity,
+            Vector2 parabolicStartPoint)
         {
             _game.PacketNotifier.NotifyCustomDashTest(unit, targetPos, speed, gravity, parabolicStartPoint);
         }

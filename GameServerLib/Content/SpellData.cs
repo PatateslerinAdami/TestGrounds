@@ -35,7 +35,7 @@ namespace LeagueSandbox.GameServer.Content
         public string AnimationLoopName { get; set; } = "";
         public string AnimationName { get; set; } = "";
         public string AnimationWinddownName { get; set; } = "";
-        public float AttackDamageCoefficient { get; set; }
+        public float Coefficient { get; set; }
         //ApplyAttackDamage
         //ApplyAttackEffect
         //ApplyMaterialOnHitSound
@@ -123,7 +123,7 @@ namespace LeagueSandbox.GameServer.Content
         public bool LockConeToPlayer { get; set; }
         //LookAtPolicy
         public float LuaOnMissileUpdateDistanceInterval { get; set; }
-        public float MagicDamageCoefficient { get; set; }
+        public float Coefficient2 { get; set; }
         public float[] ManaCost { get; set; } = { 0, 0, 0, 0, 0, 0, 0 };
         //Map_X_EffectYLevelZAmmount
         public int MaxAmmo { get; set; } = 1;
@@ -369,7 +369,7 @@ namespace LeagueSandbox.GameServer.Content
             AnimationLoopName = file.GetString("SpellData", "AnimationLoopName", name);
             AnimationName = file.GetString("SpellData", "AnimationName", name);
             AnimationWinddownName = file.GetString("SpellData", "AnimationWinddownName", name);
-            AttackDamageCoefficient = file.GetFloat("SpellData", "Coefficient", AttackDamageCoefficient);
+            Coefficient = file.GetFloat("SpellData", "Coefficient", Coefficient);
             //ApplyAttackDamage
             //ApplyAttackEffect
             //ApplyMaterialOnHitSound
@@ -457,7 +457,7 @@ namespace LeagueSandbox.GameServer.Content
             LockConeToPlayer = file.GetBool("SpellData", "LockConeToPlayer", LockConeToPlayer);
             //LookAtPolicy
             LuaOnMissileUpdateDistanceInterval = file.GetFloat("SpellData", "LuaOnMissileUpdateDistanceInterval", LuaOnMissileUpdateDistanceInterval);
-            MagicDamageCoefficient = file.GetFloat("SpellData", "Coefficient2", MagicDamageCoefficient);
+            Coefficient2 = file.GetFloat("SpellData", "Coefficient2", Coefficient2);
             ManaCost = file.GetMultiFloat("SpellData", "ManaCost", 6, ManaCost[0]);
             //Map_X_EffectYLevelZAmmount
             MaxAmmo = file.GetInt("SpellData", "MaxAmmo", MaxAmmo);

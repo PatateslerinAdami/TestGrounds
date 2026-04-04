@@ -56,8 +56,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private bool _skipNextAutoAttack;
         private Spell _castingSpell;
         private Spell _lastAutoAttack;
+        private Spell _lastOverrideAutoAttack;
         private SpellQueueEntry _queuedSpellCast;
-        private Random _random = new Random();
+        private readonly Random _random = new Random();
+        private readonly List<Spell> _autoAttackOverrideSpells = new List<Spell>();
+        private readonly Dictionary<Spell, float> _autoAttackOverrideWeights = new Dictionary<Spell, float>();
+        private Spell _autoAttackOverrideCritSpell;
         protected ItemManager _itemManager;
         protected AIState _aiState = AIState.AI_IDLE;
         protected bool _aiPaused;
@@ -94,6 +98,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Whether or not this AI is currently auto attacking.
         /// </summary>
         public bool IsAttacking { get; private set; }
+        public bool IsAutoAttackOverridden { get; private set; }
         /// <summary>
         /// Spell this unit will cast when in range of its target.
         /// Overrides auto attack spell casting.
@@ -782,47 +787,267 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <returns>Random auto attack spell.</returns>
         public Spell GetNewAutoAttack()
         {
-            List<Spell> autoAttackSpells = new List<Spell>();
-            Spell toCast;
+            var candidates = new List<(Spell spell, float weight)>();
+
             if (IsNextAutoCrit)
             {
-                for (short i = (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1; i <= (short)BasicAttackTypes.BASICATTACK_CRITICAL_LAST_SLOT; i++)
+                for (short slot = (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1; slot <= (short)BasicAttackTypes.BASICATTACK_CRITICAL_LAST_SLOT; slot++)
                 {
-                    if (CharData.BasicAttacks[i - 64].Probability > 0.0f && Spells.TryGetValue(i, out toCast))
+                    var idx = slot - 64;
+                    if (idx < 0 || idx >= CharData.BasicAttacks.Count)
                     {
-                        autoAttackSpells.Add(toCast);
+                        continue;
+                    }
+
+                    var prob = CharData.BasicAttacks[idx].Probability;
+                    if (prob <= 0.0f)
+                    {
+                        continue;
+                    }
+
+                    if (Spells.TryGetValue(slot, out var spell) && spell != null)
+                    {
+                        candidates.Add((spell, prob));
                     }
                 }
             }
             else
             {
-                for (short i = (short)BasicAttackTypes.BASIC_ATTACK_TYPES_FIRST_SLOT; i <= (short)BasicAttackTypes.BASICATTACK_NORMAL_LAST_SLOT; i++)
+                for (short slot = (short)SpellSlotType.BasicAttackNormalSlots; slot <= (short)BasicAttackTypes.BASICATTACK_NORMAL_LAST_SLOT; slot++)
                 {
-                    if (CharData.BasicAttacks[i - 64].Probability > 0.0f && Spells.TryGetValue(i, out toCast))
+                    var idx = slot - 64;
+                    if (idx < 0 || idx >= CharData.BasicAttacks.Count)
                     {
-                        autoAttackSpells.Add(toCast);
+                        continue;
+                    }
+
+                    var prob = CharData.BasicAttacks[idx].Probability;
+                    if (prob <= 0.0f)
+                    {
+                        continue;
+                    }
+
+                    if (Spells.TryGetValue(slot, out var spell) && spell != null)
+                    {
+                        candidates.Add((spell, prob));
                     }
                 }
             }
 
-            autoAttackSpells.Remove(_lastAutoAttack);
-
-            if (autoAttackSpells.Count == 0)
+            if (candidates.Count == 0)
             {
-                BasicAttackTypes type = BasicAttackTypes.BASIC_ATTACK_TYPES_FIRST_SLOT;
-                if (IsNextAutoCrit)
+                var first = IsNextAutoCrit
+                    ? (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1
+                    : (short)BasicAttackTypes.BASIC_ATTACK_TYPES_FIRST_SLOT;
+
+                _lastAutoAttack = Spells[first];
+                return _lastAutoAttack;
+            }
+
+            const int maxRerolls = 3;
+            for (var attempt = 0; attempt <= maxRerolls; attempt++)
+            {
+                var chosen = WeightedPick(candidates);
+                if (chosen != _lastAutoAttack || candidates.Count == 1 || attempt == maxRerolls)
                 {
-                    type = BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1;
+                    _lastAutoAttack = chosen;
+                    return chosen;
                 }
-                toCast = Spells[(short)type];
             }
-            else
-            {
-                toCast = autoAttackSpells[_random.Next(0, autoAttackSpells.Count)];
-            }
-            _lastAutoAttack = toCast;
 
-            return toCast;
+            _lastAutoAttack = candidates[0].spell;
+            return _lastAutoAttack;
+        }
+
+        private float GetAutoAttackProbabilityWeight(Spell spell)
+        {
+            if (spell == null)
+            {
+                return 0.0f;
+            }
+
+            var idx = spell.CastInfo.SpellSlot - (short)SpellSlotType.BasicAttackNormalSlots;
+            if (idx >= 0 && idx < CharData.BasicAttacks.Count)
+            {
+                var configuredWeight = CharData.BasicAttacks[idx].Probability;
+                if (configuredWeight > 0.0f)
+                {
+                    return configuredWeight;
+                }
+            }
+
+            return 1.0f;
+        }
+
+        private float GetOverrideAutoAttackProbabilityWeight(Spell spell)
+        {
+            if (spell == null)
+            {
+                return 0.0f;
+            }
+
+            if (_autoAttackOverrideWeights.TryGetValue(spell, out var explicitWeight))
+            {
+                return explicitWeight;
+            }
+
+            return GetAutoAttackProbabilityWeight(spell);
+        }
+
+        private Spell GetNewOverrideAutoAttack()
+        {
+            if (_autoAttackOverrideSpells.Count == 0)
+            {
+                return GetNewAutoAttack();
+            }
+
+            if (_autoAttackOverrideSpells.Count == 1)
+            {
+                _lastOverrideAutoAttack = _autoAttackOverrideSpells[0];
+                return _lastOverrideAutoAttack;
+            }
+
+            var candidates = new List<(Spell spell, float weight)>(_autoAttackOverrideSpells.Count);
+            foreach (var overrideSpell in _autoAttackOverrideSpells)
+            {
+                if (overrideSpell == null)
+                {
+                    continue;
+                }
+
+                var weight = GetOverrideAutoAttackProbabilityWeight(overrideSpell);
+                if (weight <= 0.0f)
+                {
+                    continue;
+                }
+
+                candidates.Add((overrideSpell, weight));
+            }
+
+            if (candidates.Count == 0)
+            {
+                return GetNewAutoAttack();
+            }
+
+            const int maxRerolls = 3;
+            for (var attempt = 0; attempt <= maxRerolls; attempt++)
+            {
+                var chosen = WeightedPick(candidates);
+                if (chosen != _lastOverrideAutoAttack || candidates.Count == 1 || attempt == maxRerolls)
+                {
+                    _lastOverrideAutoAttack = chosen;
+                    return chosen;
+                }
+            }
+
+            _lastOverrideAutoAttack = candidates[0].spell;
+            return _lastOverrideAutoAttack;
+        }
+
+        private Spell GetNextOverriddenAutoAttackForCast(bool isCritAttack)
+        {
+            if (isCritAttack && _autoAttackOverrideCritSpell != null)
+            {
+                return _autoAttackOverrideCritSpell;
+            }
+
+            if (_autoAttackOverrideSpells.Count > 1)
+            {
+                return GetNewOverrideAutoAttack();
+            }
+
+            if (_autoAttackOverrideSpells.Count == 1)
+            {
+                return _autoAttackOverrideSpells[0];
+            }
+
+            return GetNewAutoAttack();
+        }
+
+        private Spell WeightedPick(List<(Spell spell, float weight)> candidates)
+        {
+            float total = 0.0f;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                total += candidates[i].weight;
+            }
+
+            if (total <= 0.0f)
+            {
+                return candidates[0].spell;
+            }
+
+            var roll = (float)(_random.NextDouble() * total);
+            float acc = 0.0f;
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                acc += candidates[i].weight;
+                if (roll <= acc)
+                {
+                    return candidates[i].spell;
+                }
+            }
+
+            return candidates[candidates.Count - 1].spell;
+        }
+
+        private void PrepareAutoAttackSpellForCast(Spell spell)
+        {
+            if (spell == null)
+            {
+                return;
+            }
+
+            if (spell.State != SpellState.STATE_CASTING && spell.State != SpellState.STATE_CHANNELING)
+            {
+                spell.ResetSpellCast();
+                spell.CastInfo.Targets.Clear();
+            }
+
+            spell.CastInfo.IsSecondAutoAttack = HasMadeInitialAttack;
+        }
+
+        private float GetAutoAttackCooldownSeconds(Spell spell)
+        {
+            float baseAttackSpeed = Math.Max(0.0001f, Stats.GetTotalAttackSpeed());
+            float cooldown = 1.0f / baseAttackSpeed;
+
+            if (spell == null || !spell.CastInfo.IsAutoAttack)
+            {
+                return cooldown;
+            }
+
+            // Auto-attack overrides in non-basic slots can have longer cycle times.
+            if (spell.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
+            {
+                float attackSpeedModifier = Math.Max(0.0001f, spell.CastInfo.AttackSpeedModifier);
+                float overrideCycleTime = spell.CastInfo.DesignerTotalTime / attackSpeedModifier;
+                if (overrideCycleTime > cooldown)
+                {
+                    cooldown = overrideCycleTime;
+                }
+            }
+
+            return cooldown;
+        }
+
+        public Spell GetAutoAttackSpell(string name)
+        {
+            foreach (var spell in Spells.Values)
+            {
+                if (spell == null)
+                {
+                    continue;
+                }
+
+                if (spell.CastInfo.IsAutoAttack && spell.SpellName == name)
+                {
+                    return spell;
+                }
+            }
+
+            return null;
         }
 
         public Spell GetSpell(string name)
@@ -878,12 +1103,47 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Stats.SetSpellEnabled(slot, false);
         }
 
+        public Spell OverrideBasicAttackSlot(byte slot, string newSpellName)
+        {
+            var old = Spells.TryGetValue(slot, out var existing) ? existing : null;
+            Spells[slot] = new Spell(_game, this, newSpellName, slot, _scriptsEnabled);
+            return old;
+        }
+
+        public void SetAutoAttackOverride(bool overridden)
+        {
+            IsAutoAttackOverridden = overridden;
+            if (!overridden)
+            {
+                _autoAttackOverrideSpells.Clear();
+                _autoAttackOverrideWeights.Clear();
+                _autoAttackOverrideCritSpell = null;
+                _lastOverrideAutoAttack = null;
+            }
+        }
+
+        public void RestoreBasicAttackSlot(byte slot, Spell previous)
+        {
+            if (previous == null)
+            {
+                return;
+            }
+
+            Spells[slot] = previous;
+        }
+
         /// <summary>
         /// Sets this AI's current auto attack to their base auto attack.
         /// </summary>
         public void ResetAutoAttackSpell()
         {
+            _autoAttackOverrideSpells.Clear();
+            _autoAttackOverrideWeights.Clear();
+            _autoAttackOverrideCritSpell = null;
+            _lastOverrideAutoAttack = null;
+            IsAutoAttackOverridden = false;
             AutoAttackSpell = GetNewAutoAttack();
+            PrepareAutoAttackSpellForCast(AutoAttackSpell);
         }
 
         /// <summary>
@@ -893,8 +1153,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="isReset">Whether or not setting this spell causes auto attacks to be reset (cooldown).</param>
         public void SetAutoAttackSpell(Spell spell, bool isReset)
         {
+            if (spell == null)
+            {
+                return;
+            }
+
+            _autoAttackOverrideSpells.Clear();
+            _autoAttackOverrideWeights.Clear();
+            _autoAttackOverrideCritSpell = null;
             AutoAttackSpell = spell;
-            CancelAutoAttack(isReset);
+            _autoAttackOverrideSpells.Add(AutoAttackSpell);
+            _lastOverrideAutoAttack = AutoAttackSpell;
+            PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            IsAutoAttackOverridden = true;
+
+            if (isReset)
+            {
+                CancelAutoAttack(true);
+            }
         }
 
         /// <summary>
@@ -905,10 +1181,150 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <returns>Spell set.</returns>
         public Spell SetAutoAttackSpell(string name, bool isReset)
         {
-            AutoAttackSpell = GetSpell(name);
-            if (isReset) CancelAutoAttack(isReset);
+            AutoAttackSpell = GetAutoAttackSpell(name) ?? GetSpell(name);
+            if (AutoAttackSpell == null)
+            {
+                return null;
+            }
+
+            _autoAttackOverrideSpells.Clear();
+            _autoAttackOverrideWeights.Clear();
+            _autoAttackOverrideCritSpell = null;
+            _autoAttackOverrideSpells.Add(AutoAttackSpell);
+            _lastOverrideAutoAttack = AutoAttackSpell;
+            PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            IsAutoAttackOverridden = true;
+            if (isReset)
+            {
+                CancelAutoAttack(true);
+            }
 
             return AutoAttackSpell;
+        }
+
+        public Spell SetAutoAttackSpells(bool isReset, params string[] names)
+        {
+            _autoAttackOverrideSpells.Clear();
+            _autoAttackOverrideWeights.Clear();
+            _autoAttackOverrideCritSpell = null;
+            _lastOverrideAutoAttack = null;
+
+            if (names == null || names.Length == 0)
+            {
+                return null;
+            }
+
+            foreach (var name in names)
+            {
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                var overrideSpell = GetAutoAttackSpell(name) ?? GetSpell(name);
+                if (overrideSpell == null || _autoAttackOverrideSpells.Contains(overrideSpell))
+                {
+                    continue;
+                }
+
+                _autoAttackOverrideSpells.Add(overrideSpell);
+            }
+
+            if (_autoAttackOverrideSpells.Count == 0)
+            {
+                return null;
+            }
+
+            AutoAttackSpell = GetNewOverrideAutoAttack();
+            PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            IsAutoAttackOverridden = true;
+            if (isReset)
+            {
+                CancelAutoAttack(true);
+            }
+
+            return AutoAttackSpell;
+        }
+
+        public Spell SetAutoAttackSpells(bool isReset, params (string name, float weight)[] weightedNames)
+        {
+            _autoAttackOverrideSpells.Clear();
+            _autoAttackOverrideWeights.Clear();
+            _autoAttackOverrideCritSpell = null;
+            _lastOverrideAutoAttack = null;
+
+            if (weightedNames == null || weightedNames.Length == 0)
+            {
+                return null;
+            }
+
+            foreach (var weightedName in weightedNames)
+            {
+                if (string.IsNullOrEmpty(weightedName.name) || weightedName.weight <= 0.0f)
+                {
+                    continue;
+                }
+
+                var overrideSpell = GetAutoAttackSpell(weightedName.name) ?? GetSpell(weightedName.name);
+                if (overrideSpell == null || _autoAttackOverrideSpells.Contains(overrideSpell))
+                {
+                    continue;
+                }
+
+                _autoAttackOverrideSpells.Add(overrideSpell);
+                _autoAttackOverrideWeights[overrideSpell] = weightedName.weight;
+            }
+
+            if (_autoAttackOverrideSpells.Count == 0)
+            {
+                return null;
+            }
+
+            AutoAttackSpell = GetNewOverrideAutoAttack();
+            PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            IsAutoAttackOverridden = true;
+            if (isReset)
+            {
+                CancelAutoAttack(true);
+            }
+
+            return AutoAttackSpell;
+        }
+
+        public Spell SetAutoAttackSpellWithCrit(string normalName, string critName, bool isReset)
+        {
+            var selected = SetAutoAttackSpell(normalName, isReset);
+            if (selected == null)
+            {
+                return null;
+            }
+
+            _autoAttackOverrideCritSpell = GetAutoAttackSpell(critName) ?? GetSpell(critName);
+            return selected;
+        }
+
+        public Spell SetAutoAttackSpellsWithCrit(bool isReset, string critName, params string[] names)
+        {
+            var selected = SetAutoAttackSpells(isReset, names);
+            if (selected == null)
+            {
+                return null;
+            }
+
+            _autoAttackOverrideCritSpell = GetAutoAttackSpell(critName) ?? GetSpell(critName);
+            return selected;
+        }
+
+        public Spell SetAutoAttackSpellsWithCrit(bool isReset, string critName, params (string name, float weight)[] weightedNames)
+        {
+            var selected = SetAutoAttackSpells(isReset, weightedNames);
+            if (selected == null)
+            {
+                return null;
+            }
+
+            _autoAttackOverrideCritSpell = GetAutoAttackSpell(critName) ?? GetSpell(critName);
+            return selected;
         }
 
         /// <summary>
@@ -1465,20 +1881,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                                 if (_autoAttackCurrentCooldown <= 0)
                                 {
                                     HasAutoAttacked = false;
-                                    AutoAttackSpell.ResetSpellCast();
-                                    // TODO: ApiEventManager.OnUnitPreAttack.Publish(this);
                                     IsAttacking = true;
-
-                                    if (AutoAttackSpell.HasEmptyScript || (AutoAttackSpell.CastInfo.SpellSlot - 64 < 9 && IsNextAutoCrit) || (AutoAttackSpell.CastInfo.SpellSlot - 64 >= 9 && !IsNextAutoCrit))
-                                    {
-                                        AutoAttackSpell = GetNewAutoAttack();
-                                    }
-
+                                    // TODO: ApiEventManager.OnUnitPreAttack.Publish(this);
                                     if (!_skipNextAutoAttack)
                                     {
-                                        AutoAttackSpell.Cast(TargetUnit.Position, TargetUnit.Position, TargetUnit);
+                                        AutoAttackSpell = IsAutoAttackOverridden
+                                            ? GetNextOverriddenAutoAttackForCast(IsNextAutoCrit)
+                                            : GetNewAutoAttack();
 
-                                        _autoAttackCurrentCooldown = 1.0f / Stats.GetTotalAttackSpeed();
+                                        PrepareAutoAttackSpellForCast(AutoAttackSpell);
+                                        if (AutoAttackSpell != null && AutoAttackSpell.Cast(TargetUnit.Position, TargetUnit.Position, TargetUnit))
+                                        {
+                                            _autoAttackCurrentCooldown = GetAutoAttackCooldownSeconds(AutoAttackSpell);
+                                        }
                                     }
                                     else
                                     {
@@ -1489,7 +1904,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         }
                         // Update the auto attack spell target.
                         // Units outside of range are ignored.
-                        else if (IsAttacking && AutoAttackSpell.CastInfo.Targets[0].Unit != TargetUnit && !(Vector2.Distance(TargetUnit.Position, Position) > (Stats.Range.Total + TargetUnit.CollisionRadius)))
+                        else if (IsAttacking
+                                 && AutoAttackSpell.CastInfo.Targets.Count > 0
+                                 && (AutoAttackSpell.CastInfo.Targets[0] as CastTarget)?.Unit != TargetUnit
+                                 && !(Vector2.Distance(TargetUnit.Position, Position) > (Stats.Range.Total + TargetUnit.CollisionRadius)))
                         {
                             AutoAttackSpell.SetCurrentTarget(TargetUnit);
                         }

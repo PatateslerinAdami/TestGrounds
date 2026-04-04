@@ -224,6 +224,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
+        private bool ShouldTreatAsAutoAttack()
+        {
+            if (CastInfo.IsAutoAttack)
+            {
+                return true;
+            }
+
+            return CastInfo.Owner is ObjAIBase ai && ai.AutoAttackSpell == this;
+        }
+
+        private bool IsBasicAttackSlotSpell()
+        {
+            return CastInfo.SpellSlot >= (byte)SpellSlotType.BasicAttackNormalSlots;
+        }
+
         /// <summary>
         /// Whether or not this spell can be cancelled during cast.
         /// </summary>
@@ -321,6 +336,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             _attackType = AttackType.ATTACK_TYPE_RADIAL;
             var stats = CastInfo.Owner.Stats;
 
+            // Auto-attack overrides can use non-AA slots (ex: TalonNoxianDiplomacyAttack).
+            // If this spell is currently selected as the owner's attack spell, keep AA behavior.
+            CastInfo.IsAutoAttack = ShouldTreatAsAutoAttack();
+
             if ((SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY || CurrentAmmo <= 0)
             {
                 return false;
@@ -350,7 +369,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // For things like Garen Q, Leona Q, and TF W (and probably more)
-            if (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay) // TODO: Verify
+            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
             {
                 CastInfo.IsAutoAttack = false;
                 CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
@@ -379,7 +398,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.IsAutoAttack)
             {
                 _attackType = AttackType.ATTACK_TYPE_TARGETED;
-                CastInfo.UseAttackCastTime = true;
+                // Non-basic-slot auto-attack overrides (ex: Talon Q attack spell) should use spell cast timing,
+                // while true basic attack slots continue using base auto-attack timing.
+                CastInfo.UseAttackCastTime = IsBasicAttackSlotSpell();
                 CastInfo.AmmoUsed = 0; // TODO: Verify
                 CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
@@ -523,7 +544,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
+            if ((CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()) || CastInfo.UseAttackCastTime)
             {
                 // We assume it is already an attack.
                 int index = CastInfo.SpellSlot - 64;
@@ -536,7 +557,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
                 CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
 
-                if (CastInfo.IsAutoAttack)
+                if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
                     if (!CastInfo.IsSecondAutoAttack)
                     {
@@ -588,6 +609,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
+            // Auto-attack overrides in non-basic slots still need a normal cast packet for animation.
+            if (CastInfo.IsAutoAttack && !IsBasicAttackSlotSpell())
+            {
+                _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+            }
+
             if (CastInfo.DesignerCastTime > 0)
             {
                 if (Script.ScriptMetadata.TriggersSpellCasts)
@@ -631,6 +658,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public bool Cast(CastInfo castInfo, bool cast)
         {
             CastInfo = castInfo;
+            CastInfo.IsAutoAttack = ShouldTreatAsAutoAttack();
             /*
             if (CastInfo.Targets == null)
             {
@@ -681,7 +709,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // For things like Garen Q, Leona Q, and TF W (and probably more)
-            if (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay) // TODO: Verify
+            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
             {
                 CastInfo.IsAutoAttack = false;
                 CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
@@ -709,7 +737,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Otherwise, use the normal auto attack setup
             if (CastInfo.IsAutoAttack)
             {
-                CastInfo.UseAttackCastTime = true;
+                // Non-basic-slot auto-attack overrides (ex: Talon Q attack spell) should use spell cast timing,
+                // while true basic attack slots continue using base auto-attack timing.
+                CastInfo.UseAttackCastTime = IsBasicAttackSlotSpell();
                 CastInfo.AmmoUsed = 0; // TODO: Verify
                 CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
@@ -780,7 +810,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
+            if ((CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()) || CastInfo.UseAttackCastTime)
             {
                 // We assume it is already an attack.
                 int index = CastInfo.SpellSlot - 64;
@@ -794,7 +824,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
 
                 // TODO: Verify if this should be affected by cast variable.
-                if (CastInfo.IsAutoAttack)
+                if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
                     if (!CastInfo.IsSecondAutoAttack)
                     {
@@ -842,6 +872,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         _game.PacketNotifier.NotifyWaypointGroup(CastInfo.Owner);
                     }
+                }
+
+                // Auto-attack overrides in non-basic slots still need a normal cast packet for animation.
+                if (CastInfo.IsAutoAttack && !IsBasicAttackSlotSpell())
+                {
+                    _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
                 }
 
                 if (CastInfo.DesignerCastTime > 0)
@@ -1073,7 +1109,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
             {
                 CastInfo.Owner.HasAutoAttacked = true;
-                if (!CastInfo.Owner.HasMadeInitialAttack)
+                bool shouldAdvanceBasicAttackChain = CastInfo.IsAutoAttack && IsBasicAttackSlotSpell();
+                if (shouldAdvanceBasicAttackChain && !CastInfo.Owner.HasMadeInitialAttack)
                 {
                     CastInfo.Owner.HasMadeInitialAttack = true;
                 }
@@ -1609,11 +1646,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 ApiEventManager.OnPreAttack.Publish(CastInfo.Owner, this);
 
-                if (!CastInfo.IsSecondAutoAttack)
+                if (IsBasicAttackSlotSpell() && !CastInfo.IsSecondAutoAttack)
                 {
                     _game.PacketNotifier.NotifyBasic_Attack_Pos(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit);
                 }
-                else
+                else if (IsBasicAttackSlotSpell())
                 {
                     _game.PacketNotifier.NotifyBasic_Attack(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.HasMadeInitialAttack);
                 }
