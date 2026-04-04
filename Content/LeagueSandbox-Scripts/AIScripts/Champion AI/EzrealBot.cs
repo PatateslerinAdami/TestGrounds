@@ -43,10 +43,18 @@ namespace AIScripts
 
         private Champion EzrealInstance;
         private static ILog _logger = LoggerProvider.GetLogger();
-        private Vector2 _midLanePosition = new Vector2(7500f, 7500f);
-
-
-        // State management
+        // Mid lane waypoints (matching minion path from Map1)
+        private List<Vector2> _midLaneWaypoints = new List<Vector2>
+        {
+            new Vector2(1418.0f, 1686.0f),
+            new Vector2(2997.0f, 2781.0f),
+            new Vector2(4472.0f, 4727.0f),
+            new Vector2(8375.0f, 8366.0f),
+            new Vector2(10948.0f, 10821.0f),
+            new Vector2(12511.0f, 12776.0f)
+        };
+        private int _currentWaypointIndex = 0;
+        private const float WaypointReachedThreshold = 300f; // Distance to consider waypoint reached
         private BotState _currentState;
         private float _gameTime;
         private float _lastDamageTakenTime;
@@ -288,7 +296,7 @@ namespace AIScripts
                 _currentState = BotState.DeadState;
                 return;
             }
-            if (!EzrealInstance.IsDead && !isInCombat)
+            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower())
             {
                 _currentState = BotState.MovingToLane;
             }
@@ -304,11 +312,7 @@ namespace AIScripts
                     break;
 
                 case BotState.Farming:
-                    if (isUnderTower && !IsAllyTower())
-                    {
-                        _currentState = BotState.Retreating;
-                    }
-                    else if (nearbyEnemies.Count > 0 && CanPoke())
+                    if (nearbyEnemies.Count > 0 && CanPoke())
                     {
                         _currentState = BotState.Poking;
                     }
@@ -318,11 +322,25 @@ namespace AIScripts
                         _logger.Debug("Found vulnerable enemy - switching to chase mode");
                         _currentState = BotState.Chasing;
                     }
-                    // Check for tower pushing opportunity
+                    // Check for tower pushing opportunity - aggressive check for nearby towers
                     else if (ShouldPushTower())
                     {
                         _logger.Debug("Tower push opportunity detected - switching to push mode");
                         _currentState = BotState.Pushing;
+                    }
+                    // Additional check: if there's an enemy tower nearby and we're healthy, switch to pushing
+                    else if (GetHealthPercentage() > 0.6f)
+                    {
+                        LaneTurret nearbyTower = GetNearbyEnemyTower(1000f);
+                        if (nearbyTower != null)
+                        {
+                            float distanceToTower = Vector2.Distance(EzrealInstance.Position, nearbyTower.Position);
+                            if (distanceToTower <= AutoAttackRange + 300f)
+                            {
+                                _logger.Debug($"Enemy tower nearby at {distanceToTower:F0} units - switching to push mode");
+                                _currentState = BotState.Pushing;
+                            }
+                        }
                     }
                     break;
 
@@ -377,7 +395,7 @@ namespace AIScripts
                     }
                     else if (isUnderTower && !IsAllyTower())
                     {
-                        _currentState = BotState.Retreating;
+                        // _currentState = BotState.Retreating;
                     }
                     break;
 
@@ -500,10 +518,135 @@ namespace AIScripts
         // Movement and positioning
         private void MoveToLane()
         {
-            // Movement code to go to lane
-            Vector2 lanePosition = GetLanePosition();
-            MoveToPosition(_midLanePosition);
+            // Check for enemy towers first - stop if near one
+            LaneTurret nearbyEnemyTower = GetNearbyEnemyTower(1000f);
+            if (nearbyEnemyTower != null)
+            {
+                float distanceToTower = Vector2.Distance(EzrealInstance.Position, nearbyEnemyTower.Position);
+                _logger.Debug($"Enemy tower detected at distance {distanceToTower:F0} while moving to lane");
+                
+                // If we're close enough to attack tower, switch to pushing
+                if (distanceToTower <= AutoAttackRange + 200f)
+                {
+                    _currentState = BotState.Pushing;
+                    return;
+                }
+                
+                // Otherwise, position at safe distance from tower
+                Vector2 safePosition = GetSafePositionFromTower(nearbyEnemyTower);
+                MoveToPosition(safePosition);
+                MovingToLane = true;
+                return;
+            }
+
+            // Check if there are ally minions nearby to follow
+            LaneMinion allyMinionToFollow = GetNearbyAllyMinion();
+            if (allyMinionToFollow != null)
+            {
+                // Follow the ally minion
+                _logger.Debug($"Following ally minion at {allyMinionToFollow.Position}");
+                MoveToPosition(allyMinionToFollow.Position);
+                MovingToLane = true;
+                return;
+            }
+
+            // Use waypoint system to progress through mid lane
+            Vector2 currentWaypoint = GetCurrentWaypoint();
+            
+            // Check if we've reached the current waypoint
+            float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
+            if (distanceToWaypoint < WaypointReachedThreshold)
+            {
+                // Advance to next waypoint
+                _currentWaypointIndex++;
+                if (_currentWaypointIndex >= _midLaneWaypoints.Count)
+                {
+                    _currentWaypointIndex = _midLaneWaypoints.Count - 1; // Stay at last waypoint
+                }
+                _logger.Debug($"Reached waypoint {_currentWaypointIndex}, advancing to next");
+            }
+            
+            // Move to current waypoint
+            currentWaypoint = GetCurrentWaypoint();
+            MoveToPosition(currentWaypoint);
+            _logger.Debug($"Moving to waypoint {_currentWaypointIndex} at {currentWaypoint}, distance: {distanceToWaypoint:F0}");
             MovingToLane = true;
+        }
+
+        private Vector2 GetCurrentWaypoint()
+        {
+            if (_currentWaypointIndex >= 0 && _currentWaypointIndex < _midLaneWaypoints.Count)
+            {
+                return _midLaneWaypoints[_currentWaypointIndex];
+            }
+            // Fallback to center
+            return new Vector2(7500f, 7500f);
+        }
+
+        private LaneMinion GetNearbyAllyMinion()
+        {
+            // Look for ally minions within range
+            List<AttackableUnit> units = GetUnitsInRange(EzrealInstance.Position, 800f, true);
+            LaneMinion closestMinion = null;
+            float closestDistance = float.MaxValue;
+            
+            foreach (var unit in units)
+            {
+                if (unit is LaneMinion minion && minion.Team == EzrealInstance.Team)
+                {
+                    float dist = Vector2.Distance(EzrealInstance.Position, minion.Position);
+                    // Prefer minions that are ahead of us (closer to enemy base)
+                    Vector2 enemyBaseDir = GetEnemyBaseDirection();
+                    Vector2 toMinion = Vector2.Normalize(minion.Position - EzrealInstance.Position);
+                    float dot = Vector2.Dot(enemyBaseDir, toMinion);
+                    
+                    // If minion is roughly ahead of us or very close
+                    if ((dot > 0.3f || dist < 300f) && dist < closestDistance)
+                    {
+                        closestMinion = minion;
+                        closestDistance = dist;
+                    }
+                }
+            }
+            
+            return closestMinion;
+        }
+
+        private LaneTurret GetNearbyEnemyTower(float range)
+        {
+            // Look for enemy towers within range
+            List<AttackableUnit> units = GetUnitsInRange(EzrealInstance.Position, range, true);
+            
+            foreach (var unit in units)
+            {
+                if (unit is LaneTurret turret && turret.Team != EzrealInstance.Team)
+                {
+                    return turret;
+                }
+            }
+            
+            return null;
+        }
+
+        private Vector2 GetSafePositionFromTower(LaneTurret tower)
+        {
+            // Position at auto attack range from tower
+            Vector2 directionToTower = Vector2.Normalize(tower.Position - EzrealInstance.Position);
+            float distance = AutoAttackRange + 50f;
+            return tower.Position - (directionToTower * distance);
+        }
+
+        private Vector2 GetEnemyBaseDirection()
+        {
+            // Return normalized direction toward enemy base
+            if (EzrealInstance.Team == TeamId.TEAM_BLUE)
+            {
+                return Vector2.Normalize(new Vector2(12511f, 12776f) - EzrealInstance.Position);
+            }
+            else
+            {
+                return Vector2.Normalize(new Vector2(1418f, 1686f) - EzrealInstance.Position);
+            }
         }
 
         private void Farm()
@@ -513,6 +656,14 @@ namespace AIScripts
 
             Vector2 botPosition = EzrealInstance.Position;
             List<AttackableUnit> units = GetUnitsInRange(botPosition, 800f, true);
+
+            if (ShouldPushTower())
+            {
+                _logger.Debug("Should push tower - pushing");
+                _currentState = BotState.Pushing;
+                PushTower();
+                return;
+            }
 
             // Check if we're taking minion damage and should back off
             if (IsTakingMinionDamage())
@@ -573,7 +724,7 @@ namespace AIScripts
             }
             else
             {
-                var qKillableMinions = GetUnitsInRange(botPosition, QRange, true).OfType<Minion>()
+                var qKillableMinions = GetUnitsInRange(botPosition, QRange, true).OfType<LaneMinion>()
                     .Where(minion => minion.Team != EzrealInstance.Team &&
                            minion.Stats.CurrentHealth < CalculateQDamage(minion) &&
                            !IsInAutoAttackRange(minion))
@@ -586,8 +737,36 @@ namespace AIScripts
                 }
                 else
                 {
+                    // No minions to farm - continue pushing forward using waypoints
+                    AdvanceWaypointIfNeeded();
                     MoveToPosition(GetIdealFarmingPosition());
                 }
+            }
+        }
+
+        private void AdvanceWaypointIfNeeded()
+        {
+            // First check for enemy towers - don't advance past them
+            LaneTurret enemyTower = GetNearbyEnemyTower(1000f);
+            if (enemyTower != null && !ShouldPushTower())
+            {
+                float distanceToTower = Vector2.Distance(EzrealInstance.Position, enemyTower.Position);
+                _logger.Debug($"Not advancing waypoint - enemy tower nearby at distance {distanceToTower:F0}");
+                return;
+            }
+
+            // Check if we've reached current waypoint and should advance
+            Vector2 currentWaypoint = GetCurrentWaypoint();
+            float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
+            
+            if (distanceToWaypoint < WaypointReachedThreshold)
+            {
+                _currentWaypointIndex++;
+                if (_currentWaypointIndex >= _midLaneWaypoints.Count)
+                {
+                    _currentWaypointIndex = _midLaneWaypoints.Count - 1;
+                }
+                _logger.Debug($"Advanced to waypoint {_currentWaypointIndex} while farming");
             }
         }
 
@@ -1593,13 +1772,30 @@ namespace AIScripts
 
         private Vector2 GetLanePosition()
         {
-            // Just return mid lane position
-            return _midLanePosition;
+            // Return current waypoint or first waypoint
+            if (_currentWaypointIndex < _midLaneWaypoints.Count)
+            {
+                return _midLaneWaypoints[_currentWaypointIndex];
+            }
+            return _midLaneWaypoints[0];
         }
 
 
         private Vector2 GetIdealFarmingPosition()
         {
+            // First check if there's an enemy tower nearby
+            LaneTurret enemyTower = GetNearbyEnemyTower(1200f);
+            if (enemyTower != null)
+            {
+                float distanceToTower = Vector2.Distance(EzrealInstance.Position, enemyTower.Position);
+                
+                // If we're close enough to attack, position at auto attack range
+                if (distanceToTower <= AutoAttackRange + 200f)
+                {
+                    return GetSafePositionFromTower(enemyTower);
+                }
+            }
+
             // Keep Ezreal at his auto attack range from minions (550 range)
             const float IDEAL_DISTANCE = 550f; // Ezreal's auto range
 
@@ -1615,7 +1811,7 @@ namespace AIScripts
                 Vector2 ourBase = EzrealInstance.Team == TeamId.TEAM_BLUE ?
                     new Vector2(1000f, 1000f) : new Vector2(14000f, 14000f);
 
-                Minion frontMinion = enemyMinions
+                LaneMinion frontMinion = enemyMinions
                     .OrderBy(m => Vector2.Distance(m.Position, ourBase))
                     .FirstOrDefault();
 
@@ -1627,7 +1823,7 @@ namespace AIScripts
                 }
             }
 
-            return _midLanePosition;
+            return GetLanePosition();
         }
 
         private Vector2 GetIdealPokingPosition()
@@ -1939,10 +2135,12 @@ namespace AIScripts
             }
             else
             {
-                // In range - attack the tower
-                EzrealInstance.MoveOrder = OrderType.AttackTo;
+                // In range - attack the tower using auto-attack
                 EzrealInstance.TargetUnit = tower;
-                _logger.Debug($"Attacking tower at {tower.Position}");
+                EzrealInstance.MoveOrder = OrderType.AttackTo;
+                
+                
+                _logger.Debug($"Attacking tower at {tower.Position} with auto-attack");
             }
 
             // Check for dive opportunity while pushing
@@ -2159,6 +2357,11 @@ namespace AIScripts
         /// </summary>
         private void PerformOrbwalk(Vector2 targetPosition, AttackableUnit attackTarget = null)
         {
+            if (ShouldPushTower())
+            {
+                return;
+            }
+
             // If casting, stand still
             if (IsBasicAttackCasting())
             {
