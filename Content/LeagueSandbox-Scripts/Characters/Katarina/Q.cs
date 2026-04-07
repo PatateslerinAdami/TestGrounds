@@ -55,7 +55,7 @@ namespace Spells;
                               false);
             
             ConsumeDaggered(target);
-            AddBuff("KatarinaDaggered",              4.0f, 1, spell, target, _katarina);
+            AddBuff("KatarinaQMark",              4.0f, 1, spell, target, _katarina);
             
             /*switch (_katarina.SkinId) {
                 case 9: AddParticleTarget(_katarina, target, "katarina_Skin09_Q_Cast", target); break; 
@@ -73,7 +73,7 @@ namespace Spells;
             var hitUnits = new HashSet<AttackableUnit> { target };
             _chainHitUnits[chainId] = hitUnits;
             
-            /*var nextTarget = GetUnitsInRange(_katarina, target.Position, 400f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)
+            var nextTarget = GetUnitsInRange(_katarina, target.Position, 400f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)
                 .Where(x => x != _katarina && !hitUnits.Contains(x))
                 .OrderBy(x => Vector2.Distance(target.Position, x.Position))
                 .FirstOrDefault();
@@ -86,7 +86,7 @@ namespace Spells;
             else
             {
                 EndChain(chainId);
-            }*/
+            }
         }
 
         private void OnStatsUpdate(AttackableUnit unit, float diff) {
@@ -128,13 +128,13 @@ namespace Spells;
 
         private void ConsumeDaggered(AttackableUnit target)
         {
-            if (!target.HasBuff("KatarinaDaggered")) return;
+            if (!target.HasBuff("KatarinaQMark")) return;
 
             var markApRatio = _katarina.Stats.AbilityPower.Total * 0.2f;
             var markDamage  = 15 + 15 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1) + markApRatio;
 
             target.TakeDamage(_katarina, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
-            RemoveBuff(target, "KatarinaDaggered");
+            RemoveBuff(target, "KatarinaQMark");
         }
     }
 
@@ -191,13 +191,13 @@ namespace Spells;
 
             target.TakeDamage(_katarina, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                               false);
-            if (target.HasBuff("KatarinaDaggered")) {
+            if (target.HasBuff("KatarinaQMark")) {
                 var markApRatio = _katarina.Stats.AbilityPower.Total * 0.2f;
                 var markDamage  = 15 + 15 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1) + markApRatio;
                 target.TakeDamage(_katarina, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
-                RemoveBuff(target, "KatarinaDaggered");
+                RemoveBuff(target, "KatarinaQMark");
             }
-            AddBuff("KatarinaDaggered",              4.0f, 1, spell, target, _katarina);
+            AddBuff("KatarinaQMark",              4.0f, 1, spell, target, _katarina);
             
 
             hitUnits.Add(target);

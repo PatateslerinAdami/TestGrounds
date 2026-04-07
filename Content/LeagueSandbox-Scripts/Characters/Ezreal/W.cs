@@ -71,8 +71,8 @@ namespace Spells
         public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
             var owner = spell.CastInfo.Owner;
-            var ad = owner.Stats.AttackDamage.Total * spell.SpellData.AttackDamageCoefficient;
-            var ap = owner.Stats.AbilityPower.Total * spell.SpellData.MagicDamageCoefficient;
+            var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
+            var ap = owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient2;
             var damage = 15 + spell.CastInfo.SpellLevel * 20 + ad + ap;
 
             var spellO = owner.GetSpell("EzrealEssenceFlux");
