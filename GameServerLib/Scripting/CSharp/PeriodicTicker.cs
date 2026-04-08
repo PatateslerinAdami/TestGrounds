@@ -3,7 +3,7 @@ using System;
 namespace LeagueSandbox.GameServer.Scripting.CSharp;
 
 /// <summary>
-///     Utility for converting per-frame <c>diff</c> (milliseconds) into fixed-period ticks.
+///     Utility for converting frame (diff) (milliseconds) into fixed-period ticks.
 /// </summary>
 public struct PeriodicTicker {
     private float _elapsedMs;
@@ -49,8 +49,7 @@ public struct PeriodicTicker {
             _elapsedMs -= periodMs;
             ticks++;
         }
-
-        // Keep backlog bounded if we hit the cap this frame.
+        
         if (ticks >= maxTicksPerUpdate && _elapsedMs > periodMs) {
             _elapsedMs = periodMs;
         }
