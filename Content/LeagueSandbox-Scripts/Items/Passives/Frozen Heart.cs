@@ -17,7 +17,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemPassives;
 
-public class ItemId3110 : IItemScript {
+public class ItemID_3110 : IItemScript {
     private ObjAIBase     _owner;
     public  StatsModifier StatsModifier { get; } = new();
     private PeriodicTicker _periodicTicker;
