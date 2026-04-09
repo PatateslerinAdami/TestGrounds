@@ -3,6 +3,7 @@ using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Packets;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace LeagueSandbox.GameServer.Players
 {
@@ -46,6 +47,17 @@ namespace LeagueSandbox.GameServer.Players
             info.ClientId = _players.Count;
             _userIdsPerTeam[teamId]++;
 
+            // Check if this is a bot (PlayerId = -1)
+            bool isBot = config.PlayerID <= -1;
+            
+            if (isBot)
+            {
+                // Set bot connection flags to prevent AFK protection
+                info.IsDisconnected = false;
+                info.IsStartedClient = true;
+                info.IsMatchingVersion = true;
+            }
+
             var c = new Champion(
                 _game,
                 config.Champion,
@@ -53,8 +65,20 @@ namespace LeagueSandbox.GameServer.Players
                 config.Talents,
                 info,
                 0,
-                teamId
+                teamId,
+                AIScript: config.AIScript
             );
+
+            if (isBot)
+            {
+                // Set bot flag and status flags for proper movement and actions
+                c.IsBot = false;
+                c.SetStatus(StatusFlags.CanMove, true);
+                c.SetStatus(StatusFlags.CanMoveEver, true);
+                c.SetStatus(StatusFlags.CanAttack, true);
+                c.SetStatus(StatusFlags.CanCast, true);
+                c.SetStatus(StatusFlags.Targetable, true);
+            }
 
             var pos = c.GetSpawnPosition(_userIdsPerTeam[teamId]);
             c.SetPosition(pos, false);

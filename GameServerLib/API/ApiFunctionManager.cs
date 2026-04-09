@@ -1658,5 +1658,16 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyCustomDashTest(unit, targetPos, speed, gravity, parabolicStartPoint);
         }
+
+        /// <summary>
+        /// Gets the fountain position for the specified team.
+        /// This is the position where champions respawn and buy items.
+        /// </summary>
+        /// <param name="team">Team to get fountain position for.</param>
+        /// <returns>Vector2 position of the fountain for the specified team.</returns>
+        public static Vector2 GetFountainPosition(TeamId team)
+        {
+            return _game.Map.MapScript.GetFountainPosition(team);
+        }
     }
 }
