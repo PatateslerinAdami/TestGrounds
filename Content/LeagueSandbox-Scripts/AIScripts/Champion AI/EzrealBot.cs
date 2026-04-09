@@ -112,6 +112,11 @@ namespace AIScripts
         private const float TowerDiveSafeDistance = 775f; // Distance to stay from tower while diving
         private Champion _diveTarget = null;
 
+        // Item shopping configuration
+        private List<int> _itemBuildOrder = new List<int>(); // Item IDs to buy in order
+        private int _currentBuildIndex = 0;
+        private const float FountainShopRange = 1000f; // Distance from fountain to shop
+        private bool _hasItemsToBuy = true;
 
 
         // Enum for bot state
@@ -126,7 +131,8 @@ namespace AIScripts
             Chasing,
             Pushing,
             Diving,
-            DeadState
+            DeadState,
+            Shopping
         }
 
         public void OnActivate(ObjAIBase owner)
@@ -153,6 +159,16 @@ namespace AIScripts
                 EzrealInstance.LevelUpSpell(QSlot); // Start with Q for lane poke
 
                 Console.WriteLine("Ezreal Bot initialized with state: " + _currentState);
+
+                _itemBuildOrder = new List<int>
+                {
+                    3153,
+                    3078,
+                    3031,
+                    3006,
+                    3046,
+                    3142
+                };
             }
         }
 
@@ -166,6 +182,9 @@ namespace AIScripts
                 _logger.Debug($"EzrealBot died! Total deaths: {_deathCount}");
                 // Queue delayed reaction instead of immediate trash talk
                 QueueReactionMessage(_dyingTaunts);
+                
+                // Set flag to indicate we need to shop when respawning
+                _hasItemsToBuy = true;
             }
         }
 
@@ -296,7 +315,25 @@ namespace AIScripts
                 _currentState = BotState.DeadState;
                 return;
             }
-            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower())
+            
+            // Check if we should shop (just respawned and at fountain with items to buy)
+            // Only enter shopping state if we can actually afford something
+            if (!EzrealInstance.IsDead && _hasItemsToBuy && IsNearFountain())
+            {
+                if (CanAffordNextItem())
+                {
+                    _currentState = BotState.Shopping;
+                    return;
+                }
+                else
+                {
+                    // Can't afford anything, reset shopping flag and go farm
+                    _logger.Debug("Cannot afford next item, resuming farming");
+                    _hasItemsToBuy = false;
+                }
+            }
+            
+            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower() && _currentState != BotState.Shopping)
             {
                 _currentState = BotState.MovingToLane;
             }
@@ -454,6 +491,11 @@ namespace AIScripts
                 case BotState.Diving:
                     // Dive state is managed by ExecuteDive() which transitions out when appropriate
                     break;
+
+                case BotState.Shopping:
+                    // Shopping is handled in ActOnState, transition back to farming once done
+                    _currentState = BotState.Farming;
+                    break;
             }
         }
 
@@ -511,6 +553,12 @@ namespace AIScripts
 
                 case BotState.Diving:
                     ExecuteDive();
+                    break;
+
+                case BotState.Shopping:
+                    TryBuyItems();
+                    // After shopping, return to farming
+                    _currentState = BotState.Farming;
                     break;
             }
         }
@@ -1000,6 +1048,88 @@ namespace AIScripts
             {
                 UseDefensiveE();
             }
+        }
+
+        // Item shopping methods
+        private void TryBuyItems()
+        {
+            if (!_hasItemsToBuy || _currentBuildIndex >= _itemBuildOrder.Count)
+            {
+                _hasItemsToBuy = false;
+                return;
+            }
+
+            int targetItemId = _itemBuildOrder[_currentBuildIndex];
+            var itemTemplate = ApiFunctionManager.GetItemData(targetItemId);
+            
+            if (itemTemplate == null)
+            {
+                _logger.Debug($"Item {targetItemId} not found in ItemManager");
+                _currentBuildIndex++;
+                return;
+            }
+
+            // Check if we can afford the item
+            var price = itemTemplate.TotalPrice;
+            var ownedItems = EzrealInstance.Inventory.GetAvailableItems(itemTemplate.Recipe.GetItems());
+            if (ownedItems.Count != 0)
+            {
+                price -= ownedItems.Sum(item => item.ItemData.TotalPrice);
+            }
+
+            // Buy if we have enough gold
+            if (EzrealInstance.Stats.Gold >= price)
+            {
+                bool success = EzrealInstance.Shop.HandleItemBuyRequest(targetItemId);
+                if (success)
+                {
+                    _logger.Debug($"Successfully bought item {itemTemplate.Name} (ID: {targetItemId})");
+                    _currentBuildIndex++;
+                    
+                    // Continue buying if there are more items and we have gold
+                    if (_currentBuildIndex < _itemBuildOrder.Count)
+                    {
+                        TryBuyItems();
+                    }
+                    else
+                    {
+                        _hasItemsToBuy = false;
+                        _logger.Debug("Completed item build order");
+                    }
+                }
+                else
+                {
+                    _logger.Debug($"Failed to buy item {itemTemplate.Name} - shop request failed");
+                }
+            }
+            else
+            {
+                _logger.Debug($"Not enough gold for {itemTemplate.Name}. Need {price}, have {EzrealInstance.Stats.Gold}");
+                // Can't afford this item, stop shopping and go farm
+                _hasItemsToBuy = false;
+            }
+        }
+
+        private bool CanAffordNextItem()
+        {
+            if (_currentBuildIndex >= _itemBuildOrder.Count)
+                return false;
+
+            int targetItemId = _itemBuildOrder[_currentBuildIndex];
+            var itemTemplate = ApiFunctionManager.GetItemData(targetItemId);
+            
+            if (itemTemplate == null)
+                return false;
+
+            // Calculate price with owned components
+            var price = itemTemplate.TotalPrice;
+            var ownedItems = EzrealInstance.Inventory.GetAvailableItems(itemTemplate.Recipe.GetItems());
+            if (ownedItems.Count != 0)
+            {
+                price -= ownedItems.Sum(item => item.ItemData.TotalPrice);
+            }
+
+            return EzrealInstance.Stats.Gold >= price;
         }
 
         // Spell casting methods
@@ -1842,6 +1972,13 @@ namespace AIScripts
             // Move directly toward base
             Vector2 directionToBase = Vector2.Normalize(basePosition - EzrealInstance.Position);
             return EzrealInstance.Position + (directionToBase * 600f); // Move 600 units toward base
+        }
+
+        private bool IsNearFountain()
+        {
+            Vector2 fountainPosition = ApiFunctionManager.GetFountainPosition(EzrealInstance.Team);
+            float distanceToFountain = Vector2.Distance(EzrealInstance.Position, fountainPosition);
+            return distanceToFountain <= FountainShopRange;
         }
 
 
