@@ -103,14 +103,14 @@ namespace Buffs
                 float BonusAPRatioDamage = _owner.Stats.AbilityPower.Total * 0.75f;
                 float BonusDamage = BonusBaseADValue + BonusAPRatioDamage;
 
-                damageData.Target.TakeDamage(_owner, BonusDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+                RemoveBuff(_buff);
+                damageData.Target.TakeDamage(_owner, BonusDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
 
                 Spell LichBaneItemSpell = GetLichBaneSpell();
                 if (LichBaneItemSpell != null)
                 {
                     LichBaneItemSpell.SetCooldown(1.5f, true);
                 }
-                RemoveBuff(_buff);
             }
         }
 

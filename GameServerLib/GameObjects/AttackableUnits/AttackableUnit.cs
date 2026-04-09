@@ -709,6 +709,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="damageText">Type of damage the damage text should be.</param>
         public virtual void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
+            var targetIsWard = damageData.Target is Minion { IsWard: true };
+            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK && !targetIsWard)
+            {
+                ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
+            }
+
             float healRatio = 0.0f;
             var attacker = damageData.Attacker;
             var attackerStats = damageData.Attacker.Stats;

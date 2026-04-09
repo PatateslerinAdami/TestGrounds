@@ -55,14 +55,19 @@ namespace Buffs
                 if (sheenItemSpell != null)
                 {
                     sheenItemSpell.SetCooldown(1.5f, true);
-                    damageData.Target.TakeDamage(_owner, SheenBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+                    RemoveBuff(_buff);
+                    damageData.Target.TakeDamage(_owner, SheenBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
                 }
                 else if (TrinitySheenItemSpell != null)
                 {
                     TrinitySheenItemSpell.SetCooldown(1.5f, true);
-                    damageData.Target.TakeDamage(_owner, TrinityBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+                    RemoveBuff(_buff);
+                    damageData.Target.TakeDamage(_owner, TrinityBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
                 }
-                RemoveBuff(_buff);
+                else
+                {
+                    RemoveBuff(_buff);
+                }
             }
         }
 
