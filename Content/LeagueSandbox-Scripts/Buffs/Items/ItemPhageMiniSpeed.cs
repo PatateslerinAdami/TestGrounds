@@ -19,7 +19,7 @@ internal class ItemPhageMiniSpeed : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        StatsModifier.MoveSpeed.FlatBonus = 20f;
+        StatsModifier.MoveSpeed.FlatBonus = unit.CharData.IsMelee ? 20f : 10f;
         unit.AddStatModifier(StatsModifier);
     }
 }
