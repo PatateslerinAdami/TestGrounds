@@ -1,65 +1,44 @@
-﻿using GameServerCore.Enums;
-using GameServerCore.Scripting.CSharp;
+﻿using GameServerCore.Scripting.CSharp;
+using System.Numerics;
+using GameServerCore.Enums;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.Scripting.CSharp;
+using LeagueSandbox.GameServer.Logging;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using LeagueSandbox.GameServer.GameObjects;
 
-namespace ItemPassives
-{
-    public class ItemID_3057 : IItemScript
-    {
-        public StatsModifier StatsModifier { get; } = new StatsModifier();
-        private ObjAIBase _owner;
 
-        public void OnActivate(ObjAIBase owner)
-        {
-            _owner = owner;
+namespace ItemPassives;
 
-            for (short i = 0; i <= 3; i++)
+public class ItemID_3057 : IItemScript {
+    private ObjAIBase     _owner;
+    
+    public         StatsModifier StatsModifier { get; } = new();
+
+    public void OnActivate(ObjAIBase owner) {
+        _owner = owner;
+        for (byte i = 0; i < 4; i++) {
+            if (_owner.Spells.TryGetValue(i, out Spell spell))
             {
-                if (_owner.Spells.TryGetValue(i, out Spell spell) && spell != null)
-                {
-                    ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellCast);
-                }
+                ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellCast);
             }
         }
-
-        public void OnDeactivate(ObjAIBase owner)
-        {
-            ApiEventManager.RemoveAllListenersForOwner(this);
-        }
-
-        private void OnSpellCast(Spell spell)
-        {
-            Spell sheenItemSpell = GetSheenSpell();
-
-            if (sheenItemSpell != null && sheenItemSpell.CurrentCooldown <= 0f && !_owner.HasBuff("Sheen"))
-            {
-                AddBuff("Sheen", 10.0f, 1, spell, _owner, _owner);
-            }
-        }
-
-        private Spell GetSheenSpell()
-        {
-            for (byte i = 0; i < 7; i++)
-            {
-                var item = _owner.Inventory.GetItem(i);
-                if (item != null && item.ItemData.ItemId == 3057) 
-                {
-                    short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                    if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                    {
-                        return s;
-                    }
-                }
-            }
-            return null;
-        }
+        
     }
+
+    public void OnSpellCast(Spell spell) {
+        if (!spell.Script.ScriptMetadata.TriggersSpellCasts || _owner.HasBuff("SheenDelay")) return;
+        var variables = new BuffVariables();
+        variables.Set("damageAmount", _owner.Stats.AttackDamage.BaseValue * 2f);
+        AddBuff("Sheen", 10f, 1, spell, _owner, _owner, buffVariables: variables);
+    }
+
+    public void OnDeactivate(ObjAIBase owner) { for (byte i = 0; i < 4; i++) {
+        ApiEventManager.OnSpellCast.RemoveListener(this, _owner.Spells[i], OnSpellCast);
+    }}
+    
 }
