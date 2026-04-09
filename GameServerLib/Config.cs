@@ -259,6 +259,7 @@ public class PlayerConfig
     public string BlowfishKey { get; private set; }
     public RuneCollection Runes { get; private set; }
     public TalentInventory Talents { get; private set; }
+    public string AIScript { get; private set; }
 
     private JToken _playerData;
 
@@ -283,6 +284,7 @@ public class PlayerConfig
         Ribbon = (short)playerData.SelectToken("ribbon");
         Icon = (int)playerData.SelectToken("icon");
         BlowfishKey = (string)playerData.SelectToken("blowfishKey");
+        AIScript = (string)playerData.SelectToken("aiScript") ?? "";
     }
 
     public void LoadTalentsAndRunes()
