@@ -773,6 +773,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
 
             ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
+            ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
 
             if (!IsDead && Stats.CurrentHealth <= 0)
             {
