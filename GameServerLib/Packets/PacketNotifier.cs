@@ -1060,6 +1060,47 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Sends a packet to toggle a unit's PAR visual state.
+        /// </summary>
+        /// <param name="unit">Unit whose PAR state should be updated.</param>
+        /// <param name="parState">State value to apply (typically 0/1).</param>
+        /// <param name="userId">UserId to send the packet to. If not specified, packet is broadcasted to players with vision of the unit.</param>
+        public void NotifySetPARState(AttackableUnit unit, uint parState, int userId = -1)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var packet = new SetPARState
+            {
+                SenderNetID = unit.NetId,
+                UnitNetID = unit.NetId,
+                PARState = parState
+            };
+
+            if (userId < 0)
+            {
+                // Ensure the owner gets this even if visibility bookkeeping lags behind.
+                if (unit is Champion champion)
+                {
+                    _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+                }
+                _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        // Backward-compatible alias for naming used in other server branches.
+        public void NotifySetParState(AttackableUnit unit, uint parState, int userId = -1)
+        {
+            NotifySetPARState(unit, parState, userId);
+        }
+
+        /// <summary>
         /// Sends a packet to the specified user that highlights the specified GameObject.
         /// </summary>
         /// <param name="userId">ID of the user to send the packet to.</param>

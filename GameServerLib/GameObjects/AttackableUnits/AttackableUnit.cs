@@ -1300,11 +1300,59 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     if (parentBuff.StackCount >= parentBuff.MaxStacks)
                     {
-                        parentBuff.Refresh();
+                        RemoveBuffSlot(b);
                     }
                     else
                     {
+                        var buffsWithName = GetBuffsWithName(b.Name);
+                        var maxRemainingDuration = 0.0f;
+                        for (var i = 0; i < buffsWithName.Count; i++)
+                        {
+                            var existingBuff = buffsWithName[i];
+                            var remainingDuration = Math.Max(0.0f, existingBuff.Duration - existingBuff.TimeElapsed);
+                            if (remainingDuration > maxRemainingDuration)
+                            {
+                                maxRemainingDuration = remainingDuration;
+                            }
+                        }
+
+                        var durationToAdd = maxRemainingDuration + b.Duration;
+                        if (durationToAdd <= Extensions.COMPARE_EPSILON)
+                        {
+                            durationToAdd = b.Duration;
+                        }
+
+                        // Recreate this stack with a queued duration so stack expirations continue sequentially.
+                        var continuingBuff = new Buff(_game, b.Name, durationToAdd, parentBuff.StackCount, b.OriginSpell,
+                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.Variables?.Clone());
+
+                        // Reuse the parent slot for this stack group.
+                        RemoveBuffSlot(b);
+                        RemoveBuffSlot(continuingBuff);
+                        continuingBuff.SetSlot(parentBuff.Slot);
+
+                        BuffList.Add(continuingBuff);
+
                         parentBuff.IncrementStackCount();
+                        buffsWithName.Add(continuingBuff);
+                        for (var i = 0; i < buffsWithName.Count; i++)
+                        {
+                            buffsWithName[i].SetStacks(parentBuff.StackCount);
+                        }
+
+                        if (!b.IsHidden)
+                        {
+                            if (parentBuff.BuffType == BuffType.COUNTER)
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
+                            }
+                            else
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff, parentBuff.Duration, parentBuff.TimeElapsed);
+                            }
+                        }
+
+                        // STACKS_AND_CONTINUE stacks are queued durations; only the current parent stack should stay active.
                     }
                 }
                 else if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS)
@@ -1316,13 +1364,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         RemoveBuff(b.Name, true);
 
                         var tempbuffs = GetBuffsWithName(b.Name);
-                        if (tempbuffs.Count > 0)
-                        {
-                            BuffSlots[oldestbuff.Slot] = tempbuffs[0];
-                            ParentBuffs.Add(oldestbuff.Name, tempbuffs[0]);
-                            BuffList.Add(b);
+                        BuffSlots[oldestbuff.Slot] = tempbuffs[0];
+                        ParentBuffs.Add(oldestbuff.Name, tempbuffs[0]);
+                        BuffList.Add(b);
 
-                            ParentBuffs[b.Name].SetStacks(parentBuff.StackCount);
+                        if (!b.IsHidden)
+                        {
+                            var currentParentBuff = ParentBuffs[b.Name];
+                            if (currentParentBuff.BuffType == BuffType.COUNTER)
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(currentParentBuff);
+                            }
+                            else
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
+                            }
                         }
 
                         b.ActivateBuff();
@@ -1332,28 +1388,68 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         BuffList.Add(b);
 
                         parentBuff.IncrementStackCount();
-                        GetBuffsWithName(b.Name).ForEach(buff =>
+                        var buffsWithName = GetBuffsWithName(b.Name);
+                        for (var i = 0; i < buffsWithName.Count; i++)
                         {
-                            if (buff != ParentBuffs[b.Name])
+                            buffsWithName[i].SetStacks(parentBuff.StackCount);
+                        }
+
+                        if (!b.IsHidden)
+                        {
+                            if (b.BuffType == BuffType.COUNTER)
                             {
-                                buff.SetStacks(ParentBuffs[b.Name].StackCount, false);
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
                             }
-                        });
+                            else
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
+                            }
+                        }
 
                         b.ActivateBuff();
                     }
                 }
                 else if (parentBuff.BuffAddType == BuffAddType.STACKS_AND_RENEWS)
                 {
-                    RemoveBuffSlot(b);
-                    if (parentBuff.IncrementStackCount())
+                    var existingBuffs = GetBuffsWithName(b.Name);
+                    for (var i = 0; i < existingBuffs.Count; i++)
                     {
-                        parentBuff.ActivateBuff();
+                        existingBuffs[i].ResetTimeElapsed();
                     }
-                    // If max stacks reached, we just refresh
+
+                    // If max stacks reached, only renew existing stack timers.
+                    if (parentBuff.StackCount >= parentBuff.MaxStacks)
+                    {
+                        RemoveBuffSlot(b);
+                    }
                     else
                     {
-                        parentBuff.Refresh();
+                        // Reuse the parent slot for this stack group.
+                        var parentSlot = parentBuff.Slot;
+                        RemoveBuffSlot(b);
+                        b.SetSlot(parentSlot);
+
+                        BuffList.Add(b);
+                        parentBuff.IncrementStackCount();
+                        existingBuffs.Add(b);
+                        for (var i = 0; i < existingBuffs.Count; i++)
+                        {
+                            existingBuffs[i].SetStacks(parentBuff.StackCount);
+                        }
+
+                        b.ActivateBuff();
+                    }
+
+                    if (!b.IsHidden)
+                    {
+                        if (parentBuff.BuffType == BuffType.COUNTER)
+                        {
+                            _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
+                        }
+                        else
+                        {
+                            _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff, parentBuff.Duration, parentBuff.TimeElapsed);
+                        }
                     }
                 }
                 return true;
@@ -1496,48 +1592,164 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return;
             }
 
-            // STACKS_AND_OVERLAPS is the only type that maintains multiple active Buff objects in BuffList
-            if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS && b.StackCount > 1)
+            // STACKS_AND_CONTINUE keeps queued buff instances and removes one segment at a time.
+            if (b.BuffAddType == BuffAddType.STACKS_AND_CONTINUE && b.StackCount > 1)
             {
                 if (b == parentBuff)
                 {
                     var parentSlot = parentBuff.Slot;
-                    if (!parentBuff.Elapsed()) parentBuff.DeactivateBuff();
+                    if (!parentBuff.Elapsed())
+                    {
+                        parentBuff.DeactivateBuff();
+                    }
 
+                    parentBuff.DecrementStackCount();
                     RemoveBuff(b.Name, false);
 
                     var tempBuffs = GetBuffsWithName(b.Name);
-                    if (tempBuffs.Count > 0)
-                    {
-                        var newParent = tempBuffs[0];
-                        BuffSlots[parentSlot] = newParent;
-                        newParent.SetSlot(parentSlot);
-                        ParentBuffs.Add(b.Name, newParent);
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
 
-                        newParent.SetStacks(parentBuff.StackCount - 1, false);
-                        tempBuffs.ForEach(tb => { if (tb != newParent) tb.SetStacks(newParent.StackCount, false); });
-                    }
+                    // Next oldest buff takes the parent slot.
+                    BuffSlots[parentSlot] = tempBuffs[0];
+                    tempBuffs[0].SetSlot(parentSlot);
+                    ParentBuffs.Add(b.Name, tempBuffs[0]);
+
+                    // Continue-style stacks apply one active segment at a time.
+                    tempBuffs[0].ActivateBuff();
                 }
                 else
                 {
-                    if (!b.Elapsed()) b.DeactivateBuff();
+                    if (!b.Elapsed())
+                    {
+                        b.DeactivateBuff();
+                    }
                     BuffList.Remove(b);
-                    RemoveBuffSlot(b);
 
-                    parentBuff.SetStacks(parentBuff.StackCount - 1, false);
-                    GetBuffsWithName(b.Name).ForEach(tb => { if (tb != parentBuff) tb.SetStacks(parentBuff.StackCount, false); });
+                    parentBuff.DecrementStackCount();
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
                 }
 
-                if (!b.IsHidden && ParentBuffs.TryGetValue(b.Name, out var currentParent))
+                if (!b.IsHidden)
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(currentParent);
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
                     }
                     else
                     {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, GetBuffsWithName(b.Name),
-                            currentParent.Duration - currentParent.TimeElapsed, currentParent.TimeElapsed);
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(ParentBuffs[b.Name], ParentBuffs[b.Name].Duration,
+                            ParentBuffs[b.Name].TimeElapsed);
+                    }
+                }
+            }
+            else if (b.BuffAddType == BuffAddType.STACKS_AND_RENEWS && b.StackCount > 1)
+            {
+                if (b == parentBuff)
+                {
+                    var parentSlot = parentBuff.Slot;
+                    if (!parentBuff.Elapsed())
+                    {
+                        parentBuff.DeactivateBuff();
+                    }
+
+                    parentBuff.DecrementStackCount();
+                    RemoveBuff(b.Name, false);
+
+                    var tempBuffs = GetBuffsWithName(b.Name);
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+
+                    // Next oldest buff takes the parent slot.
+                    BuffSlots[parentSlot] = tempBuffs[0];
+                    tempBuffs[0].SetSlot(parentSlot);
+                    ParentBuffs.Add(b.Name, tempBuffs[0]);
+                }
+                else
+                {
+                    if (!b.Elapsed())
+                    {
+                        b.DeactivateBuff();
+                    }
+                    BuffList.Remove(b);
+
+                    parentBuff.DecrementStackCount();
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                }
+
+                // Keep visual timer from the newest active instance.
+                var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
+                var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
+
+                if (!b.IsHidden)
+                {
+                    if (b.BuffType == BuffType.COUNTER)
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
+                    }
+                    else if (parentBuff.StackCount == 1)
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(newestBuff, b.Duration - newestBuff.TimeElapsed,
+                            newestBuff.TimeElapsed);
+                    }
+                    else
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, tempBuffsAfterRemoval,
+                            b.Duration - newestBuff.TimeElapsed, newestBuff.TimeElapsed);
+                    }
+                }
+            }
+            // STACKS_AND_OVERLAPS maintains multiple active Buff objects in BuffList
+            else if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS && b.StackCount > 1)
+            {
+                if (b == parentBuff)
+                {
+                    var parentSlot = parentBuff.Slot;
+                    if (!parentBuff.Elapsed())
+                    {
+                        parentBuff.DeactivateBuff();
+                    }
+
+                    parentBuff.DecrementStackCount();
+                    RemoveBuff(b.Name, false);
+
+                    var tempBuffs = GetBuffsWithName(b.Name);
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+
+                    // Next oldest buff takes the parent slot.
+                    BuffSlots[parentSlot] = tempBuffs[0];
+                    tempBuffs[0].SetSlot(parentSlot);
+                    ParentBuffs.Add(b.Name, tempBuffs[0]);
+                }
+                else
+                {
+                    if (!b.Elapsed())
+                    {
+                        b.DeactivateBuff();
+                    }
+                    BuffList.Remove(b);
+
+                    parentBuff.DecrementStackCount();
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                }
+
+                // Used in packets to maintain the visual buff icon's timer, as removing a stack from the icon can reset the timer.
+                var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
+                var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
+
+                if (!b.IsHidden)
+                {
+                    if (b.BuffType == BuffType.COUNTER)
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
+                    }
+                    else if (parentBuff.StackCount == 1)
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(newestBuff, b.Duration - newestBuff.TimeElapsed,
+                            newestBuff.TimeElapsed);
+                    }
+                    else
+                    {
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, tempBuffsAfterRemoval,
+                            b.Duration - newestBuff.TimeElapsed, newestBuff.TimeElapsed);
                     }
                 }
             }
