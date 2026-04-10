@@ -667,7 +667,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 DamageType = type,
                 DamageResultType = damageText
             };
-            ApiEventManager.OnPreDealDamage.Publish(attacker, damageData);
             this.TakeDamage(damageData, damageText, sourceScript);
             return damageData;
         }
@@ -737,6 +736,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var source = damageData.DamageSource;
 
             ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
+            ApiEventManager.OnPreDealDamage.Publish(damageData.Attacker, damageData);
             var postMitigationDamage = damageData.PostMitigationDamage;
             if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
@@ -813,11 +813,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Get health from lifesteal/spellvamp
             if (healRatio > 0)
             {
-                attackerStats.CurrentHealth = Math.Min
-                (
-                    attackerStats.HealthPoints.Total,
-                    attackerStats.CurrentHealth + healRatio * postMitigationDamage
-                );
+                var healAmount = healRatio * postMitigationDamage;
+                if (healAmount > 0.0f)
+                {
+                    attacker.TakeHeal(attacker, healAmount,
+                        source == DamageSource.DAMAGE_SOURCE_ATTACK ? HealType.LifeSteal : HealType.SpellVamp,
+                        sourceScript);
+                }
             }
         }
 
