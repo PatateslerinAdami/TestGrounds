@@ -425,6 +425,21 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Sets the target's PAR visual state.
+        /// </summary>
+        /// <param name="target">Unit whose PAR state should be updated.</param>
+        /// <param name="parState">State value to apply (typically 0/1).</param>
+        /// <param name="userId">Optional user id. If not set, packet is sent using vision broadcast rules.</param>
+        public static void SetPARState(AttackableUnit target, uint parState, int userId = -1)
+        {
+            if (target == null)
+            {
+                return;
+            }
+            _game.PacketNotifier.NotifySetParState(target, parState, userId);
+        }
+
+        /// <summary>
         /// Checks whether the target uses the specified PAR type.
         /// </summary>
         /// <param name="target">Unit to query.</param>

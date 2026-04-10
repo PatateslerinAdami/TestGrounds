@@ -20,7 +20,7 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        Particle _slowParticle;
+        private Particle _slowParticle;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {

@@ -398,9 +398,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.IsAutoAttack)
             {
                 _attackType = AttackType.ATTACK_TYPE_TARGETED;
-                // Non-basic-slot auto-attack overrides (ex: Talon Q attack spell) should use spell cast timing,
-                // while true basic attack slots continue using base auto-attack timing.
-                CastInfo.UseAttackCastTime = IsBasicAttackSlotSpell();
+                CastInfo.UseAttackCastTime = true;
                 CastInfo.AmmoUsed = 0; // TODO: Verify
                 CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
@@ -544,7 +542,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            if ((CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()) || CastInfo.UseAttackCastTime)
+            if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
             {
                 // We assume it is already an attack.
                 int index = CastInfo.SpellSlot - 64;
@@ -737,9 +735,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Otherwise, use the normal auto attack setup
             if (CastInfo.IsAutoAttack)
             {
-                // Non-basic-slot auto-attack overrides (ex: Talon Q attack spell) should use spell cast timing,
-                // while true basic attack slots continue using base auto-attack timing.
-                CastInfo.UseAttackCastTime = IsBasicAttackSlotSpell();
+                CastInfo.UseAttackCastTime = true;
                 CastInfo.AmmoUsed = 0; // TODO: Verify
                 CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
@@ -810,7 +806,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            if ((CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()) || CastInfo.UseAttackCastTime)
+            if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
             {
                 // We assume it is already an attack.
                 int index = CastInfo.SpellSlot - 64;

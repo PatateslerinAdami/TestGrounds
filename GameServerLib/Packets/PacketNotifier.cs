@@ -452,13 +452,19 @@ namespace PacketDefinitions420
                 });
             }
 
+            var replicationDirection = m.Direction;
+            if (m is SpellCircleMissile circleMissile && circleMissile.Type == MissileType.Circle)
+            {
+                replicationDirection = circleMissile.GetReplicationDirection();
+            }
+
             var misPacket = new MissileReplication
             {
                 SenderNetID = m.CastInfo.Owner.NetId,
                 Position = new Vector3(m.Position.X, m.CastInfo.SpellCastLaunchPosition.Y, m.Position.Y),
                 CasterPosition = m.CastInfo.Owner.GetPosition3D(),
                 // Not sure if we want to add height for these, but i did it anyway
-                Direction = m.Direction,
+                Direction = replicationDirection,
                 Velocity = m.Direction * m.GetSpeed(),
                 StartPoint = m.CastInfo.SpellCastLaunchPosition,
                 EndPoint = m.CastInfo.TargetPositionEnd,
@@ -1057,6 +1063,47 @@ namespace PacketDefinitions420
             {
                 _packetHandlerManager.SendPacket(userId, cdPacket.GetBytes(), Channel.CHL_S2C);
             }
+        }
+
+        /// <summary>
+        /// Sends a packet to toggle a unit's PAR visual state.
+        /// </summary>
+        /// <param name="unit">Unit whose PAR state should be updated.</param>
+        /// <param name="parState">State value to apply (typically 0/1).</param>
+        /// <param name="userId">UserId to send the packet to. If not specified, packet is broadcasted to players with vision of the unit.</param>
+        public void NotifySetPARState(AttackableUnit unit, uint parState, int userId = -1)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var packet = new SetPARState
+            {
+                SenderNetID = unit.NetId,
+                UnitNetID = unit.NetId,
+                PARState = parState
+            };
+
+            if (userId < 0)
+            {
+                // Ensure the owner gets this even if visibility bookkeeping lags behind.
+                if (unit is Champion champion)
+                {
+                    _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+                }
+                _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        // Backward-compatible alias for naming used in other server branches.
+        public void NotifySetParState(AttackableUnit unit, uint parState, int userId = -1)
+        {
+            NotifySetPARState(unit, parState, userId);
         }
 
         /// <summary>
