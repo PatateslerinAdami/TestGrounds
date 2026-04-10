@@ -710,9 +710,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public virtual void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
             var targetIsWard = damageData.Target is Minion { IsWard: true };
-            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK && !targetIsWard)
+            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
-                ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
+                ApiEventManager.OnBeingHit.Publish(damageData.Target, damageData.Attacker);
+
+                // Wards should not trigger on-hit proc pipelines; Therfore each basic attack consumes only one ward hit.
+                if (!targetIsWard)
+                    ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
+                
+                //TODO: find a use case for these OnDodge OnBeingDodged and OnMiss
+                if (damageData.DamageResultType == DamageResultType.RESULT_DODGE)
+                {
+                    ApiEventManager.OnDodge.Publish(damageData.Target, damageData.Attacker);
+                    ApiEventManager.OnBeingDodged.Publish(damageData.Attacker, damageData.Target);
+                }
+                else if (damageData.DamageResultType == DamageResultType.RESULT_MISS)
+                {
+                    ApiEventManager.OnMiss.Publish(damageData.Attacker, damageData.Target);
+                }
             }
 
             float healRatio = 0.0f;

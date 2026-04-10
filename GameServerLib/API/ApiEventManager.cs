@@ -138,6 +138,16 @@ namespace LeagueSandbox.GameServer.API
 
         public static DataOnlyDispatcher<ObjAIBase, Spell> OnLaunchAttack
             = new DataOnlyDispatcher<ObjAIBase, Spell>();
+        
+        //Attack debuffs
+        public static Dispatcher<AttackableUnit, AttackableUnit> OnDodge    
+            = new Dispatcher<AttackableUnit, AttackableUnit>();
+        
+        public static Dispatcher<AttackableUnit, AttackableUnit> OnMiss        
+            = new Dispatcher<AttackableUnit, AttackableUnit>();
+        
+        public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingDodged 
+            = new Dispatcher<AttackableUnit, AttackableUnit>();
 
         /// <summary>
         /// Called immediately after the rocket is added to the scene. *NOTE*: At the time of the call, the rocket has not yet been spawned for players.
