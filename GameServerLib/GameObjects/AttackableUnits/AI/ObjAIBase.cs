@@ -125,6 +125,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public IAIScript AIScript { get; protected set; }
         public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
         private bool invisSent = false;
+        private bool _charScriptActivated;
+        private bool _charScriptPostActivated;
         private bool _scriptsEnabled = true;
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
             Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "", bool enableScripts = true) :
@@ -299,6 +301,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     _logger.Error(null, e);
                 }
+
+                _charScriptActivated = true;
+                TryPostActivateCharScript();
             }
         }
 
@@ -308,6 +313,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public void LoadCharScript(Spell spell = null)
         {
             CharScript = CSharpScriptEngine.CreateObjectStatic<ICharScript>("CharScripts", $"CharScript{Model}") ?? new CharScriptEmpty();
+            _charScriptActivated = false;
+            _charScriptPostActivated = false;
+        }
+
+        private void TryPostActivateCharScript()
+        {
+            if (_charScriptPostActivated || !_charScriptActivated || CharScript == null)
+            {
+                return;
+            }
+
+            if (!VisibleForPlayers.Any())
+            {
+                return;
+            }
+
+            _charScriptPostActivated = true;
+            try
+            {
+                CharScript.OnPostActivate(
+                    this, Spells.GetValueOrDefault<short, Spell>(
+                        (int)SpellSlotType.PassiveSpellSlot
+                    )
+                );
+            }
+            catch (Exception e)
+            {
+                _logger.Error(null, e);
+            }
         }
 
         /// <summary>
@@ -1653,6 +1687,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public void SetPet(Pet pet)
         {
             _lastPetSpawned = pet;
+        }
+
+        public override void OnAfterSync()
+        {
+            base.OnAfterSync();
+            TryPostActivateCharScript();
         }
 
         public override void Update(float diff)
