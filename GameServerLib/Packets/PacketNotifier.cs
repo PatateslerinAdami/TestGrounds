@@ -452,13 +452,19 @@ namespace PacketDefinitions420
                 });
             }
 
+            var replicationDirection = m.Direction;
+            if (m is SpellCircleMissile circleMissile && circleMissile.Type == MissileType.Circle)
+            {
+                replicationDirection = circleMissile.GetReplicationDirection();
+            }
+
             var misPacket = new MissileReplication
             {
                 SenderNetID = m.CastInfo.Owner.NetId,
                 Position = new Vector3(m.Position.X, m.CastInfo.SpellCastLaunchPosition.Y, m.Position.Y),
                 CasterPosition = m.CastInfo.Owner.GetPosition3D(),
                 // Not sure if we want to add height for these, but i did it anyway
-                Direction = m.Direction,
+                Direction = replicationDirection,
                 Velocity = m.Direction * m.GetSpeed(),
                 StartPoint = m.CastInfo.SpellCastLaunchPosition,
                 EndPoint = m.CastInfo.TargetPositionEnd,

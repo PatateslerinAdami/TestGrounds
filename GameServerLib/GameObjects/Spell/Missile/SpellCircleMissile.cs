@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 using GameServerCore.Enums;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
@@ -13,15 +14,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         // Function Vars.
         private bool _atDestination;
 
-        public override MissileType Type { get; protected set; } = MissileType.Circle;
-        /// <summary>
-        /// Number of objects this projectile has hit since it was created.
-        /// </summary>
-        public List<GameObject> ObjectsHit { get; }
-        /// <summary>
-        /// Position this projectile is moving towards. Projectile is destroyed once it reaches this destination. Equals Vector2.Zero if TargetUnit is not null.
-        /// </summary>
-        public Vector2 Destination { get; protected set; }
+        private readonly bool _useCircularPath;
+        private readonly bool _useCircularReplicationDirection;
+        private readonly float _circleAngularVelocity;
+        private readonly float _circleRadialVelocity;
+        private readonly Vector2 _circleCenter;
+        private readonly Vector3 _replicationDirection;
+
+        private float _circleRadius;
+        private float _circleAngle;
+        private float _lifeElapsedMs;
+        private float _targetSyncAccumulatorMs;
 
         public SpellCircleMissile(
             Game game,
@@ -37,7 +40,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         {
             // TODO: Verify if there is a case which contradicts this.
             // Line and Circle Missiles are location targeted only.
-            TargetUnit = null;
+            if (castInfo.Targets.Count <= 0 || castInfo.Targets[0].Unit == null)
+            {
+                TargetUnit = null;
+            }
 
             Position = new Vector2(castInfo.SpellCastLaunchPosition.X, castInfo.SpellCastLaunchPosition.Z);
 
@@ -68,11 +74,99 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             Destination = endPos;
 
+            _circleAngularVelocity = SpellOrigin.SpellData.CircleMissileAngularVelocity;
+            _circleRadialVelocity = SpellOrigin.SpellData.CircleMissileRadialVelocity;
+            _useCircularReplicationDirection = MathF.Abs(_circleAngularVelocity) > float.Epsilon
+                                           || MathF.Abs(_circleRadialVelocity) > float.Epsilon;
+            _useCircularPath = _useCircularReplicationDirection && SpellOrigin.SpellData.MissileLifetime > 0.0f;
+
+            _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+            var circleReferenceEnd = overrideEndPos != default
+                ? overrideEndPos
+                : new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
+            var circleOffset = circleReferenceEnd - _circleCenter;
+
+            if (circleOffset.LengthSquared() <= float.Epsilon)
+            {
+                var fallbackDir = new Vector2(CastInfo.Owner.Direction.X, CastInfo.Owner.Direction.Z);
+                if (fallbackDir.LengthSquared() <= float.Epsilon)
+                {
+                    fallbackDir = new Vector2(1.0f, 0.0f);
+                }
+
+                fallbackDir = Vector2.Normalize(fallbackDir);
+                circleOffset = fallbackDir * SpellOrigin.GetCurrentCastRange();
+            }
+
+            _circleRadius = circleOffset.Length();
+            _circleAngle = MathF.Atan2(circleOffset.Y, circleOffset.X);
+            _replicationDirection = new Vector3(_circleRadius, _circleAngle, 0.0f);
+
+            if (_useCircularPath)
+            {
+                Position = _circleCenter + new Vector2(MathF.Cos(_circleAngle), MathF.Sin(_circleAngle)) * _circleRadius;
+
+                var tangentSign = (float)MathF.Sign(_circleAngularVelocity);
+                if (MathF.Abs(tangentSign) <= float.Epsilon)
+                {
+                    tangentSign = 1.0f;
+                }
+                var tangent = new Vector2(-MathF.Sin(_circleAngle), MathF.Cos(_circleAngle)) * tangentSign;
+                Direction = new Vector3(tangent.X, 0.0f, tangent.Y);
+            }
+
             ObjectsHit = new List<GameObject>();
+        }
+
+        public override MissileType Type { get; protected set; } = MissileType.Circle;
+        public bool FollowCasterForCircularPath { get; set; }
+
+        /// <summary>
+        /// Number of objects this projectile has hit since it was created.
+        /// </summary>
+        public List<GameObject> ObjectsHit { get; }
+        /// <summary>
+        /// Position this projectile is moving towards. Projectile is destroyed once it reaches this destination. Equals Vector2.Zero if TargetUnit is not null.
+        /// </summary>
+        public Vector2 Destination { get; protected set; }
+
+        public override void OnAdded()
+        {
+            base.OnAdded();
+
+            // Circle missiles like Diana W orbs are visually attached to a moving unit.
+            // A post-spawn target sync binds the orbit center correctly.
+            if (HasTarget())
+            {
+                _game.PacketNotifier.NotifyS2C_ChangeMissileTarget(this);
+            }
+        }
+
+        public Vector3 GetReplicationDirection()
+        {
+            return _useCircularReplicationDirection ? _replicationDirection : Direction;
         }
 
         public override void Update(float diff)
         {
+            _timeSinceCreation += diff;
+
+            if (_useCircularPath)
+            {
+                _lifeElapsedMs += diff;
+
+                var lifetimeSeconds = SpellOrigin.SpellData.MissileLifetime;
+                if (lifetimeSeconds > 0.0f && _lifeElapsedMs >= lifetimeSeconds * 1000.0f)
+                {
+                    SetToRemove();
+                    return;
+                }
+
+                Move(diff);
+                ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+                return;
+            }
+
             if (!HasDestination() || _atDestination)
             {
                 SetToRemove();
@@ -80,8 +174,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             }
 
             Move(diff);
-            _timeSinceCreation += diff;
-            API.ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+            ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)
@@ -109,6 +202,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// <param name="diff">The amount of milliseconds the AI is supposed to move</param>
         public override void Move(float diff)
         {
+            if (_useCircularPath)
+            {
+                MoveCircular(diff);
+                return;
+            }
+
             // current position
             var cur = Position;
 
@@ -154,6 +253,35 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 if (Position == Destination)
                 {
                     _atDestination = true;
+                }
+            }
+        }
+
+        private void MoveCircular(float diff)
+        {
+            var deltaSeconds = diff * 0.001f;
+            _circleRadius = MathF.Max(0.0f, _circleRadius + _circleRadialVelocity * deltaSeconds);
+            _circleAngle += _circleAngularVelocity * deltaSeconds;
+
+            var center = FollowCasterForCircularPath ? CastInfo.Owner.Position : _circleCenter;
+            var next = center + new Vector2(MathF.Cos(_circleAngle), MathF.Sin(_circleAngle)) * _circleRadius;
+            var movement = next - Position;
+
+            if (movement.LengthSquared() > float.Epsilon)
+            {
+                var moveDir = Vector2.Normalize(movement);
+                Direction = new Vector3(moveDir.X, 0.0f, moveDir.Y);
+            }
+
+            Position = next;
+
+            if (FollowCasterForCircularPath && HasTarget())
+            {
+                _targetSyncAccumulatorMs += diff;
+                if (_targetSyncAccumulatorMs >= 100.0f)
+                {
+                    _targetSyncAccumulatorMs = 0.0f;
+                    _game.PacketNotifier.NotifyS2C_ChangeMissileTarget(this);
                 }
             }
         }
