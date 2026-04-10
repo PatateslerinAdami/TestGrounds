@@ -31,7 +31,7 @@ internal class AatroxEslow : IBuffGameScript {
         switch (_aatrox.SkinID) {
             
         }
-        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow", unit, bone: "BUFFBONE_GLB_GROUND_LOC");
+        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow", unit);
         //ApplyAssistMarker(unit, _aatrox, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= _slowPercentage;

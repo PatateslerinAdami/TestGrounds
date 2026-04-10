@@ -549,10 +549,11 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f)
+            float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                enemyParticle);
             return p;
         }
 
@@ -577,10 +578,11 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f)
+            float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                enemyParticle);
         }
 
         /// <summary>
@@ -605,10 +607,11 @@ namespace LeagueSandbox.GameServer.API
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f)
+            float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight);
+                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                enemyParticle);
             return p;
         }
 

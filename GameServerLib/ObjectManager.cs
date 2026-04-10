@@ -186,12 +186,20 @@ namespace LeagueSandbox.GameServer
             TeamId team = clientInfo.Team;
             Champion champion = clientInfo.Champion;
 
-            bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
-            bool shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
-                nearSighted ?
-                    UnitHasVisionOn(champion, obj) :
-                    obj.IsVisibleByTeam(champion.Team)
-            );
+            bool shouldBeVisibleForPlayer;
+            if (obj is Particle particle && particle.SpecificUnit != null)
+            {
+                shouldBeVisibleForPlayer = IsServerFoWDisabled || particle.SpecificUnit == champion;
+            }
+            else
+            {
+                bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
+                shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
+                    nearSighted ?
+                        UnitHasVisionOn(champion, obj) :
+                        obj.IsVisibleByTeam(champion.Team)
+                );
+            }
 
             obj.Sync(cid, team, shouldBeVisibleForPlayer, forceSpawn);
         }
@@ -317,6 +325,27 @@ namespace LeagueSandbox.GameServer
         bool UnitHasVisionOn(GameObject observer, GameObject tested)
         {
             if (!tested.IsAffectedByFoW) return true;
+
+            if (tested is Particle particle)
+            {
+                if (particle.SpecificUnit != null)
+                {
+                    return false;
+                }
+
+                if (particle.SpecificTeam == TeamId.TEAM_NEUTRAL)
+                {
+                    if (particle.Team == TeamId.TEAM_NEUTRAL || tested.Team == observer.Team)
+                    {
+                        return true;
+                    }
+                }
+                else if (particle.SpecificTeam != observer.Team)
+                {
+                    return false;
+                }
+            }
+
             if (tested.Team == observer.Team) return true;
 
             if (Vector2.DistanceSquared(observer.Position, tested.Position) >= observer.VisionRadius * observer.VisionRadius)

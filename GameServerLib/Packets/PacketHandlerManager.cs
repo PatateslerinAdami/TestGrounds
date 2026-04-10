@@ -229,6 +229,12 @@ namespace PacketDefinitions420
             return true;
         }
 
+        public TeamId GetClientTeam(int userId)
+        {
+            var peerInfo = _playerManager.GetPeerInfo(userId);
+            return peerInfo?.Team ?? TeamId.TEAM_NEUTRAL;
+        }
+
         public bool HandlePacket(Peer peer, byte[] data, Channel channelId)
         {
             var reader = new BinaryReader(new MemoryStream(data));

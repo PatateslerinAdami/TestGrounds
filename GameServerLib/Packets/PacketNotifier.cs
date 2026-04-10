@@ -231,7 +231,7 @@ namespace PacketDefinitions420
             return enterVis;
         }
 
-        FX_Create_Group ConstructFXCreateGroupPacket(Particle particle)
+        FX_Create_Group ConstructFXCreateGroupPacket(Particle particle, TeamId viewingTeam)
         {
             uint bindNetID = 0;
             uint targetNetID = 0;
@@ -322,7 +322,7 @@ namespace PacketDefinitions420
 
             var fxGroupData1 = new FXCreateGroupData
             {
-                EffectNameHash = HashString(particle.Name),
+                EffectNameHash = HashString(particle.GetEffectNameForTeam(viewingTeam)),
                 Flags = (ushort)particle.Flags,
                 TargetBoneNameHash = HashString(particle.TargetBoneName),
                 BoneNameHash = HashString(particle.BoneName),
@@ -510,7 +510,7 @@ namespace PacketDefinitions420
             };
         }
 
-        GamePacket ConstructSpawnPacket(GameObject o, float gameTime = 0)
+        GamePacket ConstructSpawnPacket(GameObject o, TeamId viewingTeam, float gameTime = 0)
         {
             switch (o)
             {
@@ -537,7 +537,7 @@ namespace PacketDefinitions420
                     return ConstructMinionSpawnedPacket(minion);
 
                 case Particle particle:
-                    return ConstructFXCreateGroupPacket(particle);
+                    return ConstructFXCreateGroupPacket(particle, viewingTeam);
             }
             // Generic object
             return ConstructEnterVisibilityClientPacket(o);
@@ -1365,36 +1365,70 @@ namespace PacketDefinitions420
         /// <param name="userId">User to send the packet to.</param>
         public void NotifyFXCreateGroup(Particle particle, int userId = -1)
         {
-            var fxPacket = ConstructFXCreateGroupPacket(particle);
-
-            if (userId < 0)
+            if (particle.SpecificUnit is Champion specificChampion)
             {
-                // Broadcast only to specific team.
-                if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL)
-                {
-                    _packetHandlerManager.BroadcastPacketTeam(particle.SpecificTeam, fxPacket.GetBytes(), Channel.CHL_S2C);
-                }
-                // Broadcast to particle team, and only to opposite team if visible.
-                else if (particle.Team != TeamId.TEAM_NEUTRAL)
-                {
-                    _packetHandlerManager.BroadcastPacketTeam(particle.Team, fxPacket.GetBytes(), Channel.CHL_S2C);
-
-                    var oppTeam = particle.Team.GetEnemyTeam();
-                    if (particle.IsVisibleByTeam(oppTeam))
-                    {
-                        _packetHandlerManager.BroadcastPacketTeam(oppTeam, fxPacket.GetBytes(), Channel.CHL_S2C);
-                    }
-                }
-                // Broadcast to all teams.
-                else
-                {
-                    _packetHandlerManager.BroadcastPacket(fxPacket.GetBytes(), Channel.CHL_S2C);
-                }
+                var fxPacket = ConstructFXCreateGroupPacket(particle, specificChampion.Team);
+                _packetHandlerManager.SendPacket(specificChampion.ClientId, fxPacket.GetBytes(), Channel.CHL_S2C);
+                return;
             }
-            else
+
+            if (userId >= 0)
             {
+                var viewingTeam = _packetHandlerManager.GetClientTeam(userId);
+                if (!IsParticleVisibleToRecipient(particle, viewingTeam, userId))
+                {
+                    return;
+                }
+
+                var fxPacket = ConstructFXCreateGroupPacket(particle, viewingTeam);
                 _packetHandlerManager.SendPacket(userId, fxPacket.GetBytes(), Channel.CHL_S2C);
+                return;
             }
+
+            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL)
+            {
+                var fxPacket = ConstructFXCreateGroupPacket(particle, particle.SpecificTeam);
+                _packetHandlerManager.BroadcastPacketTeam(particle.SpecificTeam, fxPacket.GetBytes(), Channel.CHL_S2C);
+                return;
+            }
+
+            if (particle.Team != TeamId.TEAM_NEUTRAL)
+            {
+                var allyFxPacket = ConstructFXCreateGroupPacket(particle, particle.Team);
+                _packetHandlerManager.BroadcastPacketTeam(particle.Team, allyFxPacket.GetBytes(), Channel.CHL_S2C);
+
+                var oppTeam = particle.Team.GetEnemyTeam();
+                if (particle.IsVisibleByTeam(oppTeam))
+                {
+                    var enemyFxPacket = ConstructFXCreateGroupPacket(particle, oppTeam);
+                    _packetHandlerManager.BroadcastPacketTeam(oppTeam, enemyFxPacket.GetBytes(), Channel.CHL_S2C);
+                }
+
+                return;
+            }
+
+            var globalFxPacket = ConstructFXCreateGroupPacket(particle, TeamId.TEAM_NEUTRAL);
+            _packetHandlerManager.BroadcastPacket(globalFxPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        static bool IsParticleVisibleToRecipient(Particle particle, TeamId team, int userId = -1)
+        {
+            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL && team != particle.SpecificTeam)
+            {
+                return false;
+            }
+
+            if (particle.SpecificUnit is Champion specificChampion)
+            {
+                return specificChampion.ClientId == userId;
+            }
+
+            if (particle.SpecificUnit != null)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         S2C_FX_OnEnterTeamVisibility ConstructFXEnterTeamVisibilityPacket(Particle particle, TeamId team)
@@ -1421,6 +1455,11 @@ namespace PacketDefinitions420
         /// <param name="team">TeamId to send the packet to; BLUE/PURPLE/NEUTRAL.</param>
         public void NotifyFXEnterTeamVisibility(Particle particle, TeamId team)
         {
+            if (!IsParticleVisibleToRecipient(particle, team))
+            {
+                return;
+            }
+
             var fxVisPacket = ConstructFXEnterTeamVisibilityPacket(particle, team);
             _packetHandlerManager.BroadcastPacketTeam(team, fxVisPacket.GetBytes(), Channel.CHL_S2C);
         }
@@ -1437,7 +1476,7 @@ namespace PacketDefinitions420
                 SenderNetID = particle.NetId,
                 NetID = particle.NetId
             };
-            _packetHandlerManager.BroadcastPacket(fxKill.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacketVision(particle, fxKill.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -1447,11 +1486,16 @@ namespace PacketDefinitions420
         /// <param name="team">TeamId to send the packet to; BLUE/PURPLE/NEUTRAL.</param>
         public void NotifyFXLeaveTeamVisibility(Particle particle, TeamId team)
         {
-            NotifyFXLeaveTeamVisibility(particle, team, 0);
+            NotifyFXLeaveTeamVisibility(particle, team, -1);
         }
 
         public void NotifyFXLeaveTeamVisibility(Particle particle, TeamId team, int userId = -1)
         {
+            if (!IsParticleVisibleToRecipient(particle, team, userId))
+            {
+                return;
+            }
+
             var fxVisPacket = new S2C_FX_OnLeaveTeamVisibility
             {
                 SenderNetID = particle.NetId,
@@ -3674,7 +3718,7 @@ namespace PacketDefinitions420
         /// <param name="doVision">Whether or not to package the packets into a vision packet.</param>
         public void NotifySpawn(GameObject obj, TeamId team, int userId, float gameTime, bool doVision = false)
         {
-            var spawnPacket = ConstructSpawnPacket(obj, gameTime);
+            var spawnPacket = ConstructSpawnPacket(obj, team, gameTime);
             if (spawnPacket != null)
             {
                 if (doVision)
@@ -4134,6 +4178,11 @@ namespace PacketDefinitions420
         /// </summary>
         void NotifyEnterTeamVision(GameObject obj, TeamId team, int userId = -1, GamePacket spawnPacket = null)
         {
+            if (obj is Particle particleObj && !IsParticleVisibleToRecipient(particleObj, team, userId))
+            {
+                return;
+            }
+
             if (obj is AttackableUnit u)
             {
                 var visibilityPacket = spawnPacket as OnEnterVisibilityClient;
@@ -4199,6 +4248,7 @@ namespace PacketDefinitions420
             if (obj is Particle p)
             {
                 NotifyFXLeaveTeamVisibility(p, team, userId);
+                return;
             }
             if (obj is AttackableUnit)
             {
