@@ -34,6 +34,11 @@ public class EzrealTrueshotBarrage : ISpellScript {
         ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate);
     }
 
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        _owner.StopMovement();
+    }
+
     public void OnSpellCast(Spell spell) {
         AddParticleTarget(_owner, _owner, "Ezreal_bow_huge",      _owner, bone: "L_hand", flags: FXFlags.BindDirection);
     }
