@@ -27,6 +27,7 @@ namespace Buffs
             StatsModifier.MoveSpeed.PercentBonus = buff.Variables.GetFloat("slowPercent");
             unit.AddStatModifier(StatsModifier);
             _slowParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Slow", unit, buff.Duration, bone:"head");
+            ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

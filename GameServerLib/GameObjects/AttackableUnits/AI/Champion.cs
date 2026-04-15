@@ -8,7 +8,9 @@ using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.API;
 using LeaguePackets.Game.Events;
 using System;
+using System.Linq;
 using GameServerLib.GameObjects.AttackableUnits;
+using GameServerLib.Handlers;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
@@ -394,119 +396,28 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void Die(DeathData data)
         {
-            ExitStealth();
-            var mapScript = _game.Map.MapScript;
-            var mapScriptMetaData = mapScript.MapScriptMetadata;
-            var mapData = _game.Map.MapData;
-
-            ApiEventManager.OnDeath.Publish(data.Unit, data);
-
+            IsDead = true;
             RespawnTimer = _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f;
-            ChampStats.Deaths += 1;
+            ChampStats.Deaths++;
 
-            var cKiller = data.Killer as Champion;
+            _game.ObjectManager.StopTargeting(this);
+            SetDashingState(false, MoveStopReason.Death);
+            ApiEventManager.OnDeath.Publish(data.Unit, data);
+            data.Unit.SetStatus(StatusFlags.Ghosted, true);
 
-            if (cKiller == null && _championHitFlagTimer > 0)
+            if (data.Killer is Champion)
             {
-                cKiller = _game.ObjectManager.GetObjectById(_playerHitId) as Champion;
-                _logger.Debug("Killed by turret, minion or monster, but still  give gold to the enemy.");
+                ChampionDeathHandler.ProcessKill(data);
+            }
+            else if (EnemyAssistMarkers.LastOrDefault()?.Source is Champion ch)
+            {
+                data.Killer = ch;
+                ChampionDeathHandler.ProcessKill(data);
             }
 
-            if (cKiller == null)
-            {
-                _game.PacketNotifier.NotifyNPC_Hero_Die(data);
-                EventHistory.Clear();
-                return;
-            }
-
-            ApiEventManager.OnKill.Publish(data.Killer, data);
-
-            // TODO: Find out if we can unhardcode some of the fractions used here.
-            var gold = mapScriptMetaData.ChampionBaseGoldValue;
-            if (KillSpree > 1)
-            {
-                gold = Math.Min(gold * (float)Math.Pow(7f / 6f, KillSpree - 1), mapScriptMetaData.ChampionMaxGoldValue);
-            }
-            else if (KillSpree == 0 & DeathSpree >= 1)
-            {
-                gold *= (11f / 12f);
-
-                if (DeathSpree > 1)
-                {
-                    gold = Math.Max(gold * (float)Math.Pow(0.8f, DeathSpree / 2), mapScriptMetaData.ChampionMinGoldValue);
-                }
-                DeathSpree++;
-            }
-
-            if (!mapScript.HasFirstBloodHappened)
-            {
-                gold += mapScript.MapScriptMetadata.FirstBloodExtraGold;
-                mapScript.HasFirstBloodHappened = true;
-
-            }
-
-            var EXP = (mapData.ExpCurve[Stats.Level - 1]) * mapData.BaseExpMultiple;
-            if (cKiller.Stats.Level != Stats.Level)
-            {
-                var levelDifference = Math.Abs(cKiller.Stats.Level - Stats.Level);
-                float EXPDiff = EXP * Math.Min(mapData.LevelDifferenceExpMultiple * levelDifference, mapData.MinimumExpMultiple);
-                if (cKiller.Stats.Level > Stats.Level)
-                {
-                    EXPDiff = -EXPDiff;
-                }
-                EXP += EXPDiff;
-            }
-
-            /*foreach(var unit in data.Assists)
-            {
-                var deathAssist = new OnDeathAssist
-                {
-                    AtTime = _game.GameTime,
-                    PhysicalDamage = 0.0f,
-                    MagicalDamage = 0.0f,
-                    TrueDamage = 0.0f,
-                    PercentageOfAssist = 1 / data.AssistCount,
-                    OrginalGoldReward = gold,
-                    KillerNetID = data.Killer.NetId,
-                    OtherNetID = data.Unit.NetId
-                };
-                _game.PacketNotifier.NotifyOnEvent(deathAssist, unit.NetId)
-            }*/
-
-            var championDie = new OnChampionDie 
-            { 
-                OtherNetID = data.Killer.NetId, 
-                GoldGiven = gold, 
-                //TODO: Implement Assists here;
-            };
-
-            var championKill = new OnChampionKill
-            {
-                OtherNetID = data.Unit.NetId
-            };
-
-            _game.PacketNotifier.NotifyOnEvent(championDie, this);
-            _game.PacketNotifier.NotifyOnEvent(championKill, data.Killer);
-
-            cKiller.AddExperience(EXP);
-            cKiller.AddGold(this, gold);
-
-            cKiller.GoldFromMinions = 0;
-            cKiller.ChampStats.Kills++;
-            cKiller.KillSpree++;
-            cKiller.DeathSpree = 0;
-
-            KillSpree = 0;
-            DeathSpree++;
-
-            //Remove all buffs that should be removed on death here.
-
-            //CORE_INFO("After: getGoldFromChamp: %f Killer: %i Victim: %i", gold, cKiller.killDeathCounter,this.killDeathCounter);
             _game.PacketNotifier.NotifyNPC_Hero_Die(data);
             EventHistory.Clear();
-            
-            SetDashingState(false, MoveStopReason.Death);
-            _game.ObjectManager.StopTargeting(this);
+            ApiEventManager.OnKill.Publish(data.Killer, data);
         }
 
         private T CreateEventForHistory<T>(AttackableUnit source, IEventSource sourceScript) where T: ArgsForClient, new()
@@ -557,6 +468,28 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return true;
             }
             return false;
+        }
+
+        public override void TakeHeal(AttackableUnit caster, float amount, HealType healType, IEventSource sourceScript = null)
+        {
+            var healerUnit = caster ?? this;
+            var previousHealth = Stats.CurrentHealth;
+            base.TakeHeal(healerUnit, amount, healType, sourceScript);
+            var actualHeal = Stats.CurrentHealth - previousHealth;
+
+            if (actualHeal > 0.0f
+                && healerUnit is Champion healer
+                && healer != this
+                && healer.Team == Team)
+            {
+                AddAssistMarker(healer, GlobalData.ChampionVariables.TimerForAssist);
+            }
+
+            var e = CreateEventForHistory<OnCastHeal>(healerUnit, sourceScript);
+            if (e != null)
+            {
+                e.HealAmmount = actualHeal;
+            }
         }
 
         public override void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)

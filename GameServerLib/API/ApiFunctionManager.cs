@@ -1600,6 +1600,23 @@ namespace LeagueSandbox.GameServer.API
             return GlobalData.ObjAIBaseVariables.DefaultPetReturnRadius;
         }
 
+        /// <summary>
+        /// Add a marker for assist to the target.
+        /// </summary>
+        /// <param name="target">Assist target.</param>
+        /// <param name="source">Unit credited for assist.</param>
+        /// <param name="duration">Assist duration in seconds.</param>
+        public static void ApplyAssistMarker(AttackableUnit target, AttackableUnit source, float duration)
+        {
+            if (target is not ObjAIBase objTarget || source is not ObjAIBase objSource)
+            {
+                _logger.Warn("Can't ApplyAssistMarker! (Target or Source is null or not ObjAIBase!)");
+                return;
+            }
+
+            objTarget.AddAssistMarker(objSource, duration);
+        }
+
         public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);

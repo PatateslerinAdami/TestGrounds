@@ -51,6 +51,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     public class ObjAIBase : AttackableUnit
     {
         public int hitCount = 0;
+        internal readonly List<AssistMarker> AlliedAssistMarkers = new List<AssistMarker>();
+        internal readonly List<AssistMarker> EnemyAssistMarkers = new List<AssistMarker>();
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
         private bool _skipNextAutoAttack;
@@ -1731,6 +1733,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Inventory.OnUpdate(diff);
             }
 
+            UpdateAssistMarkers();
             UpdateTarget();
 
             if (_autoAttackCurrentCooldown > 0)
@@ -2089,6 +2092,68 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             _aiPaused = isPaused;
         }
+
+        internal void AddAssistMarker(ObjAIBase sourceUnit, float duration, DamageData damageData = null)
+        {
+            if (sourceUnit is Champion)
+            {
+                if (sourceUnit.Team == Team)
+                {
+                    AuxAddAssistMarker(AlliedAssistMarkers, sourceUnit, duration, damageData);
+                }
+                else
+                {
+                    AuxAddAssistMarker(EnemyAssistMarkers, sourceUnit, duration, damageData);
+                }
+            }
+        }
+
+        void AuxAddAssistMarker(List<AssistMarker> assistList, ObjAIBase sourceUnit, float duration, DamageData damageData = null)
+        {
+            AssistMarker assistMarker = assistList.Find(x => x.Source == sourceUnit);
+            if (assistMarker != null)
+            {
+                float desiredDuration = _game.GameTime + duration * 1000;
+                assistMarker.StartTime = _game.GameTime;
+                assistMarker.EndTime = assistMarker.EndTime < desiredDuration ? desiredDuration : assistMarker.EndTime;
+            }
+            else
+            {
+                assistMarker = new AssistMarker()
+                {
+                    Source = sourceUnit,
+                    StartTime = _game.GameTime,
+                    EndTime = _game.GameTime + duration * 1000,
+                };
+
+                assistList.Add(assistMarker);
+            }
+
+            if (damageData != null)
+            {
+                switch (damageData.DamageType)
+                {
+                    case DamageType.DAMAGE_TYPE_PHYSICAL:
+                        assistMarker.PhysicalDamage += damageData.Damage;
+                        break;
+                    case DamageType.DAMAGE_TYPE_MAGICAL:
+                        assistMarker.MagicalDamage += damageData.Damage;
+                        break;
+                    case DamageType.DAMAGE_TYPE_TRUE:
+                        assistMarker.TrueDamage += damageData.Damage;
+                        break;
+                }
+            }
+
+            assistList = assistList.OrderByDescending(x => x.StartTime).ToList();
+        }
+
+        void UpdateAssistMarkers()
+        {
+            AlliedAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
+            EnemyAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
+        }
+
         protected override void UpdateFacing()
         {
             bool isCastingMobile = _castingSpell != null && _castingSpell.SpellData.CanMoveWhileChanneling;

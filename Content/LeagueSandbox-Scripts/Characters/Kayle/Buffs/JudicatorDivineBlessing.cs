@@ -39,7 +39,7 @@ internal class JudicatorDivineBlessing : IBuffGameScript {
         StatsModifier.MoveSpeed.PercentBonus = moveSpeed;
         unit.AddStatModifier(StatsModifier);
         _unit.TakeHeal(_kayle, healAmount, unit == _kayle ? HealType.SelfHeal : HealType.OutgoingHeal);
-        //ApplyAssistMarker(unit, _kayle, 10.0f);
+        ApplyAssistMarker(unit, _kayle, 10.0f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

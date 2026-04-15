@@ -32,7 +32,7 @@ internal class JudicatorReckoning : IBuffGameScript {
         
         StatsModifier.MoveSpeed.PercentBonus -= slowPercentage;
         unit.AddStatModifier(StatsModifier);
-        //ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

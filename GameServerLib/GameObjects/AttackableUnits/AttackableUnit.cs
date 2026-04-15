@@ -758,6 +758,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
+            if (this is Champion c && damageData.Attacker is Champion cAttacker)
+            {
+                c.AddAssistMarker(cAttacker, 10.0f, damageData);
+            }
+
             if (!CanTakeDamage(type))
             {
                 return;

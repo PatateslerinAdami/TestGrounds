@@ -118,6 +118,9 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell, SpellSector> OnCreateSector
             = new Dispatcher<Spell, SpellSector>();
 
+        public static Dispatcher<ObjAIBase, DeathData> OnAssist
+            = new Dispatcher<ObjAIBase, DeathData>();
+
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnDealDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 

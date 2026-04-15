@@ -45,6 +45,8 @@ namespace Buffs
             {
                 Flee();
             }
+
+            ApplyAssistMarker(unit, _owner, 10.0f);
             StatsModifier.MoveSpeed.PercentBonus = -slowPercent;
             unit.AddStatModifier(StatsModifier);
         }

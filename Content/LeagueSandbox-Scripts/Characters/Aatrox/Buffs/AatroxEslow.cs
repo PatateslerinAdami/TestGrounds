@@ -32,7 +32,7 @@ internal class AatroxEslow : IBuffGameScript {
             
         }
         _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow", unit);
-        //ApplyAssistMarker(unit, _aatrox, 10.0f);
+        ApplyAssistMarker(unit, _aatrox, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= _slowPercentage;
         unit.AddStatModifier(StatsModifier);
