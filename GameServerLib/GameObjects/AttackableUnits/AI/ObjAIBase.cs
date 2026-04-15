@@ -1854,9 +1854,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
             else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
             {
-                if (IsAttacking)
+                // If the attack already connected (e.g. HasAutoAttacked), let the animation
+                // finish instead of cancelling it mid-animation.
+                if (IsAttacking && !HasAutoAttacked)
                 {
-                    CancelAutoAttack(!HasAutoAttacked, true);
+                    CancelAutoAttack(true, true);
                 }
 
                 SetTargetUnit(null, true);
