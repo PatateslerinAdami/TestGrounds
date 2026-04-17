@@ -19,16 +19,20 @@ namespace ItemPassives
         }
         public void TargetExecute(DamageData data)
         {
-            var TargetHealth = data.Target.Stats.CurrentHealth;
-            float TargetHealthPercentDamage = 0.08f;
-            float AppliedBORKDamage = TargetHealth * TargetHealthPercentDamage;
+            if (data.Target is not LaneTurret)
+            {
+                var TargetHealth = data.Target.Stats.CurrentHealth;
+                float TargetHealthPercentDamage = 0.08f;
+                float AppliedBORKDamage = TargetHealth * TargetHealthPercentDamage;
 
-            data.Target.TakeDamage(_owner, AppliedBORKDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                data.Target.TakeDamage(_owner, AppliedBORKDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                // TODO: cap the bonus damage to minions and monsters to 60.
+            }
         }
 
         public void OnDeactivate(ObjAIBase owner)
         {
-            ApiEventManager.OnKillUnit.RemoveListener(this);
+            ApiEventManager.OnHitUnit.RemoveListener(this);
         }
     }
 }

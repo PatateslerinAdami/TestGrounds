@@ -44,15 +44,6 @@ namespace AIScripts
         private Champion EzrealInstance;
         private static ILog _logger = LoggerProvider.GetLogger();
         // Mid lane waypoints (matching minion path from Map1)
-        private List<Vector2> _midLaneWaypoints = new List<Vector2>
-        {
-            new Vector2(1418.0f, 1686.0f),
-            new Vector2(2997.0f, 2781.0f),
-            new Vector2(4472.0f, 4727.0f),
-            new Vector2(8375.0f, 8366.0f),
-            new Vector2(10948.0f, 10821.0f),
-            new Vector2(12511.0f, 12776.0f)
-        };
         private int _currentWaypointIndex = 0;
         private const float WaypointReachedThreshold = 300f; // Distance to consider waypoint reached
         private BotState _currentState;
@@ -79,6 +70,9 @@ namespace AIScripts
         private readonly byte RSlot = 3;
         private readonly byte IgniteSlot = 0; // Summoner spell slot
         private Dictionary<byte, float> _lastCastTime = new Dictionary<byte, float>();
+        
+        // Mid lane waypoints (will be generated dynamically based on team)
+        private List<Vector2> _midLaneWaypoints = new List<Vector2>();
 
         // Attack weaving / Orbwalking fields
         private float _autoAttackCooldownEndTime = 0f;
@@ -159,6 +153,9 @@ namespace AIScripts
                 EzrealInstance.LevelUpSpell(QSlot); // Start with Q for lane poke
 
                 Console.WriteLine("Ezreal Bot initialized with state: " + _currentState);
+
+                // Initialize dynamic waypoints based on team
+                InitializeWaypoints();
 
                 _itemBuildOrder = new List<int>
                 {
@@ -629,6 +626,36 @@ namespace AIScripts
             }
             // Fallback to center
             return new Vector2(7500f, 7500f);
+        }
+
+        /// <summary>
+        /// Initializes waypoints dynamically based on team (blue advances forward, purple advances backward through the same points)
+        /// </summary>
+        private void InitializeWaypoints()
+        {
+            // Base waypoints from blue side perspective (moving toward enemy base)
+            var baseWaypoints = new List<Vector2>
+            {
+                new Vector2(1418.0f, 1686.0f),   // Blue fountain area
+                new Vector2(2997.0f, 2781.0f),   // Near blue outer turret
+                new Vector2(4472.0f, 4727.0f),   // Mid lane center area
+                new Vector2(8375.0f, 8366.0f),   // Mid lane center area
+                new Vector2(10948.0f, 10821.0f), // Near purple outer turret
+                new Vector2(12511.0f, 12776.0f)  // Purple fountain area (enemy nexus)
+            };
+
+            if (EzrealInstance.Team == TeamId.TEAM_BLUE)
+            {
+                // Blue team: use waypoints in forward order (from blue base to purple base)
+                _midLaneWaypoints = baseWaypoints;
+            }
+            else
+            {
+                // Purple team: reverse the waypoints (from purple base to blue base)
+                _midLaneWaypoints = new List<Vector2>(baseWaypoints);
+                _midLaneWaypoints.Reverse();
+            }
+            _logger.Debug($"Initialized {_midLaneWaypoints.Count} waypoints for team {EzrealInstance.Team}");
         }
 
         private LaneMinion GetNearbyAllyMinion()

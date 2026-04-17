@@ -53,7 +53,8 @@ namespace Buffs
 
             StatsModifier.Size.PercentBonus += 0.25f;
             StatsModifier.Tenacity.PercentBonus += 0.25f;
-            //TODO: add slow resistance and the trail that boosts ally movement speed
+            StatsModifier.SlowResistPercent += 0.25f; // or should it be 25f?
+            //TODO: add the trail that boosts ally movement speed
 
             unit.AddStatModifier(StatsModifier);
         }
