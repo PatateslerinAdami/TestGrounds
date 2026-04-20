@@ -33,6 +33,8 @@ using static GameServerLib.GameObjects.AttackableUnits.DamageData;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using static LENet.Protocol;
 using Timer = System.Timers.Timer;
+using AIScripts.Common;
+using static AIScripts.Common.BotCommunicationAPI;
 
 namespace AIScripts
 {
@@ -112,6 +114,12 @@ namespace AIScripts
         private const float FountainShopRange = 1000f; // Distance from fountain to shop
         private bool _hasItemsToBuy = true;
 
+        // Bot communication settings and tracking
+        private BotSettings _botSettings;
+        private float _lastPingTime = 0f;
+        private float _lastToxicPingTime = 0f;
+        private HashSet<uint> _trackedDeadAllies = new HashSet<uint>();
+        private ToxicPingSpamState _toxicPingSpamState = new ToxicPingSpamState();
 
         // Enum for bot state
         public enum BotState
@@ -149,6 +157,10 @@ namespace AIScripts
                 // Initialize trash talk system with randomized cooldown
                 InitializeTrashTalk();
 
+                // Initialize bot communication settings (set to SeriousOnly for now, change to ToxicOnly or Default as desired)
+                _botSettings = BotSettings.SeriousOnly;
+                _logger.Debug($"Ezreal Bot communication settings - TrashTalk: {_botSettings.EnableTrashTalk}, ToxicPings: {_botSettings.EnableToxicPings}, SeriousPings: {_botSettings.EnableSeriousPings}");
+
                 // Initialize with first skill point
                 EzrealInstance.LevelUpSpell(QSlot); // Start with Q for lane poke
 
@@ -180,6 +192,17 @@ namespace AIScripts
                 // Queue delayed reaction instead of immediate trash talk
                 QueueReactionMessage(_dyingTaunts);
                 
+
+                // Send death trash talk using the new API
+                SendDeathTrashTalk(EzrealInstance, _botSettings);
+
+                // Request help ping at death position (serious ping to alert allies)
+                if (_botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                {
+                    SendRequestHelpPing(EzrealInstance, _botSettings, EzrealInstance.Position);
+                    _lastPingTime = _gameTime;
+                }
+
                 // Set flag to indicate we need to shop when respawning
                 _hasItemsToBuy = true;
             }
@@ -194,6 +217,16 @@ namespace AIScripts
                 _logger.Debug($"EzrealBot got a kill! Total kills: {_killCount}");
                 // Queue delayed reaction instead of immediate trash talk
                 QueueReactionMessage(_killingTaunts);
+
+                // Send kill trash talk using the new API
+                SendKillTrashTalk(EzrealInstance, _botSettings);
+
+                // Send an "On My Way" ping to the enemy position (serious ping for coordinating with allies)
+                if (_botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                {
+                    SendOnMyWayPing(EzrealInstance, _botSettings, deathData.Unit.Position);
+                    _lastPingTime = _gameTime;
+                }
             }
         }
 
@@ -224,6 +257,12 @@ namespace AIScripts
             ProcessDelayedMessages();
 
             TryTrashTalk();
+
+            // Process any active toxic ping spam sequence (sends pings at intervals)
+            ProcessToxicPingSpam(_botSettings, _gameTime, ref _lastToxicPingTime, _toxicPingSpamState);
+
+            // Check for dead allies and start new toxic ping spam sequences if appropriate
+            CheckForDeadAlliesAndToxicPing(EzrealInstance, _botSettings, _gameTime, ref _lastToxicPingTime, _trackedDeadAllies, _toxicPingSpamState);
 
             // Track auto-attack state for orbwalking
             UpdateAutoAttackState();
@@ -296,6 +335,18 @@ namespace AIScripts
                     if (IsSpellAvailable(QSlot, SpellSlotType.SpellSlots))
                     {
                         _currentState = BotState.Aggressive;
+
+                        // Send attack ping if allies are nearby and cooldown has passed
+                        if (_botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                        {
+                            var nearestAlly = GetNearestAlly(EzrealInstance, _botSettings.AllyNearbyDistance);
+                            if (nearestAlly != null)
+                            {
+                                SendAttackPing(EzrealInstance, _botSettings, enemyChampion.Position);
+                                _lastPingTime = _gameTime;
+                            }
+                        }
+
                         // Force immediate Q cast on attacker
                         CastQ(enemyChampion);
                     }
@@ -392,13 +443,26 @@ namespace AIScripts
                     {
                         // Check if any enemy is vulnerable
                         bool foundVulnerable = false;
+                        Champion vulnerableTarget = null;
                         foreach (var enemy in nearbyEnemies)
                         {
                             if (IsChampionVulnerable(enemy))
                             {
                                 _currentState = BotState.Chasing;
                                 foundVulnerable = true;
+                                vulnerableTarget = enemy;
                                 break;
+                            }
+                        }
+
+                        // Send OnMyWay ping if chasing with allies nearby
+                        if (foundVulnerable && _botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                        {
+                            var nearestAlly = GetNearestAlly(EzrealInstance, _botSettings.AllyNearbyDistance);
+                            if (nearestAlly != null && vulnerableTarget != null)
+                            {
+                                SendOnMyWayPing(EzrealInstance, _botSettings, vulnerableTarget.Position);
+                                _lastPingTime = _gameTime;
                             }
                         }
 
@@ -430,6 +494,17 @@ namespace AIScripts
                     else if (isUnderTower && !IsAllyTower())
                     {
                         // _currentState = BotState.Retreating;
+                    }
+
+                    // Request help ping when defensive and allies are nearby
+                    if (_botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                    {
+                        var nearestAlly = GetNearestAlly(EzrealInstance, _botSettings.AllyNearbyDistance);
+                        if (nearestAlly != null)
+                        {
+                            SendRequestHelpPing(EzrealInstance, _botSettings, EzrealInstance.Position);
+                            _lastPingTime = _gameTime;
+                        }
                     }
                     break;
 
@@ -2585,7 +2660,7 @@ namespace AIScripts
         #endregion
 
         // Trash talk toggle — set to false to disable entirely
-        private const bool TrashTalkEnabled = true;
+        private const bool TrashTalkEnabled = false;
 
         // Use personality random (unique per bot) instead of static random (shared)
         // This prevents all bots from spamming at the same time
@@ -2742,15 +2817,12 @@ namespace AIScripts
 
         private void TryTrashTalk(string[] pool = null)
         {
-            if (!TrashTalkEnabled) return;
-            if (_gameTime - _lastTrashTalkTime < _trashTalkCooldown) return;
+            // Check if trash talk is enabled via BotSettings or local toggle
+            if ((!TrashTalkEnabled && !_botSettings.EnableTrashTalk) || _gameTime - _lastTrashTalkTime < _trashTalkCooldown)
+                return;
 
-            // Pick the pool based on context if none is forced
-            if (pool == null)
-                pool = PickContextualPool();
-
-            string message = pool[_personalityRandom.Next(pool.Length)];
-            SendChatMessage(message);
+            // Use the new API for contextual trash talk
+            SendContextualTrashTalk(EzrealInstance, _botSettings, GetHealthPercentage(), _killCount, _deathCount);
 
             _lastTrashTalkTime = _gameTime;
             // Randomize next cooldown slightly

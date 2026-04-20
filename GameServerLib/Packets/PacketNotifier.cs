@@ -2952,14 +2952,47 @@ namespace PacketDefinitions420
         /// <param name="type">Type of ping; COMMAND/ATTACK/DANGER/MISSING/ONMYWAY/FALLBACK/REQUESTHELP. *NOTE*: Not all ping types are supported yet.</param>
         public void NotifyS2C_MapPing(Vector2 pos, Pings type, uint targetNetId = 0, ClientInfo client = null)
         {
-            var response = new S2C_MapPing
+            if (client != null)
+            {
+                NotifyS2C_MapPing(pos, type, client.Champion.NetId, client.Team, targetNetId);
+            }
+            else
             {
                 // TODO: Verify if this is correct. Usually 0.
+                // Fallback for backwards compatibility - broadcasts to everyone (not recommended)
+                var response = new S2C_MapPing
+                {
+                    TargetNetID = targetNetId,
+                    PingCategory = (byte)type,
+                    Position = pos,
+                    PlayAudio = true,
+                    ShowChat = true,
+                    PingThrottled = false,
+                    PlayVO = true
+                };
+                _packetHandlerManager.BroadcastPacket(response.GetBytes(), Channel.CHL_S2C);
+            }
+        }
 
+        /// <summary>
+        /// Sends a packet to the specified team detailing a map ping from a specific source.
+        /// Used for bot pings that don't have a ClientInfo.
+        /// </summary>
+        /// <param name="pos">2D top-down position of the ping.</param>
+        /// <param name="type">Type of ping; COMMAND/ATTACK/DANGER/MISSING/ONMYWAY/FALLBACK/REQUESTHELP.</param>
+        /// <param name="sourceNetId">NetID of the unit sending the ping (for terrain icon).</param>
+        /// <param name="team">Team to send the ping to.</param>
+        /// <param name="targetNetId">Target of the ping (if applicable).</param>
+        public void NotifyS2C_MapPing(Vector2 pos, Pings type, uint sourceNetId, TeamId team, uint targetNetId = 0)
+        {
+            var response = new S2C_MapPing
+            {
                 TargetNetID = targetNetId,
                 PingCategory = (byte)type,
                 Position = pos,
                 //Unhardcode these bools later
+                SenderNetID = sourceNetId,
+                SourceNetID = sourceNetId,
                 PlayAudio = true,
                 ShowChat = true,
                 PingThrottled = false,
@@ -2971,16 +3004,7 @@ namespace PacketDefinitions420
                 response.TargetNetID = targetNetId;
             }
 
-            if (client != null)
-            {
-                response.SenderNetID = client.Champion.NetId;
-                response.SourceNetID = client.Champion.NetId;
-                _packetHandlerManager.BroadcastPacketTeam(client.Team, response.GetBytes(), Channel.CHL_S2C);
-            }
-            else
-            {
-                _packetHandlerManager.BroadcastPacket(response.GetBytes(), Channel.CHL_S2C);
-            }
+            _packetHandlerManager.BroadcastPacketTeam(team, response.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>

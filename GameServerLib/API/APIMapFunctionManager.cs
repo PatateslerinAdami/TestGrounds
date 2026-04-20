@@ -443,5 +443,10 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyS2C_MapPing(position, (Pings)ping);
         }
+
+        public static void NotifyMapPing(Vector2 position, PingCategory ping, uint sourceNetId, TeamId team)
+        {
+            _game.PacketNotifier.NotifyS2C_MapPing(position, (Pings)ping, sourceNetId, team);
+        }
     }
 }
