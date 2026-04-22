@@ -33,7 +33,8 @@ namespace Spells
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
             _owner = owner;
-            _target = GetClosestTeamUnitInRange(end, 200, true, CustomConvert.GetEnemyTeam(_owner.Team));
+            _target = GetClosestUnitInRange(_owner, end, 200f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes); //Todo: please confirm which Flags should be used here
         }
 
         public void OnSpellPostCast(Spell spell)

@@ -22,6 +22,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using GameMaths.Geometry.Polygons;
+using GameServerCore;
 
 namespace LeagueSandbox.GameServer.API
 {
@@ -436,6 +438,7 @@ namespace LeagueSandbox.GameServer.API
             {
                 return;
             }
+
             _game.PacketNotifier.NotifySetParState(target, parState, userId);
         }
 
@@ -867,6 +870,7 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
+        //TODO: replace this function in every script that references this with the filtered version
         /// <summary>
         /// Acquires all dead or alive AttackableUnits within the specified range of a target position.
         /// </summary>
@@ -888,7 +892,7 @@ namespace LeagueSandbox.GameServer.API
             returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos));
             return returnList;
         }
-        
+
         /// <summary>
         ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
         /// </summary>
@@ -904,11 +908,212 @@ namespace LeagueSandbox.GameServer.API
             float range,
             bool isAlive,
             SpellDataFlags useFlags
-        ) {
+        )
+        {
             return EnumerateUnitsInRange(targetPos, range, isAlive)
                 .Where(unit => IsValidTarget(self, unit, useFlags))
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos))
                 .ToList();
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a ring and filters them by IsValidTarget using the given flags.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Center of the ring.</param>
+        /// <param name="innerRadius">Inner radius of the ring.</param>
+        /// <param name="outerRadius">Outer radius of the ring.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInRing(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float innerRadius,
+            float outerRadius,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            innerRadius = MathF.Max(0.0f, innerRadius);
+            outerRadius = MathF.Max(0.0f, outerRadius);
+
+            if (outerRadius < innerRadius)
+            {
+                (innerRadius, outerRadius) = (outerRadius, innerRadius);
+            }
+
+            if (outerRadius <= 0.0f)
+            {
+                return [];
+            }
+
+            var innerRadiusSquared = innerRadius * innerRadius;
+            var outerRadiusSquared = outerRadius * outerRadius;
+
+            return EnumerateUnitsInRange(targetPos, outerRadius, isAlive)
+                .Where(unit => IsValidTarget(self, unit, useFlags))
+                .Where(unit =>
+                {
+                    var distanceSquared = Vector2.DistanceSquared(unit.Position, targetPos);
+                    return distanceSquared >= innerRadiusSquared && distanceSquared <= outerRadiusSquared;
+                })
+                .OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos))
+                .ToList();
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a cone and filters them by IsValidTarget using the given flags.
+        ///     The cone angle is expressed in total degrees, not half-angle degrees.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Origin of the cone.</param>
+        /// <param name="direction">Forward direction of the cone.</param>
+        /// <param name="range">Maximum cone length.</param>
+        /// <param name="coneAngleDegrees">Total cone angle in degrees.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInConeRange(
+            AttackableUnit self,
+            Vector2 origin,
+            Vector2 direction,
+            float range,
+            float coneAngleDegrees,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            if (range <= 0.0f || coneAngleDegrees <= 0.0f || direction.LengthSquared() <= float.Epsilon)
+                return [];
+
+            var normalizedDirection = Vector2.Normalize(direction);
+            var halfAngleRadians = MathF.PI * Math.Clamp(coneAngleDegrees, 0.0f, 360.0f) / 360.0f;
+            var cosThreshold = MathF.Cos(halfAngleRadians);
+            var rangeSquared = range * range;
+
+            return EnumerateUnitsInRange(origin, range, isAlive)
+                .Where(unit => IsValidTarget(self, unit, useFlags))
+                .Where(unit =>
+                {
+                    var toTarget = unit.Position - origin;
+                    var distanceSquared = toTarget.LengthSquared();
+
+                    if (distanceSquared > rangeSquared) return false;
+                    if (distanceSquared <= float.Epsilon) return true;
+
+                    var normalizedToTarget = Vector2.Normalize(toTarget);
+                    return Vector2.Dot(normalizedDirection, normalizedToTarget) >= cosThreshold;
+                })
+                .OrderBy(unit => Vector2.DistanceSquared(unit.Position, origin))
+                .ToList();
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a polygon and filters them by IsValidTarget using the given flags.
+        ///     Polygon vertices are relative to the origin and are scaled by width (x) and length (y).
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Origin of the polygon.</param>
+        /// <param name="direction">Forward direction of the polygon.</param>
+        /// <param name="width">Scale applied to each vertex's x coordinate.</param>
+        /// <param name="length">Scale applied to each vertex's y coordinate.</param>
+        /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInPolygon(
+            AttackableUnit self,
+            Vector2 origin,
+            Vector2 direction,
+            float width,
+            float length,
+            Vector2[] polygonVertices,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            width = MathF.Abs(width);
+            length = MathF.Abs(length);
+            if (polygonVertices == null || polygonVertices.Length < 3 || width <= 0.0f || length <= 0.0f)
+            {
+                return [];
+            }
+
+            if (!TryNormalizeDirection(direction, out var normalizedDirection))
+            {
+                return [];
+            }
+
+            var polygon = BuildScaledPolygon(polygonVertices, width, length, out var maxRange);
+            if (polygon.Points.Count < 3 || maxRange <= 0.0f)
+            {
+                return [];
+            }
+
+            var angleDir = Extensions.UnitVectorToAngle(normalizedDirection);
+
+            return EnumerateUnitsInRange(origin, maxRange, isAlive)
+                .Where(unit => IsValidTarget(self, unit, useFlags))
+                .Where(unit =>
+                {
+                    var relativePos = (unit.Position - origin).Rotate(angleDir + 270f);
+                    return polygon.IsInside(relativePos);
+                })
+                .OrderBy(unit => Vector2.DistanceSquared(unit.Position, origin))
+                .ToList();
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a polygon created by a spell and filters them by IsValidTarget
+        ///     using the given flags. Targeted spells use the target's position and facing direction as the polygon origin.
+        /// </summary>
+        /// <param name="spell">Spell which created the polygon area.</param>
+        /// <param name="width">Scale applied to each vertex's x coordinate.</param>
+        /// <param name="length">Scale applied to each vertex's y coordinate.</param>
+        /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInPolygon(
+            Spell spell,
+            float width,
+            float length,
+            Vector2[] polygonVertices,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            if (spell?.CastInfo?.Owner == null)
+            {
+                return [];
+            }
+
+            var self = spell.CastInfo.Owner;
+            var origin = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X,
+                spell.CastInfo.SpellCastLaunchPosition.Z);
+            var direction = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z) -
+                            origin;
+
+            if (spell.SpellData.TargetingType == TargetingType.Target
+                && spell.CastInfo.Targets.Count > 0
+                && (spell.CastInfo.Targets[0] as CastTarget)?.Unit is AttackableUnit targetUnit)
+            {
+                origin = targetUnit.Position;
+                direction = new Vector2(targetUnit.Direction.X, targetUnit.Direction.Z);
+            }
+
+            if (!TryNormalizeDirection(direction, out var normalizedDirection))
+            {
+                var ownerDirection = new Vector2(self.Direction.X, self.Direction.Z);
+                if (!TryNormalizeDirection(ownerDirection, out normalizedDirection))
+                {
+                    normalizedDirection = new Vector2(1.0f, 0.0f);
+                }
+            }
+
+            return GetUnitsInPolygon(self, origin, normalizedDirection, width, length, polygonVertices, isAlive,
+                useFlags);
         }
 
         public static List<AttackableUnit> GetUnitsInRangeDiffTeam(Vector2 targetPos, float range, bool isAlive,
@@ -928,59 +1133,58 @@ namespace LeagueSandbox.GameServer.API
             return returnList;
         }
 
-        /// <summary>
-        /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position.
-        /// </summary>
-        /// <param name="targetPos">Origin of the range to check.</param>
-        /// <param name="range">Range to check from the target position.</param>
-        /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
-        /// <returns>Closest AttackableUnit.</returns>
-        public static AttackableUnit GetClosestUnitInRange(Vector2 targetPos, float range, bool isAlive)
+        private static Polygon BuildScaledPolygon(
+            IEnumerable<Vector2> polygonVertices,
+            float width,
+            float length,
+            out float maxRange
+        )
         {
-            var units = GetUnitsInRange(targetPos, range, isAlive);
-            var orderedUnits = units.OrderBy(unit => Vector2.DistanceSquared(targetPos, unit.Position));
+            var polygon = new Polygon();
+            maxRange = 0.0f;
 
-            return orderedUnits.First();
+            foreach (var vertex in polygonVertices)
+            {
+                var scaledVertex = new Vector2(vertex.X * width, vertex.Y * length);
+                polygon.Add(scaledVertex);
+                maxRange = MathF.Max(maxRange, scaledVertex.Length());
+            }
+
+            return polygon;
+        }
+
+        private static bool TryNormalizeDirection(Vector2 direction, out Vector2 normalizedDirection)
+        {
+            normalizedDirection = default;
+
+            if (float.IsNaN(direction.X) || float.IsNaN(direction.Y) || direction.LengthSquared() <= float.Epsilon)
+            {
+                return false;
+            }
+
+            normalizedDirection = Vector2.Normalize(direction);
+            return !float.IsNaN(normalizedDirection.X) && !float.IsNaN(normalizedDirection.Y);
         }
 
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position
-        /// that belongs to the specified team.
+        /// and filters candidates by IsValidTarget using the provided flags.
         /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
         /// <param name="targetPos">Origin of the range to check.</param>
         /// <param name="range">Range to check from the target position.</param>
         /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
-        /// <param name="teamId">Team the unit must belong to.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
         /// <returns>Closest AttackableUnit.</returns>
-        public static AttackableUnit GetClosestTeamUnitInRange(Vector2 targetPos, float range, bool isAlive,
-            TeamId teamId)
+        public static AttackableUnit GetClosestUnitInRange(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
         {
-            var units = GetUnitsInRange(targetPos, range, isAlive)
-                .Where(unit => unit.Team == teamId);
-            return units
-                .OrderBy(unit => Vector2.DistanceSquared(targetPos, unit.Position))
-                .FirstOrDefault();
-        }
-
-
-        /// <summary>
-        /// Acquires the closest alive or dead AttackableUnit within the specified range of another unit.
-        /// </summary>
-        /// <param name="target">Origin of the range to check.</param>
-        /// <param name="range">Range to check from the target position.</param>
-        /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
-        /// <returns>Closest AttackableUnit.</returns>
-        public static AttackableUnit GetClosestUnitInRange(AttackableUnit target, float range, bool isAlive)
-        {
-            var units = GetUnitsInRange(target.Position, range, isAlive);
-            var orderedUnits = units.OrderBy(unit => Vector2.DistanceSquared(target.Position, unit.Position));
-
-            if (orderedUnits.First() == target && orderedUnits.Count() > 1)
-            {
-                return orderedUnits.ElementAt(1);
-            }
-
-            return orderedUnits.First();
+            return GetUnitsInRange(self, targetPos, range, isAlive, useFlags).FirstOrDefault();
         }
 
         public static bool IsValidTarget(AttackableUnit self, AttackableUnit target, SpellDataFlags useFlags)
