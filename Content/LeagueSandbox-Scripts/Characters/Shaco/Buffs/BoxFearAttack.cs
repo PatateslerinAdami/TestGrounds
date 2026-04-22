@@ -43,7 +43,10 @@ namespace Buffs
             var units = GetUnitsInRangeDiffTeam(boxMinion.Position, 500f, true, boxMinion);
             foreach (var u in units)
             {
-                AddBuff("Fear", 3f, 1, ownerSpell, u, boxMinion);
+                if (u is not LaneTurret)
+                {
+                    AddBuff("Fear", 3f, 1, ownerSpell, u, boxMinion);
+                }
             }
         }
         public void OnUpdate(float diff)

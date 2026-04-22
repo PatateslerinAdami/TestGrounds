@@ -24,6 +24,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             string aiScript = ""
         ) : base(game, name, model, position, team, netId, lane, mapObject, stats: stats, aiScript: aiScript)
         {
+            SetStatus(StatusFlags.CanMove, false);
+            SetStatus(StatusFlags.CanMoveEver, false);
             Type = type;
 
             if (type == TurretType.FOUNTAIN_TURRET)
