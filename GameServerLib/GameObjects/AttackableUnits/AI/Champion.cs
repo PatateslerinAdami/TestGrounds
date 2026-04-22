@@ -200,16 +200,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return _game.Map.MapScript.GetFountainPosition(Team);
         }
 
-        public override Spell LevelUpSpell(byte slot)
-        {
-            if (SkillPoints == 0)
-            {
-                return null;
+        public Spell LevelUpSpell(byte slot, bool spendSkillPoint) {
+            if (spendSkillPoint && SkillPoints == 0) return null;
+
+            var spell = base.LevelUpSpell(slot);
+            if (spell == null) return null;
+
+            if (spell.CastInfo.SpellLevel == 1) {
+                Stats.SetSpellEnabled(slot, true);
             }
 
-            SkillPoints--;
+            if (spendSkillPoint) {
+                SkillPoints--;
+            }
 
-            return base.LevelUpSpell(slot);
+            return spell;
         }
 
         public void AddToolTipChange(ToolTipData data)

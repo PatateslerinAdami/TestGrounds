@@ -1,6 +1,5 @@
 using GameServerCore.Enums;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.Other;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects
@@ -110,8 +109,11 @@ namespace LeagueSandbox.GameServer.GameObjects
             {
                 _game.Map.CollisionHandler.AddObject(this);
             }
-            _game.ObjectManager.AddVisionProvider(this, Team);
-            RegisterVision();
+            if (GrantVision)
+            {
+                _game.ObjectManager.AddVisionProvider(this, Team);
+                RegisterVision();
+            }
         }
 
         public override void OnRemoved()
@@ -120,12 +122,21 @@ namespace LeagueSandbox.GameServer.GameObjects
             {
                 _game.Map.CollisionHandler.RemoveObject(this);
             }
-            _game.ObjectManager.RemoveVisionProvider(this, Team);
-            UnregisterVision();
+            if (GrantVision)
+            {
+                _game.ObjectManager.RemoveVisionProvider(this, Team);
+                UnregisterVision();
+            }
         }
 
         public override void SetTeam(TeamId team)
         {
+            if (!GrantVision)
+            {
+                Team = team;
+                return;
+            }
+
             UnregisterVision();
             base.SetTeam(team);
             RegisterVision();
@@ -136,6 +147,11 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         void RegisterVision()
         {
+            if (!GrantVision)
+            {
+                return;
+            }
+
             // NEUTRAL Regions give global vision.
             if (Team == TeamId.TEAM_NEUTRAL)
             {
@@ -146,6 +162,11 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         void UnregisterVision()
         {
+            if (!GrantVision)
+            {
+                return;
+            }
+
             if (Team == TeamId.TEAM_NEUTRAL)
             {
                 _game.ObjectManager.RemoveVisionProvider(this, TeamId.TEAM_BLUE);
@@ -170,6 +191,42 @@ namespace LeagueSandbox.GameServer.GameObjects
             {
                 Position = CollisionUnit.Position;
             }
+
+            if (RevealsStealth && VisionRadius > 0.0f)
+            {
+                var revealTeam = Team;
+                if (revealTeam == TeamId.TEAM_NEUTRAL && CollisionUnit is AttackableUnit collisionUnit)
+                {
+                    revealTeam = collisionUnit.Team;
+                }
+
+                var units = _game.ObjectManager.GetUnitsInRange(Position, VisionRadius, true);
+                foreach (var unit in units)
+                {
+                    if (unit == null || unit.IsDead || unit == CollisionUnit)
+                    {
+                        continue;
+                    }
+
+                    if (OnlyShowTarget && VisionTarget != null && unit != VisionTarget)
+                    {
+                        continue;
+                    }
+
+                    if (revealTeam != TeamId.TEAM_NEUTRAL && unit.Team == revealTeam)
+                    {
+                        continue;
+                    }
+
+                    if (!unit.Status.HasFlag(StatusFlags.Stealthed))
+                    {
+                        continue;
+                    }
+
+                    unit.RevealSpecificUnit(0.1f);
+                }
+            }
+
             if (Lifetime > 0)
             {
                 _currentTime += diff / 1000.0f;

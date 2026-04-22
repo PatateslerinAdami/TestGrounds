@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using GameServerCore.Enums;
+using GameServerLib.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.Packets;
 
@@ -25,6 +26,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         protected Dictionary<TeamId, bool> _visibleByTeam;
         protected HashSet<int> _spawnedForPlayers = new HashSet<int>();
         protected Dictionary<int, bool> _visibleForPlayers = new Dictionary<int, bool>();
+        private static Fade _defaultFade = new Fade(0, 0, 0, 1);
+        private Fade _currentFade = _defaultFade;
+        private int _nextFadeId = 0;
+        // What was the opacity at the moment when the current fade replaced the previous one.
+        private float _currentFadeStartOpacity = 0;
+        private Fade _previousFade = null;
+        private List<Fade> _fades = new List<Fade>();
+        private Dictionary<int, Fade> _lastFadeSeenByPlayer = new Dictionary<int, Fade>();
+
         /// <summary>
         /// A set of players with vision of this GameObject.
         /// Can be iterated through.
@@ -292,6 +302,33 @@ namespace LeagueSandbox.GameServer.GameObjects
                 SetVisibleForPlayer(userId, visible);
                 SetSpawnedForPlayer(userId);
             }
+            
+            if (forceSpawn)
+            {
+                _lastFadeSeenByPlayer[userId] = _defaultFade;
+            }
+            Fade lastSeenFade = _lastFadeSeenByPlayer.GetValueOrDefault(userId, _defaultFade);
+            float currentFadeTimeLeft = _currentFade.Duration - (_game.GameTime - _currentFade.StartTime);
+            float lastSeenFadeTimeLeft = lastSeenFade.Duration - (_game.GameTime - lastSeenFade.StartTime);
+            if (visible && !(
+                    lastSeenFade == _currentFade ||
+                    lastSeenFade.Opacity == _currentFade.Opacity &&
+                    lastSeenFadeTimeLeft <= 0 && currentFadeTimeLeft <= 0
+                ))
+            {
+                if (currentFadeTimeLeft > 0)
+                {
+                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, GetOpacity(), 0, userId);
+                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, _currentFade.Opacity, currentFadeTimeLeft,
+                        userId);
+                }
+                else
+                {
+                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, GetOpacity(), 0, userId);
+                }
+
+                _lastFadeSeenByPlayer[userId] = _currentFade;
+            }
         }
 
         public virtual void OnAfterSync()
@@ -445,6 +482,50 @@ namespace LeagueSandbox.GameServer.GameObjects
         public void StopAnimation(string animation, bool stopAll = false, bool fade = false, bool ignoreLock = true)
         {
             _game.PacketNotifier.NotifyS2C_StopAnimation(this, animation, stopAll, fade, ignoreLock);
+        }
+
+        public float GetOpacity()
+        {
+            float t = Math.Min(1, (_game.GameTime - _currentFade.StartTime) / _currentFade.Duration);
+            return t * (_currentFade.Opacity - _currentFadeStartOpacity) + _currentFadeStartOpacity;
+        }
+
+        private void SetFade(float opacity, float duration)
+        {
+            _currentFadeStartOpacity = GetOpacity();
+            _previousFade = _currentFade;
+            _currentFade = new Fade(_nextFadeId++, _game.GameTime, duration, opacity);
+        }
+
+        public Fade FadeOut(float opacity, float duration)
+        {
+            duration *= 1000;
+
+            SetFade(opacity, duration);
+            _fades.Add(_currentFade);
+            return _currentFade;
+        }
+        
+        public bool FadeIn(Fade fade, float duration = 1.0f)
+        {
+            duration *= 1000;
+
+            if (_fades.Remove(fade) && fade == _currentFade)
+            {
+                float opacity = 1;
+                if (_fades.Count > 0)
+                {
+                    Fade lastFade = _fades[_fades.Count - 1];
+                    float lastFadeTimeLeft = lastFade.Duration - (_game.GameTime - lastFade.StartTime);
+
+                    duration = Math.Max(duration, lastFadeTimeLeft);
+                    opacity = lastFade.Opacity;
+                }
+                SetFade(opacity, duration);
+                return true;
+            }
+
+            return false;
         }
     }
 }

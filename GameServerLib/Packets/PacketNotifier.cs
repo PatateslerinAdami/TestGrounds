@@ -148,7 +148,7 @@ namespace PacketDefinitions420
         OnEnterVisibilityClient ConstructEnterVisibilityClientPacket(GameObject o, bool isChampion = false, List<GamePacket> packets = null)
         {
             var itemDataList = new List<LeaguePackets.Game.Common.ItemData>();
-            var shields = new ShieldValues(); //TODO: Implement shields so this can be finished
+            var shields = new ShieldValues();
             var charStackDataList = new List<CharacterStackData>();
             var charStackData = new CharacterStackData
             {
@@ -163,7 +163,7 @@ namespace PacketDefinitions420
 
             if (o is AttackableUnit a)
             {
-                shields = a.ShieldValues;
+                shields = a.GetCombinedShieldValues();
                 charStackData.SkinName = a.Model;
                 NotifyFaceDirection(a, a.Direction, true);
                 if (a is ObjAIBase obj)
@@ -615,6 +615,31 @@ namespace PacketDefinitions420
                 StringBuffer = name
             };
             _packetHandlerManager.SendPacket(userId, debugObjPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifyS2C_SetFadeOut_Push(GameObject o, float value, float time, int userId)
+        {
+            time /= 1000f;
+
+            var packet = new SetFadeOut_Push
+            {
+                SenderNetID = o.NetId,
+                FadeTime = time,
+                FadeTargetValue = value
+            };
+            _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifyS2C_SetFadeOut_Pop(GameObject o, short buffId, float time, int userId)
+        {
+            time /= 1000f;
+
+            var packet = new SetFadeOut_Pop
+            {
+                SenderNetID = o.NetId,
+                StackID = buffId
+            };
+            _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -1843,6 +1868,7 @@ namespace PacketDefinitions420
                 SenderNetID = unit.NetId,
                 Physical = IsPhysical,
                 Magical = IsMagical,
+                StopShieldFade = StopShieldFade,
                 Amount = amount
             };
             _packetHandlerManager.BroadcastPacket(mods.GetBytes(), Channel.CHL_S2C);
@@ -2860,6 +2886,19 @@ namespace PacketDefinitions420
                 IsTeamOrderWin = losingTeam != TeamId.TEAM_BLUE
             };
             _packetHandlerManager.BroadcastPacket(gameEndPacket.GetBytes(), Channel.CHL_S2C);
+        }
+        
+        public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
+        {
+            var packet = new AttachFlexParticleS2C
+            {
+                NetID = netId,
+                ParticleFlexID = particleFlexId,
+                CpIndex = capturePointIndex,
+                ParticleAttachType = particleAttachType
+            };
+
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
         }
 
         public void NotifyS2C_HandleCapturePointUpdate(byte capturePointIndex, uint otherNetId, byte PARType, byte attackTeam, CapturePointUpdateCommand capturePointUpdateCommand)
@@ -4617,28 +4656,6 @@ namespace PacketDefinitions420
         public void NotifyNPC_CastSpellTeam(GamePacket gp, ObjAIBase oa, TeamId team)
         {
             _packetHandlerManager.BroadcastPacketTeam(team, gp.GetBytes(), Channel.CHL_S2C);
-        }
-        public void NotifyModifyShield(float magic, float physical, uint senderNetId, bool stopShieldFade = true)
-        {
-            var mods = new ModifyShield
-            {
-                SenderNetID = senderNetId,
-                Physical = physical != 0,
-                Magical = magic != 0,
-                Amount = magic != 0 ? magic : physical,
-                StopShieldFade = stopShieldFade
-            };
-            _packetHandlerManager.BroadcastPacket(mods.GetBytes(), Channel.CHL_S2C);
-        }
-        public void HealthBarTest(AttackableUnit au)
-        {
-            var healthbarPacket = new OnEnterLocalVisibilityClient
-            {
-                SenderNetID = au.NetId,
-                MaxHealth = au.Stats.HealthPoints.Total,
-                Health = au.Stats.CurrentHealth,
-            };
-            _packetHandlerManager.BroadcastPacket(healthbarPacket.GetBytes(), Channel.CHL_S2C);
         }
         public void NotifyCustomDashTest(AttackableUnit u, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
         {

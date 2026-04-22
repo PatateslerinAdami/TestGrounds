@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeaguePackets.Game;
 using LeagueSandbox.GameServer.Content;
@@ -361,6 +362,49 @@ namespace LeagueSandbox.GameServer.API
         public static void RemoveBuff(AttackableUnit target, string buff)
         {
             target.RemoveBuffsWithName(buff);
+        }
+
+        /// <summary>
+        /// Adds a shield to an AttackableUnit with specified values.
+        /// </summary>
+        /// <param name="source">Source unit of the shield.</param>
+        /// <param name="target">Target unit to shield.</param>
+        /// <param name="amount">Shield amount.</param>
+        /// <param name="physical">Whether the shield blocks physical damage.</param>
+        /// <param name="magical">Whether the shield blocks magical damage.</param>
+        /// <returns>New shield instance.</returns>
+        public static Shield AddShield(
+            ObjAIBase source,
+            AttackableUnit target,
+            float amount,
+            bool physical = true,
+            bool magical = true
+        )
+        {
+            var shield = new Shield(source, target, physical, magical, amount);
+            target.AddShield(shield);
+            return shield;
+        }
+
+        /// <summary>
+        /// Removes a shield from an AttackableUnit immediately.
+        /// </summary>
+        /// <param name="target">Target unit to remove the shield from.</param>
+        /// <param name="shield">Shield to remove.</param>
+        public static void RemoveShield(AttackableUnit target, Shield shield)
+        {
+            target.RemoveShield(shield);
+        }
+
+        /// <summary>
+        /// Checks whether an AttackableUnit has any shield or a specific shield.
+        /// </summary>
+        /// <param name="target">Target unit to check.</param>
+        /// <param name="shield">Optional shield instance to look for.</param>
+        /// <returns>True if a shield is present.</returns>
+        public static bool HasShield(AttackableUnit target, Shield shield = null)
+        {
+            return target.HasShield(shield);
         }
 
         /// <summary>
@@ -1819,6 +1863,33 @@ namespace LeagueSandbox.GameServer.API
             }
 
             objTarget.AddAssistMarker(objSource, duration);
+        }
+
+        /// <summary>
+        /// Sets the unit stealthed/faded.
+        /// </summary>
+        public static Fade PushCharacterFade(
+            AttackableUnit target,
+            float fadeAmount,
+            float fadeTime,
+            Fade ID = null
+        )
+        {
+            if (ID != null && fadeAmount == 0)
+            {
+                target.FadeIn(ID, fadeTime);
+                return null;
+            }
+
+            return target.FadeOut(fadeAmount, fadeTime);
+        }
+
+        public static void PopCharacterFade(
+            AttackableUnit target,
+            Fade ID
+        )
+        {
+            target.FadeIn(ID);
         }
 
         public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)

@@ -867,7 +867,30 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             Vector2 origin = a.Position + d * a.PathfindingRadius;
             Vector2 destination = b.Position - d * b.PathfindingRadius;
 
-            return CastRay(origin, destination, !checkVision, checkVision);
+            if (!CastRay(origin, destination, !checkVision, checkVision))
+            {
+                return false;
+            }
+
+            // Bush edge fallback -> if the observer is near/in brush, test LOS from nearby brush cells too.
+            // This avoids false negatives when the observer origin is nudged outside of grass by radius offsets.
+            if (!checkVision)
+            {
+                return true;
+            }
+
+            foreach (var cell in GetAllCellsInRange(a.Position, Math.Max(25.0f, a.PathfindingRadius)))
+            {
+                if (cell != null && cell.HasFlag(NavigationGridCellFlags.HAS_GRASS))
+                {
+                    if (!CastRay(TranslateFromNavGrid(cell.GetCenter()), destination, false, true))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

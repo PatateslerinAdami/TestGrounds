@@ -123,8 +123,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         private bool _teleportedDuringThisFrame = false;
         private List<GameScriptTimer> _scriptTimers;
-        public ShieldValues ShieldValues { get; set; }
-        protected bool shieldFixSend = false;
+        internal LinkedList<Shield> Shields { get; } = new LinkedList<Shield>();
+        private float _revealSpecificUnitTimer = 0.0f;
         private class AnimOverrideInfo
         {
             public string OverrideValue { get; set; }
@@ -174,7 +174,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             BuffList = new List<Buff>();
             IconInfo = new IconInfo(_game, this);
             _scriptTimers = new List<GameScriptTimer>();
-            ShieldValues = new ShieldValues();
             _animOverrideStack = new Dictionary<string, List<AnimOverrideInfo>>(StringComparer.OrdinalIgnoreCase);
             animOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
@@ -256,6 +255,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             UpdateTimers(diff);
             UpdateBuffs(diff);
+            UpdateRevealSpecificUnit(diff);
 
             // TODO: Rework stat management.
             _statUpdateTimer += diff;
@@ -294,6 +294,37 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _death = null;
             }
         }
+
+        /// <summary>
+        /// Temporarily marks this unit as specifically revealed through fog/stealth checks.
+        /// </summary>
+        /// <param name="durationSeconds">Reveal duration in seconds.</param>
+        public void RevealSpecificUnit(float durationSeconds)
+        {
+            if (durationSeconds <= 0.0f)
+            {
+                return;
+            }
+
+            _revealSpecificUnitTimer = Math.Max(_revealSpecificUnitTimer, durationSeconds);
+            SetStatus(StatusFlags.RevealSpecificUnit, true);
+        }
+
+        private void UpdateRevealSpecificUnit(float diff)
+        {
+            if (_revealSpecificUnitTimer <= 0.0f)
+            {
+                return;
+            }
+
+            _revealSpecificUnitTimer -= diff / 1000.0f;
+            if (_revealSpecificUnitTimer <= 0.0f)
+            {
+                _revealSpecificUnitTimer = 0.0f;
+                SetStatus(StatusFlags.RevealSpecificUnit, false);
+            }
+        }
+
         protected virtual void UpdateFacing()
         {
             if (Waypoints.Count - CurrentWaypointKey != 0)
@@ -767,30 +798,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 return;
             }
-            if (ShieldValues.HasShield())
+            if (HasShield())
             {
-                switch (type)
+                ConsumeShields(damageData);
+                postMitigationDamage = damageData.PostMitigationDamage;
+            }
+            damageData.PostMitigationDamage = postMitigationDamage;
+            Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
+
+            if (attacker != null && attacker.Team != Team && postMitigationDamage > 0.0f)
+            {
+                var revealRange = GlobalData.AttackFlags.RevealAttackerRange;
+                if (Vector2.DistanceSquared(attacker.Position, Position) <= revealRange * revealRange)
                 {
-                    case DamageType.DAMAGE_TYPE_TRUE:
-                        postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
-                        break;
-                    case DamageType.DAMAGE_TYPE_PHYSICAL:
-                        postMitigationDamage = TakeShield(0, -postMitigationDamage, false);
-                        if (postMitigationDamage > 0)
-                        {
-                            postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
-                        }
-                        break;
-                    case DamageType.DAMAGE_TYPE_MAGICAL:
-                        postMitigationDamage = TakeShield(-postMitigationDamage, 0, false);
-                        if (postMitigationDamage > 0)
-                        {
-                            postMitigationDamage = TakeShield(-postMitigationDamage, -postMitigationDamage, false);
-                        }
-                        break;
+                    attacker.RevealSpecificUnit(GlobalData.AttackFlags.RevealAttackerTimeOut);
                 }
             }
-            Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
 
             ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
@@ -1862,6 +1885,69 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 RemoveBuff(buff);
             }
         }
+
+        public virtual void AddShield(Shield shield)
+        {
+            if (shield == null || Shields.Contains(shield))
+            {
+                return;
+            }
+
+            Shields.AddLast(shield);
+            _game.PacketNotifier.NotifyModifyShield(this, shield.Amount, shield.Physical, shield.Magical, true);
+        }
+
+        public virtual void RemoveShield(Shield shield)
+        {
+            if (shield == null)
+            {
+                return;
+            }
+
+            if (Shields.Remove(shield) && shield.Amount != 0)
+            {
+                _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
+            }
+        }
+
+        public virtual bool HasShield(Shield shield = null)
+        {
+            return shield == null ? Shields.Count > 0 : Shields.Contains(shield);
+        }
+
+        /// <summary>
+        /// Consume object-based shields and reduce post-mitigation damage.
+        /// </summary>
+        protected bool ConsumeShields(DamageData damageData)
+        {
+            LinkedList<Shield> toRemove = new LinkedList<Shield>();
+            foreach (var shield in Shields)
+            {
+                var consumed = shield.Consume(damageData);
+                if (consumed != 0)
+                {
+                    _game.PacketNotifier.NotifyModifyShield(this, -consumed, shield.Physical, shield.Magical, false);
+                }
+
+                if (shield.IsConsumed())
+                {
+                    toRemove.AddFirst(shield);
+                }
+
+                if (damageData.PostMitigationDamage <= 0)
+                {
+                    break;
+                }
+            }
+
+            foreach (var shield in toRemove)
+            {
+                RemoveShield(shield);
+            }
+
+            return damageData.PostMitigationDamage <= 0;
+        }
+
         /// <summary>
         /// Forces this unit to perform a dash which ends at the given position.
         /// </summary>
@@ -2118,77 +2204,28 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             _game.ObjectManager.RefreshUnitVision(this);
         }
-        public float TakeShield(float magic, float physical, bool stopShieldFade = true)
+
+        public ShieldValues GetCombinedShieldValues()
         {
-            float unabsorbedDamage = 0;
+            var combined = new ShieldValues();
 
-            if (magic != 0 && physical != 0)
+            foreach (var shield in Shields)
             {
-                if (magic > 0)
+                if (shield.Magical && shield.Physical)
                 {
-                    ShieldValues.MagicalAndPhysical += magic;
-                    _game.PacketNotifier.NotifyModifyShield(magic, magic, NetId, stopShieldFade);
+                    combined.MagicalAndPhysical += shield.Amount;
                 }
-                else
+                else if (shield.Magical)
                 {
-                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.MagicalAndPhysical, magic);
-                    ShieldValues.MagicalAndPhysical += shieldChange;
-                    unabsorbedDamage = remainingDamage;
-
-                    if (shieldChange != 0)
-                    {
-                        _game.PacketNotifier.NotifyModifyShield(shieldChange, shieldChange, NetId, stopShieldFade);
-                    }
+                    combined.Magical += shield.Amount;
+                }
+                else if (shield.Physical)
+                {
+                    combined.Phyisical += shield.Amount;
                 }
             }
-            else if (magic != 0)
-            {
-                if (magic > 0)
-                {
-                    ShieldValues.Magical += magic;
-                    _game.PacketNotifier.NotifyModifyShield(magic, 0, NetId, stopShieldFade);
-                }
-                else
-                {
-                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.Magical, magic);
-                    ShieldValues.Magical += shieldChange;
-                    unabsorbedDamage = remainingDamage;
 
-                    if (shieldChange != 0)
-                    {
-                        _game.PacketNotifier.NotifyModifyShield(shieldChange, 0, NetId, stopShieldFade);
-                    }
-                }
-            }
-            else if (physical != 0)
-            {
-                if (physical > 0)
-                {
-                    ShieldValues.Phyisical += physical;
-                    _game.PacketNotifier.NotifyModifyShield(0, physical, NetId, stopShieldFade);
-                }
-                else
-                {
-                    (float shieldChange, float remainingDamage) = DeductShield(ShieldValues.Phyisical, physical);
-                    ShieldValues.Phyisical += shieldChange;
-                    unabsorbedDamage = remainingDamage;
-
-                    if (shieldChange != 0)
-                    {
-                        _game.PacketNotifier.NotifyModifyShield(0, shieldChange, NetId, stopShieldFade);
-                    }
-                }
-            }
-            if (Stats.CurrentHealth + ShieldValues.GetAllShieldValue() > Stats.HealthPoints.Total && magic + physical < 0) shieldFixSend = true;
-            return unabsorbedDamage;
-        }
-        private (float shieldChange, float unabsorbedDamage) DeductShield(float currentShield, float damageAmount)
-        {
-            float incomingDamage = -damageAmount;
-            float effectiveChange = -System.Math.Min(currentShield, incomingDamage);
-            float remainingDamage = incomingDamage + effectiveChange;
-
-            return (effectiveChange, remainingDamage);
+            return combined;
         }
         protected void UpdateGrassState()
         {

@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -19,6 +20,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         Particle pbuff, pbuff1, pbuff2;
+        private Shield _feintShield;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
@@ -26,7 +28,7 @@ namespace Buffs
             pbuff = AddParticleTarget(owner, owner, "Riven_Base_E_Shield.troy", owner, buff.Duration);
             pbuff1 = AddParticleTarget(owner, owner, "Riven_Base_E_Mis.troy", owner, buff.Duration);
             pbuff2 = AddParticleTarget(owner, owner, "Riven_Base_E_Interupt.troy", owner, buff.Duration);
-            unit.TakeShield(200f, 200f, true);
+            _feintShield = AddShield(ownerSpell.CastInfo.Owner, unit, 200f, true, true);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
@@ -34,7 +36,11 @@ namespace Buffs
             RemoveParticle(pbuff);
             RemoveParticle(pbuff1);
             RemoveParticle(pbuff2);
-            unit.TakeShield(-200f, -200f, true);
+            if (_feintShield != null)
+            {
+                RemoveShield(unit, _feintShield);
+                _feintShield = null;
+            }
         }
     }
 }

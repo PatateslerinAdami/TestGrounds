@@ -196,7 +196,7 @@ namespace LeagueSandbox.GameServer
                 bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
                 shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
                     nearSighted ?
-                        UnitHasVisionOn(champion, obj) :
+                        UnitHasVisionOn(champion, obj, nearSighted) :
                         obj.IsVisibleByTeam(champion.Team)
                 );
             }
@@ -304,27 +304,105 @@ namespace LeagueSandbox.GameServer
         /// <returns>true/false; networked or not.</returns>
         public bool TeamHasVisionOn(TeamId team, GameObject o)
         {
-            if (o != null)
+            if (o == null)
             {
-                if(!o.IsAffectedByFoW)
+                return false;
+            }
+
+            if (!o.IsAffectedByFoW)
+            {
+                return true;
+            }
+
+            foreach (var p in _visionProviders[team])
+            {
+                if (p == null || p.IsToRemove())
+                {
+                    continue;
+                }
+
+                // Dead units should never provide vision.
+                if (p is AttackableUnit observerUnit && observerUnit.IsDead)
+                {
+                    continue;
+                }
+
+                // Regions bound to dead units should not provide vision either.
+                if (p is Region providerRegion
+                    && providerRegion.CollisionUnit is AttackableUnit regionOwner
+                    && regionOwner.IsDead)
+                {
+                    continue;
+                }
+
+                // Enemy turrets should not provide vision for your team.
+                if (p is BaseTurret && p.Team != team)
+                {
+                    continue;
+                }
+
+                // Enemy lane minions should not provide vision for your team.
+                if (p is Minion laneMinion
+                    && laneMinion.Team != team
+                    && laneMinion.Team != TeamId.TEAM_NEUTRAL)
+                {
+                    continue;
+                }
+
+                if (UnitHasVisionOn(p, o))
                 {
                     return true;
                 }
-
-                foreach (var p in _visionProviders[team])
-                {
-                    if (UnitHasVisionOn(p, o))
-                    {
-                        return true;
-                    }
-                }
             }
+
             return false;
         }
 
-        bool UnitHasVisionOn(GameObject observer, GameObject tested)
+        bool UnitHasVisionOn(GameObject observer, GameObject tested, bool nearSighted = false)
         {
-            if (!tested.IsAffectedByFoW) return true;
+            if (!tested.IsAffectedByFoW)
+            {
+                return true;
+            }
+
+            if (observer == null || observer.IsToRemove())
+            {
+                return false;
+            }
+
+            if (observer is AttackableUnit observerUnit && observerUnit.IsDead)
+            {
+                return false;
+            }
+
+            if (observer is Region observerRegion
+                && observerRegion.CollisionUnit is AttackableUnit regionOwner
+                && regionOwner.IsDead)
+            {
+                return false;
+            }
+
+            if (tested is AttackableUnit testedUnit
+                && testedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit))
+            {
+                return true;
+            }
+
+            if (tested is AttackableUnit stealthedUnit
+                && stealthedUnit.Status.HasFlag(StatusFlags.Stealthed)
+                && !stealthedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit)
+                && stealthedUnit.Team != observer.Team)
+            {
+                return false;
+            }
+
+            if (observer is Region regionObserver
+                && regionObserver.OnlyShowTarget
+                && regionObserver.VisionTarget != null
+                && regionObserver.VisionTarget != tested)
+            {
+                return false;
+            }
 
             if (tested is Particle particle)
             {
@@ -346,54 +424,28 @@ namespace LeagueSandbox.GameServer
                 }
             }
 
-            if (tested.Team == observer.Team) return true;
+            if (tested.Team == observer.Team && !nearSighted)
+            {
+                return true;
+            }
 
             if (Vector2.DistanceSquared(observer.Position, tested.Position) >= observer.VisionRadius * observer.VisionRadius)
             {
                 return false;
             }
 
-            bool hasLineOfSight = false;
-
             if (observer is Region region && region.IgnoresLineOfSight)
             {
-                hasLineOfSight = true;
-            }
-            else
-            {
-                bool isSelfCheck = (observer is Region r && r.VisionTarget == tested);
-                if (isSelfCheck)
-                {
-                    hasLineOfSight = true;
-                }
-                else
-                {
-                    hasLineOfSight = !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
-                }
+                return true;
             }
 
-            if (!hasLineOfSight)
+            bool isSelfCheck = observer is Region r && r.VisionTarget == tested;
+            if (isSelfCheck)
             {
-                return false;
-            }
-            if (tested is AttackableUnit au && au.Status.HasFlag(StatusFlags.Stealthed))
-            {
-                if (observer is Region r && r.RevealsStealth)
-                {
-                    if (r.OnlyShowTarget && r.VisionTarget != tested)
-                    {
-                        return false;
-                    }
-                    return true;
-                }
-                return false;
+                return true;
             }
 
-            if (observer is Region reg && reg.OnlyShowTarget && reg.VisionTarget != tested)
-            {
-                return false;
-            }
-            return true;
+            return !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
         }
 
         /// <summary>

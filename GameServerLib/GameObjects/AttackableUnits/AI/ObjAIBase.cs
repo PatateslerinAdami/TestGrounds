@@ -1784,11 +1784,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void LateUpdate(float diff)
         {
-            if (shieldFixSend)
-            {
-                _game.PacketNotifier.HealthBarTest(this);
-                shieldFixSend = false;
-            }
             if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.GetIsTargetableToTeam(Team))
             {
                 if (TargetUnit.CharData.IsUseable)
