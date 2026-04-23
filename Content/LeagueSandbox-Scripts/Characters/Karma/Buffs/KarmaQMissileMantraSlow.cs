@@ -1,38 +1,37 @@
-﻿using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using System.Numerics;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using GameServerCore.Enums;
-using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 
 namespace Buffs
 {
-    internal class KarmaSolKimShield : IBuffGameScript
-    {
+    internal class KarmaQMissileMantraSlow: IBuffGameScript {
         private ObjAIBase _karma;
-        private Shield _solKimShield;
+        private Particle  _slowParticle;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            MaxStacks = 1
+            BuffType    = BuffType.SLOW,
+            BuffAddType = BuffAddType.STACKS_AND_OVERLAPS,
+            MaxStacks   = 100
         };
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            _karma = ownerSpell.CastInfo.Owner;
-            _solKimShield = new Shield(_karma, _karma, true, true, 200f);
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+            _karma                               =  ownerSpell.CastInfo.Owner;
+            StatsModifier.MoveSpeed.PercentBonus -= 0.5f;
+            unit.AddStatModifier(StatsModifier);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            RemoveShield(_karma, _solKimShield);
+            RemoveParticle(_slowParticle);
         }
     }
 }

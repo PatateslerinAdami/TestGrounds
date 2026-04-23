@@ -217,6 +217,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return spell;
         }
 
+        public override Spell LevelUpSpell(byte slot)
+        {
+            return LevelUpSpell(slot, true);
+        }
+
         public void AddToolTipChange(ToolTipData data)
         {
             if (!_tipsChanged.Contains(data))

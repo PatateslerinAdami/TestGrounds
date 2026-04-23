@@ -171,7 +171,9 @@ namespace LeagueSandbox.GameServer.Content
 
             for (var i = 0; i < 4; i++)
             {
-                SpellsUpLevels[i] = file.GetIntArray("Data", $"SpellsUpLevels{i + 1}", SpellsUpLevels[i]);
+                var defaultLevels = SpellsUpLevels[i];
+                var levels = file.GetIntArray("Data", $"SpellSupLevels{i + 1}", defaultLevels);
+                SpellsUpLevels[i] = file.GetIntArray("Data", $"SpellsUpLevels{i + 1}", levels);
             }
 
             PassiveData.PassiveLuaName = file.GetString("Data", "Passive1LuaName", "");
