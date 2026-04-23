@@ -2299,10 +2299,22 @@ namespace AIScripts
                 offsetTarget = ApplyPersonalityOffset(targetPosition);
             }
 
-            // If the target itself isn't walkable, find the nearest walkable point
-            Vector2 safeTarget = FindNearestWalkable(offsetTarget);
+            // Use the pathfinding handler to get a terrain-aware path
+            List<Vector2> waypoints = ApiFunctionManager.GetPath(botPosition, offsetTarget, EzrealInstance.PathfindingRadius);
 
-            List<Vector2> waypoints = new List<Vector2> { botPosition, safeTarget };
+            // Fallback: if pathfinding returned nothing (unreachable target), try without radius
+            if (waypoints == null || waypoints.Count == 0)
+            {
+                waypoints = ApiFunctionManager.GetPath(botPosition, offsetTarget, 0);
+            }
+
+            // Final fallback: stay put rather than walk into a wall
+            if (waypoints == null || waypoints.Count == 0)
+            {
+                _logger.Debug($"No path found to {offsetTarget}, staying put.");
+                return;
+            }
+
             EzrealInstance.MoveOrder = OrderType.MoveTo;
             EzrealInstance.SetWaypoints(waypoints);
         }
