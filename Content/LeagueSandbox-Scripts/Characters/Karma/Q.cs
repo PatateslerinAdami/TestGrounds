@@ -18,6 +18,7 @@ namespace Spells;
 public class KarmaQ : ISpellScript {
     private ObjAIBase _karma;
     private Vector2   _targetPosition;
+    private bool      _isMantraEmpoweredCast;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = true,
@@ -30,10 +31,13 @@ public class KarmaQ : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _targetPosition = end;
+        _isMantraEmpoweredCast = _karma.HasBuff("KarmaMantra");
     }
 
     public void OnSpellPostCast(Spell spell) {
-        SpellCast(_karma, _karma.HasBuff("KarmaMantra") ? 3 : 2, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition,
+        var missileSlot = _isMantraEmpoweredCast ? 3 : 2;
+        _isMantraEmpoweredCast = false;
+        SpellCast(_karma, missileSlot, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition,
                   true,   Vector2.Zero);
         //2 is QMissile
         //3 is QMissileMantra
@@ -62,8 +66,8 @@ public class KarmaQMissile : ISpellScript {
 
     public void OnSpellPostCast(Spell spell) { }
 
-    public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        if (!IsValidTarget(_karma, target, SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+        if (!IsValidTarget(_karma, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
             var ap       = _karma.Stats.AbilityPower.Total * 0.6f;
             var dmg      = 80 + 45f * (_karma.GetSpell("KarmaQ").CastInfo.SpellLevel -1) + ap;
 
