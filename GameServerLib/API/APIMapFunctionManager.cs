@@ -429,6 +429,18 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyS2C_HandleCapturePointUpdate(capturePointIndex, otherNetId, PARType, attackTeam, capturePointUpdateCommand);
         }
 
+        /// <summary>
+        /// Attaches level-prop idle flex particles to a capture point index.
+        /// </summary>
+        /// <param name="netId">NetID of the prop/object with flex particles.</param>
+        /// <param name="particleFlexId">Flex value id used by the particle.</param>
+        /// <param name="capturePointIndex">Capture point index to bind to.</param>
+        /// <param name="particleAttachType">Attach behavior flags.</param>
+        public static void NotifyAttachFlexParticle(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
+        {
+            _game.PacketNotifier.NotifyAttachFlexParticleS2C(netId, particleFlexId, capturePointIndex, particleAttachType);
+        }
+
         public static void TeleportCamera(Champion target, Vector3 position)
         {
             _game.PacketNotifier.NotifyS2C_CameraBehavior(target, position);

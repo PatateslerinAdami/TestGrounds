@@ -40,6 +40,10 @@ namespace MapScripts.Map8
 
             foreach (var infoPoint in InfoPoints)
             {
+                const byte particleFlexId = 0;
+                const uint particleAttachType = 1;
+
+                NotifyAttachFlexParticle(infoPoint.Point.NetId, particleFlexId, infoPoint.Index, particleAttachType);
                 NotifyHandleCapturePointUpdate(infoPoint.Index, infoPoint.Point.NetId, 0, 0, CapturePointUpdateCommand.AttachToObject);
             }
         }

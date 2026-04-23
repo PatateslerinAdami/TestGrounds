@@ -2887,7 +2887,7 @@ namespace PacketDefinitions420
             };
             _packetHandlerManager.BroadcastPacket(gameEndPacket.GetBytes(), Channel.CHL_S2C);
         }
-        
+
         public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
         {
             var packet = new AttachFlexParticleS2C
