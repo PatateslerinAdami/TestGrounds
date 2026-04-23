@@ -15,8 +15,8 @@ namespace Buffs;
 
 // Temporary lockout/transition buff after Fishbones is forced off.
 internal class JinxQIcon : IBuffGameScript {
-    ObjAIBase _jinx;
-    Spell     _spell;
+    private ObjAIBase _jinx;
+    private Spell     _spell;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,

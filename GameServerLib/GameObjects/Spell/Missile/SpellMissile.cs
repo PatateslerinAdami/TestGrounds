@@ -106,6 +106,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         {
             return _moveSpeed;
         }
+        
+        //TODO: Find out if this causes issues with replication?
+        /// <summary>
+        ///     Sets the server-side speed that this Projectile moves at in units/sec.
+        /// </summary>
+        public void SetSpeed(float speed) { _moveSpeed = speed; }
 
         /// <summary>
         /// Gets the time since this projectile was created.
