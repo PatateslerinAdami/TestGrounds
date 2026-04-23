@@ -35,6 +35,7 @@ using static LENet.Protocol;
 using Timer = System.Timers.Timer;
 using AIScripts.Common;
 using static AIScripts.Common.BotCommunicationAPI;
+using static AIScripts.Common.BotLaneAPI;
 
 namespace AIScripts
 {
@@ -114,6 +115,11 @@ namespace AIScripts
         private const float FountainShopRange = 1000f; // Distance from fountain to shop
         private bool _hasItemsToBuy = true;
 
+        // Lane selection configuration
+        private BotLane _assignedLane = BotLane.Mid;
+        private bool _hasSelectedLane = false;
+        private bool _isRecallingForLane = false;
+
         // Bot communication settings and tracking
         private BotSettings _botSettings;
         private float _lastPingTime = 0f;
@@ -169,6 +175,9 @@ namespace AIScripts
                 // Initialize dynamic waypoints based on team
                 InitializeWaypoints();
 
+                // Select lane immediately when bot is activated
+                SelectLane();
+
                 _itemBuildOrder = new List<int>
                 {
                     3153,
@@ -179,6 +188,120 @@ namespace AIScripts
                     3142
                 };
             }
+        }
+
+        /// <summary>
+        /// Selects the optimal lane for this bot based on team composition
+        /// </summary>
+        private void SelectLane()
+        {
+            if (EzrealInstance == null)
+                return;
+
+            // Check if another ally is already recalling for lane selection
+            if (IsAllyRecalling(EzrealInstance))
+            {
+                _logger.Debug($"Ally is already recalling for lane selection, waiting...");
+                return;
+            }
+
+            // Check if we should recall due to lane overflow
+            if (ShouldRecallDueToOverflow(EzrealInstance))
+            {
+                // Mark ourselves as recalling to prevent other bots from also recalling
+                MarkBotAsRecalling(EzrealInstance);
+                _isRecallingForLane = true;
+                _logger.Debug($"Lane overflow detected, recalling to choose new lane...");
+
+                // Trigger recall
+                EzrealInstance.Recall();
+                return;
+            }
+
+            // Select the optimal lane
+            _assignedLane = GetTargetLane(EzrealInstance);
+            _hasSelectedLane = true;
+
+            // Assign this bot to the lane in the API
+            AssignBotToLane(EzrealInstance, _assignedLane);
+
+            _logger.Debug($"Selected lane: {_assignedLane}");
+
+            // Update waypoints based on selected lane
+            InitializeLaneWaypoints();
+        }
+
+        /// <summary>
+        /// Initializes waypoints based on the assigned lane
+        /// </summary>
+        private void InitializeLaneWaypoints()
+        {
+            if (EzrealInstance == null)
+                return;
+
+            // Base waypoints for each lane (blue side perspective)
+            List<Vector2> laneWaypoints;
+
+            switch (_assignedLane)
+            {
+                case BotLane.Top:
+                    laneWaypoints = new List<Vector2>
+                    {
+                        new Vector2(917.0f, 1725.0f),    // Blue fountain area
+                        new Vector2(1170.0f, 4041.0f),    // Near blue outer turret
+                        new Vector2(861.0f, 6459.0f),      // Mid lane center area
+                        new Vector2(880.0f, 10180.0f),     // Mid lane center area
+                        new Vector2(1268.0f, 11675.0f),    // Near purple outer turret
+                        new Vector2(2806.0f, 13075.0f),    // Purple fountain area (enemy nexus)
+                        new Vector2(3907.0f, 13243.0f),
+                        new Vector2(7550.0f, 13407.0f),
+                        new Vector2(10244.0f, 13238.0f),
+                        new Vector2(10947.0f, 13135.0f),
+                        new Vector2(12511.0f, 12776.0f)
+                    };
+                    break;
+
+                case BotLane.Bottom:
+                    laneWaypoints = new List<Vector2>
+                    {
+                        new Vector2(1487.0f, 1302.0f),   // Blue fountain area
+                        new Vector2(3789.0f, 1346.0f),   // Near blue outer turret
+                        new Vector2(6430.0f, 1005.0f),   // Mid lane center area
+                        new Vector2(10995.0f, 1234.0f),  // Mid lane center area
+                        new Vector2(12841.0f, 3051.0f),  // Near purple outer turret
+                        new Vector2(13148.0f, 4202.0f),  // Purple fountain area (enemy nexus)
+                        new Vector2(13249.0f, 7884.0f),
+                        new Vector2(12886.0f, 10356.0f),
+                        new Vector2(12511.0f, 12776.0f)
+                    };
+                    break;
+
+                case BotLane.Mid:
+                default:
+                    laneWaypoints = new List<Vector2>
+                    {
+                        new Vector2(1418.0f, 1686.0f),   // Blue fountain area
+                        new Vector2(2997.0f, 2781.0f),   // Near blue outer turret
+                        new Vector2(4472.0f, 4727.0f),   // Mid lane center area
+                        new Vector2(8375.0f, 8366.0f),   // Mid lane center area
+                        new Vector2(10948.0f, 10821.0f), // Near purple outer turret
+                        new Vector2(12511.0f, 12776.0f)  // Purple fountain area (enemy nexus)
+                    };
+                    break;
+            }
+
+            if (EzrealInstance.Team == TeamId.TEAM_BLUE)
+            {
+                // Blue team: use waypoints in forward order (from blue base to purple base)
+                _midLaneWaypoints = laneWaypoints;
+            }
+            else
+            {
+                // Purple team: reverse the waypoints (from purple base to blue base)
+                _midLaneWaypoints = new List<Vector2>(laneWaypoints);
+                _midLaneWaypoints.Reverse();
+            }
+            _logger.Debug($"Initialized {_midLaneWaypoints.Count} waypoints for lane {_assignedLane} on team {EzrealInstance.Team}");
         }
 
         public void OnDeath(DeathData deathData)
@@ -205,6 +328,10 @@ namespace AIScripts
 
                 // Set flag to indicate we need to shop when respawning
                 _hasItemsToBuy = true;
+
+                // Clear recalling status on death
+                ClearBotRecallingStatus(EzrealInstance);
+                _isRecallingForLane = false;
             }
         }
 
@@ -248,6 +375,40 @@ namespace AIScripts
             if (isInCombat && _gameTime - _lastDamageTakenTime > CombatCooldownTime)
             {
                 isInCombat = false;
+            }
+
+            // Handle lane selection logic
+            if (!_hasSelectedLane && ShouldSelectLanes())
+            {
+                SelectLane();
+            }
+
+            // Handle recall for lane selection
+            if (_isRecallingForLane)
+            {
+                // Check if we've respawned at fountain (teleport completed)
+                // This is a simple check - if we're near our base and not moving, recall is complete
+                if (IsNearFountain())
+                {
+                    // Clear recalling status
+                    ClearBotRecallingStatus(EzrealInstance);
+                    _isRecallingForLane = false;
+
+                // Select new lane
+                _assignedLane = GetTargetLane(EzrealInstance);
+                _hasSelectedLane = true;
+
+                // Reassign this bot to the new lane
+                AssignBotToLane(EzrealInstance, _assignedLane);
+
+                _logger.Debug($"After recall, selected new lane: {_assignedLane}");
+
+                // Update waypoints
+                InitializeLaneWaypoints();
+
+                    // Reset state to moving to lane
+                    _currentState = BotState.MovingToLane;
+                }
             }
 
             // Update personality offset periodically
@@ -381,7 +542,20 @@ namespace AIScripts
                 }
             }
             
-            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower() && _currentState != BotState.Shopping)
+            // Check if we should recall due to lane overflow (only before minions spawn)
+            if (!EzrealInstance.IsDead && ShouldSelectLanes() && ShouldRecallDueToOverflow(EzrealInstance) && !_isRecallingForLane)
+            {
+                // Check if another ally is already recalling
+                if (!IsAllyRecalling(EzrealInstance))
+                {
+                    MarkBotAsRecalling(EzrealInstance);
+                    _isRecallingForLane = true;
+                    _logger.Debug($"Lane overflow detected, recalling to choose new lane...");
+                    EzrealInstance.Recall();
+                }
+            }
+
+            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower() && _currentState != BotState.Shopping && !_isRecallingForLane)
             {
                 _currentState = BotState.MovingToLane;
             }
