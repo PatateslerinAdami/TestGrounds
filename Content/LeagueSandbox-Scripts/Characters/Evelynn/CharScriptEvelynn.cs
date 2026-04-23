@@ -11,7 +11,7 @@ public class CharScriptEvelynn : ICharScript {
     private ObjAIBase _evelynn;
     private Spell     _spell;
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnPostActivate(ObjAIBase owner, Spell spell) {
         _evelynn = owner;
         _spell   = spell;
         ApiEventManager.OnTakeDamage.AddListener(this, owner, OnTakeDamage);
