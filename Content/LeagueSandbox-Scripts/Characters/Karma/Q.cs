@@ -87,7 +87,7 @@ public class KarmaQMissileMantra : ISpellScript {
     private ObjAIBase _karma;
     private Vector2   _endPos;
     private float     _fieldTimer = 0f;
-    private bool      _hasExploded = true;
+    private bool      _hasDetonated = true;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters() {
@@ -133,7 +133,7 @@ public class KarmaQMissileMantra : ISpellScript {
         }
         //AddParticlePos(_karma, "Karma_Base_Q_impact_R_02.troybin",      _endPos, _endPos, 1.5f);
         //_fieldTimer  = 0f;
-        //_hasExploded = false;
+        //_hasDetonated = false;
         missile.SetToRemove();
     }
 
@@ -141,11 +141,11 @@ public class KarmaQMissileMantra : ISpellScript {
         _endPos      = missile.Position;
         AddParticlePos(_karma, "Karma_Base_Q_impact_R_01",      _endPos, _endPos, 1.5f, enemyParticle: "Karma_Base_Q_impact_red_R_01");
         _fieldTimer  = 0f;
-        _hasExploded = false;
+        _hasDetonated = false;
     }
 
     public void OnUpdate(float diff) {
-        if (_hasExploded) return;
+        if (_hasDetonated) return;
         _fieldTimer += diff;
         if (_fieldTimer >= 1500f) {
             var ap  = _karma.Stats.AbilityPower.Total * 0.6f;
@@ -161,7 +161,7 @@ public class KarmaQMissileMantra : ISpellScript {
                 var reductionAmount = 0.5f + 0.25f * (_karma.Spells[3].CastInfo.SpellLevel -1);
                 _karma.Spells[3].LowerCooldown(reductionAmount);
             }
-            _hasExploded = true;
+            _hasDetonated = true;
             return;
         }
         var remainingDuration = 1.5f - _fieldTimer / 1000f;
