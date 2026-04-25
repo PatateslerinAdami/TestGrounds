@@ -41,12 +41,7 @@ public class TalonNoxianDiplomacy : ISpellScript
     {
         AddBuff(BuffName, 5f, 1, spell, _talon, _talon);
         
-        // Fix A: TalonNoxianDiplomacyAttack is now an ExtraAttack in Talon.json,
-        // so just force the next auto to use that attack variant.
         _talon.SetAutoAttackSpell("TalonNoxianDiplomacyAttack", true);
-        // 🔍 SANITY CHECK (TEMP)
-        var aa = _talon.GetAutoAttackSpell("TalonNoxianDiplomacyAttack")
-                 ?? _talon.GetSpell("TalonNoxianDiplomacyAttack");
         
     }
 
