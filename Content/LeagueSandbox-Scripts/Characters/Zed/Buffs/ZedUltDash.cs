@@ -446,19 +446,32 @@ internal class ZedUltDash : IBuffGameScript {
     }
 
     private Vector2 GetPositionByOffset(float angleOffset, float distanceOffset) {
-        var angle    = angleOffset * Math.PI / 180.0f;
-        var dX       = _target.Position.X - _zed.Position.X;
-        var dY       = _target.Position.Y - _zed.Position.Y;
-        var distance = (float) Math.Sqrt(dX * dX + dY * dY);
-        var offset   = distanceOffset;
-        dX /= distance;
-        dY /= distance;
-        var rotX         = dX * Math.Cos(angle) - dY   * Math.Sin(angle);
-        var rotY         = dX * Math.Sin(angle) + dY   * Math.Cos(angle);
-        var newX         = _target.Position.X   + rotX * offset;
-        var newY         = _target.Position.Y   + rotY * offset;
-        var targetVector = new Vector2((float) newX, (float) newY);
-        return targetVector;
+        var angle = angleOffset * Math.PI / 180.0f;
+
+        var direction = _target.Position - _zed.Position;
+        if (direction.LengthSquared() < 0.0001f ||
+            float.IsNaN(direction.X) || float.IsNaN(direction.Y) ||
+            float.IsInfinity(direction.X) || float.IsInfinity(direction.Y)) {
+            direction = new Vector2(_zed.Direction.X, _zed.Direction.Z);
+        }
+
+        if (direction.LengthSquared() < 0.0001f ||
+            float.IsNaN(direction.X) || float.IsNaN(direction.Y) ||
+            float.IsInfinity(direction.X) || float.IsInfinity(direction.Y)) {
+            direction = Vector2.UnitX;
+        }
+
+        direction = Vector2.Normalize(direction);
+
+        var cos = (float) Math.Cos(angle);
+        var sin = (float) Math.Sin(angle);
+
+        var rotatedDirection = new Vector2(
+            direction.X * cos - direction.Y * sin,
+            direction.X * sin + direction.Y * cos
+        );
+
+        return _target.Position + rotatedDirection * distanceOffset;
     }
 
     private void SetAllCastSlotsSealed(bool sealedState) {

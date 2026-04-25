@@ -1128,7 +1128,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             else
             {
+                if (Waypoints == null || Waypoints.Count <= 1)
+                {
+                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    return frameTime;
+                }
+
                 dir = Waypoints[1] - Position;
+                if (float.IsNaN(dir.X) || float.IsNaN(dir.Y) || float.IsInfinity(dir.X) || float.IsInfinity(dir.Y))
+                {
+                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    return frameTime;
+                }
                 distToDest = dir.Length();
             }
             distRemaining = Math.Min(distToDest, distRemaining);
