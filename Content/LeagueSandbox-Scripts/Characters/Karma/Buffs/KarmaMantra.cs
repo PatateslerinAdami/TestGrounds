@@ -31,7 +31,7 @@ namespace Buffs
             _p2 = AddParticleTarget(_karma, _karma, "Karma_Base_R_activate_overhead", _karma, buff.Duration);
             ApiEventManager.OnSpellPostCast.AddListener(this, _karma.GetSpell("KarmaQ"), OnSpellCast);
             ApiEventManager.OnSpellPostCast.AddListener(this, _karma.GetSpell("KarmaSpiritBind"), OnSpellCast);
-            ApiEventManager.OnSpellPostCast.AddListener(this, _karma.GetSpell("KarmaSolKimShield"), OnSpellCast); 
+            ApiEventManager.OnSpellPostCast.AddListener(this, _karma.GetSpell("KarmaSolKimShield"), OnSpellCast);
         }
 
         private void OnSpellCast(Spell spell) {

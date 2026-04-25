@@ -40,7 +40,7 @@ namespace Buffs
             _3 = AddParticleTarget(_nami, unit, "Nami_E_Counter3", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
         }
 
-        public void OnHit(DamageData data) {
+        private void OnHit(DamageData data) {
             var ap  = _nami.Stats.AbilityPower.Total * 0.2f;
             var dmg = 20f + 10f * (_tideCallersBlessing.CastInfo.SpellLevel - 1) + ap;
             if (_count < 3 && IsValidTarget(_nami, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) {
