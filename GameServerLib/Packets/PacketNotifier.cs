@@ -1132,6 +1132,35 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Sends a packet to show or hide a unit's health bar.
+        /// </summary>
+        /// <param name="unit">Unit whose health bar visibility should change.</param>
+        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="hide">True to hide, false to show.</param>
+        public void NotifyShowHealthBar(AttackableUnit unit, int userId, bool hide)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var packet = new S2C_ShowHealthBar
+            {
+                SenderNetID = unit.NetId,
+                ShowHealthBar = !hide
+            };
+
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
         /// Sends a packet to the specified user that highlights the specified GameObject.
         /// </summary>
         /// <param name="userId">ID of the user to send the packet to.</param>

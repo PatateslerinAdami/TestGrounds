@@ -1,144 +1,357 @@
-﻿using GameServerCore.Enums;
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using Buffs;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Spells
-{
-    public class ZedShuriken : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            TriggersSpellCasts = true,
-            IsDamagingSpell = true
-        };
+namespace Spells;
 
-        private ObjAIBase _owner;
+internal static class ZedShurikenCastTracker {
+    private const long CastLifetimeMs = 3000;
+    private static int _nextCastId = 1;
+    private static readonly Dictionary<uint, int> _activeCastByOwner = new();
+    private static readonly Dictionary<uint, int> _castByMissile = new();
+    private static readonly Dictionary<int, Dictionary<uint, int>> _targetHitCountByCast = new();
+    private static readonly Dictionary<int, bool> _energyRefundedByCast = new();
+    private static readonly Dictionary<int, long> _castExpiresAt = new();
 
-        private Minion _wShadow;
-        private Minion wShadow
-        {
-            get
-            {
-                if (_wShadow == null)
-                {
-                    var sp = _owner.GetSpell("ZedShadowDashMissile");
-                    if (sp?.Script is ZedShadowDashMissile dashScript)
-                    {
-                        _wShadow = dashScript.shadow;
-                    }
-                }
-                return _wShadow;
-            }
+    public static void BeginCast(ObjAIBase owner) {
+        if (owner == null) return;
+        Cleanup();
+
+        var castId = _nextCastId++;
+        if (_nextCastId == int.MaxValue) _nextCastId = 1;
+
+        _activeCastByOwner[owner.NetId] = castId;
+        _targetHitCountByCast[castId] = new Dictionary<uint, int>();
+        _energyRefundedByCast[castId] = false;
+        _castExpiresAt[castId] = NowMs() + CastLifetimeMs;
+    }
+
+    public static void RegisterMissile(ObjAIBase owner, SpellMissile missile) {
+        if (owner == null || missile == null) return;
+        Cleanup();
+
+        if (!_activeCastByOwner.TryGetValue(owner.NetId, out var castId)) return;
+        _castByMissile[missile.NetId] = castId;
+    }
+
+    public static float RegisterHitAndGetDamageMultiplier(SpellMissile missile, AttackableUnit target, out bool shouldRefundEnergy) {
+        shouldRefundEnergy = false;
+        if (missile == null || target == null) return 1.0f;
+        Cleanup();
+
+        if (!_castByMissile.TryGetValue(missile.NetId, out var castId)) return 1.0f;
+        if (!_targetHitCountByCast.TryGetValue(castId, out var hitCountByTarget)) {
+            hitCountByTarget = new Dictionary<uint, int>();
+            _targetHitCountByCast[castId] = hitCountByTarget;
         }
 
-        private ZedShadowDashMissile GetInFlightMissile(ObjAIBase owner)
-        {
-            var sp = owner.GetSpell("ZedShadowDashMissile");
-            if (sp?.Script is ZedShadowDashMissile dashScript && dashScript.MissileInFlight)
-            {
-                return dashScript;
-            }
-            return null;
+        hitCountByTarget.TryGetValue(target.NetId, out var hitCount);
+        hitCount++;
+        hitCountByTarget[target.NetId] = hitCount;
+
+        if (hitCount >= 2 && TryConsumeEnergyRefund(castId)) {
+            shouldRefundEnergy = true;
         }
 
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _owner = owner;
+        _castExpiresAt[castId] = NowMs() + CastLifetimeMs;
+        return MathF.Pow(0.5f, hitCount - 1);
+    }
+
+    public static void OnMissileEnd(SpellMissile missile) {
+        if (missile == null) return;
+        _castByMissile.Remove(missile.NetId);
+    }
+
+    private static long NowMs() { return Environment.TickCount64; }
+
+    private static bool TryConsumeEnergyRefund(int castId) {
+        if (castId <= 0) return false;
+        Cleanup();
+
+        if (!_energyRefundedByCast.TryGetValue(castId, out var alreadyRefunded)) {
+            _energyRefundedByCast[castId] = false;
+            alreadyRefunded = false;
         }
 
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-            owner.StopMovement(networked: false);
+        if (alreadyRefunded) return false;
+        _energyRefundedByCast[castId] = true;
+        _castExpiresAt[castId]        = NowMs() + CastLifetimeMs;
+        return true;
+    }
 
-            var dashScript = GetInFlightMissile(owner);
-
-            if (dashScript != null)
-            {
-                var capturedEnd = end;
-                dashScript.PendingShadowCasts.Add(() =>
-                {
-                    FaceDirection(capturedEnd, dashScript.shadow);
-                    dashScript.shadow.PlayAnimation("Spell1", timeScale: 1.5f);
-                });
-            }
-            else if (wShadow != null)
-            {
-                FaceDirection(end, wShadow);
-                wShadow.PlayAnimation("Spell1", timeScale: 1.5f);
-            }
+    private static void Cleanup() {
+        var now = NowMs();
+        var expiredCastIds = new List<int>();
+        foreach (var entry in _castExpiresAt) {
+            if (entry.Value <= now) expiredCastIds.Add(entry.Key);
         }
 
-        public void OnSpellPostCast(Spell spell)
-        {
-            var owner = spell.CastInfo.Owner;
+        foreach (var castId in expiredCastIds) {
+            _castExpiresAt.Remove(castId);
+            _targetHitCountByCast.Remove(castId);
+            _energyRefundedByCast.Remove(castId);
+        }
 
-            var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-            var maxRange = spell.GetCurrentCastRange();
-            var zedDir = Vector2.Normalize(targetPos - owner.Position);
-            var zedEndPos = owner.Position + (zedDir * maxRange);
+        var staleMissileIds = new List<uint>();
+        foreach (var entry in _castByMissile) {
+            if (!_targetHitCountByCast.ContainsKey(entry.Value)) staleMissileIds.Add(entry.Key);
+        }
 
-            SpellCast(owner, 1, SpellSlotType.ExtraSlots, zedEndPos, zedEndPos, true, Vector2.Zero);
+        foreach (var missileId in staleMissileIds) {
+            _castByMissile.Remove(missileId);
+        }
 
-            var dashScript = GetInFlightMissile(owner);
+        var staleOwners = new List<uint>();
+        foreach (var entry in _activeCastByOwner) {
+            if (!_targetHitCountByCast.ContainsKey(entry.Value)) staleOwners.Add(entry.Key);
+        }
 
-            if (dashScript != null)
-            {
-                var capturedTargetPos = targetPos;
-                var capturedMaxRange = maxRange;
-                dashScript.PendingShadowCasts.Add(() =>
-                {
-                    var sh = dashScript.shadow;
-                    var shadowDir = Vector2.Normalize(capturedTargetPos - sh.Position);
-                    var shadowEndPos = sh.Position + (shadowDir * capturedMaxRange);
-                    CreateCustomMissile(owner, "ZedShurikenMisOne", sh.Position, shadowEndPos,
-                        new MissileParameters { Type = MissileType.Circle });
-                });
-            }
-            else if (owner.HasBuff("ZedWHandler2"))
-            {
-                var sh = wShadow;
-                if (sh != null)
-                {
-                    var shadowDir = Vector2.Normalize(targetPos - sh.Position);
-                    var shadowEndPos = sh.Position + (shadowDir * maxRange);
-                    CreateCustomMissile(owner, "ZedShurikenMisOne", sh.Position, shadowEndPos,
-                        new MissileParameters { Type = MissileType.Circle });
-                }
-            }
+        foreach (var ownerId in staleOwners) {
+            _activeCastByOwner.Remove(ownerId);
+        }
+    }
+}
+
+public class ZedShuriken : ISpellScript {
+    private const float ShadowMimicRange = 2000f;
+
+    private ObjAIBase _zed;
+    private Spell     _spell;
+    private Vector2   _end;
+    private ZedShadowHandler      _buff;
+    private Minion    _wShadow;
+    private Minion    _rShadow;
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        MissileParameters = new MissileParameters {
+            Type = MissileType.Target
+        },
+        TriggersSpellCasts   = true,
+        CastingBreaksStealth = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _zed   = owner;
+        _spell = spell;
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+        _end = end;
+        ZedShurikenCastTracker.BeginCast(_zed);
+
+        var wHandlerBuff = _zed.GetBuffWithName("ZedWHandler");
+        var zedWHandler  = wHandlerBuff?.BuffScript as ZedWHandler;
+        zedWHandler?.QueueShuriken(_end);
+
+        var shadowHandlerBuff = _zed.GetBuffWithName("ZedShadowHandler");
+        _buff                 = shadowHandlerBuff?.BuffScript as ZedShadowHandler;
+        if (_buff == null) return;
+
+        _wShadow = _buff.GetWShadow();
+        if (IsShadowWithinMimicRange(_wShadow)) {
+            FaceDirection(_end, _wShadow);
+            PlayAnimation(_wShadow, "Spell1");
+        } else {
+            _wShadow = null;
+        }
+
+        _rShadow = _buff.GetRShadow();
+        if (!IsShadowWithinMimicRange(_rShadow)) {
+            _rShadow = null;
+            return;
+        }
+
+        FaceDirection(_end, _rShadow);
+        PlayAnimation(_rShadow, "Spell1");
+    }
+
+    public void OnSpellPostCast(Spell spell) {
+        SpellCast(_zed, 1, SpellSlotType.ExtraSlots, _end, _end, true, Vector2.Zero);
+        if (IsShadowWithinMimicRange(_wShadow)) {
+            SpellCast(_zed, 0, SpellSlotType.ExtraSlots, _end, _end, true, _wShadow.Position);
+        }
+        if (IsShadowWithinMimicRange(_rShadow)) {
+            SpellCast(_zed, 6, SpellSlotType.ExtraSlots, _end, _end, true, _rShadow.Position);
         }
     }
 
-    public class ZedShurikenMisOne : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            MissileParameters = new MissileParameters { Type = MissileType.Circle },
-            IsDamagingSpell = true
-        };
+    private bool IsShadowWithinMimicRange(Minion shadow) {
+        if (shadow == null || shadow.IsDead || shadow.IsToRemove()) return false;
+        return Vector2.Distance(_zed.Position, shadow.Position) <= ShadowMimicRange;
+    }
+}
 
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+public class ZedShurikenMisOne : ISpellScript {
+    private ObjAIBase      _owner;
+    private Spell          _spell;
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        MissileParameters = new MissileParameters {
+            Type = MissileType.Circle
+        },
+        IsDamagingSpell = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _owner = owner;
+        _spell = spell;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+    }
+
+    public void OnSpellCast(Spell spell) {
+        
+    }
+
+    public void OnSpellPostCast(Spell spell) {
+        
+    }
+
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        ZedShurikenCastTracker.RegisterMissile(_owner, missile);
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
+    }
+
+    private void OnMissileEnd(SpellMissile missile) {
+        ZedShurikenCastTracker.OnMissileEnd(missile);
+    }
+
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+        var ad     = _owner.Stats.AttackDamage.FlatBonus;
+        var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
+        var damage = 75f + 35f * (qLevel - 1) + ad;
+        damage *= ZedShurikenCastTracker.RegisterHitAndGetDamageMultiplier(missile, target, out var shouldRefundEnergy);
+
+        if (shouldRefundEnergy) {
+            var energyReturn = 20f + 5f * (qLevel - 1);
+            IncreasePAR(_owner, energyReturn, PrimaryAbilityResourceType.Energy);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
-        {
-            var owner = spell.CastInfo.Owner;
-            var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
-            var ap = owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient2;
-            var damage = 15 + (spell.CastInfo.SpellLevel * 20) + ad + ap;
+        AddParticleTarget(_owner, target, "Zed_Q_tar", target, bone: "C_BUFFBONE_GLB_CHEST_LOC");
+        target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+    }
+}
 
-            var spellO = owner.GetSpell("ZedShuriken");
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
-            AddParticle(owner, target, "zed_q_tar.troy", target.Position);
+public class ZedShurikenMisTwo : ISpellScript {
+    private ObjAIBase _owner;
+    private Spell     _spell;
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        MissileParameters = new MissileParameters {
+            Type = MissileType.Circle
+        },
+        IsDamagingSpell = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _owner = owner;
+        _spell = spell;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+    }
+
+    public void OnSpellCast(Spell spell) {
+        
+    }
+
+    public void OnSpellPostCast(Spell spell) {
+        
+    }
+
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        ZedShurikenCastTracker.RegisterMissile(_owner, missile);
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
+    }
+
+    private void OnMissileEnd(SpellMissile missile) {
+        ZedShurikenCastTracker.OnMissileEnd(missile);
+    }
+
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+        var ad     = _owner.Stats.AttackDamage.FlatBonus;
+        var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
+        var damage = 75f + 35f * (qLevel - 1) + ad;
+        damage *= ZedShurikenCastTracker.RegisterHitAndGetDamageMultiplier(missile, target, out var shouldRefundEnergy);
+
+        if (shouldRefundEnergy) {
+            var energyReturn = 20f + 5f * (qLevel - 1);
+            IncreasePAR(_owner, energyReturn, PrimaryAbilityResourceType.Energy);
         }
+
+        AddParticleTarget(_owner, target, "Zed_Q_tar_Double", target, bone: "C_BUFFBONE_GLB_CHEST_LOC");
+        target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+    }
+}
+
+public class ZedShurikenMisThree : ISpellScript {
+    private ObjAIBase _owner;
+    private Spell     _spell;
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        MissileParameters = new MissileParameters {
+            Type = MissileType.Circle
+        },
+        IsDamagingSpell = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _owner = owner;
+        _spell = spell;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+    }
+
+    public void OnSpellCast(Spell spell) {
+        
+    }
+
+    public void OnSpellPostCast(Spell spell) {
+        
+    }
+
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        ZedShurikenCastTracker.RegisterMissile(_owner, missile);
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
+    }
+
+    private void OnMissileEnd(SpellMissile missile) {
+        ZedShurikenCastTracker.OnMissileEnd(missile);
+    }
+
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+        var ad     = _owner.Stats.AttackDamage.FlatBonus;
+        var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
+        var damage = 75f + 40f * (qLevel - 1) + ad;
+        damage *= ZedShurikenCastTracker.RegisterHitAndGetDamageMultiplier(missile, target, out var shouldRefundEnergy);
+
+        if (shouldRefundEnergy) {
+            var energyReturn = 20f + 5f * (qLevel - 1);
+            IncreasePAR(_owner, energyReturn, PrimaryAbilityResourceType.Energy);
+        }
+
+        AddParticleTarget(_owner, target, "Zed_Q_tar_Double", target);
+        target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
     }
 }

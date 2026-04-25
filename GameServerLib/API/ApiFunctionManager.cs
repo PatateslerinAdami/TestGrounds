@@ -487,6 +487,22 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Shows or hides the specified unit's health bar on the client.
+        /// </summary>
+        /// <param name="target">Unit whose health bar visibility should change.</param>
+        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="hide">True to hide the health bar, false to show it.</param>
+        public static void HideHealthBar(AttackableUnit target, int userId = -1, bool hide = true)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyShowHealthBar(target, userId, hide);
+        }
+
+        /// <summary>
         /// Checks whether the target uses the specified PAR type.
         /// </summary>
         /// <param name="target">Unit to query.</param>

@@ -1,125 +1,143 @@
-﻿using Buffs;
+﻿﻿using System.Numerics;
+using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets.Game;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System;
-using System.Collections.Generic;
-using System.Numerics;
-using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Spells
-{
-    public class ZedShadowDash : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata() { TriggersSpellCasts = false };
+namespace Spells;
 
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-            var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-            var maxRange = spell.GetCurrentCastRange();
+public class ZedShadowDash : ISpellScript {
+    private ObjAIBase _zed;
+    private Vector2   _endPosition;
 
-            if (Vector2.Distance(owner.Position, targetPos) > maxRange)
-            {
-                targetPos = owner.Position + (Vector2.Normalize(targetPos - owner.Position) * maxRange);
-            }
+    public SpellScriptMetadata ScriptMetadata => new() {
+        TriggersSpellCasts   = true,
+        CastingBreaksStealth = true
+    };
 
-            if (!IsWalkable(targetPos.X, targetPos.Y))
-            {
-                targetPos = GetClosestTerrainExit(targetPos);
-            }
-
-            CreateCustomMissile(owner, "ZedShadowDashMissile", owner.Position, targetPos, new MissileParameters { Type = MissileType.Circle });
-            SealSpellSlot(owner, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
-            owner.PlayAnimation("Spell2_Cast", timeScale: 0.7f);
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _zed = owner;
+        // This spell gets recreated during W/W2 swaps. Keep one persistent shadow tracker.
+        if (_zed.GetBuffWithName("ZedShadowHandler") == null) {
+            AddBuff("ZedShadowHandler", 10f, 1, spell, _zed, _zed, true);
         }
+        ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
+        ApiEventManager.OnUpdateStats.AddListener(this, _zed, OnUpdateStats);
     }
 
-    public class ZedShadowDashMissile : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            TriggersSpellCasts = true,
-            MissileParameters = new MissileParameters { Type = MissileType.Circle }
-        };
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+        _endPosition = end;
 
-        private ObjAIBase _owner;
-        private Vector2 _shadowDestination;
+        var shadowTrackerBuff = _zed.GetBuffWithName("ZedShadowHandler");
+        var zedShadowHandler  = shadowTrackerBuff?.BuffScript as ZedShadowHandler;
+        zedShadowHandler?.RemoveWShadow();
 
-        public Minion shadow;
-        public bool MissileInFlight { get; private set; }
-        public List<Action> PendingShadowCasts { get; } = new List<Action>();
-
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _owner = owner;
-            ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunch, false);
-
-            shadow = AddMinion(owner, "ZedShadow", "ZedShadow", default, owner.Team, owner.SkinID, true, false, false, default, default, true, true, true);
-            shadow.SetStatus(StatusFlags.NoRender, true);
-
-            //spell.SpellData.MissileSpeed = 2500;
-        }
-
-        public void OnLaunch(Spell spell, SpellMissile missile)
-        {
-            ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
-
-            _shadowDestination = new Vector2(missile.CastInfo.TargetPositionEnd.X, missile.CastInfo.TargetPositionEnd.Z);
-            MissileInFlight = true;
-        }
-
-        public void OnMissileEnd(SpellMissile missile)
-        {
-            MissileInFlight = false;
-            var owner = missile.CastInfo.Owner;
-
-            shadow.TeleportTo(_shadowDestination.X, _shadowDestination.Y);
-            shadow.PlayAnimation("Idle1", timeScale: 0.8f);
-
-            foreach (var action in PendingShadowCasts)
-            {
-                action();
-            }
-            PendingShadowCasts.Clear();
-
-            var buffVariables = new BuffVariables();
-            buffVariables.Set("Shadow", shadow);
-
-            AddBuff("ZedWHandler", 4f, 1, missile.SpellOrigin, owner, owner, buffVariables: buffVariables);
-            AddBuff("ZedWHandler2", 4f, 1, missile.SpellOrigin, owner, owner, buffVariables: buffVariables);
-
-            AddParticle(_owner, null, "Zed_Base_W_tar.troy", missile.Position, lifetime: 1f);
-        }
+        var wHandlerBuff = AddBuff("ZedWHandler", 4f, 1, spell, _zed, _zed, false);
+        var zedWHandler  = wHandlerBuff?.BuffScript as ZedWHandler;
+        zedWHandler?.SetSpellShadowSwap();
     }
 
-    public class ZedW2 : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata() { TriggersSpellCasts = true };
+    public void OnSpellCast(Spell spell) {
+        PlayAnimation(_zed, "Spell2_Cast", 0.5f);
+    }
 
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-            var buff = owner.GetBuffWithName("ZedWHandler");
+    public void OnSpellPostCast(Spell spell) {
+        SpellCast(_zed, 4, SpellSlotType.ExtraSlots, _endPosition, _endPosition, true, Vector2.Zero);
+    }
 
-            if (buff?.BuffScript is ZedWHandler handler && handler.shadow != null)
-            {
-                var zedPos = owner.Position;
-                var shadowPos = handler.shadow.Position;
+    private void OnUpdateStats(AttackableUnit unit, float diff) {
+        var bonusAd = _zed.Stats.AttackDamage.Total * 0.05f;
+        SetSpellToolTipVar(_zed, 2, bonusAd, SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
+    }
 
-                TeleportTo(owner, shadowPos.X, shadowPos.Y);
-                TeleportTo(handler.shadow, zedPos.X, zedPos.Y);
+    private void OnLevelUpSpell(Spell spell) {
+        AddBuff("ZedWPassiveBuff", 1000000f, 1, spell, _zed, _zed, true);
+    }
+}
 
-                AddParticle(owner, null, "zed_base_cloneswap.troy", shadowPos, lifetime: 1f);
-                AddParticle(owner, null, "zed_base_cloneswap.troy", zedPos, lifetime: 1f);
-            }
+public class ZedShadowDashMissile : ISpellScript {
+    private ObjAIBase _zed;
+    private Spell     _spell;
+    private ZedWHandler      _zedWHandler;
 
-            owner.RemoveBuffsWithName("ZedWHandler");
+    public SpellScriptMetadata ScriptMetadata { get; } = new() {
+        MissileParameters = new MissileParameters {
+            Type = MissileType.Circle,
+        },
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _zed   = owner;
+        _spell = spell;
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+        ScriptMetadata.MissileParameters.OverrideEndPosition = end;
+        var wHandlerBuff = _zed.GetBuffWithName("ZedWHandler");
+        if (wHandlerBuff == null) {
+            wHandlerBuff = AddBuff("ZedWHandler", 4f, 1, _spell, _zed, _zed, false);
         }
+        _zedWHandler = wHandlerBuff?.BuffScript as ZedWHandler;
+        _zedWHandler?.SetSpellShadowSwap();
+        ApiEventManager.OnSpellCast.AddListener(this, _zed.GetSpell("ZedPBAOEDummy"), OnSpellCastSlash);
+    }
+
+    private void OnSpellCastSlash(Spell spell) {
+        _zedWHandler?.QueueSlash();
+    }
+
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnSpellMissileEnd);
+    }
+
+    private void OnSpellMissileEnd(SpellMissile missile) {
+        _zedWHandler.SpawnShadow(missile.Position);
+        ApiEventManager.OnSpellCast.RemoveListener(this, _zed.GetSpell("ZedPBAOEDummy"));
+    }
+}
+
+public class ZedW2 : ISpellScript {
+    private ObjAIBase   _zed;
+    private ZedWHandler _wShadowHandler;
+
+    public SpellScriptMetadata ScriptMetadata { get; } = new() {
+       TriggersSpellCasts = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _zed = owner;
+        ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+        var handlerBuff = owner.GetBuffWithName("ZedWHandler");
+        if (handlerBuff == null) return;
+
+        _wShadowHandler = handlerBuff.BuffScript as ZedWHandler;
+        if (_wShadowHandler == null) return;
+    }
+
+    public void OnSpellCast(Spell spell) { }
+
+    public void OnSpellPostCast(Spell spell) {
+        var handlerBuff = spell.CastInfo.Owner.GetBuffWithName("ZedWHandler");
+        if (handlerBuff == null) return;
+        _wShadowHandler = handlerBuff.BuffScript as ZedWHandler;
+        _wShadowHandler?.Swap();
+    }
+
+    private void OnLevelUpSpell(Spell spell) {
+        AddBuff("ZedWPassiveBuff", 1000000f, 1, spell, _zed, _zed, true);
     }
 }
