@@ -258,7 +258,7 @@ internal class ZedUltDash : IBuffGameScript {
         _dashResolved          = true;
 
         if (_zed.MovementParameters != null) {
-            //_zed.SetForcedMovementState(false, MoveStopReason.Death);
+            _zed.SetDashingState(false, MoveStopReason.Death);
         }
 
         RemoveRShadow();
@@ -289,7 +289,7 @@ internal class ZedUltDash : IBuffGameScript {
         _dashResolved    = true;
 
         if (_zed.MovementParameters != null) {
-            //_zed.SetForcedMovementState(false, MoveStopReason.HeroReincarnate);
+            _zed.SetDashingState(false, MoveStopReason.HeroReincarnate);
         }
 
         _buff.DeactivateBuff();
@@ -338,7 +338,7 @@ internal class ZedUltDash : IBuffGameScript {
 
         _ignoreNextMoveFailure = true;
         if (_zed.MovementParameters != null) {
-            //_zed.SetForcedMovementState(false, MoveStopReason.ForceMovement);
+            _zed.SetDashingState(false, MoveStopReason.ForceMovement);
         }
         _zed.DashToLocation(endPoint, DashSpeed, "zed_spell4_strike");
     }
@@ -357,7 +357,7 @@ internal class ZedUltDash : IBuffGameScript {
         if (shadow == null || shadow.IsDead) return;
 
         if (shadow.MovementParameters != null) {
-            //shadow.SetForcedMovementState(false, MoveStopReason.ForceMovement);
+            shadow.SetDashingState(false, MoveStopReason.ForceMovement);
         }
 
         var finalDashEndPoint = GetFinalDashEndPoint(shadow, dashCastPosition);
