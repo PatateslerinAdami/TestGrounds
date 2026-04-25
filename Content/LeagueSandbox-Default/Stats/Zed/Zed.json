@@ -43,6 +43,7 @@
             "ExtraSpell4": "ZedW2",
             "ExtraSpell5": "ZedShadowDashMissile",
             "ExtraSpell6": "ZedR2",
+            "ExtraSpell1": "ZedShurikenMisThree",
             "HPPerLevel": "80",
             "HPRegenPerLevel": 0.13,
             "IsMelee": "true",
