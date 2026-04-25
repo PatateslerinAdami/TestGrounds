@@ -1386,36 +1386,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return null;
             }
 
-            Spell toReturn = Spells[slot];
+            var toReturn = Spells[slot];
+            var oldSpell = Spells[slot];
 
             if (name != Spells[slot].SpellName)
             {
-                // Use any existing spells before making a new one.
-                bool exists = false;
-                foreach (var spell in Spells.Values)
+                var oldLevel = oldSpell?.CastInfo.SpellLevel ?? (byte)0;
+                var oldCurrentCooldown = oldSpell?.CurrentCooldown ?? 0.0f;
+
+                if (oldSpell != null)
                 {
-                    if (spell.SpellName == name)
-                    {
-                        toReturn = spell;
-                        exists = true;
-                        break;
-                    }
+                    oldSpell.Deactivate();
                 }
 
-                if (!exists)
-                {
-                    toReturn = new Spell(_game, this, name, slot);
+                toReturn = new Spell(_game, this, name, slot);
+                toReturn.SetLevel(oldLevel);
 
-                    if (Spells[slot] != null)
-                    {
-                        Spells[slot].Deactivate();
-                    }
-
-                    toReturn.SetLevel(Spells[slot].CastInfo.SpellLevel);
-                }
-                else
+                if (oldCurrentCooldown > 0.0f)
                 {
-                    toReturn.Script.OnActivate(this, toReturn);
+                    toReturn.SetCooldown(oldCurrentCooldown, true);
                 }
 
                 Spells[slot] = toReturn;
