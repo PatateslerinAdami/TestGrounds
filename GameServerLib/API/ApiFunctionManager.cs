@@ -923,18 +923,12 @@ namespace LeagueSandbox.GameServer.API
         /// <returns>List of AttackableUnits.</returns>
         public static List<AttackableUnit> GetUnitsInRange(Vector2 targetPos, float range, bool isAlive)
         {
-            var returnList = new List<AttackableUnit>();
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
-                         new System.Activities.Presentation.View.Circle(targetPos, range)))
-            {
-                if (obj is AttackableUnit u && (!isAlive || !u.IsDead))
-                {
-                    returnList.Add(u);
-                }
-            }
-
-            returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos));
-            return returnList;
+            return _game.Map.CollisionHandler
+                .GetNearestObjects(new System.Activities.Presentation.View.Circle(targetPos, range))
+                .OfType<AttackableUnit>()
+                .Where(u => !isAlive || !u.IsDead)
+                .OrderBy(u => Vector2.DistanceSquared(u.Position, targetPos))
+                .ToList();
         }
 
         /// <summary>
