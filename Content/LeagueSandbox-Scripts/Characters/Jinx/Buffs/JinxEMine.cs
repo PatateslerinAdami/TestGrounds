@@ -17,6 +17,7 @@ internal class JinxEMine : IBuffGameScript
     private AttackableUnit _unit;
     private Buff _buff;
     private Spell _spell;
+    private Particle _readyParticle;
     private PeriodicTicker _armingPeriodicTicker, _armedPeriodicTicker;
     private bool _isArmed;
     private bool _triggeredByUnit;
@@ -60,16 +61,7 @@ internal class JinxEMine : IBuffGameScript
 
             PauseAnimation(_unit, false);
             PlayAnimation(_unit, "Idle1", flags: AnimationFlags.Override);
-            AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Green", _unit, _buff.Duration, teamOnly: _jinx.Team);
-            switch (_jinx.Team)
-            {
-                case TeamId.TEAM_BLUE:
-                    AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Red", _unit, _buff.Duration,
-                        teamOnly: TeamId.TEAM_PURPLE); break;
-                case TeamId.TEAM_PURPLE:
-                    AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Red", _unit, _buff.Duration,
-                        teamOnly: TeamId.TEAM_BLUE); break;
-            }
+            _readyParticle = AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Green", _unit, _buff.Duration, enemyParticle: "Jinx_E_Mine_Ready_Red");
 
             _isArmed = true;
             return;
@@ -106,6 +98,7 @@ internal class JinxEMine : IBuffGameScript
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         PauseAnimation(unit, false);
+        RemoveParticle(_readyParticle);
         AddBuff("JinxEMineExplode", 0.75f, 1, ownerSpell, unit, _jinx);
         if (_triggeredByUnit)
         {
