@@ -22,6 +22,8 @@ internal class JinxEMineSnare : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _jinx = ownerSpell.CastInfo.Owner;
+       unit.StopMovement();
+       unit.SetStatus(StatusFlags.Rooted, true);
         AddBuff("JinxEMineVision", 1.5f, 1, ownerSpell, unit, _jinx);
         switch (_jinx.SkinID) {
             default: _haste = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Jinx_E_Mine_Debuff", unit,
@@ -31,6 +33,7 @@ internal class JinxEMineSnare : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        unit.SetStatus(StatusFlags.Rooted, false);
         RemoveParticle(_haste);
     }
 }
