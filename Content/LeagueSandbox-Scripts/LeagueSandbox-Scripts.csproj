@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Items\ItemCharScripts\" />
     <Folder Include="Maps\Map31\" />
   </ItemGroup>
 
