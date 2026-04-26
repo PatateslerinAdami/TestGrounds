@@ -32,6 +32,7 @@ internal class MorderkaiserIronMan : IBuffGameScript {
     }
 
     private void OnDealDamage(DamageData data) {
+        if (data.DamageSource is DamageSource.DAMAGE_SOURCE_ATTACK or DamageSource.DAMAGE_SOURCE_PROC) return;
         var shieldMod = 0.175f;
         if (data.Target is Champion) {
             shieldMod = 0.35f;
