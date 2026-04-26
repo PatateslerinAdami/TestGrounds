@@ -109,13 +109,13 @@ public class JinxR : ISpellScript
         {
             case >= 1500f:
                 //AddParticlePos(_jinx, "Jinx_R_Tar_Super", target.Position, target.Position);
-                AddParticlePos(_jinx, "Jinx_R_Tar", target.Position, target.Position);
+                AddParticlePos(null, "Jinx_R_Tar", target.Position, target.Position);
                 break;
             case >= 1000f and < 1500f:
-                AddParticlePos(_jinx, "Jinx_R_Tar", target.Position, target.Position);
+                AddParticlePos(null, "Jinx_R_Tar", target.Position, target.Position);
                 break;
             default:
-                AddParticleTarget(_jinx, null, "Jinx_R_Tar_Weak", target);
+                AddParticleTarget(null, null, "Jinx_R_Tar_Weak", target);
                 break;
         }
 
