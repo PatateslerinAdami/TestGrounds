@@ -145,7 +145,7 @@ namespace Spells
             if (dir == Vector2.Zero) dir = new Vector2(1, 0);
 
             foreach (var unit in EnumerateValidUnitsInRange(_owner, _owner.Position, currentRange + 200f, true,
-                         SpellDataFlags.AffectEnemies))
+                         SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectNeutral))
             {
                 Vector2 toUnit = unit.Position - _owner.Position;
                 float projection = Vector2.Dot(toUnit, dir);
