@@ -48,7 +48,6 @@ namespace AIScripts
                 minion.Stats.Range.Total,
                 true,
                 SpellDataFlags.AffectEnemies
-                | SpellDataFlags.AffectNeutral
                 | SpellDataFlags.AffectMinions
                 | SpellDataFlags.AffectHeroes
                 | SpellDataFlags.AffectTurrets
