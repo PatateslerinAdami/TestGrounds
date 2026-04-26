@@ -274,8 +274,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 return false;
             }
 
-            return SpecificTeam == TeamId.TEAM_ALL
-                && (Team == TeamId.TEAM_ALL || observerTeam == Team);
+            return SpecificTeam == TeamId.TEAM_ALL;
         }
 
         public override void Update(float diff)
