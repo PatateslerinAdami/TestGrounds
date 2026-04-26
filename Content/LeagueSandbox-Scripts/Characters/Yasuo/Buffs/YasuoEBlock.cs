@@ -9,6 +9,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Linq;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
