@@ -57,6 +57,36 @@ namespace PacketDefinitions420
             _navGrid = navGrid;
         }
 
+        private static byte GetItemsInSlotForDisplay(ObjAIBase owner, Item item)
+        {
+            if (item == null)
+            {
+                return 0;
+            }
+            if (item.StackCount > 1)
+            {
+                return (byte)item.StackCount;
+            }
+
+            var supportsCharges = item.SpellCharges > 0;
+            if (!supportsCharges && owner != null && !string.IsNullOrEmpty(item.ItemData.SpellName))
+            {
+                var spell = owner.GetSpell(item.ItemData.SpellName);
+                if (spell != null)
+                {
+                    supportsCharges = spell.SpellData.MaxAmmo > 1 || (spell.Script?.ScriptMetadata.AmmoPerCharge ?? 1) > 1;
+                }
+            }
+
+            if (!supportsCharges)
+            {
+                return (byte)item.StackCount;
+            }
+
+            var displayCount = Math.Max(1, item.SpellCharges);
+            return (byte)Math.Clamp(displayCount, 0, byte.MaxValue);
+        }
+
         AddRegion ConstructAddRegionPacket(Region region)
         {
             var regionPacket = new AddRegion
@@ -177,10 +207,9 @@ namespace PacketDefinitions420
                             itemDataList.Add(new LeaguePackets.Game.Common.ItemData
                             {
                                 ItemID = (uint)itemData.ItemId,
-                                ItemsInSlot = (byte)item.StackCount,
+                                ItemsInSlot = GetItemsInSlotForDisplay(obj, item),
                                 Slot = obj.Inventory.GetItemSlot(item),
-                                //Unhardcode this when spell ammo gets introduced
-                                SpellCharges = 0
+                                SpellCharges = (byte)item.SpellCharges
                             });
                         }
                     }
@@ -930,8 +959,8 @@ namespace PacketDefinitions420
             {
                 ItemID = (uint)itemInstance.ItemData.ItemId,
                 Slot = gameObject.Inventory.GetItemSlot(itemInstance),
-                ItemsInSlot = (byte)itemInstance.StackCount,
-                SpellCharges = 0 // TODO: Unhardcode
+                ItemsInSlot = GetItemsInSlotForDisplay(gameObject, itemInstance),
+                SpellCharges = (byte)itemInstance.SpellCharges
             };
 
             //TODO find out what bitfield does, currently unknown
@@ -943,6 +972,27 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(gameObject, buyItemPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifySetItem(ObjAIBase ai, Item itemInstance)
+        {
+            if (!(ai is Champion champion))
+            {
+                return;
+            }
+
+            var packet = new SetItem
+            {
+                Item = new LeaguePackets.Game.Common.ItemData
+                {
+                    ItemID = (uint)itemInstance.ItemData.ItemId,
+                    Slot = ai.Inventory.GetItemSlot(itemInstance),
+                    ItemsInSlot = GetItemsInSlotForDisplay(ai, itemInstance),
+                    SpellCharges = (byte)itemInstance.SpellCharges
+                }
+            };
+
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -2619,6 +2669,22 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacketVision(ai, ria.GetBytes(), Channel.CHL_S2C);
         }
 
+        public void NotifyS2C_SetItemCharges(ObjAIBase ai, byte slot, byte charges)
+        {
+            if (!(ai is Champion champion))
+            {
+                return;
+            }
+
+            var packet = new S2C_SetItemCharges
+            {
+                Slot = slot,
+                SpellCharges = charges
+            };
+
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         /// <summary>
         /// Sends a packet to all players detailing that the specified region was removed.
         /// </summary>
@@ -4241,7 +4307,8 @@ namespace PacketDefinitions420
             {
                 SenderNetID = ai.NetId,
                 Slot = ai.Inventory.GetItemSlot(itemInstance),
-                SpellCharges = (byte)itemInstance.StackCount
+                ItemsInSlot = GetItemsInSlotForDisplay(ai, itemInstance),
+                SpellCharges = (byte)itemInstance.SpellCharges
             };
 
             _packetHandlerManager.BroadcastPacketVision(ai, useItemPacket.GetBytes(), Channel.CHL_S2C);
