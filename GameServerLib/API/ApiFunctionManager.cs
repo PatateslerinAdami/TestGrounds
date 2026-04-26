@@ -358,7 +358,26 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="newStacks">Stacks to set.</param>
         public static void EditBuff(Buff b, byte newStacks)
         {
-            b.SetStacks(newStacks);
+            if (b == null)
+            {
+                return;
+            }
+
+            // Avoid default stack packet routing so counter buffs can use their dedicated packet type.
+            b.SetStacks(newStacks, false);
+            if (b.Hidden || _game?.PacketNotifier == null)
+            {
+                return;
+            }
+
+            if (b.BuffType == BuffType.COUNTER)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(b);
+            }
+            else
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
+            }
         }
 
         /// <summary>
