@@ -971,7 +971,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             // CallForHelpSuppressor
             Stats.SetActionState(ActionState.CAN_ATTACK, Status.HasFlag(StatusFlags.CanAttack));
-            Stats.SetActionState(ActionState.CAN_CAST, Status.HasFlag(StatusFlags.CanCast));
+            bool canCast = Status.HasFlag(StatusFlags.CanCast)
+                && !Status.HasFlag(StatusFlags.Charmed)
+                && !Status.HasFlag(StatusFlags.Feared)
+                && !Status.HasFlag(StatusFlags.Silenced)
+                && !Status.HasFlag(StatusFlags.Sleep)
+                && !Status.HasFlag(StatusFlags.Stunned)
+                && !Status.HasFlag(StatusFlags.Suppressed)
+                && !Status.HasFlag(StatusFlags.Taunted);
+            Stats.SetActionState(ActionState.CAN_CAST, canCast);
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
             Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
             Stats.SetActionState(ActionState.CHARMED, Status.HasFlag(StatusFlags.Charmed));
