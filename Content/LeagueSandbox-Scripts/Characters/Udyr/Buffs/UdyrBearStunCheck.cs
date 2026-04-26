@@ -22,11 +22,4 @@ public class UdyrBearStunCheck : IBuffGameScript {
     };
 
     public StatsModifier StatsModifier { get; } = new();
-
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell spell) {
-        _buff = buff;
-        _udyr = spell.CastInfo.Owner;
-    }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {}
 }

@@ -18,7 +18,7 @@ namespace Buffs;
 public class UdyrPhoenixActivation : IBuffGameScript {
     private ObjAIBase _udyr;
     private Spell     _spell;
-    private float     _damageTimer = 0f;
+    private PeriodicTicker _periodicTicker;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.DAMAGE,
         BuffAddType = BuffAddType.REPLACE_EXISTING
@@ -32,9 +32,10 @@ public class UdyrPhoenixActivation : IBuffGameScript {
         AddParticleTarget(_udyr, _udyr, "PhoenixStance",      _udyr, buff.Duration);
     }
 
-    public void OnUpdate(float diff) {
-        _damageTimer -= diff;
-        if (_damageTimer > 0f) return;
+    public void OnUpdate(float diff)
+    {
+        var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, true, 1,5);
+        if (ticks != 1) return;
         AddParticleTarget(_udyr, _udyr, "Udyr_Phoenix_nova", _udyr);
         var dmg = 15f + 10 * (_spell.CastInfo.SpellLevel = 1) + _udyr.Stats.AbilityPower.Total * 0.25f; 
         var targets = GetUnitsInRange(_udyr, _udyr.Position, 250f, true, SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
@@ -42,7 +43,6 @@ public class UdyrPhoenixActivation : IBuffGameScript {
             unit.TakeDamage(_udyr, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                             DamageResultType.RESULT_NORMAL);
         }
-        _damageTimer = 1000f;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
