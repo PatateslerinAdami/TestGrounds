@@ -13,12 +13,12 @@ namespace LeaguePackets.Game
     public class ShieldValues
     {
         public float Magical { get; set; }
-        public float Phyisical { get; set; }
+        public float Physical { get; set; }
         public float MagicalAndPhysical { get; set; }
 
         public bool HasShield()
         {
-            if (Magical == 0 && Phyisical == 0 && MagicalAndPhysical == 0)
+            if (Magical == 0 && Physical == 0 && MagicalAndPhysical == 0)
             {
                 return false;
             }
@@ -26,7 +26,7 @@ namespace LeaguePackets.Game
         }
         public float GetAllShieldValue()
         {
-            return Magical + Phyisical + MagicalAndPhysical;
+            return Magical + Physical + MagicalAndPhysical;
         }
     }
 
@@ -83,7 +83,7 @@ namespace LeaguePackets.Game
             {
                 ShieldValues = new ShieldValues();
                 ShieldValues.Magical = reader.ReadFloat();
-                ShieldValues.Phyisical = reader.ReadFloat();
+                ShieldValues.Physical = reader.ReadFloat();
                 ShieldValues.MagicalAndPhysical = reader.ReadFloat();
             }
 
@@ -164,7 +164,7 @@ namespace LeaguePackets.Game
             {
                 writer.WriteBool(true);
                 writer.WriteFloat(ShieldValues.Magical);
-                writer.WriteFloat(ShieldValues.Phyisical);
+                writer.WriteFloat(ShieldValues.Physical);
                 writer.WriteFloat(ShieldValues.MagicalAndPhysical);
             }
             else
