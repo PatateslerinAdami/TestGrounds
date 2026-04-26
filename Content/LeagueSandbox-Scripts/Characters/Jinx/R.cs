@@ -69,6 +69,40 @@ public class JinxR : ISpellScript
     {
     }
 
+    private void SpawnRHitIndicator(AttackableUnit target, float distance)
+    {
+        //AddParticlePos(_jinx, "Jinx_R_Tar_Super", target.Position, target.Position); //fun particle? never seen it on live
+        // Default usage: visible to everyone.
+        if (distance >= 1000f)
+        {
+            AddParticlePos(
+                _jinx,
+                "Jinx_R_Tar",
+                target.Position,
+                target.Position,
+                teamOnly: TeamId.TEAM_ALL
+            );
+            return;
+        }
+
+        AddParticleTarget(
+            _jinx,
+            null,
+            "Jinx_R_Tar_Weak",
+            target,
+            teamOnly: TeamId.TEAM_ALL
+        );
+
+        // Example team-only variant (allies only):
+        // AddParticlePos(_jinx, "Jinx_R_Tar", target.Position, target.Position, teamOnly: _jinx.Team);
+        //
+        // Example unit-only variant (single player only, when target is a champion):
+        // if (target is Champion championTarget)
+        // {
+        //     AddParticlePos(_jinx, "Jinx_R_Tar", target.Position, target.Position, unitOnly: championTarget);
+        // }
+    }
+
     public void OnMissileUpdate(SpellMissile missile, float diff)
     {
         LogInfo("Distance: ");
@@ -105,19 +139,7 @@ public class JinxR : ISpellScript
         var splashDamage = primaryDamage * 0.8f;
         LogInfo($"R ramp={ramp}, primaryDamage={primaryDamage}");
 
-        switch (distance)
-        {
-            case >= 1500f:
-                //AddParticlePos(_jinx, "Jinx_R_Tar_Super", target.Position, target.Position);
-                AddParticlePos(null, "Jinx_R_Tar", target.Position, target.Position);
-                break;
-            case >= 1000f and < 1500f:
-                AddParticlePos(null, "Jinx_R_Tar", target.Position, target.Position);
-                break;
-            default:
-                AddParticleTarget(null, null, "Jinx_R_Tar_Weak", target);
-                break;
-        }
+        SpawnRHitIndicator(target, distance);
 
         var unitsInArea = GetUnitsInRange(_jinx, target.Position, 1000f, true,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |

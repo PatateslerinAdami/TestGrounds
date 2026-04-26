@@ -194,7 +194,8 @@ namespace LeagueSandbox.GameServer
             bool shouldBeVisibleForPlayer;
             if (obj is Particle particle && particle.SpecificUnit != null)
             {
-                shouldBeVisibleForPlayer = IsServerFoWDisabled || particle.SpecificUnit == champion;
+                shouldBeVisibleForPlayer = IsServerFoWDisabled
+                    || particle.IsAudienceVisibleToRecipient(team, cid);
             }
             else
             {
@@ -413,21 +414,14 @@ namespace LeagueSandbox.GameServer
 
             if (tested is Particle particle)
             {
-                if (particle.SpecificUnit != null)
+                if (!particle.IsAudienceVisibleToTeam(observer.Team))
                 {
                     return false;
                 }
 
-                if (particle.SpecificTeam == TeamId.TEAM_NEUTRAL)
+                if (particle.ShouldAutoRevealForObserverTeam(observer.Team))
                 {
-                    if (particle.Team == TeamId.TEAM_NEUTRAL || tested.Team == observer.Team)
-                    {
-                        return true;
-                    }
-                }
-                else if (particle.SpecificTeam != observer.Team)
-                {
-                    return false;
+                    return true;
                 }
             }
 

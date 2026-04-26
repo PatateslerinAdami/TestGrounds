@@ -1489,14 +1489,14 @@ namespace PacketDefinitions420
                 return;
             }
 
-            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL)
+            if (particle.SpecificTeam != TeamId.TEAM_ALL)
             {
                 var fxPacket = ConstructFXCreateGroupPacket(particle, particle.SpecificTeam);
                 _packetHandlerManager.BroadcastPacketTeam(particle.SpecificTeam, fxPacket.GetBytes(), Channel.CHL_S2C);
                 return;
             }
 
-            if (particle.Team != TeamId.TEAM_NEUTRAL)
+            if (particle.Team != TeamId.TEAM_ALL)
             {
                 var allyFxPacket = ConstructFXCreateGroupPacket(particle, particle.Team);
                 _packetHandlerManager.BroadcastPacketTeam(particle.Team, allyFxPacket.GetBytes(), Channel.CHL_S2C);
@@ -1511,28 +1511,15 @@ namespace PacketDefinitions420
                 return;
             }
 
-            var globalFxPacket = ConstructFXCreateGroupPacket(particle, TeamId.TEAM_NEUTRAL);
+            var globalFxPacket = ConstructFXCreateGroupPacket(particle, TeamId.TEAM_ALL);
             _packetHandlerManager.BroadcastPacket(globalFxPacket.GetBytes(), Channel.CHL_S2C);
         }
 
         static bool IsParticleVisibleToRecipient(Particle particle, TeamId team, int userId = -1)
         {
-            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL && team != particle.SpecificTeam)
-            {
-                return false;
-            }
-
-            if (particle.SpecificUnit is Champion specificChampion)
-            {
-                return specificChampion.ClientId == userId;
-            }
-
-            if (particle.SpecificUnit != null)
-            {
-                return false;
-            }
-
-            return true;
+            return userId >= 0
+                ? particle.IsAudienceVisibleToRecipient(team, userId)
+                : particle.IsAudienceVisibleToTeam(team);
         }
 
         S2C_FX_OnEnterTeamVisibility ConstructFXEnterTeamVisibilityPacket(Particle particle, TeamId team)
@@ -1544,7 +1531,7 @@ namespace PacketDefinitions420
             };
 
             fxVisPacket.VisibilityTeam = 0;
-            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_NEUTRAL)
+            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_ALL)
             {
                 fxVisPacket.VisibilityTeam = 1;
             }
@@ -1607,7 +1594,7 @@ namespace PacketDefinitions420
             };
 
             fxVisPacket.VisibilityTeam = 0;
-            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_NEUTRAL)
+            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_ALL)
             {
                 fxVisPacket.VisibilityTeam = 1;
             }
