@@ -209,6 +209,24 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Converts a spell's absolute slot number to a 0-based inventory slot index.
+        /// Returns -1 when the spell is null or does not belong to an inventory slot.
+        /// </summary>
+        /// <param name="spell">Spell to convert.</param>
+        /// <returns>0-based inventory slot index, or -1 if invalid.</returns>
+        public static int ToInventorySlotIndex(Spell spell)
+        {
+            if (spell == null)
+            {
+                return -1;
+            }
+
+            var inventorySlot = spell.CastInfo.SpellSlot - (int)SpellSlotType.InventorySlots;
+            var maxInventorySlot = (int)SpellSlotType.BluePillSlot - (int)SpellSlotType.InventorySlots - 1;
+            return inventorySlot >= 0 && inventorySlot <= maxInventorySlot ? inventorySlot : -1;
+        }
+
+        /// <summary>
         /// Teleports an AI unit to the specified coordinates.
         /// Instant.
         /// TODO: Change to GameObjects.
@@ -389,6 +407,17 @@ namespace LeagueSandbox.GameServer.API
         public static void RemoveBuff(AttackableUnit target, string buff)
         {
             target.RemoveBuffsWithName(buff);
+        }
+        
+        /// <summary>
+        ///     Whether the specified unit is within its team's fountain area.
+        /// </summary>
+        /// <param name="unit">Unit to check.</param>
+        /// <param name="range">Fountain radius to check against. Defaults to 1000.</param>
+        /// <returns>True if within fountain range.</returns>
+        public static bool IsInFountain(AttackableUnit unit, float range = 1000.0f) {
+            var fountainPos = _game.Map.MapScript.GetFountainPosition(unit.Team);
+            return Vector2.DistanceSquared(unit.Position, fountainPos) <= range * range;
         }
 
         /// <summary>
