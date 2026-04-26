@@ -766,8 +766,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var type = damageData.DamageType;
             var source = damageData.DamageSource;
 
-            ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnPreDealDamage.Publish(damageData.Attacker, damageData);
+            ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
             var postMitigationDamage = damageData.PostMitigationDamage;
             if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
@@ -815,9 +815,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
-
+            ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
+            
             if (!IsDead && Stats.CurrentHealth <= 0)
             {
                 IsDead = true;
@@ -2232,7 +2232,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 else if (shield.Physical)
                 {
-                    combined.Phyisical += shield.Amount;
+                    combined.Physical += shield.Amount;
                 }
             }
 

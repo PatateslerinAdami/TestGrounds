@@ -376,8 +376,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 DamageType = DamageType.DAMAGE_TYPE_PHYSICAL,
                 DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
             };
-
-            //ApiEventManager.OnHitUnit.Publish(this, damageData);
+            
             // TODO: Verify if we should use MissChance instead.
             if (HasBuffType(BuffType.BLIND))
             {
