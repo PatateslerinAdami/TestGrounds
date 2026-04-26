@@ -97,6 +97,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
         }
 
+        public void AddAmountToCreepScore(int amount, AttackableUnit killedMinion)
+        {
+            ChampStats.MinionsKilled += amount;
+
+            // Send a second death notification crediting this champ
+            // so the client updates the CS counter on the HUD
+            var fakeDeathData = new DeathData
+            {
+                Unit = killedMinion,
+                Killer = this,
+                DamageType = DamageType.DAMAGE_TYPE_TRUE,
+                DamageSource = DamageSource.DAMAGE_SOURCE_PROC,
+            };
+            _game.PacketNotifier.NotifyDeath(fakeDeathData);
+        }
+
         public override void OnAdded()
         {
             _game.ObjectManager.AddChampion(this);
