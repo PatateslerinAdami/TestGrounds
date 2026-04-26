@@ -59,8 +59,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.Tenacity.Total, 1, 30); //mPercentCCReduction
             UpdateFloat(Stats.Armor.PercentBonus, 2, 0); //mPercentBonusArmorPenetration
             UpdateFloat(Stats.MagicPenetration.PercentBonus, 2, 1); //mPercentBonusMagicPenetration
-            // UpdateFloat(Stats.HealthRegeneration.BaseValue, 2, 2); //mBaseHPRegenRate
-            // UpdateFloat(Stats.ManaRegeneration.BaseValue, 2, 3); //mBasePARRegenRate
+            UpdateFloat(Stats.HealthRegeneration.BaseValue, 2, 2); //mBaseHPRegenRate
+            UpdateFloat(Stats.ManaRegeneration.BaseValue, 2, 3); //mBasePARRegenRate
             UpdateFloat(Stats.CurrentHealth, 3, 0); //mHP
             UpdateFloat(Stats.CurrentMana, 3, 1); //mMP
             UpdateFloat(Stats.HealthPoints.Total, 3, 2); //mMaxHP
