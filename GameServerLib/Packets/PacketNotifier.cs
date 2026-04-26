@@ -2060,14 +2060,16 @@ namespace PacketDefinitions420
         /// Sends a packet to all players with vision of the target of the specified buff detailing that the buff previously in the same slot was replaced by the newly specified buff.
         /// </summary>
         /// <param name="b">Buff that will replace the old buff in the same slot.</param>
-        public void NotifyNPC_BuffReplace(Buff b)
+        /// <param name="duration">Optional override for duration in seconds.</param>
+        /// <param name="runningTime">Optional override for elapsed/running time in seconds.</param>
+        public void NotifyNPC_BuffReplace(Buff b, float? duration = null, float? runningTime = null)
         {
             var replacePacket = new NPC_BuffReplace
             {
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
-                RunningTime = b.TimeElapsed,
-                Duration = b.Duration,
+                RunningTime = runningTime ?? b.TimeElapsed,
+                Duration = duration ?? b.Duration,
                 CasterNetID = 0
             };
 

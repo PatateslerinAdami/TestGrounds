@@ -344,6 +344,33 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Updates only the client-side timer visuals for a buff icon.
+        /// Useful for infinite buffs that need a custom recharge indicator.
+        /// </summary>
+        /// <param name="b">Buff instance.</param>
+        /// <param name="durationSeconds">Displayed total duration in seconds.</param>
+        /// <param name="runningTimeSeconds">Displayed elapsed/running time in seconds.</param>
+        public static void SetBuffClientTimer(Buff b, float durationSeconds, float runningTimeSeconds = 0f)
+        {
+            if (b == null || b.Hidden)
+            {
+                return;
+            }
+
+            if (durationSeconds < 0f)
+            {
+                durationSeconds = 0f;
+            }
+
+            if (runningTimeSeconds < 0f)
+            {
+                runningTimeSeconds = 0f;
+            }
+
+            _game.PacketNotifier.NotifyNPC_BuffReplace(b, durationSeconds, runningTimeSeconds);
+        }
+
+        /// <summary>
         /// Removes the specified buff from any AI units it is applied to and runs OnDeactivate callback for the buff's script.
         /// If the buff's BuffAddType is STACKS_AND_OVERLAPS, each stack is individually instanced, so only one stack is removed.
         /// </summary>
