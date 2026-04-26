@@ -75,7 +75,7 @@ public class TalentReaperVFX : ISpellScript {
         if (pendingTransfer.GoldAmount > 0f) {
             allyChampion.AddGold(null, pendingTransfer.GoldAmount, true);
             caster.AddGold(null, -pendingTransfer.GoldAmount, false);
-            ItemPassives.ItemId3302.NotifySpoilsGoldLooted(caster, (int) pendingTransfer.GoldAmount);
+            ItemPassives.ItemID_3302.NotifySpoilsGoldLooted(caster, (int) pendingTransfer.GoldAmount);
         }
 
         if (pendingTransfer.HealAmount > 0f) {

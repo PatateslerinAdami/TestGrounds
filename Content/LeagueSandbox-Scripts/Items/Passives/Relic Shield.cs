@@ -18,14 +18,14 @@ internal sealed class PendingSpoilsExecute {
     public float    Gold         { get; init; }
 }
 
-public class ItemId3302 : IItemScript {
+public class ItemID_3302 : IItemScript {
     private const int   ItemId                       = 3302;
     private const float ExecuteHealthThresholdFactor = 0.5f;
     private const float ExecuteDamagePadding         = 1.0f;
     private const float SpoilsRange                  = 1100f;
     private const float SpoilsHealAmountFlat         = 40f;
 
-    private static readonly Dictionary<uint, ItemId3302> _activeScriptsByOwnerNetId = new();
+    private static readonly Dictionary<uint, ItemID_3302> _activeScriptsByOwnerNetId = new();
     private readonly Dictionary<uint, PendingSpoilsExecute> _pendingExecutes = new();
 
     private ObjAIBase _owner;
