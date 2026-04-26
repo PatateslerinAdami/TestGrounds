@@ -36,6 +36,7 @@ using GameServerCore.Packets.Enums;
 [OnHeal]
 [OnHitUnit]
 [OnKill]
+[OnMinionKill]
 [OnKillUnit]
 [OnLaunchAttack]
 [OnLaunchMissile]
@@ -134,6 +135,9 @@ namespace LeagueSandbox.GameServer.API
             = new DataOnlyDispatcher<Champion, ScoreData>();
 
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnKill
+            = new DataOnlyDispatcher<AttackableUnit, DeathData>();
+
+        public static DataOnlyDispatcher<AttackableUnit, DeathData> OnMinionKill
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
 
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnKillUnit

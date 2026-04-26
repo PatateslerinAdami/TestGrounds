@@ -377,6 +377,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (deathData.Unit is Minion)
             {
+                ApiEventManager.OnMinionKill.Publish(deathData.Killer, deathData);
                 ChampStats.MinionsKilled += 1;
                 if (deathData.Unit.Team == TeamId.TEAM_NEUTRAL)
                 {

@@ -679,6 +679,47 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Forces this AI unit to perform a lunge which follows the specified AttackableUnit.
+        /// Compatibility wrapper for scripts that distinguish lunges from regular dashes.
+        /// </summary>
+        /// <param name="target">Unit to follow.</param>
+        /// <param name="speed">Constant speed that the unit will have during the lunge.</param>
+        /// <param name="animation">Internal name of the lunge animation.</param>
+        /// <param name="leapGravity">How much gravity the unit will experience when above the ground while lunging.</param>
+        /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before lunging.</param>
+        /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the target before stopping or reaching the target.</param>
+        /// <param name="backDistance">Additional stopping distance from the target.</param>
+        /// <param name="travelTime">Total time (in seconds) the lunge may follow the target before stopping.</param>
+        /// <param name="consideredCc">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
+        /// <param name="movementType">Force movement type. Included for API compatibility.</param>
+        public void LungeToTarget
+        (
+            AttackableUnit target,
+            float speed,
+            string animation = "",
+            float leapGravity = 0,
+            bool keepFacingLastDirection = true,
+            float followTargetMaxDistance = 0,
+            float backDistance = 0,
+            float travelTime = 0,
+            bool consideredCc = false,
+            ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE
+        )
+        {
+            DashToTarget(
+                target,
+                speed,
+                animation,
+                leapGravity,
+                keepFacingLastDirection,
+                followTargetMaxDistance,
+                backDistance,
+                travelTime,
+                consideredCc
+            );
+        }
+
+        /// <summary>
         /// Automatically paths this AI to a favorable auto attacking position. 
         /// Used only for Minions currently.
         /// </summary>
