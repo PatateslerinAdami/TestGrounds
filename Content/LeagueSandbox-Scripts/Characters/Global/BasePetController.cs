@@ -12,6 +12,7 @@ namespace Spells
     public class BasePetController : ISpellScript
     {
         private Pet Pet;
+
         public SpellScriptMetadata ScriptMetadata => new SpellScriptMetadata()
         {
             NotSingleTargetSpell = true,
@@ -36,8 +37,9 @@ namespace Spells
                 AddParticle(owner, null, "cursor_moveto", start);
 
                 //TODO: Instead of baking AI here, make a general Pet AI script and set it as the default AI for Pet class.
-                var unitsInRange = GetUnitsInRange(end, 100.0f, true);
-                unitsInRange.RemoveAll(x => x.Team == spell.CastInfo.Owner.Team);
+                var unitsInRange =
+                    EnumerateValidUnitsInRange(spell.CastInfo.Owner, end, 100.0f, true, SpellDataFlags.AffectEnemies)
+                        .ToList();
                 if (unitsInRange.Count > 0)
                 {
                     Pet.UpdateMoveOrder(OrderType.PetHardAttack);

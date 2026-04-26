@@ -49,7 +49,8 @@ namespace Buffs
             _spell = ownerSpell;
             _targetPos = new Vector2(buff.Variables.GetFloat("TargetX"), buff.Variables.GetFloat("TargetY"));
 
-            var mainMissile = CreateCustomMissile(_owner, "VarusEMissile", _owner.Position, _targetPos, new MissileParameters { Type = MissileType.Arc });
+            var mainMissile = CreateCustomMissile(_owner, "VarusEMissile", _owner.Position, _targetPos,
+                new MissileParameters { Type = MissileType.Arc });
             if (mainMissile != null)
             {
                 ApiEventManager.OnSpellMissileEnd.AddListener(this, mainMissile, OnMainMissileEnd, true);
@@ -64,7 +65,8 @@ namespace Buffs
                 Vector2 offset = new Vector2((float)Math.Cos(angle) * radius, (float)Math.Sin(angle) * radius);
                 Vector2 visualEndPos = _targetPos + offset;
                 //At some point should look over hit registering of missile dummies since they also calls OnBeingSpellHit
-                var visMissile = CreateCustomMissile(_owner, "VarusEMissileDummy", _owner.Position, visualEndPos, new MissileParameters { Type = MissileType.Arc });
+                var visMissile = CreateCustomMissile(_owner, "VarusEMissileDummy", _owner.Position, visualEndPos,
+                    new MissileParameters { Type = MissileType.Arc });
                 if (visMissile != null)
                 {
                     _visualMissiles.Add(visMissile);
@@ -81,21 +83,22 @@ namespace Buffs
 
                 _zoneActive = true;
 
-                var units = GetUnitsInRange(_targetPos, 300f, true);
+                var units = GetUnitsInRange(_owner, _targetPos, 300f, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                    SpellDataFlags.AffectNeutral);
                 foreach (var target in units)
                 {
-                    if (target.Team != _owner.Team && target is ObjAIBase)
-                    {
-                        _spell.ApplyEffects(target);
-                        AddParticleTarget(_owner, target, "globalhit_orange_tar.troy", target, 1.0f);
-                    }
+                    _spell.ApplyEffects(target);
+                    AddParticleTarget(_owner, target, "globalhit_orange_tar.troy", target, 1.0f);
                 }
 
                 _zoneParticle = AddParticlePos(_owner, "varuseaoe.troy", _targetPos, _targetPos, 4.0f);
-                _zoneSound =    AddParticlePos(_owner, "varusehit_sound.troy", _targetPos, _targetPos, 4.0f);
+                _zoneSound = AddParticlePos(_owner, "varusehit_sound.troy", _targetPos, _targetPos, 4.0f);
 
-                _zoneParticleGreen = AddParticlePos(_owner, "varusecirclegreen.troy", _targetPos, _targetPos, 4.0f, teamOnly: _owner.Team);
-                _zoneParticleRed =   AddParticlePos(_owner, "varusecirclered.troy", _targetPos, _targetPos, 4.0f,teamOnly: CustomConvert.GetEnemyTeam(_owner.Team));
+                _zoneParticleGreen = AddParticlePos(_owner, "varusecirclegreen.troy", _targetPos, _targetPos, 4.0f,
+                    teamOnly: _owner.Team);
+                _zoneParticleRed = AddParticlePos(_owner, "varusecirclered.troy", _targetPos, _targetPos, 4.0f,
+                    teamOnly: CustomConvert.GetEnemyTeam(_owner.Team));
             }));
         }
 
@@ -121,7 +124,8 @@ namespace Buffs
                 {
                     if (visMissile != null && !visMissile.IsToRemove())
                     {
-                        Vector2 visTargetPos = new Vector2(visMissile.CastInfo.TargetPositionEnd.X, visMissile.CastInfo.TargetPositionEnd.Z);
+                        Vector2 visTargetPos = new Vector2(visMissile.CastInfo.TargetPositionEnd.X,
+                            visMissile.CastInfo.TargetPositionEnd.Z);
                         AddParticlePos(_owner, "VarusEAOEMini.troy", visTargetPos, visTargetPos, 5.0f);
                         visMissile.SetToRemove();
                     }
@@ -139,13 +143,12 @@ namespace Buffs
             if (_tickTimer >= 250f)
             {
                 _tickTimer = 0f;
-                var units = GetUnitsInRange(_targetPos, 300f, true);
+                var units = GetUnitsInRange(_owner, _targetPos, 300f, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                    SpellDataFlags.AffectNeutral);
                 foreach (var target in units)
                 {
-                    if (target.Team != _owner.Team && target is ObjAIBase)
-                    {
-                        AddBuff("VarusESlow", 0.25f, 1, _spell, target, _owner, false);
-                    }
+                    AddBuff("VarusESlow", 0.25f, 1, _spell, target, _owner, false);
                 }
             }
         }
@@ -156,14 +159,17 @@ namespace Buffs
             {
                 _zoneParticle.SetToRemove();
             }
+
             if (_zoneParticleGreen != null && !_zoneParticleGreen.IsToRemove())
             {
                 _zoneParticleGreen.SetToRemove();
             }
+
             if (_zoneParticleRed != null && !_zoneParticleRed.IsToRemove())
             {
                 _zoneParticleRed.SetToRemove();
             }
+
             if (_zoneSound != null && !_zoneSound.IsToRemove())
             {
                 _zoneSound.SetToRemove();

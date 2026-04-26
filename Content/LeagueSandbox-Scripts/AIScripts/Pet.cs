@@ -45,21 +45,23 @@ namespace AIScripts
             {
                 return true;
             }
+
             if (state == AIState.AI_TAUNTED || state == AIState.AI_FEARED)
             {
                 return true;
             }
+
             if ((state == AIState.AI_PET_HARDATTACK
-                || state == AIState.AI_PET_HARDMOVE
-                || state == AIState.AI_PET_HARDIDLE
-                || state == AIState.AI_PET_HARDIDLE_ATTACKING
-                || state == AIState.AI_PET_HARDRETURN
-                || state == AIState.AI_PET_HARDSTOP)
+                 || state == AIState.AI_PET_HARDMOVE
+                 || state == AIState.AI_PET_HARDIDLE
+                 || state == AIState.AI_PET_HARDIDLE_ATTACKING
+                 || state == AIState.AI_PET_HARDRETURN
+                 || state == AIState.AI_PET_HARDSTOP)
                 &&
                 (order == OrderType.AttackTo
-                || order == OrderType.MoveTo
-                || order == OrderType.AttackMove
-                || order == OrderType.Stop))
+                 || order == OrderType.MoveTo
+                 || order == OrderType.AttackMove
+                 || order == OrderType.Stop))
             {
                 return true;
             }
@@ -69,20 +71,25 @@ namespace AIScripts
                 ObjAIBase owner = pet.Owner;
                 if (owner == null)
                 {
-                    pet.Die(CreateDeathData(false, 0, pet, pet, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+                    pet.Die(CreateDeathData(false, 0, pet, pet, DamageType.DAMAGE_TYPE_TRUE,
+                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                     return false;
                 }
+
                 if (order == OrderType.MoveTo)
                 {
-                    if (Vector2.DistanceSquared(ai.Position, ai.Waypoints.Last()) > FAR_MOVEMENT_DISTANCE * FAR_MOVEMENT_DISTANCE
+                    if (Vector2.DistanceSquared(ai.Position, ai.Waypoints.Last()) >
+                        FAR_MOVEMENT_DISTANCE * FAR_MOVEMENT_DISTANCE
                         || state == AIState.AI_PET_HOLDPOSITION || state == AIState.AI_PET_HOLDPOSITION_ATTACKING)
                     {
                         ai.SetAIState(AIState.AI_PET_MOVE);
                         // TODO: Move to owner.
                         RemoveBuff(ai, "PetCommandParticle");
                     }
+
                     return true;
                 }
+
                 if (order == OrderType.AttackMove)
                 {
                     ai.SetAIState(AIState.AI_PET_ATTACKMOVE);
@@ -90,6 +97,7 @@ namespace AIScripts
                     RemoveBuff(ai, "PetCommandParticle");
                     return true;
                 }
+
                 if (order == OrderType.PetHardReturn)
                 {
                     ai.SetAIState(AIState.AI_PET_HARDRETURN);
@@ -106,17 +114,20 @@ namespace AIScripts
                 {
                     return false;
                 }
+
                 // TODO: Disable attacking
                 ai.SetAIState(AIState.AI_PET_ATTACK);
                 // TODO: Move to target.
                 RemoveBuff(ai, "PetCommandParticle");
                 return true;
             }
+
             if (order == OrderType.Stop)
             {
                 RemoveBuff(ai, "PetCommandParticle");
                 return true;
             }
+
             if (order == OrderType.PetHardStop)
             {
                 // TODO: Disable attacking
@@ -127,12 +138,14 @@ namespace AIScripts
                 RemoveBuff(ai, "PetCommandParticle");
                 return true;
             }
+
             if (order == OrderType.PetHardAttack)
             {
                 if (target == null)
                 {
                     return false;
                 }
+
                 // TODO: Disable attacking
                 ai.SetAIState(AIState.AI_PET_HARDATTACK);
                 // TODO: Move to target.
@@ -141,8 +154,10 @@ namespace AIScripts
                     // TODO: source & target may be backwards
                     AddBuff("PetCommandParticle", 45.0f, 1, null, ai, targetAI);
                 }
+
                 return true;
             }
+
             if (order == OrderType.PetHardMove)
             {
                 ai.SetAIState(AIState.AI_PET_HARDMOVE);
@@ -150,6 +165,7 @@ namespace AIScripts
                 AddBuff("PetCommandParticle", 45.0f, 1, null, ai, ai);
                 return true;
             }
+
             if (order == OrderType.Hold)
             {
                 RemoveBuff(ai, "PetCommandParticle");
@@ -175,6 +191,7 @@ namespace AIScripts
                 {
                     return;
                 }
+
                 if (state == AIState.AI_PET_MOVE
                     || state == AIState.AI_PET_HARDMOVE
                     || state == AIState.AI_PET_HARDRETURN
@@ -183,14 +200,17 @@ namespace AIScripts
                 {
                     return;
                 }
+
                 AttackableUnit newTarget = GetTargetInAttackRange();
                 if (newTarget == null)
                 {
                     if (owner == null)
                     {
-                        minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+                        minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
+                            DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                         return;
                     }
+
                     if (state == AIState.AI_PET_HARDIDLE_ATTACKING)
                     {
                         //NotifySetState(AIState.AI_PET_HARDIDLE);
@@ -214,13 +234,15 @@ namespace AIScripts
                         return;
                     }
                 }
-                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK || state == AIState.AI_TAUNTED)
+                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK ||
+                         state == AIState.AI_TAUNTED)
                 {
                     minion.SetAIState(AIState.AI_PET_ATTACK);
                     // TODO: Move to newTarget
                     return;
                 }
-                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK || state == AIState.AI_TAUNTED)
+                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK ||
+                         state == AIState.AI_TAUNTED)
                 {
                     minion.SetAIState(AIState.AI_PET_ATTACK);
                     // TODO: Move to newTarget
@@ -250,6 +272,7 @@ namespace AIScripts
                     // TODO: Move to newTarget
                     return;
                 }
+
                 //NotifySetState(AIState.AI_PET_IDLE);
                 return;
             }
@@ -279,7 +302,6 @@ namespace AIScripts
                 _timerFeared += diff;
                 if (_timerFeared / 1000f >= _timerFearedThreshold)
                 {
-
                 }
             }
         }
@@ -298,11 +320,14 @@ namespace AIScripts
                 ObjAIBase owner = minion.Owner;
                 if (owner == null)
                 {
-                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
+                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                 }
 
-                Vector2 myEdge = Extensions.GetClosestCircleEdgePoint(owner.Position, minion.Position, minion.CollisionRadius);
-                Vector2 ownerEdge = Extensions.GetClosestCircleEdgePoint(minion.Position, owner.Position, owner.CollisionRadius);
+                Vector2 myEdge =
+                    Extensions.GetClosestCircleEdgePoint(owner.Position, minion.Position, minion.CollisionRadius);
+                Vector2 ownerEdge =
+                    Extensions.GetClosestCircleEdgePoint(minion.Position, owner.Position, owner.CollisionRadius);
                 float distToOwner = Vector2.Distance(myEdge, ownerEdge);
 
                 if (distToOwner > TELEPORT_DISTANCE)
@@ -321,11 +346,14 @@ namespace AIScripts
                     // TODO: Move to owner
                     return;
                 }
-                if ((state == AIState.AI_PET_RETURN || state == AIState.AI_PET_HARDRETURN) && distToOwner <= GetPetReturnRadius(minion))
+
+                if ((state == AIState.AI_PET_RETURN || state == AIState.AI_PET_HARDRETURN) &&
+                    distToOwner <= GetPetReturnRadius(minion))
                 {
                     //NotifySetState(AIState.AI_PET_IDLE);
                     return;
                 }
+
                 if (minion.IsPathEnded() && state == AIState.AI_PET_HARDMOVE)
                 {
                     //NotifySetState(AIState.AI_PET_HARDIDLE);
@@ -348,7 +376,8 @@ namespace AIScripts
                 ObjAIBase owner = minion.Owner;
                 if (owner == null)
                 {
-                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
+                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                 }
 
                 if (state == AIState.AI_PET_MOVE
@@ -357,6 +386,7 @@ namespace AIScripts
                 {
                     return;
                 }
+
                 if (state == AIState.AI_PET_IDLE
                     || state == AIState.AI_PET_RETURN
                     || state == AIState.AI_PET_ATTACKMOVE
@@ -379,6 +409,7 @@ namespace AIScripts
                     {
                         RemoveBuff(minion, "PetCommandParticle");
                     }
+
                     if (state == AIState.AI_PET_IDLE)
                     {
                         minion.SetAIState(AIState.AI_PET_ATTACK);
@@ -425,9 +456,21 @@ namespace AIScripts
         {
             AttackableUnit nextTarget = null;
             var nextTargetPriority = 14;
-            var nearestObjects = GetUnitsInRange(minion.Position, minion.Stats.Range.Total, true);
+            var nearestObjects = GetUnitsInRange(
+                minion,
+                minion.Position,
+                minion.Stats.Range.Total,
+                true,
+                SpellDataFlags.AffectEnemies
+                | SpellDataFlags.AffectNeutral
+                | SpellDataFlags.AffectMinions
+                | SpellDataFlags.AffectHeroes
+                | SpellDataFlags.AffectTurrets
+            );
             //Find target closest to max attack range.
-            foreach (var it in nearestObjects.OrderBy(x => Vector2.DistanceSquared(minion.Position, x.Position) - (minion.Stats.Range.Total * minion.Stats.Range.Total)))
+            foreach (var it in nearestObjects.OrderBy(x =>
+                         Vector2.DistanceSquared(minion.Position, x.Position) -
+                         (minion.Stats.Range.Total * minion.Stats.Range.Total)))
             {
                 if (!(it is AttackableUnit u)
                     || u.IsDead

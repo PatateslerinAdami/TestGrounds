@@ -19,9 +19,12 @@ namespace Buffs
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
+
         float time;
-        AttackableUnit au; Spell sp;
+        AttackableUnit au;
+        Spell sp;
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             sp = ownerSpell;
@@ -30,10 +33,11 @@ namespace Buffs
             var owner = ownerSpell.CastInfo.Owner;
             AddParticleTarget(owner, owner, "tremors_cas.troy", owner, lifetime: 8);
         }
+
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-
         }
+
         public void OnUpdate(float diff)
         {
             if (time >= 1000f)
@@ -41,23 +45,30 @@ namespace Buffs
                 time = 0f;
                 Targets();
             }
+
             time += diff;
         }
+
         private void Targets()
         {
-            var list = GetUnitsInRangeDiffTeam(au.Position, 500f, true, au);
+            var list = GetUnitsInRange(au, au.Position, 500f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectTurrets);
             foreach (var unit in list)
             {
                 switch (unit)
                 {
                     case Champion champion:
-                        champion.TakeDamage(au, 50f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, sp);
+                        champion.TakeDamage(au, 50f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                            false, sp);
                         break;
                     case Minion minion:
-                        minion.TakeDamage(au, 5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, sp);
+                        minion.TakeDamage(au, 5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                            false, sp);
                         break;
                     case LaneTurret turret:
-                        turret.TakeDamage(au, 500f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, sp);
+                        turret.TakeDamage(au, 500f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                            false, sp);
                         break;
                 }
             }

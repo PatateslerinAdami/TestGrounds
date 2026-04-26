@@ -32,11 +32,12 @@ namespace CharScripts
                 AddBuff("S5Test_DragonSlayerBuff", float.MaxValue, 1, null, player, deathData.Unit as Monster);
             }
 
-            foreach (var unit in GetUnitsInRange(deathData.Unit.Position, 1000.0f, true))
+            foreach (var unit in EnumerateUnitsInRange(deathData.Unit.Position, 1000f, true))
             {
                 if (unit is Monster mons && mons.Name == "Dragon")
                 {
-                    mons.TakeDamage(mons, 100000.0f, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, false);
+                    mons.TakeDamage(mons, 100000.0f, DamageType.DAMAGE_TYPE_TRUE,
+                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, false);
                 }
             }
         }
@@ -74,10 +75,12 @@ namespace Buffs
                 StatsModifier.AttackDamage.PercentBonus = 0.08f;
                 StatsModifier.AbilityPower.PercentBonus = 0.08f;
             }
+
             if (buff.StackCount >= 3)
             {
                 StatsModifier.MoveSpeed.PercentBonus = 0.05f;
             }
+
             if (buff.StackCount >= 5)
             {
                 // Aspect of the Dragon doubles all bonuses TODO: make it expire after 180 seconds?
@@ -94,13 +97,16 @@ namespace Buffs
             {
                 ApiEventManager.OnPreDealDamage.AddListener(this, unit, BonusDamageToMinions, false);
             }
+
             if (buff.StackCount == 4)
             {
                 ApiEventManager.OnPreDealDamage.AddListener(this, unit, BonusDamageToTowers, false);
             }
+
             if (buff.StackCount == 5)
             {
-                ApiEventManager.OnPreDealDamage.AddListener(this, unit, ApplyBurnDamage, false); //TODO: make it expire after 180 seconds?
+                ApiEventManager.OnPreDealDamage.AddListener(this, unit, ApplyBurnDamage,
+                    false); //TODO: make it expire after 180 seconds?
             }
         }
 

@@ -66,7 +66,9 @@ namespace Spells
             _speedModifier = new StatsModifier();
             _owner.AddStatModifier(_speedModifier);
 
-            Vector2 dir = Vector2.Normalize(new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z) - _owner.Position);
+            Vector2 dir =
+                Vector2.Normalize(new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z) -
+                                  _owner.Position);
             _currentAngle = (float)Math.Atan2(dir.Y, dir.X);
             _targetAngle = _currentAngle;
         }
@@ -134,20 +136,14 @@ namespace Spells
                 }
                 else
                 {
-                    var nearbyUnits = GetUnitsInRange(_owner.Position, _unitHitboxRadius + 100f, true);
-                    foreach (var unit in nearbyUnits)
+                    var nearbyUnits = GetUnitsInRange(_owner, _owner.Position, _unitHitboxRadius + 100f, true,
+                        SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectTurrets);
+                    if ((from unit in nearbyUnits
+                            let dist = Vector2.Distance(_owner.Position, unit.Position)
+                            where dist <= _unitHitboxRadius + unit.CollisionRadius
+                            select unit).Any())
                     {
-                        if (unit is Champion && unit.Team == _owner.Team) continue;
-
-                        if (unit is Champion || unit is BaseTurret || unit is Inhibitor)
-                        {
-                            float dist = Vector2.Distance(_owner.Position, unit.Position);
-                            if (dist <= _unitHitboxRadius + unit.CollisionRadius)
-                            {
-                                collided = true;
-                                break;
-                            }
-                        }
+                        collided = true;
                     }
                 }
 
@@ -163,7 +159,7 @@ namespace Spells
             {
                 Vector2 newPos = _owner.Position + newDir * 500f;
                 _owner.SetWaypoints(new List<Vector2> { _owner.Position, newPos }, true);
-                _waypointUpdateTimer = 100f; 
+                _waypointUpdateTimer = 100f;
             }
         }
 
@@ -206,6 +202,7 @@ namespace Spells
                     {
                         _owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.LostTarget);
                     }
+
                     PlayAnimation(_owner, "Spell4_Hit");
                     OnHit();
                 }
@@ -217,19 +214,19 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
-                            _owner.DashToLocation(_owner.Position + dir2D * 300, 545, "Spell4_Stop", 0.0f, false);//0.55 
-                            _owner.RegisterTimer(new GameScriptTimer(0.55f, () =>
-                            {
-                                OnHit();
-                            }));
+                            _owner.DashToLocation(_owner.Position + dir2D * 300, 545, "Spell4_Stop", 0.0f,
+                                false); //0.55 
+                            _owner.RegisterTimer(new GameScriptTimer(0.55f, () => { OnHit(); }));
                         }
                     }));
                 }
             }
         }
+
         public void OnHit()
         {
-            AddParticle(_owner, default, "sion_base_r_explosion.troy", _owner.Position + new Vector2(_owner.Direction.X, _owner.Direction.Z) * 200);
+            AddParticle(_owner, default, "sion_base_r_explosion.troy",
+                _owner.Position + new Vector2(_owner.Direction.X, _owner.Direction.Z) * 200);
             // dmg, knockups, stun etc.
         }
     }

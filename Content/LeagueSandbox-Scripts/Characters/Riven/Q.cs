@@ -24,6 +24,7 @@ namespace Spells
         private AttackableUnit _target;
         private int _currentQStage = 0;
         Spell _spell;
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _spell = spell;
@@ -34,12 +35,12 @@ namespace Spells
         {
             _owner = owner;
             _target = GetClosestUnitInRange(_owner, end, 200f, true,
-                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes); //Todo: please confirm which Flags should be used here
+                SpellDataFlags.AffectEnemies |
+                SpellDataFlags.AffectHeroes); //Todo: please confirm which Flags should be used here
         }
 
         public void OnSpellPostCast(Spell spell)
         {
-
             AddBuff("RivenTriCleave", 4.0f, 1, spell, _owner, _owner);
             AddBuff("RivenPassiveAABoost", 5f, 1, spell, _owner, _owner, false);
 
@@ -88,9 +89,11 @@ namespace Spells
 
             if (!string.IsNullOrEmpty(trailParticle))
             {
-                AddParticle(_owner, _owner, trailParticle, _owner.Position, size: (_currentQStage == 3 ? -1 : 1), bone: "chest");
+                AddParticle(_owner, _owner, trailParticle, _owner.Position, size: (_currentQStage == 3 ? -1 : 1),
+                    bone: "chest");
             }
         }
+
         public void OnDashFinished(AttackableUnit unit, ForceMovementParameters parameters)
         {
             if (!(unit is ObjAIBase owner)) return;
@@ -110,31 +113,23 @@ namespace Spells
             var damage = 10;
 
             var damageCenter = GetPointFromUnit(_owner, 80f);
-            var units = GetUnitsInRange(damageCenter, radius, true);
+            var units = GetUnitsInRange(_owner, damageCenter, radius, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral);
 
             foreach (var target in units)
             {
-                if (IsValidTarget(target))
+                target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                    false, _spell);
+                if (_currentQStage == 3)
                 {
-                    target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, _spell);
-                    if (_currentQStage == 3)
-                    {
-                        AddBuff("Pulverize", 0.75f, 1, _spell, target, _owner);
-                    }
-
-                    AddParticleTarget(_owner, target, "RivenQ_tar.troy", target, 10f);
-                    AddParticleTarget(_owner, target, specificHitParticle, target, 10f);
-                    AddParticleTarget(_owner, target, "exile_Q_tar_04.troy", target, 10f);
+                    AddBuff("Pulverize", 0.75f, 1, _spell, target, _owner);
                 }
-            }
-        }
 
-        private bool IsValidTarget(AttackableUnit target)
-        {
-            return target.Team != _owner.Team
-                   && !(target is ObjBuilding || target is BaseTurret)
-                   && target.Status.HasFlag(StatusFlags.Targetable)
-                   && !target.IsDead;
+                AddParticleTarget(_owner, target, "RivenQ_tar.troy", target, 10f);
+                AddParticleTarget(_owner, target, specificHitParticle, target, 10f);
+                AddParticleTarget(_owner, target, "exile_Q_tar_04.troy", target, 10f);
+            }
         }
 
         private Vector2 GetDashDestination(float maxDashRange)

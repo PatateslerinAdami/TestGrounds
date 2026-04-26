@@ -21,7 +21,6 @@ using Timer = System.Timers.Timer;
 using LeagueSandbox.GameServer.Inventory;
 
 
-
 namespace AIScripts
 {
     public class BasicAI : IAIScript
@@ -37,12 +36,12 @@ namespace AIScripts
         private bool isInCombat = false;
         private bool isUnderTower = false;
         private bool isRoaming = false;
-        private const float healthThreshold = 0.3f;  // Adjust to simulate more cautious or aggressive play
+        private const float healthThreshold = 0.3f; // Adjust to simulate more cautious or aggressive play
         private static ILog _logger = LoggerProvider.GetLogger();
         private readonly Game _game;
         private BotState _currentState = BotState.Idle;
 
-        private float _stateCooldown = 5.0f;  // Time before the bot can switch states
+        private float _stateCooldown = 5.0f; // Time before the bot can switch states
         private const float decisionCooldown = 5.0f; // 2 seconds cooldown between decisions
         private static Random random = new Random();
 
@@ -79,19 +78,22 @@ namespace AIScripts
                 isRoaming = false;
             }
         }
+
         public void OnUpdate(float diff)
         {
             if (ChampionInstance != null && !ChampionInstance.IsDead)
             {
                 // Log the initial state before updating timers
-                _logger.Debug($"Before Update: TimeSinceLastDamage = {TimeSinceLastDamage}, combatTimer = {combatTimer}, _stateCooldown = {_stateCooldown}");
+                _logger.Debug(
+                    $"Before Update: TimeSinceLastDamage = {TimeSinceLastDamage}, combatTimer = {combatTimer}, _stateCooldown = {_stateCooldown}");
 
                 TimeSinceLastDamage += diff;
                 combatTimer += diff;
                 _stateCooldown = Math.Max(0.0f, _stateCooldown - diff);
 
                 // Log the state after updating timers
-                _logger.Debug($"After Update: TimeSinceLastDamage = {TimeSinceLastDamage}, combatTimer = {combatTimer}, _stateCooldown = {_stateCooldown}");
+                _logger.Debug(
+                    $"After Update: TimeSinceLastDamage = {TimeSinceLastDamage}, combatTimer = {combatTimer}, _stateCooldown = {_stateCooldown}");
 
                 if (_stateCooldown <= 0.0f)
                 {
@@ -99,7 +101,7 @@ namespace AIScripts
 
                     DecideNextState();
 
-                    _stateCooldown = decisionCooldown;  // Reset cooldown after decision
+                    _stateCooldown = decisionCooldown; // Reset cooldown after decision
                     _logger.Debug($"New state decided. _stateCooldown reset to {decisionCooldown}");
                     _logger.Debug($"The new state is: {_currentState}");
                 }
@@ -213,7 +215,8 @@ namespace AIScripts
 
         private bool ShouldRecall()
         {
-            return TimeSinceLastDamage > recallDelay && ChampionInstance.Stats.CurrentHealth / ChampionInstance.Stats.HealthPoints.Total < healthThreshold;
+            return TimeSinceLastDamage > recallDelay &&
+                   ChampionInstance.Stats.CurrentHealth / ChampionInstance.Stats.HealthPoints.Total < healthThreshold;
         }
 
         private void Recall()
@@ -283,7 +286,7 @@ namespace AIScripts
             {
                 new Vector2(12000, 2000), // Top lane
                 new Vector2(3000, 12000), // Bot lane
-                new Vector2(7500, 7500)   // Mid lane or jungle
+                new Vector2(7500, 7500) // Mid lane or jungle
             };
             return potentialTargets[new Random().Next(0, potentialTargets.Count)];
         }
@@ -306,7 +309,8 @@ namespace AIScripts
                 {
                     StopAttack();
                     isInCombat = false;
-                    _logger.Debug("Skipping attack due to retreat or low health."); // this doesn't actually stop the attack, not sure why
+                    _logger.Debug(
+                        "Skipping attack due to retreat or low health."); // this doesn't actually stop the attack, not sure why
                     return;
                 }
 
@@ -358,31 +362,34 @@ namespace AIScripts
         private bool ShouldBeAggressive()
         {
             return ChampionInstance.Stats.CurrentHealth > healthThreshold
-                && ChampionInstance.Stats.CurrentMana > 0.3f
-                && GetNearbyChampions().Count > 0;
+                   && ChampionInstance.Stats.CurrentMana > 0.3f
+                   && GetNearbyChampions().Count > 0;
         }
 
         private List<Champion> GetNearbyChampions()
         {
             Vector2 botPosition = ChampionInstance.Position;
             List<AttackableUnit> units = GetUnitsInRange(botPosition, 2000.0f, true);
-            return units.OfType<Champion>().Where(champion => champion.Team != ChampionInstance.Team && !champion.IsDead).ToList();
+            return units.OfType<Champion>()
+                .Where(champion => champion.Team != ChampionInstance.Team && !champion.IsDead).ToList();
         }
 
         private Champion GetClosestEnemyChampion()
         {
             Vector2 botPosition = ChampionInstance.Position;
             List<AttackableUnit> units = GetUnitsInRange(botPosition, 2000.0f, true);
-            var nearbyChampions = units.OfType<Champion>().Where(champion => champion.Team != ChampionInstance.Team && !champion.IsDead).ToList();
+            var nearbyChampions = units.OfType<Champion>()
+                .Where(champion => champion.Team != ChampionInstance.Team && !champion.IsDead).ToList();
 
             // Ensure there are champions in the list
             if (nearbyChampions.Any())
             {
                 // Find the closest champion
                 return nearbyChampions
-                        .OrderBy(champion => Vector2.Distance(botPosition, champion.Position))
-                        .FirstOrDefault();
+                    .OrderBy(champion => Vector2.Distance(botPosition, champion.Position))
+                    .FirstOrDefault();
             }
+
             return null; // Return null if no valid champions are found
         }
 
@@ -414,7 +421,8 @@ namespace AIScripts
             Vector2 botPosition = ChampionInstance.Position;
             float detectionRange = 2000.0f;
             List<AttackableUnit> units = GetUnitsInRange(botPosition, detectionRange, true);
-            List<AttackableUnit> alliedMinions = units.Where(unit => unit is Minion && unit.Team == ChampionInstance.Team).ToList();
+            List<AttackableUnit> alliedMinions =
+                units.Where(unit => unit is Minion && unit.Team == ChampionInstance.Team).ToList();
 
             if (alliedMinions.Count > 0)
             {
@@ -423,6 +431,7 @@ namespace AIScripts
                 {
                     averageMinionPosition += minion.Position;
                 }
+
                 averageMinionPosition /= alliedMinions.Count;
                 MoveToPosition(averageMinionPosition);
             }
@@ -463,7 +472,6 @@ namespace AIScripts
             // Get a list of all towers in the game
             return GetUnitsInRange(Vector2.Zero, float.MaxValue, true)
                 .Where(unit => unit is LaneTurret && unit.Team != ChampionInstance.Team).ToList();
-
         }
 
         private Vector2 GetBasePosition()
@@ -482,8 +490,8 @@ namespace AIScripts
         private List<AttackableUnit> GetUnitsInRange(Vector2 position, float range, bool includeDeadUnits)
         {
             // Retrieves all units within the specified range
-            return ApiFunctionManager.GetUnitsInRange(position, range, includeDeadUnits)
-                .Where(unit => unit.Team != ChampionInstance.Team).ToList();
+            return EnumerateValidUnitsInRange(ChampionInstance, position, range, includeDeadUnits,
+                SpellDataFlags.AffectEnemies).ToList();
         }
     }
 }

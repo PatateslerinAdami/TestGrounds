@@ -378,7 +378,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             };
 
             //ApiEventManager.OnHitUnit.Publish(this, damageData);
-            ApiEventManager.OnPreDealDamage.Publish(this, damageData);
             // TODO: Verify if we should use MissChance instead.
             if (HasBuffType(BuffType.BLIND))
             {

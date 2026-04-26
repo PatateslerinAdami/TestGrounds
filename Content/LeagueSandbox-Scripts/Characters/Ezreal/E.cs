@@ -29,6 +29,7 @@ namespace Spells
             {
                 return;
             }
+
             var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
             var ownerPos = owner.Position;
             var distance = Vector2.Distance(ownerPos, targetPos);
@@ -44,21 +45,15 @@ namespace Spells
             {
                 teleportPos = targetPos;
             }
+
             AddParticle(owner, null, "ezreal_arcaneshift_cas", owner.Position);
             TeleportTo(owner, teleportPos.X, teleportPos.Y);
             AddParticleTarget(owner, owner, "ezreal_arcaneshift_flash", owner);
 
             float missileRange = 750.0f;
-            var units = GetUnitsInRange(teleportPos, missileRange, true);
-
-            var target = units
-                .Where(u => u.Team != owner.Team &&
-                            u is ObjAIBase &&
-                            !u.IsDead &&
-                            u.Status.HasFlag(StatusFlags.Targetable) &&
-                            u.IsVisibleByTeam(owner.Team))
-                .OrderBy(u => Vector2.DistanceSquared(teleportPos, u.Position))
-                .FirstOrDefault();
+            var target = GetUnitsInRange(owner, teleportPos, missileRange, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral).FirstOrDefault(unit => unit.IsVisibleByTeam(owner.Team));
 
             if (target != null)
             {
@@ -95,7 +90,8 @@ namespace Spells
             float ap = owner.Stats.AbilityPower.Total * 0.75f;
 
             float totalDamage = baseDamage + bonusAd + ap;
-            target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, spell);
+            target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                false, spell);
             AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
             missile.SetToRemove();
         }

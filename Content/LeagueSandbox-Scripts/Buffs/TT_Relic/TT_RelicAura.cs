@@ -16,8 +16,8 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-
         };
+
         public StatsModifier StatsModifier { get; private set; }
 
         bool setToKill;
@@ -27,6 +27,7 @@ namespace Buffs
         AttackableUnit Unit;
         float timer = 250f;
         Minion InvisibleMinion;
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             thisBuff = buff;
@@ -58,8 +59,10 @@ namespace Buffs
             SetStatus(unit, StatusFlags.Targetable, true);
             SetStatus(unit, StatusFlags.Invulnerable, false);
 
-            unit.TakeDamage(unit, 250000.0f, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, false);
-            InvisibleMinion.TakeDamage(unit, 250000.0f, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, false);
+            unit.TakeDamage(unit, 250000.0f, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW,
+                false);
+            InvisibleMinion.TakeDamage(unit, 250000.0f, DamageType.DAMAGE_TYPE_TRUE,
+                DamageSource.DAMAGE_SOURCE_INTERNALRAW, false);
 
             SetStatus(unit, StatusFlags.NoRender, true);
         }
@@ -70,11 +73,11 @@ namespace Buffs
             {
                 thisBuff.DeactivateBuff();
             }
+
             timer += diff;
             if (Unit != null && timer >= 250)
             {
-                var units = GetUnitsInRange(Unit.Position, 175f, true).OrderBy(unit => Vector2.DistanceSquared(unit.Position, Unit.Position)).ToList();
-                units.RemoveAll(x => !(x is Champion));
+                var units = GetUnitsInRange(Unit, Unit.Position, 175f, true, SpellDataFlags.AffectHeroes);
                 if (units.Count >= 1)
                 {
                     if (!setToKill)
@@ -86,6 +89,7 @@ namespace Buffs
                         setToKill = true;
                     }
                 }
+
                 timer = 0;
             }
         }

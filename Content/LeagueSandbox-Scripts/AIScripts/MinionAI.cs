@@ -14,10 +14,12 @@ namespace AIScripts
         public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData();
         Minion minion;
         internal const float DETECT_RANGE = 475.0f;
+
         public void OnActivate(ObjAIBase owner)
         {
             minion = owner as Minion;
         }
+
         public void OnUpdate(float diff)
         {
             if (!minion.IsDead)
@@ -40,9 +42,21 @@ namespace AIScripts
 
             AttackableUnit nextTarget = null;
             var nextTargetPriority = 14;
-            var nearestObjects = GetUnitsInRange(minion.Position, minion.Stats.Range.Total, true);
+            var nearestObjects = GetUnitsInRange(
+                minion,
+                minion.Position,
+                minion.Stats.Range.Total,
+                true,
+                SpellDataFlags.AffectEnemies
+                | SpellDataFlags.AffectNeutral
+                | SpellDataFlags.AffectMinions
+                | SpellDataFlags.AffectHeroes
+                | SpellDataFlags.AffectTurrets
+            );
             //Find target closest to max attack range.
-            foreach (var it in nearestObjects.OrderBy(x => Vector2.DistanceSquared(minion.Position, x.Position) - (minion.Stats.Range.Total * minion.Stats.Range.Total)))
+            foreach (var it in nearestObjects.OrderBy(x =>
+                         Vector2.DistanceSquared(minion.Position, x.Position) -
+                         (minion.Stats.Range.Total * minion.Stats.Range.Total)))
             {
                 if (!(it is AttackableUnit u)
                     || u.IsDead
@@ -55,10 +69,10 @@ namespace AIScripts
                     continue;
                 }
 
-                var priority = (int)minion.ClassifyTarget(u);// get the priority.
+                var priority = (int)minion.ClassifyTarget(u); // get the priority.
                 if (priority < nextTargetPriority) // if the priority is lower than the target we checked previously
                 {
-                    nextTarget = u;                // make it a potential target.
+                    nextTarget = u; // make it a potential target.
                     nextTargetPriority = priority;
                 }
             }
@@ -73,6 +87,7 @@ namespace AIScripts
 
             return false;
         }
+
         public virtual bool AIMove()
         {
             if (ScanForTargets()) // returns true if we have a target
@@ -81,14 +96,19 @@ namespace AIScripts
                 {
                     KeepFocusingTarget(); // attack/follow target
                 }
+
                 return false;
             }
+
             return true;
         }
+
         protected void KeepFocusingTarget()
         {
-            if (minion.IsAttacking && (minion.TargetUnit == null || minion.TargetUnit.IsDead || Vector2.DistanceSquared(minion.Position, minion.TargetUnit.Position) > minion.Stats.Range.Total * minion.Stats.Range.Total))
-            // If target is dead or out of range
+            if (minion.IsAttacking && (minion.TargetUnit == null || minion.TargetUnit.IsDead ||
+                                       Vector2.DistanceSquared(minion.Position, minion.TargetUnit.Position) >
+                                       minion.Stats.Range.Total * minion.Stats.Range.Total))
+                // If target is dead or out of range
             {
                 minion.CancelAutoAttack(false, true);
                 minion.SetTargetUnit(null, true);

@@ -26,7 +26,9 @@ namespace LeagueSandbox.GameServer
         // Dictionaries of GameObjects.
         private Dictionary<uint, GameObject> _objects;
         private List<GameObject> _objectsToAdd = new List<GameObject>();
+
         private List<GameObject> _objectsToRemove = new List<GameObject>();
+
         // For the initial spawning (networking) of newly added objects.
         private Dictionary<uint, Champion> _champions;
         private Dictionary<uint, BaseTurret> _turrets;
@@ -47,6 +49,7 @@ namespace LeagueSandbox.GameServer
         /// List of all possible teams in League of Legends. Normally there are only three.
         /// </summary>
         public List<TeamId> Teams { get; private set; }
+
         public bool IsServerFoWDisabled { get; set; } = false;
 
         /// <summary>
@@ -98,6 +101,7 @@ namespace LeagueSandbox.GameServer
             {
                 _objects.Remove(obj.NetId);
             }
+
             _objectsToRemove.Clear();
 
             int oldObjectsCount = _objects.Count;
@@ -106,6 +110,7 @@ namespace LeagueSandbox.GameServer
             {
                 _objects.Add(obj.NetId, obj);
             }
+
             _objectsToAdd.Clear();
 
             var players = _game.PlayerManager.GetPlayers(includeBots: false);
@@ -114,7 +119,7 @@ namespace LeagueSandbox.GameServer
             foreach (GameObject obj in _objects.Values)
             {
                 UpdateTeamsVision(obj);
-                if(i++ < oldObjectsCount)
+                if (i++ < oldObjectsCount)
                 {
                     obj.LateUpdate(diff);
                 }
@@ -195,9 +200,7 @@ namespace LeagueSandbox.GameServer
             {
                 bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
                 shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
-                    nearSighted ?
-                        UnitHasVisionOn(champion, obj, nearSighted) :
-                        obj.IsVisibleByTeam(champion.Team)
+                    nearSighted ? UnitHasVisionOn(champion, obj, nearSighted) : obj.IsVisibleByTeam(champion.Team)
                 );
             }
 
@@ -214,7 +217,7 @@ namespace LeagueSandbox.GameServer
             {
                 _objectsToRemove.Remove(o);
 
-                if(_currentlyInUpdate)
+                if (_currentlyInUpdate)
                 {
                     _objectsToAdd.Add(o);
                 }
@@ -222,10 +225,12 @@ namespace LeagueSandbox.GameServer
                 {
                     _objects.Add(o.NetId, o);
                 }
+
                 if (o is SpellMissile missile)
                 {
                     _missiles.Add(missile.NetId, missile);
                 }
+
                 // TODO: This is a hack-fix for units which have packets being sent before spawning (ex: AscWarp minion)
                 // Instead, we need a dedicated packet queue system which takes all packets which are not vision/spawn related,
                 // and queues them if the object is not spawned yet for clients.
@@ -233,6 +238,7 @@ namespace LeagueSandbox.GameServer
                 {
                     SpawnObject(o);
                 }
+
                 o.OnAdded();
             }
         }
@@ -247,7 +253,7 @@ namespace LeagueSandbox.GameServer
             {
                 _objectsToAdd.Remove(o);
 
-                if(_currentlyInUpdate)
+                if (_currentlyInUpdate)
                 {
                     _objectsToRemove.Add(o);
                 }
@@ -260,6 +266,7 @@ namespace LeagueSandbox.GameServer
                 {
                     _missiles.Remove(missile.NetId);
                 }
+
                 o.OnRemoved();
             }
         }
@@ -429,7 +436,8 @@ namespace LeagueSandbox.GameServer
                 return true;
             }
 
-            if (Vector2.DistanceSquared(observer.Position, tested.Position) >= observer.VisionRadius * observer.VisionRadius)
+            if (Vector2.DistanceSquared(observer.Position, tested.Position) >=
+                observer.VisionRadius * observer.VisionRadius)
             {
                 return false;
             }
@@ -486,7 +494,8 @@ namespace LeagueSandbox.GameServer
             var units = new List<AttackableUnit>();
             foreach (var kv in _objects)
             {
-                if (kv.Value is AttackableUnit u && Vector2.DistanceSquared(checkPos, u.Position) <= range * range && (onlyAlive && !u.IsDead || !onlyAlive))
+                if (kv.Value is AttackableUnit u && Vector2.DistanceSquared(checkPos, u.Position) <= range * range &&
+                    (onlyAlive && !u.IsDead || !onlyAlive))
                 {
                     units.Add(u);
                 }
@@ -721,13 +730,29 @@ namespace LeagueSandbox.GameServer
         }
 
         /// <summary>
+        /// Gets a distance-sorted list of all GameObjects of type Champion that are within
+        /// a certain distance from a specified position.
+        /// </summary>
+        /// <param name="checkPos">Vector2 position to check.</param>
+        /// <param name="range">Distance to check.</param>
+        /// <param name="onlyAlive">Whether dead Champions should be excluded or not.</param>
+        /// <returns>Distance-sorted list of Champions within the specified range.</returns>
+        public List<Champion> GetChampionsInRangeSorted(Vector2 checkPos, float range, bool onlyAlive = false)
+        {
+            return GetChampionsInRange(checkPos, range, onlyAlive)
+                .OrderBy(champion => Vector2.DistanceSquared(checkPos, champion.Position))
+                .ToList();
+        }
+
+        /// <summary>
         /// Gets a list of all GameObjects of type Champion that are within a certain distance from a specified position.
         /// </summary>
         /// <param name="checkPos">Vector2 position to check.</param>
         /// <param name="range">Distance to check.</param>
         /// <param name="onlyAlive">Whether dead Champions should be excluded or not.</param>
         /// <returns>List of all Champions within the specified range of the position and of the specified alive status.</returns>
-        public List<Champion> GetChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
+        public List<Champion> GetChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team,
+            bool onlyAlive = false)
         {
             var champs = new List<Champion>();
             foreach (var kv in _champions)
@@ -740,6 +765,28 @@ namespace LeagueSandbox.GameServer
 
             return champs;
         }
+
+        /// <summary>
+        /// Gets a distance-sorted list of all GameObjects of type Champion from a specific team
+        /// that are within a certain distance from a specified position.
+        /// </summary>
+        /// <param name="checkPos">Vector2 position to check.</param>
+        /// <param name="range">Distance to check.</param>
+        /// <param name="team">Team to filter by.</param>
+        /// <param name="onlyAlive">Whether dead Champions should be excluded or not.</param>
+        /// <returns>Distance-sorted list of Champions within the specified range and team.</returns>
+        public List<Champion> GetChampionsInRangeFromTeamSorted(
+            Vector2 checkPos,
+            float range,
+            TeamId team,
+            bool onlyAlive = false
+        )
+        {
+            return GetChampionsInRangeFromTeam(checkPos, range, team, onlyAlive)
+                .OrderBy(champion => Vector2.DistanceSquared(checkPos, champion.Position))
+                .ToList();
+        }
+
         public bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
         {
             foreach (var kv in _champions)
@@ -752,6 +799,7 @@ namespace LeagueSandbox.GameServer
 
             return false;
         }
+
         /// <summary>
         /// Forces a vision update for a specific object immediately. 
         /// </summary>
@@ -764,6 +812,7 @@ namespace LeagueSandbox.GameServer
                 UpdateVisionSpawnAndSync(obj, kv, forceSpawn: false);
             }
         }
+
         /// <summary>
         /// Gets a new list of all active SpellMissiles in the game.
         /// </summary>
