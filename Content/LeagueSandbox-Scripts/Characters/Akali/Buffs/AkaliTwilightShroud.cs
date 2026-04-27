@@ -26,6 +26,7 @@ public class AkaliTwilightShroud : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         var isFirstCast = buff.Variables.GetBool("isFirstCast");
         _akali                             = ownerSpell.CastInfo.Owner;
+        SetStatus(_akali, StatusFlags.RevealSpecificUnit, false);
         SetStatus(_akali, StatusFlags.Stealthed, true);
         SetStatus(_akali, StatusFlags.Ghosted,   true);
         _p1 = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_twilight_buf", unit, buff.Duration);
