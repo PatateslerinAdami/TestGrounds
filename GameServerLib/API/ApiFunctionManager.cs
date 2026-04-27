@@ -2289,6 +2289,28 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
         }
 
+        /// <summary>
+        /// Moves the camera of the player controlling the specified unit to a location.
+        /// </summary>
+        /// <param name="unit">Unit whose owning player's camera should move.</param>
+        /// <param name="cameraTimer">Travel time in seconds.</param>
+        /// <param name="finalCameraPosition">Destination camera position.</param>
+        public static void MoveCamera(ObjAIBase unit, float cameraTimer, Vector3 finalCameraPosition)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var player = _game.PlayerManager.GetPlayers(false).FirstOrDefault(p => p?.Champion?.NetId == unit.NetId);
+            if (player == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
+        }
+
         public static void NotifyWaypointGroup(AttackableUnit unit)
         {
             _game.PacketNotifier.NotifyWaypointGroup(unit);
