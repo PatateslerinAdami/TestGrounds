@@ -133,6 +133,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
                 else
                 {
+                    // Passive slot uses CharScript logic; keep a non-null spell script to avoid null access in shared spell code.
+                    Script = new SpellScriptEmpty();
+                    HasEmptyScript = true;
                     owner.LoadCharScript(this);
                 }
             }
@@ -1478,8 +1481,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableCooldowns))
             {
-                var cd = SpellData.Cooldown[CastInfo.SpellLevel];
-                if (Script.ScriptMetadata.CooldownIsAffectedByCDR)
+                if (SpellData.Cooldown == null || SpellData.Cooldown.Length == 0)
+                {
+                    return 0.0f;
+                }
+
+                var level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.Cooldown.Length - 1));
+                var cd = SpellData.Cooldown[level];
+                if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
                 {
                     cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
                 }
@@ -1491,9 +1500,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public float GetAmmoRechageTime()
         {
-            var cd = SpellData.AmmoRechargeTime[CastInfo.SpellLevel - 1];
+            if (SpellData.AmmoRechargeTime == null || SpellData.AmmoRechargeTime.Length == 0)
+            {
+                return 0.0f;
+            }
 
-            if (Script.ScriptMetadata.CooldownIsAffectedByCDR)
+            var spellLevel = Math.Max(1, (int)CastInfo.SpellLevel);
+            var level = Math.Clamp(spellLevel - 1, 0, SpellData.AmmoRechargeTime.Length - 1);
+            var cd = SpellData.AmmoRechargeTime[level];
+
+            if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
             {
                 cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
             }
