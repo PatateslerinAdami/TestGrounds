@@ -50,7 +50,7 @@ public class AkaliTwinDmg : IBuffGameScript {
     }
 
     private void UpdateStats(AttackableUnit target, float stat) {
-        var akaliVamp = 6f + _akali.Stats.AttackDamage.FlatBonus/6f;
+        var akaliVamp = (6f + _akali.Stats.AttackDamage.FlatBonus/6f) / 100f;
         _akali.Stats.SpellVamp.FlatBonus = akaliVamp;
     }
 }

@@ -43,7 +43,7 @@ public class AkaliMota : ISpellScript {
         var ap     = owner.Stats.AbilityPower.Total * 0.4f;
         var damage = 35f + 25 * (spell.CastInfo.SpellLevel - 1) + ap;
 
-        target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+        target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
         AddBuff("AkaliMota", 6f, 1, spell, target, owner);
     }
 }

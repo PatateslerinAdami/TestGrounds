@@ -51,7 +51,7 @@ internal class AkaliMota : IBuffGameScript {
         var markDamage  = 45 + 25 * (_spell.CastInfo.SpellLevel - 1) + markApRatio;
 
         AddParticleTarget(_akali, target, "akali_mark_impact_tar", target);
-        target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
+        target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                           false);
         AddParticleTarget(_akali, _akali, "akali_shadowSwipe_heal", _akali, bone: "C_BUFFBONE_GLB_CHEST_LOC");
         var energyReturn = 20f + 5f * (_spell.CastInfo.SpellLevel - 1);
@@ -65,7 +65,7 @@ internal class AkaliMota : IBuffGameScript {
 
         if (!data.Target.HasBuff("AkaliMota")) return;
         AddParticleTarget(_akali, data.Target, "akali_mark_impact_tar", data.Target);
-        data.Target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
+        data.Target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                                false);
         var energyReturn = 20f + 5f * (_spell.CastInfo.SpellLevel - 1);
         _akali.Stats.CurrentMana += energyReturn;
