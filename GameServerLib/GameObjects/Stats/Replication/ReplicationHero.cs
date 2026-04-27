@@ -51,14 +51,14 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             // UpdateFloat(Stats.PassiveCooldownEndTime, 1, 22); //mPassiveCooldownEndTime
             // UpdateFloat(Stats.PassiveCooldownTotalTime, 1, 23); //mPassiveCooldownTotalTime
             UpdateFloat(Stats.ArmorPenetration.FlatBonus, 1, 24); //mFlatArmorPenetration
-            UpdateFloat(Stats.ArmorPenetration.PercentBonus, 1, 25); //mPercentArmorPenetration
+            UpdateFloat(1.0f - Math.Clamp(Stats.ArmorPenetration.PercentBaseBonus, 0.0f, 1.0f), 1, 25); //mPercentArmorPenetration
             UpdateFloat(Stats.MagicPenetration.FlatBonus, 1, 26); //mFlatMagicPenetration
-            UpdateFloat(Stats.MagicPenetration.PercentBonus, 1, 27); //mPercentMagicPenetration
+            UpdateFloat(1.0f - Math.Clamp(Stats.MagicPenetration.PercentBaseBonus, 0.0f, 1.0f), 1, 27); //mPercentMagicPenetration
             UpdateFloat(Stats.LifeSteal.Total, 1, 28); //mPercentLifeStealMod
             UpdateFloat(Stats.SpellVamp.Total, 1, 29); //mPercentSpellVampMod
             UpdateFloat(Stats.Tenacity.Total, 1, 30); //mPercentCCReduction
-            UpdateFloat(Stats.Armor.PercentBonus, 2, 0); //mPercentBonusArmorPenetration
-            UpdateFloat(Stats.MagicPenetration.PercentBonus, 2, 1); //mPercentBonusMagicPenetration
+            UpdateFloat(1.0f - Math.Clamp(Stats.ArmorPenetration.PercentBonus, 0.0f, 1.0f), 2, 0); //mPercentBonusArmorPenetration
+            UpdateFloat(1.0f - Math.Clamp(Stats.MagicPenetration.PercentBonus, 0.0f, 1.0f), 2, 1); //mPercentBonusMagicPenetration
             UpdateFloat(Stats.HealthRegeneration.BaseValue, 2, 2); //mBaseHPRegenRate
             UpdateFloat(Stats.ManaRegeneration.BaseValue, 2, 3); //mBasePARRegenRate
             UpdateFloat(Stats.CurrentHealth, 3, 0); //mHP

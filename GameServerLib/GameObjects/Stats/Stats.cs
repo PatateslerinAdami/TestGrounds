@@ -67,6 +67,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float SlowResistPercent { get; set; }
         public float MultiplicativeSpeedBonus { get; set; }
         private List<float> _slows = new List<float>();
+        private readonly List<float> _armorPenPercentMultipliers = new List<float>();
+        private readonly List<float> _armorPenBonusPercentMultipliers = new List<float>();
+        private readonly List<float> _magicPenPercentMultipliers = new List<float>();
+        private readonly List<float> _magicPenBonusPercentMultipliers = new List<float>();
+        private const float PENETRATION_COMPARE_EPSILON = 0.0001f;
         private float _currentHealth;
         private float _trueMoveSpeed;
         public float CurrentHealth
@@ -154,7 +159,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         {
             AbilityPower.ApplyStatModifier(modifier.AbilityPower);
             Armor.ApplyStatModifier(modifier.Armor);
-            ArmorPenetration.ApplyStatModifier(modifier.ArmorPenetration);
+            AddPenetrationModifier(ArmorPenetration, modifier.ArmorPenetration, _armorPenPercentMultipliers, _armorPenBonusPercentMultipliers);
             AttackDamage.ApplyStatModifier(modifier.AttackDamage);
             AttackDamagePerLevel.ApplyStatModifier(modifier.AttackDamagePerLevel);
             AttackSpeedMultiplier.ApplyStatModifier(modifier.AttackSpeed);
@@ -168,7 +173,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             HealthRegeneration.ApplyStatModifier(modifier.HealthRegeneration);
             LifeSteal.ApplyStatModifier(modifier.LifeSteal);
             MagicResist.ApplyStatModifier(modifier.MagicResist);
-            MagicPenetration.ApplyStatModifier(modifier.MagicPenetration);
+            AddPenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.ApplyStatModifier(modifier.ManaPoints);
             ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
 
@@ -194,7 +199,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         {
             AbilityPower.RemoveStatModifier(modifier.AbilityPower);
             Armor.RemoveStatModifier(modifier.Armor);
-            ArmorPenetration.RemoveStatModifier(modifier.ArmorPenetration);
+            RemovePenetrationModifier(ArmorPenetration, modifier.ArmorPenetration, _armorPenPercentMultipliers, _armorPenBonusPercentMultipliers);
             AttackDamage.RemoveStatModifier(modifier.AttackDamage);
             AttackSpeedMultiplier.RemoveStatModifier(modifier.AttackSpeed);
             CooldownReduction.RemoveStatModifier(modifier.CooldownReduction);
@@ -207,7 +212,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             HealthRegeneration.RemoveStatModifier(modifier.HealthRegeneration);
             LifeSteal.RemoveStatModifier(modifier.LifeSteal);
             MagicResist.RemoveStatModifier(modifier.MagicResist);
-            MagicPenetration.RemoveStatModifier(modifier.MagicPenetration);
+            RemovePenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.RemoveStatModifier(modifier.ManaPoints);
             ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
 
@@ -329,6 +334,163 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             return ActionState.HasFlag(state);
         }
 
+        private static float ClampPenetrationPercent(float value)
+        {
+            return Math.Clamp(value, 0.0f, 1.0f);
+        }
+
+        private static bool IsEffectivelyZero(float value)
+        {
+            return Math.Abs(value) <= PENETRATION_COMPARE_EPSILON;
+        }
+
+        private static float ToPenetrationMultiplier(float penetrationPercent)
+        {
+            return 1.0f - ClampPenetrationPercent(penetrationPercent);
+        }
+
+        private static float GetCombinedMultiplier(List<float> multipliers)
+        {
+            var combinedMultiplier = 1.0f;
+            foreach (var multiplier in multipliers)
+            {
+                combinedMultiplier *= multiplier;
+            }
+
+            return combinedMultiplier;
+        }
+
+        private static float GetCombinedPenetrationPercent(List<float> multipliers)
+        {
+            return 1.0f - GetCombinedMultiplier(multipliers);
+        }
+
+        private static void RemovePenetrationMultiplier(List<float> multipliers, float multiplier)
+        {
+            var index = multipliers.FindIndex(existing => Math.Abs(existing - multiplier) <= PENETRATION_COMPARE_EPSILON);
+            if (index >= 0)
+            {
+                multipliers.RemoveAt(index);
+            }
+        }
+
+        private static void UpdateCombinedPenetrationPercents(
+            Stat penetrationStat,
+            List<float> totalPercentMultipliers,
+            List<float> bonusPercentMultipliers
+        )
+        {
+            penetrationStat.PercentBaseBonus = GetCombinedPenetrationPercent(totalPercentMultipliers);
+            penetrationStat.PercentBonus = GetCombinedPenetrationPercent(bonusPercentMultipliers);
+        }
+
+        private static void AddPenetrationModifier(
+            Stat penetrationStat,
+            StatModifier modifier,
+            List<float> totalPercentMultipliers,
+            List<float> bonusPercentMultipliers
+        )
+        {
+            if (!modifier.StatModified)
+            {
+                return;
+            }
+
+            penetrationStat.BaseValue += modifier.BaseValue;
+            penetrationStat.BaseBonus += modifier.BaseBonus;
+            penetrationStat.FlatBonus += modifier.FlatBonus;
+
+            if (!IsEffectivelyZero(modifier.PercentBaseBonus))
+            {
+                totalPercentMultipliers.Add(ToPenetrationMultiplier(modifier.PercentBaseBonus));
+            }
+
+            if (!IsEffectivelyZero(modifier.PercentBonus))
+            {
+                bonusPercentMultipliers.Add(ToPenetrationMultiplier(modifier.PercentBonus));
+            }
+
+            UpdateCombinedPenetrationPercents(penetrationStat, totalPercentMultipliers, bonusPercentMultipliers);
+        }
+
+        private static void RemovePenetrationModifier(
+            Stat penetrationStat,
+            StatModifier modifier,
+            List<float> totalPercentMultipliers,
+            List<float> bonusPercentMultipliers
+        )
+        {
+            if (!modifier.StatModified)
+            {
+                return;
+            }
+
+            penetrationStat.BaseValue -= modifier.BaseValue;
+            penetrationStat.BaseBonus -= modifier.BaseBonus;
+            penetrationStat.FlatBonus -= modifier.FlatBonus;
+
+            if (!IsEffectivelyZero(modifier.PercentBaseBonus))
+            {
+                RemovePenetrationMultiplier(totalPercentMultipliers, ToPenetrationMultiplier(modifier.PercentBaseBonus));
+            }
+
+            if (!IsEffectivelyZero(modifier.PercentBonus))
+            {
+                RemovePenetrationMultiplier(bonusPercentMultipliers, ToPenetrationMultiplier(modifier.PercentBonus));
+            }
+
+            UpdateCombinedPenetrationPercents(penetrationStat, totalPercentMultipliers, bonusPercentMultipliers);
+        }
+
+        private float GetBaseArmorPortion()
+        {
+            return (Armor.BaseValue + Armor.BaseBonus) * (1 + Armor.PercentBaseBonus) * (1 + Armor.PercentBonus);
+        }
+
+        private float GetEffectiveArmorAfterPenetration(AttackableUnit attacker)
+        {
+            var armor = Armor.Total;
+            if (armor <= 0.0f)
+            {
+                return armor;
+            }
+
+            var attackerArmorPen = attacker.Stats.ArmorPenetration;
+            var percentArmorMultiplier = 1.0f - ClampPenetrationPercent(attackerArmorPen.PercentBaseBonus);
+            var percentBonusArmorMultiplier = 1.0f - ClampPenetrationPercent(attackerArmorPen.PercentBonus);
+            var flatArmorPenetration = Math.Max(0.0f, attackerArmorPen.FlatBonus);
+
+            var baseArmor = GetBaseArmorPortion();
+            var bonusArmor = Math.Max(0.0f, armor - baseArmor);
+            return (baseArmor + bonusArmor * percentBonusArmorMultiplier) * percentArmorMultiplier - flatArmorPenetration;
+        }
+
+        private float GetEffectiveMagicResistAfterPenetration(AttackableUnit attacker)
+        {
+            var magicResist = MagicResist.Total;
+            if (magicResist <= 0.0f)
+            {
+                return magicResist;
+            }
+
+            var attackerMagicPen = attacker.Stats.MagicPenetration;
+            var percentMagicMultiplier = 1.0f - ClampPenetrationPercent(attackerMagicPen.PercentBaseBonus);
+            var percentBonusMagicMultiplier = 1.0f - ClampPenetrationPercent(attackerMagicPen.PercentBonus);
+            var flatMagicPenetration = Math.Max(0.0f, attackerMagicPen.FlatBonus);
+
+            return magicResist * percentMagicMultiplier * percentBonusMagicMultiplier - flatMagicPenetration;
+        }
+
+        private static float GetMitigationMultiplier(float resistance)
+        {
+            if (resistance >= 0.0f)
+            {
+                return 100.0f / (100.0f + resistance);
+            }
+
+            return 2.0f - 100.0f / (100.0f - resistance);
+        }
+
         public float GetPostMitigationDamage(float damage, DamageType type, AttackableUnit attacker)
         {
             if (damage <= 0f)
@@ -340,10 +502,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             switch (type)
             {
                 case DamageType.DAMAGE_TYPE_PHYSICAL:
-                    stat = Armor.Total;
+                    stat = GetEffectiveArmorAfterPenetration(attacker);
                     break;
                 case DamageType.DAMAGE_TYPE_MAGICAL:
-                    stat = MagicResist.Total;
+                    stat = GetEffectiveMagicResistAfterPenetration(attacker);
                     break;
                 case DamageType.DAMAGE_TYPE_TRUE:
                     return damage;
@@ -351,14 +513,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
                     throw new ArgumentOutOfRangeException(nameof(type), type, null);
             }
 
-            float mitigationPercent = 100 / (100 + stat);
-
-            if (stat < 0)
-            {
-                mitigationPercent = 2 - mitigationPercent;
-            }
-
-            return damage * mitigationPercent;
+            return damage * GetMitigationMultiplier(stat);
         }
 
         public void SetActionState(ActionState state, bool enabled)
