@@ -13,16 +13,23 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class SwainMetaToggle : IBuffGameScript {
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.AURA,
+public class SwainMetaToggle : IBuffGameScript
+{
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+    }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { ownerSpell.SetSpellToggle(true); }
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        ownerSpell.SetSpellToggle(true);
+    }
 }

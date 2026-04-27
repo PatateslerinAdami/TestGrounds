@@ -12,25 +12,33 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace CharScripts;
 
-public class CharScriptSwain : ICharScript {
-    private ObjAIBase         _swain;
+public class CharScriptSwain : ICharScript
+{
+    private ObjAIBase _swain;
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
         _swain = owner;
         ApiEventManager.OnKill.AddListener(this, owner, OnKill);
         ApiEventManager.OnAssist.AddListener(this, owner, OnAssist);
     }
 
-    private void OnKill(DeathData data) {
-        if (data.Unit is Champion) {
+    private void OnKill(DeathData data)
+    {
+        if (data.Unit is Champion)
+        {
             _swain.Stats.CurrentMana += _swain.Stats.ManaPoints.Total * 0.09f;
-        } else {
+        }
+        else
+        {
             _swain.Stats.CurrentMana += 13 + 1 * (_swain.Stats.Level - 1);
         }
     }
 
-    private void OnAssist(ObjAIBase assistant, DeathData data) {
-        if (data.Unit is Champion) {
+    private void OnAssist(ObjAIBase assistant, DeathData data)
+    {
+        if (data.Unit is Champion)
+        {
             _swain.Stats.CurrentMana += _swain.Stats.ManaPoints.Total * 0.09f;
         }
     }

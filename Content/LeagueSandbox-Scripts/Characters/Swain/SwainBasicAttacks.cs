@@ -13,38 +13,44 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class SwainBasicAttack : ISpellScript {
-    public SpellScriptMetadata ScriptMetadata => new() {
-        
-        MissileParameters = new MissileParameters {
+public class SwainBasicAttack : ISpellScript
+{
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        MissileParameters = new MissileParameters
+        {
             Type = MissileType.Target
         },
-        IsDamagingSpell      = true,
-        TriggersSpellCasts   = true,
+        IsDamagingSpell = true,
+        TriggersSpellCasts = true,
         CastingBreaksStealth = true
     };
 }
 
-public class SwainBasicAttack2 : ISpellScript {
-    public SpellScriptMetadata ScriptMetadata => new() {
-        
-        MissileParameters = new MissileParameters {
+public class SwainBasicAttack2 : ISpellScript
+{
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        MissileParameters = new MissileParameters
+        {
             Type = MissileType.Target
         },
-        IsDamagingSpell      = true,
-        TriggersSpellCasts   = true,
+        IsDamagingSpell = true,
+        TriggersSpellCasts = true,
         CastingBreaksStealth = true
     };
 }
 
-public class SwainCritAttack : ISpellScript {
-    public SpellScriptMetadata ScriptMetadata => new() {
-        
-        MissileParameters = new MissileParameters {
+public class SwainCritAttack : ISpellScript
+{
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        MissileParameters = new MissileParameters
+        {
             Type = MissileType.Target
         },
-        IsDamagingSpell      = true,
-        TriggersSpellCasts   = true,
+        IsDamagingSpell = true,
+        TriggersSpellCasts = true,
         CastingBreaksStealth = true
     };
 }
