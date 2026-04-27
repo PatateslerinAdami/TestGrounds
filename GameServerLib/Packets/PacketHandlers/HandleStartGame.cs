@@ -1,9 +1,11 @@
-﻿using GameServerCore.Packets.PacketDefinitions.Requests;
-using GameServerCore.Packets.Handlers;
-using LeaguePackets.Game.Events;
+﻿using GameServerCore.Enums;
 using GameServerCore.NetInfo;
-using System.Linq;
+using GameServerCore.Packets.Handlers;
+using GameServerCore.Packets.PacketDefinitions.Requests;
+using LeaguePackets.Game.Events;
 using LeagueSandbox.GameServer.Players;
+using LeagueSandbox.GameServer.Quests;
+using System.Linq;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -98,16 +100,36 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 );
             }
 
-            // TODO: send this in one place only
-            _game.PacketNotifier.NotifyS2C_HandleTipUpdate(player.ClientId,
-                "Welcome to League Sandbox!", "This is a WIP project.",
-                "", 0, player.Champion.NetId, _game.NetworkIdManager.GetNewNetId());
-            _game.PacketNotifier.NotifyS2C_HandleTipUpdate(player.ClientId,
-                "Server Build Date", ServerContext.BuildDateString,
-                "", 0, player.Champion.NetId, _game.NetworkIdManager.GetNewNetId());
-            _game.PacketNotifier.NotifyS2C_HandleTipUpdate(player.ClientId,
-                "Your Champion:", player.Champion.Model,
-                "", 0, player.Champion.NetId, _game.NetworkIdManager.GetNewNetId());
+            var questManager = player.Champion.PlayerQuestManager;
+
+            var systemTipsGroup = new QuestDisplayGroup { IsActionable = false, SourceQuestId = "System_Tips" };
+
+            systemTipsGroup.AddQuest(new UIQuestData
+            {
+                QuestId = questManager.GetNextQuestId(),
+                Objective = "Welcome to League Sandbox!",
+                Tooltip = "This is a WIP project.",
+                IsTip = true
+            });
+
+            systemTipsGroup.AddQuest(new UIQuestData
+            {
+                QuestId = questManager.GetNextQuestId(),
+                Objective = "Server Build Date",
+                Tooltip = ServerContext.BuildDateString,
+                IsTip = true
+            });
+
+            systemTipsGroup.AddQuest(new UIQuestData
+            {
+                QuestId = questManager.GetNextQuestId(),
+                Objective = "Your Champion:",
+                Tooltip = player.Champion.Model,
+                IsTip = true
+            });
+
+            questManager.AddQuest(systemTipsGroup);
+            questManager.SyncActiveQuests();
 
         }
     }

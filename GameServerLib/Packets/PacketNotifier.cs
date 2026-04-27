@@ -4754,5 +4754,23 @@ namespace PacketDefinitions420
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
         }
+        public void NotifyS2C_HandleQuestUpdate(int userId, uint questId, string objective, string tooltip, string icon, byte command, QuestType questType, bool success)
+        {
+            var packet = new S2C_HandleQuestUpdate
+            {
+                QuestID = questId,
+                Objective = objective ?? "",
+                Tooltip = tooltip ?? "",
+                Icon = icon ?? "",
+                Reward = "",
+                QuestCommand = command,
+                QuestType = (byte)questType,
+                Success = success,
+                Ceremony = false,
+                HandleRollovers = false
+            };
+
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
     }
 }

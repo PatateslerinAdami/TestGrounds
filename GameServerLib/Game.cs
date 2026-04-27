@@ -22,6 +22,7 @@ using GameServerLib.Handlers;
 using GameServerCore.Packets.PacketDefinitions;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.Quests;
 
 namespace LeagueSandbox.GameServer
 {
@@ -119,6 +120,7 @@ namespace LeagueSandbox.GameServer
         internal CSharpScriptEngine ScriptEngine { get; private set; }
 
         internal FileSystemWatcher ScriptsHotReloadWatcher { get; private set; }
+        public QuestManager QuestManager { get; private set; }
 
         /// <summary>
         /// Instantiates all game managers and handlers.
@@ -132,6 +134,7 @@ namespace LeagueSandbox.GameServer
             ScriptEngine = new CSharpScriptEngine();
             RequestHandler = new NetworkHandler<ICoreRequest>();
             ResponseHandler = new NetworkHandler<ICoreRequest>();
+            QuestManager = new QuestManager(this);
         }
 
         /// <summary>
@@ -176,7 +179,7 @@ namespace LeagueSandbox.GameServer
                 _logger.Info("Player " + p.Name + " Added: " + p.Champion);
                 PlayerManager.AddPlayer(p);
             }
-
+            QuestManager.Initialize();
             _logger.Info("Game is ready.");
         }
 
