@@ -1,20 +1,21 @@
-﻿using System.Collections.Generic;
-using System.Numerics;
+﻿using GameServerCore.Enums;
 using GameServerCore.NetInfo;
-using GameServerCore.Enums;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.Inventory;
-using LeagueSandbox.GameServer.API;
-using LeaguePackets.Game.Events;
-using System;
-using System.Linq;
+using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using GameServerLib.Handlers;
-using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.Logging;
-using log4net;
+using LeaguePackets.Game.Events;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.Content;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Inventory;
+using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Quests;
+using log4net;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 {
@@ -43,6 +44,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
         public bool teamChanged = false;
+        public PlayerQuestManager PlayerQuestManager { get; private set; }
 
         public Champion(Game game,
                         string model,
@@ -86,6 +88,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 IsBot = false; // This change was necessary for my customized bot names to work. If you are going to be serious about bot dev and the true value of this is needed somewhere, feel free to revert it
             }
+            PlayerQuestManager = new PlayerQuestManager(game, this);
         }
 
         public void AddGold(AttackableUnit source, float gold, bool notify = true)
