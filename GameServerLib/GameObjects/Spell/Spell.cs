@@ -34,6 +34,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         private readonly NetworkIdManager _networkIdManager;
         private float _overrrideCastRange;
         private AttackType _attackType;
+        private bool _scriptActivated;
+        private bool _scriptPostActivated;
         private static ILog _logger = LoggerProvider.GetLogger();
 
         /// <summary>
@@ -158,6 +160,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public void LoadScript()
         {
             ApiEventManager.RemoveAllListenersForOwner(Script);
+            _scriptActivated = false;
+            _scriptPostActivated = false;
+
             string nameSpace = "Spells";
             if (CastInfo.SpellSlot >= (byte)SpellSlotType.InventorySlots && CastInfo.SpellSlot < (byte)SpellSlotType.BluePillSlot)
             {
@@ -184,6 +189,39 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 Script.OnActivate(CastInfo.Owner, this);
             }
             catch(Exception e)
+            {
+                _logger.Error(null, e);
+            }
+
+            _scriptActivated = true;
+            TryPostActivateScript();
+        }
+
+        public void TryPostActivateScript()
+        {
+            if (_scriptPostActivated || !_scriptActivated || Script == null || CastInfo.Owner == null)
+            {
+                return;
+            }
+
+            bool hasViewer = false;
+            foreach (var _ in CastInfo.Owner.VisibleForPlayers)
+            {
+                hasViewer = true;
+                break;
+            }
+
+            if (!hasViewer)
+            {
+                return;
+            }
+
+            _scriptPostActivated = true;
+            try
+            {
+                Script.OnPostActivate(CastInfo.Owner, this);
+            }
+            catch (Exception e)
             {
                 _logger.Error(null, e);
             }

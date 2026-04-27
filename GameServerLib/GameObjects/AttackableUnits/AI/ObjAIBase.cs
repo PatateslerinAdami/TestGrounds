@@ -306,6 +306,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
                 _charScriptActivated = true;
                 TryPostActivateCharScript();
+                TryPostActivateSpellScripts();
             }
         }
 
@@ -343,6 +344,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             catch (Exception e)
             {
                 _logger.Error(null, e);
+            }
+        }
+
+        private void TryPostActivateSpellScripts()
+        {
+            if (Spells == null || Spells.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var spell in Spells.Values)
+            {
+                spell?.TryPostActivateScript();
             }
         }
 
@@ -1723,6 +1737,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.OnAfterSync();
             TryPostActivateCharScript();
+            TryPostActivateSpellScripts();
         }
 
         public override void Update(float diff)
