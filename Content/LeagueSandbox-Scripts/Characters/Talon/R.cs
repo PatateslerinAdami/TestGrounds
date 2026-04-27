@@ -1,7 +1,5 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Buffs;
 using CharScripts;
@@ -137,10 +135,10 @@ public class TalonShadowAssaultMisOneHalf : ISpellScript {
 }
 
 public class TalonShadowAssaultMisTwo : ISpellScript {
-    private          ObjAIBase _talon;
-    private          Spell     _spell;
-    private SpellMissile               _missile;
-    private bool               _isFinished = true;
+    private readonly List<SpellMissile> _activeMissiles = new();
+    private readonly Dictionary<SpellMissile, Vector2> _lastMissilePositions = new();
+    private ObjAIBase _talon;
+    private Spell     _spell;
 
     public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata() {
         MissileParameters = new MissileParameters{
@@ -152,28 +150,97 @@ public class TalonShadowAssaultMisTwo : ISpellScript {
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _talon = owner;
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _isFinished = false;
-        _spell      = spell;
-        _missile    = spell.CreateSpellMissile();
+        _spell = spell;
     }
 
     public void OnUpdate(float diff) {
-        if (_isFinished) return;
-        var unitsInRange = GetUnitsInRange(_talon, _missile.Position, _missile.CollisionRadius * 2, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)
-            .Where(unit => !unit.HasBuff("TalonShadowAssaultHitReturn"));
-        foreach (var unit in unitsInRange) {
-            if (unit == _talon) {
-                _isFinished = true;
-                _missile.SetToRemove();
+        for (var i = _activeMissiles.Count - 1; i >= 0; i--) {
+            var missile = _activeMissiles[i];
+            if (missile == null || missile.IsToRemove()) {
+                RemoveMissileAt(i);
                 continue;
             }
 
-            if (unit.Team == _talon.Team) continue;
+            var currentPosition = missile.Position;
+            var lastPosition = _lastMissilePositions.TryGetValue(missile, out var savedPosition) ? savedPosition : currentPosition;
+
+            ApplyDamageOnMissilePath(missile, lastPosition, currentPosition);
+
+            if (HasReachedOwner(missile, currentPosition)) {
+                missile.SetToRemove();
+                RemoveMissileAt(i);
+                continue;
+            }
+
+            _lastMissilePositions[missile] = currentPosition;
+        }
+    }
+
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        if (missile == null) return;
+        _activeMissiles.Add(missile);
+        _lastMissilePositions[missile] = missile.Position;
+    }
+
+    private void ApplyDamageOnMissilePath(SpellMissile missile, Vector2 start, Vector2 end) {
+        var segment = end - start;
+        var segmentLength = segment.Length();
+        var hitRadius = MathF.Max(60f, missile.CollisionRadius * 0.5f);
+        var queryRadius = (segmentLength * 0.5f) + hitRadius;
+        var queryCenter = start + (segment * 0.5f);
+
+        var unitsInRange = GetUnitsInRange(
+            _talon,
+            queryCenter,
+            queryRadius,
+            true,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions
+        );
+
+        foreach (var unit in unitsInRange) {
+            if (unit == null || unit.Team == _talon.Team || unit.HasBuff("TalonShadowAssaultHitReturn")) continue;
+
+            var combinedRadius = hitRadius + unit.CollisionRadius;
+            if (DistanceSquaredPointToSegment(unit.Position, start, end) > combinedRadius * combinedRadius) continue;
+
             DealDamage(unit);
         }
+    }
+
+    private bool HasReachedOwner(SpellMissile missile, Vector2 missilePosition) {
+        var endRadius = _talon.CollisionRadius + MathF.Max(35f, missile.CollisionRadius * 0.5f);
+        return Vector2.DistanceSquared(missilePosition, _talon.Position) <= endRadius * endRadius;
+    }
+
+    private static float DistanceSquaredPointToSegment(Vector2 point, Vector2 start, Vector2 end) {
+        var segment = end - start;
+        var lengthSquared = segment.LengthSquared();
+        if (lengthSquared <= float.Epsilon) {
+            return Vector2.DistanceSquared(point, start);
+        }
+
+        var t = Vector2.Dot(point - start, segment) / lengthSquared;
+        t = Math.Clamp(t, 0f, 1f);
+        var projection = start + segment * t;
+        return Vector2.DistanceSquared(point, projection);
+    }
+
+    private void RemoveMissileAt(int index) {
+        var missile = _activeMissiles[index];
+        _activeMissiles.RemoveAt(index);
+        if (missile != null) {
+            _lastMissilePositions.Remove(missile);
+        }
+    }
+
+    private void RemoveMissile(SpellMissile missile) {
+        if (missile == null) return;
+        _activeMissiles.Remove(missile);
+        _lastMissilePositions.Remove(missile);
     }
 
     private void DealDamage(AttackableUnit target) {
@@ -185,9 +252,13 @@ public class TalonShadowAssaultMisTwo : ISpellScript {
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        if (target != _talon) return;
-        _missile.SetToRemove();
-        _isFinished = true;
-        ApiEventManager.OnSpellHit.RemoveListener(this, spell, OnSpellHit);
+        if (target != _talon || missile == null) return;
+
+        if (_lastMissilePositions.TryGetValue(missile, out var lastPosition)) {
+            ApplyDamageOnMissilePath(missile, lastPosition, missile.Position);
+        }
+
+        missile.SetToRemove();
+        RemoveMissile(missile);
     }
 }
