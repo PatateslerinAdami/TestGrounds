@@ -1923,9 +1923,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return;
             }
 
-            if (Shields.Remove(shield) && shield.Amount != 0)
+            if (Shields.Remove(shield))
             {
-                _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
+                if (shield.Amount != 0)
+                {
+                    _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
+                }
+                ApiEventManager.OnShieldBreak.Publish(shield);
             }
         }
 

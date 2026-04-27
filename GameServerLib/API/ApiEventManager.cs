@@ -237,6 +237,9 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
 
+        public static Dispatcher<Shield> OnShieldBreak
+            = new Dispatcher<Shield>();
+
         // TODO: Handle crowd control the same as normal dashes.
         public static Dispatcher<AttackableUnit> OnUnitCrowdControlled
             = new Dispatcher<AttackableUnit>();
