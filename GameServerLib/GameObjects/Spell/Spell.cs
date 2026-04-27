@@ -1135,6 +1135,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     State = SpellState.STATE_COOLDOWN;
 
                     CurrentCooldown = GetCooldown();
+                    SetPassiveCooldownStats(CurrentCooldown);
 
                     if (CastInfo.SpellSlot < 4)
                     {
@@ -1244,6 +1245,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             CurrentCooldown = GetCooldown();
+            SetPassiveCooldownStats(CurrentCooldown);
 
             if (CastInfo.SpellSlot < 4)
             {
@@ -1684,6 +1686,31 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
+        private void SetPassiveCooldownStats(float newCd)
+        {
+            if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
+            {
+                return;
+            }
+
+            var stats = CastInfo.Owner?.Stats;
+            if (stats == null)
+            {
+                return;
+            }
+
+            if (newCd <= 0)
+            {
+                stats.PassiveCooldownEndTime = 0;
+                stats.PassiveCooldownTotalTime = 0;
+                return;
+            }
+
+            var nowSeconds = _game.GameTime / 1000.0f;
+            stats.PassiveCooldownTotalTime = newCd;
+            stats.PassiveCooldownEndTime = nowSeconds + newCd;
+        }
+
         /// <summary>
         /// Sets the cooldown of this spell.
         /// </summary>
@@ -1694,6 +1721,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (newCd <= 0)
             {
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, 0, 0);
+                SetPassiveCooldownStats(0);
                 // Changing the state of the spell to READY during casting prevents the spell from finishing casting, thus locking the player in the move order CastSpell.
                 if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
                 {
@@ -1711,6 +1739,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, newCd, GetCooldown());
                 State = SpellState.STATE_COOLDOWN;
                 CurrentCooldown = newCd;
+                SetPassiveCooldownStats(newCd);
             }
         }
 

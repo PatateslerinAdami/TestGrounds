@@ -89,6 +89,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public bool IsGeneratingGold { get; set; } // Used to determine if the Stats update should include generating gold. Changed in Champion.h
         public float SpellCostReduction { get; set; } //URF Buff/Lissandra's passive
+        public float PassiveCooldownEndTime { get; set; }
+        public float PassiveCooldownTotalTime { get; set; }
 
         public Stats()
         {
