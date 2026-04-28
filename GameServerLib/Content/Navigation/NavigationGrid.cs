@@ -894,6 +894,41 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         }
 
         /// <summary>
+        /// Walks the ray from origin to destination cell-by-cell and returns the world-space center
+        /// of the last walkable cell before the ray hits unwalkable terrain. If the whole ray is
+        /// clear, returns destination unchanged.
+        /// </summary>
+        public Vector2 GetFirstWallHitPoint(Vector2 origin, Vector2 destination)
+        {
+            // Out of bounds → nothing to clamp against.
+            if (origin.X < MinGridPosition.X || origin.X >= MaxGridPosition.X
+                || origin.Y < MinGridPosition.Z || origin.Y >= MaxGridPosition.Z)
+            {
+                return destination;
+            }
+
+            var navOrigin = TranslateToNavGrid(origin);
+            var navDest = TranslateToNavGrid(destination);
+
+            NavigationGridCell lastWalkable = null;
+            foreach (var cell in GetAllCellsInLine(navOrigin, navDest))
+            {
+                if (!IsWalkable(cell))
+                {
+                    if (lastWalkable == null)
+                    {
+                        // Origin already inside terrain — nothing useful to clamp to.
+                        return origin;
+                    }
+                    return TranslateFromNavGrid(lastWalkable.GetCenter());
+                }
+                lastWalkable = cell;
+            }
+
+            return destination;
+        }
+
+        /// <summary>
         /// Gets the closest pathable position to the given position. *NOTE*: Computationally heavy, use sparingly.
         /// </summary>
         /// <param name="location">Vector2 position to start the check at.</param>

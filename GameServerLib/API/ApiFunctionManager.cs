@@ -1775,7 +1775,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC,
-                movementName, caster);
+                movementName, caster, movementType: movementType);
         }
 
         /// <summary>

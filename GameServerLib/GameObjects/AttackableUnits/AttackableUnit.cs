@@ -1983,12 +1983,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default)
+        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE)
         {
             if (MovementParameters != null)
             {
                 SetDashingState(false, MoveStopReason.ForceMovement);
             }
+
+            // FIRST_WALL_HIT: clamp the destination to the last walkable cell along the ray so the
+            // unit stops at the wall instead of being teleported through it by GetClosestTerrainExit
+            // when the requested endPos lies inside terrain. Track whether a wall was actually hit
+            // so we can publish OnCollisionTerrain — clamping means the unit never physically
+            // collides with terrain, but scripts (e.g. Vayne E wall-stun) rely on that signal.
+            bool wallHit = false;
+            if (!ignoreTerrain && movementType == ForceMovementType.FIRST_WALL_HIT)
+            {
+                var clampedEnd = _game.Map.NavigationGrid.GetFirstWallHitPoint(Position, endPos);
+                if (clampedEnd != endPos)
+                {
+                    wallHit = true;
+                    endPos = clampedEnd;
+                }
+            }
+
             var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
             // False because we don't want this to be networked as a normal movement.
@@ -2029,6 +2046,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             //_game.PacketNotifier.NotifyWaypointListWithSpeed(this, dashSpeed, leapGravity, keepFacingLastDirection, null, 0, 0, 20000.0f);
             _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
             _movementUpdated = false;
+
+            if (wallHit)
+            {
+                ApiEventManager.OnCollisionTerrain.Publish(this);
+            }
         }
 
         /// <summary>
