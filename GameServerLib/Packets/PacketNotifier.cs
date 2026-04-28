@@ -499,7 +499,8 @@ namespace PacketDefinitions420
                 EndPoint = m.CastInfo.TargetPositionEnd,
                 // TODO: Verify
                 UnitPosition = m.CastInfo.Owner.GetPosition3D(),
-                TimeFromCreation = m.GetTimeSinceCreation(), // TODO: Unhardcode
+                // _timeSinceCreation accumulates in ms (same unit as Game.GameTime)
+                TimeFromCreation = m.GetTimeSinceCreation() / 1000f, // TODO: Unhardcode
                 Speed = m.GetSpeed(),
                 LifePercentage = 0f, // TODO: Unhardcode
                 //TODO: Implement time limited projectiles
