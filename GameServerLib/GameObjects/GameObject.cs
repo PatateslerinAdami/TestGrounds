@@ -106,7 +106,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 NetId = _networkIdManager.GetNewNetId(); // base class assigns a netId
             }
             Position = position;
-            Direction = Vector3.Zero;
+            Direction = new Vector3(0, 0, 1);//Vector3.Zero; FUCK YOU!!
             CollisionRadius = collisionRadius;
             PathfindingRadius = pathingRadius;
             VisionRadius = visionRadius;

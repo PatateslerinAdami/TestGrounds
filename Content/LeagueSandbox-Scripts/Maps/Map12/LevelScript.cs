@@ -267,5 +267,9 @@ namespace MapScripts.Map12
             }
             return true;
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }

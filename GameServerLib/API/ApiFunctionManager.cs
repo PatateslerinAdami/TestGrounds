@@ -109,7 +109,7 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="duration">Time till the timer ends.</param>
         /// <param name="callback">Action to perform when the timer ends.</param>
         /// <returns>New GameScriptTimer instance.</returns>
-        [Obsolete("CreateTimer should only be used for debug purposes.")]
+        //[Obsolete("CreateTimer should only be used for debug purposes.")]
         public static GameScriptTimer CreateTimer(float duration, Action callback)
         {
             var newTimer = new GameScriptTimer(duration, callback);

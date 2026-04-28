@@ -13,7 +13,7 @@ namespace MapScripts.Map8
     {
         private static Dictionary<GameObjectTypes, List<MapObject>> _mapObjects;
 
-        static List<InfoPoint> InfoPoints = new List<InfoPoint>();
+        public static List<InfoPoint> InfoPoints = new List<InfoPoint>();
         public static Dictionary<TeamId, Fountain> FountainList = new Dictionary<TeamId, Fountain>();
         static Dictionary<TeamId, List<LaneTurret>> TurretList = new Dictionary<TeamId, List<LaneTurret>> { { TeamId.TEAM_BLUE, new List<LaneTurret>() }, { TeamId.TEAM_PURPLE, new List<LaneTurret>() } };
 
@@ -37,7 +37,7 @@ namespace MapScripts.Map8
         public static void OnMatchStart()
         {
             LoadShops();
-
+            /*
             foreach (var infoPoint in InfoPoints)
             {
                 const byte particleFlexId = 0;
@@ -46,6 +46,7 @@ namespace MapScripts.Map8
                 NotifyAttachFlexParticle(infoPoint.Point.NetId, particleFlexId, infoPoint.Index, particleAttachType);
                 NotifyHandleCapturePointUpdate(infoPoint.Index, infoPoint.Point.NetId, 0, 0, CapturePointUpdateCommand.AttachToObject);
             }
+            */
         }
 
         public static void OnUpdate(float diff)
@@ -97,22 +98,46 @@ namespace MapScripts.Map8
                 pointIndex++;
             }
         }
+        public static void SyncStateForPlayer(int userId)
+        {
+            CreateTimer(3.0f, () =>
+            {
+                foreach (var infoPoint in InfoPoints)
+                {
+                    uint netId = infoPoint.Point.NetId;
+                    byte cpIndex = infoPoint.Index;
+
+                    NotifyAttachFlexParticle(netId, 0, cpIndex, 1, userId);
+                    NotifyHandleCapturePointUpdate(cpIndex, netId, 0, (byte)0, (CapturePointUpdateCommand)0, userId);
+                }
+            });
+        }
     }
 
-    class InfoPoint
+    public class InfoPoint
     {
         public Minion Point;
         public char Id;
         public byte Index;
         public InfoPoint(Vector2 position, byte index, char id)
         {
-            Point = CreateMinion("OdinNeutralGuardian", "OdinNeutralGuardian", position, ignoreCollision: true);
-            Point.PauseAI(true);
-            AddUnitPerceptionBubble(Point, 800.0f, 25000.0f, TeamId.TEAM_BLUE, true, collisionArea: 120.0f);
-            AddUnitPerceptionBubble(Point, 800.0f, 25000.0f, TeamId.TEAM_PURPLE, true, collisionArea: 120.0f);
+            Point = CreateMinion("OdinNeutralGuardian", "OdinNeutralGuardian", position, ignoreCollision: true, aiScript: "OdinCapturePointAI");
+            if (Point.AIScript is AIScripts.OdinCapturePointAI captureAI)
+            {
+                captureAI.PointLetter = id;
+                captureAI.PointIndex = index;
+            }
 
+            Point.Stats.CurrentMana = 25000f;
+            Point.DisableFoW = true;
             Id = id;
             Index = index;
+
+            CreateTimer(0.1f, () =>
+            {
+                NotifyAttachFlexParticle(Point.NetId, 0, Index, 1);
+                NotifyHandleCapturePointUpdate(Index, Point.NetId, 0, (byte)0, (CapturePointUpdateCommand)0);
+            });
         }
     }
 }

@@ -40,6 +40,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             _game.PacketNotifier.NotifySpawnEnd(userId);
+            _game.Map.MapScript.OnPlayerJoin(userId);
             return true;
         }
     }

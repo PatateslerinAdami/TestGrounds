@@ -2972,7 +2972,7 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(gameEndPacket.GetBytes(), Channel.CHL_S2C);
         }
 
-        public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
+        public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType, int userId = -1)
         {
             var packet = new AttachFlexParticleS2C
             {
@@ -2982,10 +2982,18 @@ namespace PacketDefinitions420
                 ParticleAttachType = particleAttachType
             };
 
-            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            //_packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
         }
 
-        public void NotifyS2C_HandleCapturePointUpdate(byte capturePointIndex, uint otherNetId, byte PARType, byte attackTeam, CapturePointUpdateCommand capturePointUpdateCommand)
+        public void NotifyS2C_HandleCapturePointUpdate(byte capturePointIndex, uint otherNetId, byte PARType, byte attackTeam, CapturePointUpdateCommand capturePointUpdateCommand, int userId = -1)
         {
             var packet = new S2C_HandleCapturePointUpdate
             {
@@ -2996,7 +3004,15 @@ namespace PacketDefinitions420
                 CapturePointUpdateCommand = (byte)capturePointUpdateCommand
             };
 
-            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            //_packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
         }
 
         /// <summary>

@@ -33,5 +33,9 @@ namespace MapScripts.Map16
         {
             return Vector2.Zero;
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }

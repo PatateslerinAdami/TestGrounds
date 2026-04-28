@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System;
 using System.Numerics;
 using GameServerCore.Domain;
 using GameServerCore.Enums;
@@ -139,6 +140,8 @@ namespace MapScripts.Map8
         }
 
         Dictionary<TeamId, int> TeamScores = new Dictionary<TeamId, int> { { TeamId.TEAM_BLUE, 500 }, { TeamId.TEAM_PURPLE, 500 } };
+        private float _scoreTickTimer = 0f;
+        private bool _gameEnded = false;
         public void OnMatchStart()
         {
             LevelScriptObjects.OnMatchStart();
@@ -185,8 +188,52 @@ namespace MapScripts.Map8
             {
                 CheckInitialMapAnnouncements(gameTime);
             }
+            if (AllAnnouncementsAnnounced && !_gameEnded)
+            {
+                UpdateScores(diff);
+            }
+        }
+        private void UpdateScores(float diff)
+        {
+            _scoreTickTimer += diff;
+
+            if (_scoreTickTimer >= 1000f)
+            {
+                _scoreTickTimer -= 1000f;
+
+                int bluePoints = 0;
+                int purplePoints = 0;
+
+                foreach (var infoPoint in LevelScriptObjects.InfoPoints)
+                {
+                    if (infoPoint.Point.Team == TeamId.TEAM_BLUE) bluePoints++;
+                    else if (infoPoint.Point.Team == TeamId.TEAM_PURPLE) purplePoints++;
+                }
+
+                if (bluePoints > purplePoints)
+                {
+                    int damage = bluePoints - purplePoints;
+                    DrainScore(TeamId.TEAM_PURPLE, damage);
+                }
+                else if (purplePoints > bluePoints)
+                {
+                    int damage = purplePoints - bluePoints;
+                    DrainScore(TeamId.TEAM_BLUE, damage);
+                }
+            }
         }
 
+        private void DrainScore(TeamId team, int amount)
+        {
+            TeamScores[team] = Math.Max(0, TeamScores[team] - amount);
+            NotifyGameScore(team, TeamScores[team]);
+
+            if (TeamScores[team] <= 0)
+            {
+                _gameEnded = true;
+                EndGame(team, Nexus[team].GetPosition3D());
+            }
+        }
         public void SpawnAllCamps()
         {
             NeutralMinionSpawn.ForceCampSpawn();
@@ -348,6 +395,10 @@ namespace MapScripts.Map8
                 }
                 AnimationsNotified.Add("Close1");
             }
+        }
+        public void OnPlayerJoin(int userId)
+        {
+            LevelScriptObjects.SyncStateForPlayer(userId);
         }
     }
 }

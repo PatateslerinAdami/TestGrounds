@@ -48,5 +48,8 @@ namespace MapScripts
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
             AddSurrender(1200000.0f, 300000.0f, 30.0f);
         }
+        public void OnPlayerJoin(int userId)
+        {
+        }
     }
 }

@@ -81,5 +81,9 @@ namespace MapScripts.Map31
                 AnnouncedEvents.Add(EventID.OnStartGameMessage1);
             }
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }

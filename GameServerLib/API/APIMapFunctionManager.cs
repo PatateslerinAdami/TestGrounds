@@ -424,9 +424,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="PARType"></param>
         /// <param name="attackTeam"></param>
         /// <param name="capturePointUpdateCommand"></param>
-        public static void NotifyHandleCapturePointUpdate(byte capturePointIndex, uint otherNetId, byte PARType, byte attackTeam, CapturePointUpdateCommand capturePointUpdateCommand)
+        public static void NotifyHandleCapturePointUpdate(byte capturePointIndex, uint otherNetId, byte PARType, byte attackTeam, CapturePointUpdateCommand capturePointUpdateCommand, int userId = -1)
         {
-            _game.PacketNotifier.NotifyS2C_HandleCapturePointUpdate(capturePointIndex, otherNetId, PARType, attackTeam, capturePointUpdateCommand);
+            _game.PacketNotifier.NotifyS2C_HandleCapturePointUpdate(capturePointIndex, otherNetId, PARType, attackTeam, capturePointUpdateCommand, userId);
         }
 
         /// <summary>
@@ -436,9 +436,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="particleFlexId">Flex value id used by the particle.</param>
         /// <param name="capturePointIndex">Capture point index to bind to.</param>
         /// <param name="particleAttachType">Attach behavior flags.</param>
-        public static void NotifyAttachFlexParticle(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
+        public static void NotifyAttachFlexParticle(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType, int userId = -1)
         {
-            _game.PacketNotifier.NotifyAttachFlexParticleS2C(netId, particleFlexId, capturePointIndex, particleAttachType);
+            _game.PacketNotifier.NotifyAttachFlexParticleS2C(netId, particleFlexId, capturePointIndex, particleAttachType, userId);
         }
 
         public static void TeleportCamera(Champion target, Vector3 position)

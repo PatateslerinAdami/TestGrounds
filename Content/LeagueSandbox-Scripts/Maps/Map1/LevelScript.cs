@@ -316,5 +316,10 @@ namespace MapScripts.Map1
             }
             return true;
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
+
 }

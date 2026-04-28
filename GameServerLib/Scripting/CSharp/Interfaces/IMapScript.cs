@@ -24,5 +24,6 @@ namespace GameServerCore.Domain
         {
             return Vector2.Zero;
         }
+        void OnPlayerJoin(int userId);
     }
 }

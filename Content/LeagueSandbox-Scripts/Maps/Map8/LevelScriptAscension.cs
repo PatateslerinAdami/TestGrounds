@@ -194,5 +194,9 @@ namespace MapScripts.Map8
                 notificationCounter++;
             }
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }

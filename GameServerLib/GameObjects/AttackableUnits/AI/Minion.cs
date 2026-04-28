@@ -35,6 +35,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public int DamageBonus { get; protected set; }
         public int HealthBonus { get; protected set; }
         public int InitialLevel { get; protected set; }
+        public bool DisableFoW { get; set; } = false;
+
+        public override bool IsAffectedByFoW => !DisableFoW;
 
         public Minion(
             Game game,

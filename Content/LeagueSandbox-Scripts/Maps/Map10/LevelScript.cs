@@ -254,5 +254,9 @@ namespace MapScripts.Map10
             }
             return true;
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }

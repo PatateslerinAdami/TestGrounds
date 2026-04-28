@@ -20,7 +20,7 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyS2C_OnEventWorld(new OnCaptureAltar() { CapturePoint = index, OtherNetID = altar.NetId });
         }
 
-        public static void AnnounceCapturePointCaptured(LaneTurret turret, char point, Champion captor = null)
+        public static void AnnounceCapturePointCaptured(Minion turret, char point, Champion captor = null)
         {
             IEvent captured;
             switch (char.ToUpper(point))
@@ -53,7 +53,7 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyOnEvent(captured, turret);
         }
 
-        public static void AnnounceCapturePointNeutralized(LaneTurret turret, char point)
+        public static void AnnounceCapturePointNeutralized(Minion turret, char point)
         {
             IEvent neutralized;
             switch (char.ToUpper(point))

@@ -298,5 +298,9 @@ namespace MapScripts.Map11
             }
             return true;
         }
+        public void OnPlayerJoin(int userId)
+        {
+
+        }
     }
 }
