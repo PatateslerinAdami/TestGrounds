@@ -23,6 +23,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using GameMaths;
 using GameMaths.Geometry.Polygons;
 using GameServerCore;
 
@@ -2392,6 +2393,16 @@ namespace LeagueSandbox.GameServer.API
         public static Vector2 GetFountainPosition(TeamId team)
         {
             return _game.Map.MapScript.GetFountainPosition(team);
+        }
+        
+        public static bool IsInFront(AttackableUnit self, AttackableUnit target)
+        {
+            return Vector2.Dot(self.Direction.ToVector2(), target.Position - self.Position) > 0;
+        }
+
+        public static bool IsBehind(AttackableUnit self, AttackableUnit target)
+        {
+            return !IsInFront(self, target);
         }
     }
 }
