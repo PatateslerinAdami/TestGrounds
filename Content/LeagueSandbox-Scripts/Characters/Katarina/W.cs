@@ -38,7 +38,7 @@ namespace Spells
                 OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes
             });
         }
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile swag, SpellSector sector)
+        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile swag, SpellSector sector)
         {
             var owner = spell.CastInfo.Owner;
             var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.25f;

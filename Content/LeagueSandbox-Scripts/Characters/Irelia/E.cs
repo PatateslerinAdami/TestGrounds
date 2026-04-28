@@ -45,7 +45,7 @@ public class IreliaEquilibriumStrike : ISpellScript {
             AddParticleTarget(_irelia, _target, "irelia_equilibriumStrike_tar_02", _target);
         } else {
             var variables      = new BuffVariables();
-            variables.Set("slowAmount", 0.6f);
+            variables.Set("slowPercent", 0.6f);
             var slowDuration   = new[] { 0, 1, 1.25f, 1.5f, 1.75f, 2 }[spell.CastInfo.SpellLevel];
             AddBuff("Slow", slowDuration, 1, spell, _target, _irelia, buffVariables: variables);
         }

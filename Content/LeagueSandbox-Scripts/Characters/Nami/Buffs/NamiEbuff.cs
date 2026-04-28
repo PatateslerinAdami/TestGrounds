@@ -48,7 +48,7 @@ namespace Buffs
                 
                 //slow
                 var variables      = new BuffVariables();
-                variables.Set("slowAmount", 0.15f + 0.05f * (_tideCallersBlessing.CastInfo.SpellLevel - 1) + 0.05f * (_nami.Stats.AbilityPower.Total % 100f));
+                variables.Set("slowPercent", 0.15f + 0.05f * (_tideCallersBlessing.CastInfo.SpellLevel - 1) + 0.05f * (_nami.Stats.AbilityPower.Total % 100f));
                 AddBuff("Slow", 1f, 1, _tideCallersBlessing, data.Target, _nami, buffVariables: variables);
                 
                 

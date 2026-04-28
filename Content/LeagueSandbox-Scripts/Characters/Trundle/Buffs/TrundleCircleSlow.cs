@@ -1,7 +1,5 @@
-using System.Threading;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -13,35 +11,32 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class SwainBeamDamage : IBuffGameScript
-{
-    private ObjAIBase _owner;
+internal class TrundleCircleSlow : IBuffGameScript {
     private AttackableUnit _unit;
 
     private Particle _slow;
-    public BuffScriptMetaData BuffMetaData { get; set; } = new()
-    {
-        BuffType = BuffType.SLOW,
+
+    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+        BuffType    = BuffType.SLOW,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks = 1
+        MaxStacks   = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-    {
-        _unit    = unit;
-        _owner = ownerSpell.CastInfo.Owner;
-        var movementSlowAmount = buff.Variables.GetFloat("slowPercent");
-        StatsModifier.MoveSpeed.PercentBonus   -= movementSlowAmount;
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _unit                              = unit;
+        StatsModifier.MoveSpeed.PercentBonus   = -(0.34f + 0.04f * (ownerSpell.CastInfo.SpellLevel - 1));
         _unit.AddStatModifier(StatsModifier);
         _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
         ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
 
+        // For attack speed and move speed mod changes:
+        //ApiEventManager.OnUpdateBuffs.AddListener(this, buff, OnUpdateBuffs, false);
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-    {
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _unit.RemoveStatModifier(StatsModifier);
         RemoveParticle(_slow);
     }
 }

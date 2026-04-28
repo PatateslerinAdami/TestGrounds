@@ -60,7 +60,7 @@ public class EvelynnRNuke : ISpellScript {
         foreach (var unit in units) {
             AddParticleTarget(_evelynn, unit, "Evelynn_R_tar", unit);
             var variables      = new BuffVariables();
-            variables.Set("slowAmount", 0.3f + 0.2f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1));
+            variables.Set("slowPercent", 0.3f + 0.2f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1));
             AddBuff("Slow", 2f, 1, _evelynn.GetSpell("EvelynnR"), unit, _evelynn, buffVariables: variables);
             unit.TakeDamage(_evelynn, IsValidTarget(_evelynn, unit, SpellDataFlags.AffectNeutral) ? Math.Min(1000f, unit.Stats.CurrentHealth * 0.15f + 0.05f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1) + ap) 
                                           : unit.Stats.CurrentHealth * 0.15f + 0.05f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1) + ap, 

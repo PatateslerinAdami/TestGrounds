@@ -46,6 +46,7 @@ public class SwainShadowGrasp : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
+        _periodicTicker.Reset();
         _isActive = true;
         /*AddParticlePos(_swain, "Swain_shadowGrasp_warning", _position, _position, 1f, default);
         AddParticlePos(_swain, "swain_shadowGrasp_magic", _position, _position, 1f, default);
