@@ -32,9 +32,10 @@ internal class AkaliMota : IBuffGameScript {
         _akali = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
         _buff  = buff;
-        ApiEventManager.OnHitUnit.AddListener(this, _akali, OnHitUnit);
         _p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_markOftheAssasin_marker_tar", unit, buff.Duration, bone: "C_BUFFBONE_GLB_OVERHEAD_LOC");
         _p1 = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_markOftheAssasin_marker_tar_02", unit, buff.Duration);
+        ApiEventManager.OnHitUnit.AddListener(this, _akali, OnHitUnit);
+        
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
