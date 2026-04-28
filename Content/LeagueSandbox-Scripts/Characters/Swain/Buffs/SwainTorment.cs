@@ -53,7 +53,7 @@ public class SwainTorment : IBuffGameScript
             false);
     }
 
-    public void OnDeath(DeathData data)
+    private void OnDeath(DeathData data)
     {
         _buff.DeactivateBuff();
     }
