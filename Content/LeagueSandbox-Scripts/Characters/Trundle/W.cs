@@ -17,11 +17,12 @@ namespace Spells;
 public class trundledesecrate : ISpellScript {
     private const float ZoneDurationSeconds = 8.0f;
     private const float ZoneRadius          = 775.0f;
+    private const float ZoneDurationMs      = ZoneDurationSeconds * 1000.0f;
 
     private ObjAIBase _trundle;
     private Spell     _spell;
     private Vector2   _end;
-    private float     _timerSeconds;
+    private PeriodicTicker _zoneTicker;
     private bool      _zoneActive;
 
     public SpellScriptMetadata ScriptMetadata => new() {
@@ -35,9 +36,9 @@ public class trundledesecrate : ISpellScript {
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _end          = end;
-        _timerSeconds = 0.0f;
-        _zoneActive   = true;
+        _end = end;
+        _zoneTicker.Reset();
+        _zoneActive = true;
         PlayAnimation(_trundle,"Spell2");
     }
 
@@ -48,8 +49,8 @@ public class trundledesecrate : ISpellScript {
     public void OnUpdate(float diff) {
         if (!_zoneActive) return;
 
-        _timerSeconds += diff * 0.001f;
-        if (_timerSeconds >= ZoneDurationSeconds) {
+        var expiredTicks = _zoneTicker.ConsumeTicks(diff, ZoneDurationMs, false, 1, 1);
+        if (expiredTicks > 0) {
             _zoneActive = false;
             if (_trundle.HasBuff("TrundleDesecrateBuffs")) RemoveBuff(_trundle, "TrundleDesecrateBuffs");
             return;
@@ -62,7 +63,7 @@ public class trundledesecrate : ISpellScript {
         }
 
         if (_trundle.HasBuff("TrundleDesecrateBuffs")) return;
-        var remainingDuration = ZoneDurationSeconds - _timerSeconds;
+        var remainingDuration = _zoneTicker.GetRemainingMsUntilNextTick(ZoneDurationMs, false, 1) * 0.001f;
         if (remainingDuration > 0.0f)
             AddBuff("TrundleDesecrateBuffs", remainingDuration, 1, _spell, _trundle, _trundle);
     }

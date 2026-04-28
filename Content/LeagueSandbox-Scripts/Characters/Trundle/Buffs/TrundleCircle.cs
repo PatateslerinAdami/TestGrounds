@@ -53,10 +53,9 @@ public class TrundleCircle : IBuffGameScript {
             SpellDataFlags.AffectEnemies |
             SpellDataFlags.AffectFriends
         );
-        foreach (var target in unitsInRange) {
-            if (target == _pillar) continue;
-
-            //CancelForceMovement(target);
+        foreach (var target in unitsInRange.Where(target => target != _pillar))
+        {
+            CancelDash(target);
 
             var away = target.Position - _pillar.Position;
             if (!IsFiniteNonZero(away))
@@ -120,14 +119,9 @@ public class TrundleCircle : IBuffGameScript {
             }
         }
 
-        if (IsFiniteNonZero(fallback)) {
-            var normalizedFallback = Vector2.Normalize(fallback);
-            if (IsFiniteNonZero(normalizedFallback)) {
-                return normalizedFallback;
-            }
-        }
-
-        return Vector2.UnitX;
+        if (!IsFiniteNonZero(fallback)) return Vector2.UnitX;
+        var normalizedFallback = Vector2.Normalize(fallback);
+        return IsFiniteNonZero(normalizedFallback) ? normalizedFallback : Vector2.UnitX;
     }
     
     private static bool IsFiniteNonZero(Vector2 value) {
@@ -137,9 +131,8 @@ public class TrundleCircle : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        foreach (var slowed in _unitsInSlowRange.ToList())
-            if (slowed != null && slowed.HasBuff("TrundleCircleSlow"))
-                RemoveBuff(slowed, "TrundleCircleSlow");
+        foreach (var slowed in _unitsInSlowRange.ToList().OfType<AttackableUnit>().Where(slowed => slowed.HasBuff("TrundleCircleSlow")))
+            RemoveBuff(slowed, "TrundleCircleSlow");
         _unitsInSlowRange.Clear();
 
         AddBuff("PillarExpirationTimer", 0.25f, 1, _spell, unit, _trundle);
