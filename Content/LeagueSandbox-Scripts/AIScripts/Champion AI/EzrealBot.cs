@@ -966,6 +966,14 @@ namespace AIScripts
 
             foreach (var unit in units)
             {
+                // Diagnostik: warum kommen zerstörte Turrets durch den Filter?
+                _logger.Debug(
+                    $"[TurretScan] Model={unit.Model} Type={(unit is LaneTurret lt ? lt.Type.ToString() : unit.GetType().Name)} " +
+                    $"IsDead={unit.IsDead} HP={unit.Stats.CurrentHealth}/{unit.Stats.HealthPoints.Total} " +
+                    $"Targetable={(unit.Status & StatusFlags.Targetable) != 0} " +
+                    $"TargetableToTeam={unit.GetIsTargetableToTeam(EzrealInstance.Team)} " +
+                    $"InhibitorState={(unit is Inhibitor inh ? inh.InhibitorState.ToString() : "n/a")}");
+
                 if (unit is LaneTurret turret)
                 {
                     return turret;
