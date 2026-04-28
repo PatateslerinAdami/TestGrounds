@@ -43,7 +43,17 @@ public class AkaliShadowSwipe : ISpellScript {
         AddParticle(_akali, _akali, "akali_shadowSwipe_cas", _akali.Position);
         AddParticleTarget(_akali, target, "akali_shadowSwipe_tar", target);
         target.TakeDamage(_akali, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
-        ApiEventManager.OnSpellHit.Publish(_spell, (target, null, null));
+        
+        if (!target.HasBuff("AkaliMota")) return;
+        var markApRatio = _spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.5f;
+        var markDamage  = 45 + 25 * (_spell.CastInfo.SpellLevel - 1) + markApRatio;
+
+        AddParticleTarget(_akali, target, "akali_mark_impact_tar", target);
+        target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+            false);
+        AddParticleTarget(_akali, _akali, "akali_shadowSwipe_heal", _akali, bone: "C_BUFFBONE_GLB_CHEST_LOC");
+        var energyReturn = 20f + 5f * (_spell.CastInfo.SpellLevel - 1);
+        _akali.IncreasePAR(_akali, energyReturn);
     }
     
     private void OnStatsUpdate(AttackableUnit unit, float diff) {

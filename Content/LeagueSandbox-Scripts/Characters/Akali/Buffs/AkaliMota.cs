@@ -33,7 +33,6 @@ internal class AkaliMota : IBuffGameScript {
         _spell = ownerSpell;
         _buff  = buff;
         ApiEventManager.OnHitUnit.AddListener(this, _akali, OnHitUnit);
-        ApiEventManager.OnSpellHit.AddListener(this, _akali.GetSpell("AkaliShadowSwipe"), OnSpellHit);
         _p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_markOftheAssasin_marker_tar", unit, buff.Duration, bone: "C_BUFFBONE_GLB_OVERHEAD_LOC");
         _p1 = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_markOftheAssasin_marker_tar_02", unit, buff.Duration);
     }
@@ -42,21 +41,6 @@ internal class AkaliMota : IBuffGameScript {
         RemoveParticle(_p);
         RemoveParticle(_p1);
         ApiEventManager.RemoveAllListenersForOwner(this);
-    }
-
-    public void OnUpdate(float diff) { }
-
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        var markApRatio = _spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.5f;
-        var markDamage  = 45 + 25 * (_spell.CastInfo.SpellLevel - 1) + markApRatio;
-
-        AddParticleTarget(_akali, target, "akali_mark_impact_tar", target);
-        target.TakeDamage(_akali, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
-                          false);
-        AddParticleTarget(_akali, _akali, "akali_shadowSwipe_heal", _akali, bone: "C_BUFFBONE_GLB_CHEST_LOC");
-        var energyReturn = 20f + 5f * (_spell.CastInfo.SpellLevel - 1);
-        _akali.Stats.CurrentMana += energyReturn;
-        _buff.DeactivateBuff(); 
     }
 
     private void OnHitUnit(DamageData data) {
