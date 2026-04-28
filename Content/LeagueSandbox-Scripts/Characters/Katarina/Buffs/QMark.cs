@@ -46,7 +46,7 @@ internal class KatarinaQMark : IBuffGameScript {
         ApiEventManager.OnHitUnit.AddListener(this, _katarina, OnHitUnit);
     }
 
-    public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
         if (target != _unit) return;
         var markApRatio = _katarina.Stats.AbilityPower.Total * 0.2f;
         var markDamage  = 15 + 15 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1) + markApRatio;
@@ -60,7 +60,7 @@ internal class KatarinaQMark : IBuffGameScript {
         _buff.DeactivateBuff(); 
     }
 
-    public void OnHitUnit(DamageData data) {
+    private void OnHitUnit(DamageData data) {
         if (data.Target != _unit) return;
         var markApRatio = _katarina.Stats.AbilityPower.Total * 0.2f;
         var markDamage  = 15 + 15 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1) + markApRatio;
