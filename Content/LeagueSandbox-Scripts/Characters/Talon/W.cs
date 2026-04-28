@@ -130,7 +130,7 @@ public class TalonRakeMissileTwo : ISpellScript {
         var dmg = 30f + 25f                           * (_talon.GetSpell("TalonRake").CastInfo.SpellLevel - 1) +
                   _talon.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
         var variables      = new BuffVariables();
-        variables.Set("slowAmount", 0.2f);
+        variables.Set("slowPercent", 0.2f);
         AddBuff("Slow", 2f, 1, _spell, unit, _talon, buffVariables: variables);
         AddParticleTarget(_talon, unit, "talon_w_tar", unit);
         unit.TakeDamage(_talon, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
