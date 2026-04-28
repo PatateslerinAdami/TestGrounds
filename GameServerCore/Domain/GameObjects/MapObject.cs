@@ -16,12 +16,28 @@ namespace GameServerCore.Domain
         public string Name { get; private set; }
         public Vector3 CentralPoint { get; private set; }
         public int ParentMapId { get; private set; }
+        /// <summary>
+        /// World space mesh vertices projected to the XZ plane (one per .sco.json vertex), or null
+        /// when no mesh data is available. Populated for static buildings (turrets, inhibitors,
+        /// nexuses) so the NavigationGrid can bake their actual footprint instead of approximating
+        /// with a circle.
+        /// </summary>
+        public Vector2[] Vertices2D { get; private set; }
 
         public MapObject(string name, Vector3 point, int id)
         {
             Name = name;
             CentralPoint = point;
             ParentMapId = id;
+            Vertices2D = null;
+        }
+
+        public MapObject(string name, Vector3 point, int id, Vector2[] vertices2D)
+        {
+            Name = name;
+            CentralPoint = point;
+            ParentMapId = id;
+            Vertices2D = vertices2D;
         }
 
         public static MapObject Empty { [MethodImpl(MethodImplOptions.AggressiveInlining)] get { return _empty; } }

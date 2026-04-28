@@ -38,9 +38,12 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <returns>True/False.</returns>
         private bool IsCollisionObject(GameObject obj)
         {
-            // CollisionObjects can be any AI units, ObjBuildings, pure AttackableUnits, and pure GameObjects.
-            // TODO: Implement static navgrid updates for turrets so we don't have to count them as collision objects.
-            return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is SpellMissile || obj is Region) && obj.CollisionRadius >= 0;
+            // CollisionObjects can be any AI units, pure AttackableUnits, and pure GameObjects.
+            // BaseTurret and ObjBuilding are excluded their footprints are baked into the navgrid
+            // (NavigationGrid.AddDynamicBlocker), so pathfinding routes around them and the
+            // remaining unit vs unit checks don't need to carry them in the per-tick QuadTree.
+            return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is SpellMissile || obj is Region
+                     || obj is BaseTurret || obj is ObjBuilding) && obj.CollisionRadius >= 0;
         }
 
         /// <summary>

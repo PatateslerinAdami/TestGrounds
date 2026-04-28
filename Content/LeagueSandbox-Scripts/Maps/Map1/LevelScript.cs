@@ -156,8 +156,62 @@ namespace MapScripts.Map1
             MinionModifiers[MinionSpawnType.MINION_TYPE_SUPER].HealthPoints.FlatBonus = 200.0f;
             MinionModifiers[MinionSpawnType.MINION_TYPE_SUPER].AttackDamage.FlatBonus = 10.0f;
 
+            // Replace the hardcoded MinionPaths with the client-side __NAV_<lane>NN
+            // waypoints from the .sco.json scene files. Trailing-digit sort gives the correct
+            // direction (blue to purple). the SetUpLaneMinion code already handles reversing for
+            // the purple-team barracks.
+            if (mapObjects.TryGetValue(GameObjectTypes.ObjBuilding_NavPoint, out var navPoints))
+            {
+                var byLane = new Dictionary<Lane, List<(int idx, Vector2 pos)>>();
+                foreach (var np in navPoints)
+                {
+                    var lane = np.GetLaneID();
+                    if (lane == Lane.LANE_Unknown)
+                    {
+                        continue;
+                    }
+                    int idx = ParseTrailingIndex(np.Name);
+                    if (idx < 0)
+                    {
+                        continue;
+                    }
+                    if (!byLane.TryGetValue(lane, out var list))
+                    {
+                        list = new List<(int, Vector2)>();
+                        byLane[lane] = list;
+                    }
+                    list.Add((idx, new Vector2(np.CentralPoint.X, np.CentralPoint.Z)));
+                }
+                foreach (var kv in byLane)
+                {
+                    kv.Value.Sort((a, b) => a.idx.CompareTo(b.idx));
+                    var path = new List<Vector2>(kv.Value.Count);
+                    foreach (var t in kv.Value)
+                    {
+                        path.Add(t.pos);
+                    }
+                    MinionPaths[kv.Key] = path;
+                }
+            }
+
             CreateLevelProps.CreateProps();
             LevelScriptObjects.LoadBuildings(mapObjects);
+        }
+
+        // Extracts the trailing integer suffix of a name like "__NAV_C02" -> 2 or "__NAV_C010" -> 10.
+        // Returns -1 if the name has no trailing digits.
+        private static int ParseTrailingIndex(string name)
+        {
+            int i = name.Length - 1;
+            while (i >= 0 && char.IsDigit(name[i]))
+            {
+                i--;
+            }
+            if (i == name.Length - 1)
+            {
+                return -1;
+            }
+            return int.Parse(name.Substring(i + 1));
         }
 
         public virtual void OnMatchStart()

@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Collections.Generic;
+using System.Numerics;
 using System.Text;
 using Force.Crc32;
 using GameServerCore.Domain;
@@ -35,6 +36,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override bool IsAffectedByFoW => false;
 
+        // Cells in the navgrid this turret currently blocks. Tracked so we can release exactly the
+        // cells we acquired when the turret dies or is removed (ref counted in the grid).
+        private List<int> _blockedNavCells;
+
         public BaseTurret(
             Game game,
             string name,
@@ -64,6 +69,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="killer">Unit that killed this unit.</param>
         public override void Die(DeathData data)
         {
+            UnbakeFootprint();
+
             var announce = new OnTurretDie
             {
                 AssistCount = 0,
@@ -75,6 +82,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             base.Die(data);
         }
 
+        public override void OnRemoved()
+        {
+            UnbakeFootprint();
+            base.OnRemoved();
+        }
+
+        private void UnbakeFootprint()
+        {
+            if (_blockedNavCells != null)
+            {
+                _game.Map.NavigationGrid.RemoveDynamicBlocker(_blockedNavCells);
+                _blockedNavCells = null;
+            }
+        }
+
         /// <summary>
         /// Function called when this GameObject has been added to ObjectManager.
         /// </summary>
@@ -82,6 +104,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.OnAdded();
             _game.ObjectManager.AddTurret(this);
+
+            // Bake the turret footprint into the navgrid. Use the real mesh polygon from the
+            // .sco.json (via ParentObject.Vertices2D) when available; fall back to a circle of
+            // PathfindingRadius for turrets created without a MapObject (e.g. AzirTurret).
+            if (ParentObject.Vertices2D != null && ParentObject.Vertices2D.Length >= 3)
+            {
+                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(ParentObject.Vertices2D);
+            }
+            else
+            {
+                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, PathfindingRadius);
+            }
 
             // TODO: Handle this via map script for LaneTurret and via CharScript for AzirTurret.
             BubbleRegion = new Region

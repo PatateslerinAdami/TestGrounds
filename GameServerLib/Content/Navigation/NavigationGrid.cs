@@ -171,6 +171,205 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
         }
 
+        // Reference counted dynamic blockers (cellId → number of static buildings blocking it).
+        // Used by AddDynamicBlocker / RemoveDynamicBlocker so turrets, inhibitors and nexuses can
+        // bake their footprints into the grid without fighting the map-loaded NOT_PASSABLE flags.
+        private readonly Dictionary<int, int> _dynamicBlockers = new Dictionary<int, int>();
+
+        /// <summary>
+        /// Bakes a polygon footprint (in world XZ coordinates) into the navgrid. The polygon is
+        /// reduced to its convex hull and rasterized via cell center in polygon tests. Returns the
+        /// list of cell IDs that were newly blocked; pass it back to <see cref="RemoveDynamicBlocker"/>
+        /// when the building dies. Multiple overlapping blockers ref-count correctly.
+        /// </summary>
+        public List<int> AddDynamicBlocker(Vector2[] polygonWorld)
+        {
+            var blocked = new List<int>();
+            if (polygonWorld == null || polygonWorld.Length < 3)
+            {
+                return blocked;
+            }
+
+            var hull = ConvexHull(polygonWorld);
+            if (hull.Length < 3)
+            {
+                return blocked;
+            }
+
+            float minX = float.MaxValue, maxX = float.MinValue;
+            float minZ = float.MaxValue, maxZ = float.MinValue;
+            foreach (var p in hull)
+            {
+                if (p.X < minX) minX = p.X;
+                if (p.X > maxX) maxX = p.X;
+                if (p.Y < minZ) minZ = p.Y;
+                if (p.Y > maxZ) maxZ = p.Y;
+            }
+
+            var minCell = TranslateToNavGrid(new Vector2(minX, minZ));
+            var maxCell = TranslateToNavGrid(new Vector2(maxX, maxZ));
+            short cx0 = (short)Math.Floor(minCell.X);
+            short cx1 = (short)Math.Ceiling(maxCell.X);
+            short cy0 = (short)Math.Floor(minCell.Y);
+            short cy1 = (short)Math.Ceiling(maxCell.Y);
+
+            for (short cx = cx0; cx <= cx1; cx++)
+            {
+                for (short cy = cy0; cy <= cy1; cy++)
+                {
+                    var cell = GetCell(cx, cy);
+                    if (cell == null)
+                    {
+                        continue;
+                    }
+                    var centerWorld = TranslateFromNavGrid(cell.Locator);
+                    if (IsPointInConvexPolygon(centerWorld, hull))
+                    {
+                        IncrementBlocker(cell.ID);
+                        blocked.Add(cell.ID);
+                    }
+                }
+            }
+            return blocked;
+        }
+
+        /// <summary>
+        /// Bakes a circular footprint. Use as fallback when no mesh polygon is available.
+        /// </summary>
+        public List<int> AddDynamicBlocker(Vector2 worldCenter, float worldRadius)
+        {
+            var blocked = new List<int>();
+            if (worldRadius <= 0)
+            {
+                return blocked;
+            }
+
+            var minCell = TranslateToNavGrid(new Vector2(worldCenter.X - worldRadius, worldCenter.Y - worldRadius));
+            var maxCell = TranslateToNavGrid(new Vector2(worldCenter.X + worldRadius, worldCenter.Y + worldRadius));
+            short cx0 = (short)Math.Floor(minCell.X);
+            short cx1 = (short)Math.Ceiling(maxCell.X);
+            short cy0 = (short)Math.Floor(minCell.Y);
+            short cy1 = (short)Math.Ceiling(maxCell.Y);
+
+            float r2 = worldRadius * worldRadius;
+            for (short cx = cx0; cx <= cx1; cx++)
+            {
+                for (short cy = cy0; cy <= cy1; cy++)
+                {
+                    var cell = GetCell(cx, cy);
+                    if (cell == null)
+                    {
+                        continue;
+                    }
+                    var centerWorld = TranslateFromNavGrid(cell.Locator);
+                    if (Vector2.DistanceSquared(centerWorld, worldCenter) <= r2)
+                    {
+                        IncrementBlocker(cell.ID);
+                        blocked.Add(cell.ID);
+                    }
+                }
+            }
+            return blocked;
+        }
+
+        /// <summary>
+        /// Releases the cells previously blocked by <see cref="AddDynamicBlocker"/>. The list
+        /// passed in must come from the matching Add call (cell ID set is ref counted, not raw).
+        /// </summary>
+        public void RemoveDynamicBlocker(List<int> blockedCellIds)
+        {
+            if (blockedCellIds == null)
+            {
+                return;
+            }
+            foreach (var id in blockedCellIds)
+            {
+                if (_dynamicBlockers.TryGetValue(id, out int count))
+                {
+                    if (count <= 1)
+                    {
+                        _dynamicBlockers.Remove(id);
+                    }
+                    else
+                    {
+                        _dynamicBlockers[id] = count - 1;
+                    }
+                }
+            }
+        }
+
+        private void IncrementBlocker(int cellId)
+        {
+            if (_dynamicBlockers.TryGetValue(cellId, out int count))
+            {
+                _dynamicBlockers[cellId] = count + 1;
+            }
+            else
+            {
+                _dynamicBlockers[cellId] = 1;
+            }
+        }
+
+        // Andrew's monotone chain. Produces a CCW convex hull. Output length may be lower than
+        // input length (collinear / duplicate points are dropped).
+        private static Vector2[] ConvexHull(Vector2[] points)
+        {
+            if (points.Length <= 1)
+            {
+                return points;
+            }
+            var pts = (Vector2[])points.Clone();
+            Array.Sort(pts, (a, b) => a.X != b.X ? a.X.CompareTo(b.X) : a.Y.CompareTo(b.Y));
+
+            var hull = new Vector2[2 * pts.Length];
+            int k = 0;
+            // Lower hull
+            for (int i = 0; i < pts.Length; i++)
+            {
+                while (k >= 2 && Cross(hull[k - 2], hull[k - 1], pts[i]) <= 0)
+                {
+                    k--;
+                }
+                hull[k++] = pts[i];
+            }
+            // Upper hull
+            int lower = k + 1;
+            for (int i = pts.Length - 2; i >= 0; i--)
+            {
+                while (k >= lower && Cross(hull[k - 2], hull[k - 1], pts[i]) <= 0)
+                {
+                    k--;
+                }
+                hull[k++] = pts[i];
+            }
+            // Last point equals first; drop it.
+            var result = new Vector2[Math.Max(0, k - 1)];
+            Array.Copy(hull, result, result.Length);
+            return result;
+        }
+
+        private static float Cross(Vector2 o, Vector2 a, Vector2 b)
+        {
+            return (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+        }
+
+        // Polygon must be CCW (which ConvexHull above produces). Returns true for points on the
+        // boundary as well — that's fine for blocker rasterization (over-block at the edge by at
+        // most one cell, which matches what the client does).
+        private static bool IsPointInConvexPolygon(Vector2 p, Vector2[] poly)
+        {
+            for (int i = 0; i < poly.Length; i++)
+            {
+                var a = poly[i];
+                var b = poly[(i + 1) % poly.Length];
+                if (Cross(a, b, p) < 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>
         /// Finds a path of waypoints, which are aligned by the cells of the navgrid (A* method), that lead to a set destination.
         /// </summary>
@@ -553,7 +752,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         {
             return cell != null
                 && !cell.HasFlag(NavigationGridCellFlags.NOT_PASSABLE)
-                && !cell.HasFlag(NavigationGridCellFlags.SEE_THROUGH);
+                && !cell.HasFlag(NavigationGridCellFlags.SEE_THROUGH)
+                && !_dynamicBlockers.ContainsKey(cell.ID);
         }
 
         bool IsWalkable(NavigationGridCell cell, float checkRadius)

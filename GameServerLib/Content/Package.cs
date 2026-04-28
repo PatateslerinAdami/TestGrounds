@@ -110,6 +110,22 @@ namespace LeagueSandbox.GameServer.Content
                 }
             }
 
+            // The room file also doesn't reference the __NAV_<lane>NN waypoints, but these are
+            // the authoritative client-side lane paths the minions are supposed to follow. Pick up
+            // any that exist on disk so map scripts can build MinionPaths from them.
+            foreach (var key in _mapData.Keys.Where(x => x.StartsWith("__NAV_")).ToList())
+            {
+                if (toReturnMapData.MapObjects.ContainsKey(key))
+                {
+                    continue;
+                }
+                var navObj = AddMapObject(key, mapId);
+                if (navObj != MapObject.Empty)
+                {
+                    toReturnMapData.MapObjects.Add(key, navObj);
+                }
+            }
+
             // EXPCurve, DeathTimes, and StatsProgression.
             var expFileName = "ExpCurve";
             if (!string.IsNullOrEmpty(_game.Map.MapScript.MapScriptMetadata.ExpCurveOverride))
@@ -211,7 +227,24 @@ namespace LeagueSandbox.GameServer.Content
                     Y = pointJson.Value<float>("Y"),
                     Z = pointJson.Value<float>("Z")
                 };
-                return new MapObject(name, point, mapId);
+
+                // Project the mesh vertices to the XZ plane so the NavigationGrid can bake the
+                // building's actual footprint. Y is height in the source data and irrelevant for
+                // pathfinding I think? Many .sco files (NAV waypoints, spawn markers) have no Vertices
+                // array at all, those just stay null.
+                Vector2[] vertices2D = null;
+                var verticesJson = objectData.SelectToken("Vertices") as JArray;
+                if (verticesJson != null && verticesJson.Count > 0)
+                {
+                    vertices2D = new Vector2[verticesJson.Count];
+                    for (int i = 0; i < verticesJson.Count; i++)
+                    {
+                        var v = verticesJson[i];
+                        vertices2D[i] = new Vector2(v.Value<float>("X"), v.Value<float>("Z"));
+                    }
+                }
+
+                return new MapObject(name, point, mapId, vertices2D);
             }
             else
             {
