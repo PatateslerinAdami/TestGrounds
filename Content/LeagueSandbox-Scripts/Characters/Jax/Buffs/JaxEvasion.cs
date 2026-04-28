@@ -46,7 +46,7 @@ public class JaxEvasion : IBuffGameScript {
         _attacksDodged = 0f;
         SealSpellSlot(_jax, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerspell.SetCooldown(0f);
-        ApiEventManager.OnTakeDamage.AddListener(this, _jax, OnTakeDamage);
+        ApiEventManager.OnPreTakeDamage.AddListener(this, _jax, OnPreTakeDamage);
         _p1 = AddParticleTarget(_jax, _jax, "JaxDodger", _jax, 1.6f);
         _p2 = AddParticleTarget(_jax, _jax, "CounterStrike_ready", _jax, 1.9f);
     }
@@ -61,7 +61,7 @@ public class JaxEvasion : IBuffGameScript {
         _step += (short) ticks;
     }
 
-    private void OnTakeDamage(DamageData data) {
+    private void OnPreTakeDamage(DamageData data) {
         if (!IsValidTarget(_jax, data.Target,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
