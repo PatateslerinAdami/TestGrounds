@@ -32,7 +32,7 @@ public class SeismicShard : ISpellScript {
 
     private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
         var ap     = _malphite.Stats.AbilityPower.Total * 0.6f;
-        var damage = 70f  + 50f + (spell.CastInfo.SpellLevel - 1);
+        var damage = 70f  + 50f * (spell.CastInfo.SpellLevel - 1);
         
         //slow
         AddBuff("SeismicShardBuff", 4f, 1, spell, target, _malphite);
