@@ -550,8 +550,18 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             if (_slows.Count > 0)
             {
-                //Only takes into account the highest slow
-                speed *= 1 + _slows.Min(z => z) * (1 - SlowResistPercent);
+                // League slow stacking: strongest slow applies fully, every additional slow only at 35% effectiveness,
+                // combined multiplicatively. Slow values are negative, so the smallest value is the strongest slow.
+                // SlowResist dampens every individual slow.
+                var sortedSlows = _slows.OrderBy(z => z).ToList();
+                var slowResistFactor = 1 - SlowResistPercent;
+                for (var i = 0; i < sortedSlows.Count; i++)
+                {
+                    var effectiveness = i == 0 ? 1f : 0.35f;
+                    speed *= 1 + sortedSlows[i] * effectiveness * slowResistFactor;
+                }
+                // Lower-Limit: slows are not allowed to drop the speed below 110 (this implicitly also caps slows below 100%)
+                if (speed < 110f) speed = 110f;
             }
 
             _trueMoveSpeed = speed;
