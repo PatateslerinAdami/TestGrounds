@@ -19,8 +19,8 @@ internal class Slow : IBuffGameScript {
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SLOW,
-        BuffAddType = BuffAddType.STACKS_AND_OVERLAPS,
-        MaxStacks   = 100
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        MaxStacks   = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
