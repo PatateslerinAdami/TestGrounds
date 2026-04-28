@@ -45,9 +45,9 @@ public class SwainTorment : IBuffGameScript
 
     public void OnUpdate(float diff)
     {
-        var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, 4);
+        var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, 3);
         if (ticks != 1) return;
-        _damage = (75f + 40f * (_spell.CastInfo.SpellLevel - 1)) / 4 +
+        _damage = (75f + 40f * (_spell.CastInfo.SpellLevel - 1)) / 3 +
                   _owner.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
         _unit.TakeDamage(_owner, _damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLPERSIST,
             false);
