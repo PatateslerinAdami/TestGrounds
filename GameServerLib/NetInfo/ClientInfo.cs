@@ -16,6 +16,14 @@ namespace GameServerCore.NetInfo
         /// True if the client sent a Handshake request.
         /// </summary>
         public bool IsStartedClient { get; set; }
+        /// <summary>
+        /// True if the client sent C2S_ClientReady while reconnecting to an already running game.
+        /// </summary>
+        public bool ReconnectStartReady { get; set; }
+        /// <summary>
+        /// True if the client finished reconnect spawn replay (C2S_CharSelected) in an already running game.
+        /// </summary>
+        public bool ReconnectSpawnReady { get; set; }
         public int SkinNo { get; private set; }
         public string[] SummonerSkills { get; private set; }
         public string Name { get; private set; }
@@ -55,6 +63,8 @@ namespace GameServerCore.NetInfo
             PlayerId = playerId;
             IsDisconnected = true;
             IsStartedClient = false;
+            ReconnectStartReady = false;
+            ReconnectSpawnReady = false;
         }
     }
 }

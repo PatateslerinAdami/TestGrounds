@@ -229,6 +229,12 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<ViewRequest>(new HandleView(this).HandlePacket);
         }
 
+        public void TryFinishReconnectStart(int userId)
+        {
+            var player = PlayerManager.GetPeerInfo(userId);
+            _gameStartHandler?.TryFinishReconnect(player);
+        }
+
         /// <summary>
         /// Enables or disables the hot reloading of scripts. Used only for development.
         /// </summary>

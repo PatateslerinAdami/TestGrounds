@@ -301,6 +301,8 @@ namespace PacketDefinitions420
             _game.PacketNotifier.NotifyS2C_OnEventWorld(annoucement, peerInfo.Champion);
             peerInfo.IsDisconnected = true;
             peerInfo.IsStartedClient = false;
+            peerInfo.ReconnectStartReady = false;
+            peerInfo.ReconnectSpawnReady = false;
             _peers[clientId] = null;
 
             return _game.CheckIfAllPlayersLeft() || peerInfo.Champion.OnDisconnect();

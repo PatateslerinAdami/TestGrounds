@@ -28,7 +28,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
             if (_game.IsRunning)
             {
-                StartFor(peerInfo);
+                peerInfo.ReconnectStartReady = true;
+                TryFinishReconnect(peerInfo);
                 return true;
             }
             else
@@ -42,6 +43,23 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
         {
             _shouldStartAsSoonAsPossible = true;
             TryStart();
+        }
+
+        public void TryFinishReconnect(ClientInfo player)
+        {
+            if (!_game.IsRunning || player == null)
+            {
+                return;
+            }
+
+            if (!player.ReconnectStartReady || !player.ReconnectSpawnReady)
+            {
+                return;
+            }
+
+            player.ReconnectStartReady = false;
+            player.ReconnectSpawnReady = false;
+            StartFor(player);
         }
 
         private void TryStart()

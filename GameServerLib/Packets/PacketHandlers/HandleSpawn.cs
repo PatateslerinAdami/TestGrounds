@@ -33,6 +33,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             if (_game.IsRunning)
             {
                 om.OnReconnect(userId, userInfo.Team);
+                userInfo.ReconnectSpawnReady = true;
             }
             else
             {
@@ -40,6 +41,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             _game.PacketNotifier.NotifySpawnEnd(userId);
+            if (_game.IsRunning)
+            {
+                _game.TryFinishReconnectStart(userId);
+            }
             return true;
         }
     }
