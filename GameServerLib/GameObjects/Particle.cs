@@ -1,4 +1,5 @@
 ﻿using GameServerCore.Enums;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects
@@ -105,7 +106,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName,
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
-            TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null,
+            TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
@@ -144,7 +145,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName,
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
-            TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null,
+            TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
@@ -189,7 +190,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName,
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
-            TeamId teamOnly = TeamId.TEAM_NEUTRAL, GameObject unitOnly = null,
+            TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, startPos, 0, 0, 0, netId, teamOnly)
@@ -225,7 +226,55 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public string GetEffectNameForTeam(TeamId team)
         {
-            return Team == TeamId.TEAM_NEUTRAL || team == Team ? Name : NameForEnemies;
+            return Team == TeamId.TEAM_ALL || team == Team ? Name : NameForEnemies;
+        }
+
+        /// <summary>
+        /// Returns whether this particle is allowed to be seen by recipients on the given team,
+        /// ignoring FoW/line-of-sight checks.
+        /// </summary>
+        public bool IsAudienceVisibleToTeam(TeamId team)
+        {
+            if (SpecificTeam != TeamId.TEAM_ALL && team != SpecificTeam)
+            {
+                return false;
+            }
+
+            // Team-level checks cannot satisfy unit-only particles.
+            return SpecificUnit == null;
+        }
+
+        /// <summary>
+        /// Returns whether this particle is allowed to be seen by a specific player recipient,
+        /// ignoring FoW/line-of-sight checks.
+        /// </summary>
+        public bool IsAudienceVisibleToRecipient(TeamId team, int userId)
+        {
+            if (SpecificTeam != TeamId.TEAM_ALL && team != SpecificTeam)
+            {
+                return false;
+            }
+
+            if (SpecificUnit is Champion champion)
+            {
+                return champion.ClientId == userId;
+            }
+
+            return SpecificUnit == null;
+        }
+
+        /// <summary>
+        /// Returns whether this particle should be considered immediately visible for an observer team
+        /// before distance/line-of-sight checks.
+        /// </summary>
+        public bool ShouldAutoRevealForObserverTeam(TeamId observerTeam)
+        {
+            if (!IsAudienceVisibleToTeam(observerTeam))
+            {
+                return false;
+            }
+
+            return SpecificTeam == TeamId.TEAM_ALL;
         }
 
         public override void Update(float diff)

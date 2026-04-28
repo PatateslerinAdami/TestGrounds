@@ -1,0 +1,34 @@
+using GameServerCore.Enums;
+using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using log4net.Repository.Hierarchy;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
+namespace Buffs;
+
+internal class MalphiteShieldRemoval : IBuffGameScript {
+    ObjAIBase     _malphite;
+    Particle _graniteShieldParticle;
+
+    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+        BuffType    = BuffType.INTERNAL,
+        BuffAddType = BuffAddType.REPLACE_EXISTING
+    };
+
+    public StatsModifier StatsModifier { get; } = new();
+
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _malphite      = ownerSpell.CastInfo.Owner;
+        _graniteShieldParticle = AddParticleTarget(_malphite, _malphite, "Malphite_Base_Obduracy_off", _malphite, default, default, "root", "root");
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        RemoveParticle(_graniteShieldParticle);
+    }
+}

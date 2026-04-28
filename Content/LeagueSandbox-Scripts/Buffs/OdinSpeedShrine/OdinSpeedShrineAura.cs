@@ -23,6 +23,7 @@ namespace Buffs
         Particle buffParticle;
         AttackableUnit Unit;
         float timer = 250f;
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             Unit = unit;
@@ -40,12 +41,12 @@ namespace Buffs
             timer += diff;
             if (Unit != null && timer >= 100)
             {
-                var units = GetUnitsInRange(Unit.Position, 350f, true).OrderBy(unit => Vector2.DistanceSquared(unit.Position, Unit.Position)).ToList();
-                units.RemoveAll(x => !(x is Champion));
+                var units = GetUnitsInRange(Unit, Unit.Position, 350f, true, SpellDataFlags.AffectHeroes);
                 if (units.Count >= 1)
                 {
                     AddBuff("OdinSpeedShrineBuff", 10.0f, 1, null, units[0], null);
                 }
+
                 timer = 0;
             }
         }

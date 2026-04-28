@@ -95,12 +95,10 @@ namespace LeagueSandbox.GameServer.Content
             if (obj != null)
             {
                 var list = obj.Split(' ');
-                if (defaultValue.Length == list.Length)
+                var length = Math.Min(defaultValue.Length, list.Length);
+                for (var i = 0; i < length; i++)
                 {
-                    for (var i = 0; i < defaultValue.Length; i++)
-                    {
-                        float.TryParse(list[i], NumberStyles.Any, CultureInfo.InvariantCulture, out defaultValue[i]);
-                    }
+                    float.TryParse(list[i], NumberStyles.Any, CultureInfo.InvariantCulture, out defaultValue[i]);
                 }
             }
 
@@ -113,14 +111,12 @@ namespace LeagueSandbox.GameServer.Content
             if (obj != null)
             {
                 var list = obj.Split(' ');
-                if (defaultValue.Length == list.Length)
+                var length = Math.Min(defaultValue.Length, list.Length);
+                for (var i = 0; i < length; i++)
                 {
-                    for (var i = 0; i < defaultValue.Length; i++)
-                    {
-                        float value;
-                        if (float.TryParse(list[i], NumberStyles.Any, CultureInfo.InvariantCulture, out value))
-                            defaultValue[i] = (int)value;
-                    }
+                    float value;
+                    if (float.TryParse(list[i], NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+                        defaultValue[i] = (int)value;
                 }
             }
             return defaultValue;

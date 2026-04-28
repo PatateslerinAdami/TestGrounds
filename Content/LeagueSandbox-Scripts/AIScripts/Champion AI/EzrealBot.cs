@@ -45,7 +45,9 @@ namespace AIScripts
         public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData();
 
         private Champion EzrealInstance;
+
         private static ILog _logger = LoggerProvider.GetLogger();
+
         // Mid lane waypoints (matching minion path from Map1)
         private int _currentWaypointIndex = 0;
         private const float WaypointReachedThreshold = 300f; // Distance to consider waypoint reached
@@ -73,7 +75,7 @@ namespace AIScripts
         private readonly byte RSlot = 3;
         private readonly byte IgniteSlot = 0; // Summoner spell slot
         private Dictionary<byte, float> _lastCastTime = new Dictionary<byte, float>();
-        
+
         // Mid lane waypoints (will be generated dynamically based on team)
         private List<Vector2> _midLaneWaypoints = new List<Vector2>();
 
@@ -165,7 +167,8 @@ namespace AIScripts
 
                 // Initialize bot communication settings (set to SeriousOnly for now, change to ToxicOnly or Default as desired)
                 _botSettings = BotSettings.SeriousOnly;
-                _logger.Debug($"Ezreal Bot communication settings - TrashTalk: {_botSettings.EnableTrashTalk}, ToxicPings: {_botSettings.EnableToxicPings}, SeriousPings: {_botSettings.EnableSeriousPings}");
+                _logger.Debug(
+                    $"Ezreal Bot communication settings - TrashTalk: {_botSettings.EnableTrashTalk}, ToxicPings: {_botSettings.EnableToxicPings}, SeriousPings: {_botSettings.EnableSeriousPings}");
 
                 // Initialize with first skill point
                 EzrealInstance.LevelUpSpell(QSlot); // Start with Q for lane poke
@@ -247,12 +250,12 @@ namespace AIScripts
                 case BotLane.Top:
                     laneWaypoints = new List<Vector2>
                     {
-                        new Vector2(917.0f, 1725.0f),    // Blue fountain area
-                        new Vector2(1170.0f, 4041.0f),    // Near blue outer turret
-                        new Vector2(861.0f, 6459.0f),      // Mid lane center area
-                        new Vector2(880.0f, 10180.0f),     // Mid lane center area
-                        new Vector2(1268.0f, 11675.0f),    // Near purple outer turret
-                        new Vector2(2806.0f, 13075.0f),    // Purple fountain area (enemy nexus)
+                        new Vector2(917.0f, 1725.0f), // Blue fountain area
+                        new Vector2(1170.0f, 4041.0f), // Near blue outer turret
+                        new Vector2(861.0f, 6459.0f), // Mid lane center area
+                        new Vector2(880.0f, 10180.0f), // Mid lane center area
+                        new Vector2(1268.0f, 11675.0f), // Near purple outer turret
+                        new Vector2(2806.0f, 13075.0f), // Purple fountain area (enemy nexus)
                         new Vector2(3907.0f, 13243.0f),
                         new Vector2(7550.0f, 13407.0f),
                         new Vector2(10244.0f, 13238.0f),
@@ -264,12 +267,12 @@ namespace AIScripts
                 case BotLane.Bottom:
                     laneWaypoints = new List<Vector2>
                     {
-                        new Vector2(1487.0f, 1302.0f),   // Blue fountain area
-                        new Vector2(3789.0f, 1346.0f),   // Near blue outer turret
-                        new Vector2(6430.0f, 1005.0f),   // Mid lane center area
-                        new Vector2(10995.0f, 1234.0f),  // Mid lane center area
-                        new Vector2(12841.0f, 3051.0f),  // Near purple outer turret
-                        new Vector2(13148.0f, 4202.0f),  // Purple fountain area (enemy nexus)
+                        new Vector2(1487.0f, 1302.0f), // Blue fountain area
+                        new Vector2(3789.0f, 1346.0f), // Near blue outer turret
+                        new Vector2(6430.0f, 1005.0f), // Mid lane center area
+                        new Vector2(10995.0f, 1234.0f), // Mid lane center area
+                        new Vector2(12841.0f, 3051.0f), // Near purple outer turret
+                        new Vector2(13148.0f, 4202.0f), // Purple fountain area (enemy nexus)
                         new Vector2(13249.0f, 7884.0f),
                         new Vector2(12886.0f, 10356.0f),
                         new Vector2(12511.0f, 12776.0f)
@@ -280,12 +283,12 @@ namespace AIScripts
                 default:
                     laneWaypoints = new List<Vector2>
                     {
-                        new Vector2(1418.0f, 1686.0f),   // Blue fountain area
-                        new Vector2(2997.0f, 2781.0f),   // Near blue outer turret
-                        new Vector2(4472.0f, 4727.0f),   // Mid lane center area
-                        new Vector2(8375.0f, 8366.0f),   // Mid lane center area
+                        new Vector2(1418.0f, 1686.0f), // Blue fountain area
+                        new Vector2(2997.0f, 2781.0f), // Near blue outer turret
+                        new Vector2(4472.0f, 4727.0f), // Mid lane center area
+                        new Vector2(8375.0f, 8366.0f), // Mid lane center area
                         new Vector2(10948.0f, 10821.0f), // Near purple outer turret
-                        new Vector2(12511.0f, 12776.0f)  // Purple fountain area (enemy nexus)
+                        new Vector2(12511.0f, 12776.0f) // Purple fountain area (enemy nexus)
                     };
                     break;
             }
@@ -301,7 +304,9 @@ namespace AIScripts
                 _midLaneWaypoints = new List<Vector2>(laneWaypoints);
                 _midLaneWaypoints.Reverse();
             }
-            _logger.Debug($"Initialized {_midLaneWaypoints.Count} waypoints for lane {_assignedLane} on team {EzrealInstance.Team}");
+
+            _logger.Debug(
+                $"Initialized {_midLaneWaypoints.Count} waypoints for lane {_assignedLane} on team {EzrealInstance.Team}");
         }
 
         public void OnDeath(DeathData deathData)
@@ -314,7 +319,7 @@ namespace AIScripts
                 _logger.Debug($"EzrealBot died! Total deaths: {_deathCount}");
                 // Queue delayed reaction instead of immediate trash talk
                 QueueReactionMessage(_dyingTaunts);
-                
+
 
                 // Send death trash talk using the new API
                 SendDeathTrashTalk(EzrealInstance, _botSettings);
@@ -358,8 +363,6 @@ namespace AIScripts
         }
 
 
-
-
         public void OnUpdate(float diff)
         {
             // Guard every field that could be null
@@ -394,17 +397,17 @@ namespace AIScripts
                     ClearBotRecallingStatus(EzrealInstance);
                     _isRecallingForLane = false;
 
-                // Select new lane
-                _assignedLane = GetTargetLane(EzrealInstance);
-                _hasSelectedLane = true;
+                    // Select new lane
+                    _assignedLane = GetTargetLane(EzrealInstance);
+                    _hasSelectedLane = true;
 
-                // Reassign this bot to the new lane
-                AssignBotToLane(EzrealInstance, _assignedLane);
+                    // Reassign this bot to the new lane
+                    AssignBotToLane(EzrealInstance, _assignedLane);
 
-                _logger.Debug($"After recall, selected new lane: {_assignedLane}");
+                    _logger.Debug($"After recall, selected new lane: {_assignedLane}");
 
-                // Update waypoints
-                InitializeLaneWaypoints();
+                    // Update waypoints
+                    InitializeLaneWaypoints();
 
                     // Reset state to moving to lane
                     _currentState = BotState.MovingToLane;
@@ -423,7 +426,8 @@ namespace AIScripts
             ProcessToxicPingSpam(_botSettings, _gameTime, ref _lastToxicPingTime, _toxicPingSpamState);
 
             // Check for dead allies and start new toxic ping spam sequences if appropriate
-            CheckForDeadAlliesAndToxicPing(EzrealInstance, _botSettings, _gameTime, ref _lastToxicPingTime, _trackedDeadAllies, _toxicPingSpamState);
+            CheckForDeadAlliesAndToxicPing(EzrealInstance, _botSettings, _gameTime, ref _lastToxicPingTime,
+                _trackedDeadAllies, _toxicPingSpamState);
 
             // Track auto-attack state for orbwalking
             UpdateAutoAttackState();
@@ -524,7 +528,7 @@ namespace AIScripts
                 _currentState = BotState.DeadState;
                 return;
             }
-            
+
             // Check if we should shop (just respawned and at fountain with items to buy)
             // Only enter shopping state if we can actually afford something
             if (!EzrealInstance.IsDead && _hasItemsToBuy && IsNearFountain())
@@ -541,9 +545,10 @@ namespace AIScripts
                     _hasItemsToBuy = false;
                 }
             }
-            
+
             // Check if we should recall due to lane overflow (only before minions spawn)
-            if (!EzrealInstance.IsDead && ShouldSelectLanes() && ShouldRecallDueToOverflow(EzrealInstance) && !_isRecallingForLane)
+            if (!EzrealInstance.IsDead && ShouldSelectLanes() && ShouldRecallDueToOverflow(EzrealInstance) &&
+                !_isRecallingForLane)
             {
                 // Check if another ally is already recalling
                 if (!IsAllyRecalling(EzrealInstance))
@@ -555,7 +560,8 @@ namespace AIScripts
                 }
             }
 
-            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower() && _currentState != BotState.Shopping && !_isRecallingForLane)
+            if (!EzrealInstance.IsDead && !isInCombat && !ShouldPushTower() && _currentState != BotState.Shopping &&
+                !_isRecallingForLane)
             {
                 _currentState = BotState.MovingToLane;
             }
@@ -596,11 +602,13 @@ namespace AIScripts
                             float distanceToTower = Vector2.Distance(EzrealInstance.Position, nearbyTower.Position);
                             if (distanceToTower <= AutoAttackRange + 300f)
                             {
-                                _logger.Debug($"Enemy tower nearby at {distanceToTower:F0} units - switching to push mode");
+                                _logger.Debug(
+                                    $"Enemy tower nearby at {distanceToTower:F0} units - switching to push mode");
                                 _currentState = BotState.Pushing;
                             }
                         }
                     }
+
                     break;
 
                 case BotState.Poking:
@@ -630,7 +638,8 @@ namespace AIScripts
                         }
 
                         // Send OnMyWay ping if chasing with allies nearby
-                        if (foundVulnerable && _botSettings.EnableSeriousPings && _gameTime - _lastPingTime >= _botSettings.PingCooldown)
+                        if (foundVulnerable && _botSettings.EnableSeriousPings &&
+                            _gameTime - _lastPingTime >= _botSettings.PingCooldown)
                         {
                             var nearestAlly = GetNearestAlly(EzrealInstance, _botSettings.AllyNearbyDistance);
                             if (nearestAlly != null && vulnerableTarget != null)
@@ -646,6 +655,7 @@ namespace AIScripts
                             _currentState = BotState.Farming;
                         }
                     }
+
                     break;
 
 
@@ -658,6 +668,7 @@ namespace AIScripts
                     {
                         _currentState = BotState.Poking;
                     }
+
                     break;
 
                 case BotState.Defensive:
@@ -680,6 +691,7 @@ namespace AIScripts
                             _lastPingTime = _gameTime;
                         }
                     }
+
                     break;
 
                 case BotState.Chasing:
@@ -706,6 +718,7 @@ namespace AIScripts
                             _currentState = BotState.Farming;
                         }
                     }
+
                     break;
 
                 case BotState.Retreating:
@@ -713,6 +726,7 @@ namespace AIScripts
                     {
                         _currentState = BotState.Retreating;
                     }
+
                     break;
 
                 case BotState.Pushing:
@@ -731,6 +745,7 @@ namespace AIScripts
                         // No longer good pushing conditions
                         _currentState = BotState.Farming;
                     }
+
                     // Dive evaluation happens in PushTower() method
                     break;
 
@@ -758,6 +773,7 @@ namespace AIScripts
                     {
                         CastQ(enemyOnWay);
                     }
+
                     MoveToLane();
                     break;
 
@@ -770,6 +786,7 @@ namespace AIScripts
                     {
                         CastQ(target);
                     }
+
                     break;
 
                 case BotState.Poking:
@@ -818,14 +835,14 @@ namespace AIScripts
             {
                 float distanceToTower = Vector2.Distance(EzrealInstance.Position, nearbyEnemyTower.Position);
                 _logger.Debug($"Enemy tower detected at distance {distanceToTower:F0} while moving to lane");
-                
+
                 // If we're close enough to attack tower, switch to pushing
                 if (distanceToTower <= AutoAttackRange + 200f)
                 {
                     _currentState = BotState.Pushing;
                     return;
                 }
-                
+
                 // Otherwise, position at safe distance from tower
                 Vector2 safePosition = GetSafePositionFromTower(nearbyEnemyTower);
                 MoveToPosition(safePosition);
@@ -846,7 +863,7 @@ namespace AIScripts
 
             // Use waypoint system to progress through mid lane
             Vector2 currentWaypoint = GetCurrentWaypoint();
-            
+
             // Check if we've reached the current waypoint
             float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
             if (distanceToWaypoint < WaypointReachedThreshold)
@@ -857,13 +874,15 @@ namespace AIScripts
                 {
                     _currentWaypointIndex = _midLaneWaypoints.Count - 1; // Stay at last waypoint
                 }
+
                 _logger.Debug($"Reached waypoint {_currentWaypointIndex}, advancing to next");
             }
-            
+
             // Move to current waypoint
             currentWaypoint = GetCurrentWaypoint();
             MoveToPosition(currentWaypoint);
-            _logger.Debug($"Moving to waypoint {_currentWaypointIndex} at {currentWaypoint}, distance: {distanceToWaypoint:F0}");
+            _logger.Debug(
+                $"Moving to waypoint {_currentWaypointIndex} at {currentWaypoint}, distance: {distanceToWaypoint:F0}");
             MovingToLane = true;
         }
 
@@ -873,6 +892,7 @@ namespace AIScripts
             {
                 return _midLaneWaypoints[_currentWaypointIndex];
             }
+
             // Fallback to center
             return new Vector2(7500f, 7500f);
         }
@@ -885,12 +905,12 @@ namespace AIScripts
             // Base waypoints from blue side perspective (moving toward enemy base)
             var baseWaypoints = new List<Vector2>
             {
-                new Vector2(1418.0f, 1686.0f),   // Blue fountain area
-                new Vector2(2997.0f, 2781.0f),   // Near blue outer turret
-                new Vector2(4472.0f, 4727.0f),   // Mid lane center area
-                new Vector2(8375.0f, 8366.0f),   // Mid lane center area
+                new Vector2(1418.0f, 1686.0f), // Blue fountain area
+                new Vector2(2997.0f, 2781.0f), // Near blue outer turret
+                new Vector2(4472.0f, 4727.0f), // Mid lane center area
+                new Vector2(8375.0f, 8366.0f), // Mid lane center area
                 new Vector2(10948.0f, 10821.0f), // Near purple outer turret
-                new Vector2(12511.0f, 12776.0f)  // Purple fountain area (enemy nexus)
+                new Vector2(12511.0f, 12776.0f) // Purple fountain area (enemy nexus)
             };
 
             if (EzrealInstance.Team == TeamId.TEAM_BLUE)
@@ -904,26 +924,28 @@ namespace AIScripts
                 _midLaneWaypoints = new List<Vector2>(baseWaypoints);
                 _midLaneWaypoints.Reverse();
             }
+
             _logger.Debug($"Initialized {_midLaneWaypoints.Count} waypoints for team {EzrealInstance.Team}");
         }
 
         private LaneMinion GetNearbyAllyMinion()
         {
             // Look for ally minions within range
-            List<AttackableUnit> units = GetUnitsInRange(EzrealInstance.Position, 800f, true);
+            var units = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, 800f, true,
+                SpellDataFlags.AffectFriends | SpellDataFlags.AffectMinions);
             LaneMinion closestMinion = null;
             float closestDistance = float.MaxValue;
-            
+
             foreach (var unit in units)
             {
-                if (unit is LaneMinion minion && minion.Team == EzrealInstance.Team)
+                if (unit is LaneMinion minion)
                 {
                     float dist = Vector2.Distance(EzrealInstance.Position, minion.Position);
                     // Prefer minions that are ahead of us (closer to enemy base)
                     Vector2 enemyBaseDir = GetEnemyBaseDirection();
                     Vector2 toMinion = Vector2.Normalize(minion.Position - EzrealInstance.Position);
                     float dot = Vector2.Dot(enemyBaseDir, toMinion);
-                    
+
                     // If minion is roughly ahead of us or very close
                     if ((dot > 0.3f || dist < 300f) && dist < closestDistance)
                     {
@@ -932,23 +954,24 @@ namespace AIScripts
                     }
                 }
             }
-            
+
             return closestMinion;
         }
 
         private LaneTurret GetNearbyEnemyTower(float range)
         {
             // Look for enemy towers within range
-            List<AttackableUnit> units = GetUnitsInRange(EzrealInstance.Position, range, true);
-            
+            var units = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, range, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets);
+
             foreach (var unit in units)
             {
-                if (unit is LaneTurret turret && turret.Team != EzrealInstance.Team)
+                if (unit is LaneTurret turret)
                 {
                     return turret;
                 }
             }
-            
+
             return null;
         }
 
@@ -979,7 +1002,8 @@ namespace AIScripts
             _lastChaseTarget = null;
 
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, 800f, true);
+            var units = EnumerateValidUnitsInRange(EzrealInstance, botPosition, 800f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions);
 
             if (ShouldPushTower())
             {
@@ -1028,8 +1052,7 @@ namespace AIScripts
 
             // Rest of your existing farming logic...
             var lowHealthMinions = units.OfType<LaneMinion>()
-                .Where(minion => minion.Team != EzrealInstance.Team &&
-                       minion.Stats.CurrentHealth < EzrealInstance.Stats.AttackDamage.Total * 1.5f)
+                .Where(minion => minion.Stats.CurrentHealth < EzrealInstance.Stats.AttackDamage.Total * 1.5f)
                 .OrderBy(minion => minion.Stats.CurrentHealth)
                 .ToList();
 
@@ -1048,14 +1071,14 @@ namespace AIScripts
             }
             else
             {
-                var qKillableMinions = GetUnitsInRange(botPosition, QRange, true).OfType<LaneMinion>()
-                    .Where(minion => minion.Team != EzrealInstance.Team &&
-                           minion.Stats.CurrentHealth < CalculateQDamage(minion) &&
-                           !IsInAutoAttackRange(minion))
+                var qKillableMinions = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, QRange, true,
+                        SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions).OfType<LaneMinion>()
+                    .Where(minion => minion.Stats.CurrentHealth < CalculateQDamage(minion) &&
+                                     !IsInAutoAttackRange(minion))
                     .OrderBy(minion => minion.Stats.CurrentHealth)
                     .ToList();
 
-                if (qKillableMinions.Any() && IsSpellAvailable(QSlot, SpellSlotType.SpellSlots))
+                if (qKillableMinions.Count != 0 && IsSpellAvailable(QSlot, SpellSlotType.SpellSlots))
                 {
                     CastQ(qKillableMinions.First());
                 }
@@ -1082,7 +1105,7 @@ namespace AIScripts
             // Check if we've reached current waypoint and should advance
             Vector2 currentWaypoint = GetCurrentWaypoint();
             float distanceToWaypoint = Vector2.Distance(EzrealInstance.Position, currentWaypoint);
-            
+
             if (distanceToWaypoint < WaypointReachedThreshold)
             {
                 _currentWaypointIndex++;
@@ -1090,6 +1113,7 @@ namespace AIScripts
                 {
                     _currentWaypointIndex = _midLaneWaypoints.Count - 1;
                 }
+
                 _logger.Debug($"Advanced to waypoint {_currentWaypointIndex} while farming");
             }
         }
@@ -1100,9 +1124,9 @@ namespace AIScripts
             if (!isInCombat) return false;
 
             // Get nearby enemy minions
-            var nearbyEnemyMinions = GetUnitsInRange(EzrealInstance.Position, 500f, true)
+            var nearbyEnemyMinions = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, 500f, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions)
                 .OfType<LaneMinion>()
-                .Where(minion => minion.Team != EzrealInstance.Team)
                 .ToList();
 
             // If we have multiple minions nearby and we're in combat, likely taking minion damage
@@ -1122,9 +1146,9 @@ namespace AIScripts
         private bool WillTakeMinionAggro(Champion target)
         {
             // Check if attacking this champion will draw minion aggro
-            var nearbyEnemyMinions = GetUnitsInRange(target.Position, 500f, true)
+            var nearbyEnemyMinions = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, 500f, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions)
                 .OfType<LaneMinion>()
-                .Where(minion => minion.Team != EzrealInstance.Team)
                 .ToList();
 
             // If there are many minions near the target, attacking will draw aggro
@@ -1138,10 +1162,8 @@ namespace AIScripts
 
         private bool IsSafeFromMinions()
         {
-            var nearbyEnemyMinions = GetUnitsInRange(EzrealInstance.Position, 400f, true)
-                .OfType<Minion>()
-                .Where(minion => minion.Team != EzrealInstance.Team)
-                .ToList();
+            var nearbyEnemyMinions = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, 400f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions).ToList();
 
             // Safe if few minions nearby
             return nearbyEnemyMinions.Count <= 2;
@@ -1337,7 +1359,7 @@ namespace AIScripts
 
             int targetItemId = _itemBuildOrder[_currentBuildIndex];
             var itemTemplate = ApiFunctionManager.GetItemData(targetItemId);
-            
+
             if (itemTemplate == null)
             {
                 _logger.Debug($"Item {targetItemId} not found in ItemManager");
@@ -1361,7 +1383,7 @@ namespace AIScripts
                 {
                     _logger.Debug($"Successfully bought item {itemTemplate.Name} (ID: {targetItemId})");
                     _currentBuildIndex++;
-                    
+
                     // Continue buying if there are more items and we have gold
                     if (_currentBuildIndex < _itemBuildOrder.Count)
                     {
@@ -1380,7 +1402,8 @@ namespace AIScripts
             }
             else
             {
-                _logger.Debug($"Not enough gold for {itemTemplate.Name}. Need {price}, have {EzrealInstance.Stats.Gold}");
+                _logger.Debug(
+                    $"Not enough gold for {itemTemplate.Name}. Need {price}, have {EzrealInstance.Stats.Gold}");
                 // Can't afford this item, stop shopping and go farm
                 _hasItemsToBuy = false;
             }
@@ -1393,7 +1416,7 @@ namespace AIScripts
 
             int targetItemId = _itemBuildOrder[_currentBuildIndex];
             var itemTemplate = ApiFunctionManager.GetItemData(targetItemId);
-            
+
             if (itemTemplate == null)
                 return false;
 
@@ -1515,9 +1538,9 @@ namespace AIScripts
 
                 // Engine requires at least one target in the list � pass self as a dummy
                 List<CastTarget> targets = new List<CastTarget>
-        {
-            new CastTarget(EzrealInstance, HitResult.HIT_Normal)
-        };
+                {
+                    new CastTarget(EzrealInstance, HitResult.HIT_Normal)
+                };
 
                 SpellCast(
                     EzrealInstance,
@@ -1567,6 +1590,7 @@ namespace AIScripts
                 // Adjust key based on summoner spell conversion if needed
                 key = (byte)(slot + 100); // Example conversion
             }
+
             _lastCastTime[key] = _gameTime;
         }
 
@@ -1646,7 +1670,8 @@ namespace AIScripts
                 // Base stats
                 float enemyHealthPct = enemy.Stats.CurrentHealth / enemy.Stats.HealthPoints.Total;
                 int nearbyAlliesOfTarget = GetNearbyAlliesOfTarget(enemy, 800f);
-                int nearbyEnemiesOfTarget = GetNearbyEnemiesOfTarget(enemy, 800f); // So basically allies of Ezreal in relation to the target.
+                int nearbyEnemiesOfTarget =
+                    GetNearbyEnemiesOfTarget(enemy, 800f); // So basically allies of Ezreal in relation to the target.
                 float distance = Vector2.Distance(EzrealInstance.Position, enemy.Position);
                 int levelDiff = EzrealInstance.Stats.Level - enemy.Stats.Level;
 
@@ -1654,12 +1679,12 @@ namespace AIScripts
                 float score = 0f;
 
                 // Low health is good - add critical tier
-                if (enemyHealthPct <= 0.15f)          // NEW: Critical threshold
-                    score += 4.5f;                    // Highest priority - execution territory
+                if (enemyHealthPct <= 0.15f) // NEW: Critical threshold
+                    score += 4.5f; // Highest priority - execution territory
                 else if (enemyHealthPct < 0.3f)
-                    score += 3.0f;                    // Still very good
+                    score += 3.0f; // Still very good
                 else if (enemyHealthPct < 0.5f)
-                    score += 1.5f;                    // Moderate
+                    score += 1.5f; // Moderate
 
                 // Gang up bonus: many allies vs isolated enemy = great target
                 if (nearbyEnemiesOfTarget >= 2 && nearbyAlliesOfTarget == 0)
@@ -1680,8 +1705,9 @@ namespace AIScripts
                 score += Math.Min(Math.Max(levelScore, -2f), 3f);
 
                 // Debug output
-                _logger.Debug($"Enemy {enemy.Name}: health={enemyHealthPct:F2}, EnemiesOfChoosenTarget={nearbyEnemiesOfTarget}, " +
-                             $"distance={distance:F0}, levelDiff={levelDiff}, score={score:F2}");
+                _logger.Debug(
+                    $"Enemy {enemy.Name}: health={enemyHealthPct:F2}, EnemiesOfChoosenTarget={nearbyEnemiesOfTarget}, " +
+                    $"distance={distance:F0}, levelDiff={levelDiff}, score={score:F2}");
 
                 if (score > bestScore)
                 {
@@ -1728,7 +1754,8 @@ namespace AIScripts
                 return;
             }
 
-            _logger.Debug($"Chasing {target.Name} at {target.Position}, health: {target.Stats.CurrentHealth / target.Stats.HealthPoints.Total:P0}");
+            _logger.Debug(
+                $"Chasing {target.Name} at {target.Position}, health: {target.Stats.CurrentHealth / target.Stats.HealthPoints.Total:P0}");
 
             // Distance to target
             float distance = Vector2.Distance(EzrealInstance.Position, target.Position);
@@ -1916,8 +1943,8 @@ namespace AIScripts
             float adRatio = 1.3f; // Example AD ratio (120% base AD + 10% bonus AD)
 
             float damage = baseDamage +
-                          (EzrealInstance.Stats.AbilityPower.Total * apRatio) +
-                          (EzrealInstance.Stats.AttackDamage.Total * adRatio);
+                           (EzrealInstance.Stats.AbilityPower.Total * apRatio) +
+                           (EzrealInstance.Stats.AttackDamage.Total * adRatio);
 
             // Apply physical damage reduction
             float armor = target.Stats.Armor.Total;
@@ -1942,8 +1969,8 @@ namespace AIScripts
             float adRatio = 1.0f; // Example AD ratio
 
             float damage = baseDamage +
-                          (EzrealInstance.Stats.AbilityPower.Total * apRatio) +
-                          (EzrealInstance.Stats.AttackDamage.Total * adRatio);
+                           (EzrealInstance.Stats.AbilityPower.Total * apRatio) +
+                           (EzrealInstance.Stats.AttackDamage.Total * adRatio);
 
             // Apply magic resistance reduction
             float magicResist = target.Stats.MagicResist.Total;
@@ -2027,6 +2054,7 @@ namespace AIScripts
                     bestTarget = enemy;
                 }
             }
+
             return bestTarget;
         }
 
@@ -2076,40 +2104,25 @@ namespace AIScripts
         private List<Champion> GetNearbyEnemyChampions(float range)
         {
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, EnemyDetectionRange, true);
-            var nearbyEnemyChampions = units.OfType<Champion>()
-                .Where(champion => champion.Team != EzrealInstance.Team && !champion.IsDead)
-                .OrderBy(champion => Vector2.Distance(botPosition, champion.Position))
-                .ToList();
 
-            return nearbyEnemyChampions;
+            return GetChampionsInRangeSorted(EzrealInstance, botPosition, EnemyDetectionRange, true, false).ToList();
         }
 
         private int GetNearbyAlliesOfTarget(Champion target, float range)
         {
             Vector2 enemyPosition = target.Position;
 
-            List<AttackableUnit> units = GetUnitsInRange(enemyPosition, range, true);
-
-            var enemyTeammatesNearTarget = units.OfType<Champion>()
-                .Where(champion => champion.Team != EzrealInstance.Team && !champion.IsDead && champion != target)
-                .ToList();
-
-            return enemyTeammatesNearTarget.Count;
+            return EnumerateValidUnitsInRange(EzrealInstance, enemyPosition, range, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes).Count(unit => unit != target);
         }
 
         private int GetNearbyEnemiesOfTarget(Champion target, float range)
         {
             // Get allies near the TARGET (not near the bot), so we know how many friends are near the enemy
             Vector2 enemyPosition = target.Position;
-
-            List<AttackableUnit> units = GetUnitsInRange(enemyPosition, range, true); // Use enemyPosition, not botPosition
-
-            var alliesNearTarget = units.OfType<Champion>()
-                .Where(champion => champion.Team == EzrealInstance.Team && !champion.IsDead && champion != EzrealInstance)
-                .ToList();
-
-            return alliesNearTarget.Count; // Return the actual count
+            return EnumerateValidUnitsInRange(EzrealInstance, enemyPosition, range, true,
+                    SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes | SpellDataFlags.NotAffectSelf)
+                .Count(); // Use enemyPosition, not botPosition and return actual count
         }
 
         private List<Champion> GetNearbyAllyChampions(float range)
@@ -2119,53 +2132,38 @@ namespace AIScripts
             return new List<Champion>();
         }
 
-        private Champion GetClosestAllyChampion()
+        private Champion? GetClosestAllyChampion()
         {
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, AllyDetectionRange, true);
-            var nearbyAlliedChampions = units.OfType<Champion>()
-                .Where(champion => champion.Team == EzrealInstance.Team && !champion.IsDead && champion != EzrealInstance)
-                .ToList();
-
-            if (nearbyAlliedChampions.Any())
-            {
-                return nearbyAlliedChampions
-                    .OrderBy(champion => Vector2.Distance(botPosition, champion.Position))
-                    .FirstOrDefault();
-            }
-            return null;
+            return GetUnitsInRange(
+                    EzrealInstance,
+                    botPosition,
+                    AllyDetectionRange,
+                    true,
+                    SpellDataFlags.NotAffectSelf | SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes
+                ).OfType<Champion>()
+                .FirstOrDefault();
         }
 
-        private Champion GetClosestEnemyChampion()
+        private Champion? GetClosestEnemyChampion()
         {
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, EnemyDetectionRange, true);
-            var nearbyEnemyChampions = units.OfType<Champion>()
-                .Where(champion => champion.Team != EzrealInstance.Team && !champion.IsDead)
-                .ToList();
-
-            if (nearbyEnemyChampions.Any())
-            {
-                return nearbyEnemyChampions
-                    .OrderBy(champion => Vector2.Distance(botPosition, champion.Position))
-                    .FirstOrDefault();
-            }
-            return null;
+            return GetChampionsInRangeSorted(EzrealInstance, botPosition, EnemyDetectionRange, true, false)
+                .FirstOrDefault();
         }
 
         private bool IsUnderEnemyTower()
         {
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, TowerDetectionRange, true);
 
-            return units.OfType<BaseTurret>()
-                .Any(turret => turret.Team != EzrealInstance.Team);
+            return GetUnitsInRange(EzrealInstance, botPosition, TowerDetectionRange, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets).Count != 0;
         }
 
         private bool IsPositionUnderEnemyTower(Vector2 position, float towerRange = 775.0f)
         {
-            return GetUnitsInRange(position, towerRange, true)
-                .Any(unit => unit is LaneTurret && unit.Team != EzrealInstance.Team);
+            return EnumerateValidUnitsInRange(EzrealInstance, position, towerRange, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets).Any();
         }
 
 
@@ -2183,6 +2181,7 @@ namespace AIScripts
             {
                 return _midLaneWaypoints[_currentWaypointIndex];
             }
+
             return _midLaneWaypoints[0];
         }
 
@@ -2194,7 +2193,7 @@ namespace AIScripts
             if (enemyTower != null)
             {
                 float distanceToTower = Vector2.Distance(EzrealInstance.Position, enemyTower.Position);
-                
+
                 // If we're close enough to attack, position at auto attack range
                 if (distanceToTower <= AutoAttackRange + 200f)
                 {
@@ -2206,30 +2205,25 @@ namespace AIScripts
             const float IDEAL_DISTANCE = 550f; // Ezreal's auto range
 
             // Find enemy minions
-            List<LaneMinion> enemyMinions = GetUnitsInRange(EzrealInstance.Position, 1200f, true)
+            List<LaneMinion> enemyMinions = EnumerateValidUnitsInRange(EzrealInstance, EzrealInstance.Position, 1200f,
+                    true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions)
                 .OfType<LaneMinion>()
-                .Where(m => m.Team != EzrealInstance.Team)
                 .ToList();
 
-            if (enemyMinions.Any())
-            {
-                // Find the frontmost enemy minion (closest to our side)
-                Vector2 ourBase = EzrealInstance.Team == TeamId.TEAM_BLUE ?
-                    new Vector2(1000f, 1000f) : new Vector2(14000f, 14000f);
+            if (!enemyMinions.Any()) return GetLanePosition();
+            // Find the frontmost enemy minion (closest to our side)
+            Vector2 ourBase = EzrealInstance.Team == TeamId.TEAM_BLUE
+                ? new Vector2(1000f, 1000f)
+                : new Vector2(14000f, 14000f);
 
-                LaneMinion frontMinion = enemyMinions
-                    .OrderBy(m => Vector2.Distance(m.Position, ourBase))
-                    .FirstOrDefault();
+            LaneMinion frontMinion = enemyMinions
+                .OrderBy(m => Vector2.Distance(m.Position, ourBase))
+                .FirstOrDefault();
 
-                if (frontMinion != null)
-                {
-                    // Position behind our minions but at max range from enemy minions
-                    Vector2 directionFromMinion = Vector2.Normalize(EzrealInstance.Position - frontMinion.Position);
-                    return frontMinion.Position + (directionFromMinion * IDEAL_DISTANCE);
-                }
-            }
-
-            return GetLanePosition();
+            if (frontMinion == null) return GetLanePosition();
+            // Position behind our minions but at max range from enemy minions
+            Vector2 directionFromMinion = Vector2.Normalize(EzrealInstance.Position - frontMinion.Position);
+            return frontMinion.Position + (directionFromMinion * IDEAL_DISTANCE);
         }
 
         private Vector2 GetIdealPokingPosition()
@@ -2241,8 +2235,9 @@ namespace AIScripts
         private Vector2 GetSafePosition()
         {
             // Retreat toward your base from mid lane
-            Vector2 basePosition = EzrealInstance.Team == TeamId.TEAM_BLUE ?
-                new Vector2(1000f, 1000f) : // Blue team base approx
+            Vector2 basePosition = EzrealInstance.Team == TeamId.TEAM_BLUE
+                ? new Vector2(1000f, 1000f)
+                : // Blue team base approx
                 new Vector2(14000f, 14000f); // Purple team base approx
 
             // Move directly toward base
@@ -2284,8 +2279,8 @@ namespace AIScripts
 
         private int CountNearbyMinions(Vector2 position, float range, TeamId team)
         {
-            List<AttackableUnit> units = GetUnitsInRange(position, range, true);
-            return units.OfType<LaneMinion>().Count(minion => minion.Team == team);
+            return EnumerateUnitsInRange(position, range, true).OfType<LaneMinion>()
+                .Count(minion => minion.Team == team);
         }
 
         private void MoveToPosition(Vector2 targetPosition, bool applyOffset = true)
@@ -2299,10 +2294,23 @@ namespace AIScripts
                 offsetTarget = ApplyPersonalityOffset(targetPosition);
             }
 
-            // If the target itself isn't walkable, find the nearest walkable point
-            Vector2 safeTarget = FindNearestWalkable(offsetTarget);
+            // Use the pathfinding handler to get a terrain-aware path
+            List<Vector2> waypoints =
+                ApiFunctionManager.GetPath(botPosition, offsetTarget, EzrealInstance.PathfindingRadius);
 
-            List<Vector2> waypoints = new List<Vector2> { botPosition, safeTarget };
+            // Fallback: if pathfinding returned nothing (unreachable target), try without radius
+            if (waypoints == null || waypoints.Count == 0)
+            {
+                waypoints = ApiFunctionManager.GetPath(botPosition, offsetTarget, 0);
+            }
+
+            // Final fallback: stay put rather than walk into a wall
+            if (waypoints == null || waypoints.Count == 0)
+            {
+                _logger.Debug($"No path found to {offsetTarget}, staying put.");
+                return;
+            }
+
             EzrealInstance.MoveOrder = OrderType.MoveTo;
             EzrealInstance.SetWaypoints(waypoints);
         }
@@ -2407,9 +2415,10 @@ namespace AIScripts
             float distance = Vector2.Distance(botPos, targetPos);
 
             // Find minions that might be in the way
-            List<LaneMinion> minionsInPath = GetUnitsInRange(botPos, distance, true)
+            List<LaneMinion> minionsInPath = EnumerateValidUnitsInRange(EzrealInstance, botPos, distance, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions)
                 .OfType<LaneMinion>()
-                .Where(m => m.Team != EzrealInstance.Team && m != target)
+                .Where(m => m != target)
                 .ToList();
 
             foreach (var minion in minionsInPath)
@@ -2424,7 +2433,7 @@ namespace AIScripts
                 float c = targetPos.X * botPos.Y - botPos.X * targetPos.Y;
 
                 float pointLineDistance = Math.Abs(a * minionPos.X + b * minionPos.Y + c) /
-                                         (float)Math.Sqrt(a * a + b * b);
+                                          (float)Math.Sqrt(a * a + b * b);
 
                 // If minion is close to line path and between bot and target
                 if (pointLineDistance < 100) // Assuming Q width is approximately 100 units
@@ -2447,22 +2456,12 @@ namespace AIScripts
         /// <summary>
         /// Finds the best enemy tower to push based on proximity and safety
         /// </summary>
-        private LaneTurret FindBestEnemyTower()
+        private LaneTurret? FindBestEnemyTower()
         {
             Vector2 botPosition = EzrealInstance.Position;
-            List<AttackableUnit> units = GetUnitsInRange(botPosition, TowerDetectionRange * 2, true);
 
-            var enemyTowers = units.OfType<LaneTurret>()
-                .Where(turret => turret.Team != EzrealInstance.Team && !turret.IsDead)
-                .OrderBy(turret => Vector2.Distance(botPosition, turret.Position))
-                .ToList();
-
-            if (enemyTowers.Any())
-            {
-                return enemyTowers.First();
-            }
-
-            return null;
+            return GetUnitsInRange(EzrealInstance, botPosition, TowerDetectionRange * 2, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets).OfType<LaneTurret>().FirstOrDefault();
         }
 
         /// <summary>
@@ -2473,11 +2472,8 @@ namespace AIScripts
             if (tower == null) return false;
 
             float towerRange = tower.Stats.Range.Total;
-            List<AttackableUnit> units = GetUnitsInRange(tower.Position, towerRange + 100f, true);
-
-            int alliedMinions = units.OfType<LaneMinion>()
-                .Where(minion => minion.Team == EzrealInstance.Team && !minion.IsDead)
-                .Count();
+            int alliedMinions = EnumerateValidUnitsInRange(EzrealInstance, tower.Position, towerRange + 100f, true,
+                SpellDataFlags.AffectFriends | SpellDataFlags.AffectMinions).OfType<LaneMinion>().Count();
 
             _logger.Debug($"Found {alliedMinions} allied minions under tower at {tower.Position}");
             return alliedMinions >= 2; // Need at least 2 minions to tank
@@ -2551,8 +2547,8 @@ namespace AIScripts
                 // In range - attack the tower using auto-attack
                 EzrealInstance.TargetUnit = tower;
                 EzrealInstance.MoveOrder = OrderType.AttackTo;
-                
-                
+
+
                 _logger.Debug($"Attacking tower at {tower.Position} with auto-attack");
             }
 
@@ -2645,7 +2641,7 @@ namespace AIScripts
                 score += 0.5f; // Have damage spells ready
 
             _logger.Debug($"Dive score for {target.Name}: health={enemyHealthPct:F2}, allies={nearbyAllies}, " +
-                         $"enemies={nearbyEnemiesOfTarget}, levelDiff={levelDiff}, score={score:F2}");
+                          $"enemies={nearbyEnemiesOfTarget}, levelDiff={levelDiff}, score={score:F2}");
 
             return score;
         }
@@ -2663,7 +2659,8 @@ namespace AIScripts
             }
 
             LaneTurret tower = FindBestEnemyTower();
-            float distToTower = tower != null ? Vector2.Distance(EzrealInstance.Position, tower.Position) : float.MaxValue;
+            float distToTower =
+                tower != null ? Vector2.Distance(EzrealInstance.Position, tower.Position) : float.MaxValue;
 
             // Check if dive is still favorable
             if (distToTower > tower.Stats.Range.Total + 300f)
@@ -2844,8 +2841,8 @@ namespace AIScripts
         private float _lastTrashTalkTime = -999f;
 
         // Thresholds that trigger specific trash talk categories
-        private const float KillStreakThreshold = 2f;  // kills before bragging
-        private const float DeathStreakThreshold = 2f;  // deaths before raging
+        private const float KillStreakThreshold = 2f; // kills before bragging
+        private const float DeathStreakThreshold = 2f; // deaths before raging
         private int _killCount = 0;
         private int _deathCount = 0;
 
@@ -2857,6 +2854,7 @@ namespace AIScripts
             public float BaseDelay { get; set; } // Base delay before sending
             public float ReadTime { get; set; } // Additional time based on message length (time to "type")
         }
+
         private List<DelayedMessage> _delayedMessages = new List<DelayedMessage>();
         private const float BaseReactionDelay = 3f; // 3-8 seconds base delay
         private const float MaxReactionDelay = 8f;
@@ -2865,122 +2863,116 @@ namespace AIScripts
 
         private static readonly string[] _generalTaunts =
         {
-    "report my team",
-    "gg ez",
-    "this team is holding me back",
-    "hardstuck players smh",
-    "i cant carry any harder",
-    "anyone else on my team even trying?",
-    "ff 15 my team is inting",
-    "i am literally 1v9 right now",
-    "where is my team lol",
-    "this is why i have trust issues",
-    "uninstall please",
-    "my goldfish could play better",
-    "i need better teammates",
-    "actual bots on my team (no offense to me)",
-    "alt f4 for a free skin"
-};
+            "report my team",
+            "gg ez",
+            "this team is holding me back",
+            "hardstuck players smh",
+            "i cant carry any harder",
+            "anyone else on my team even trying?",
+            "ff 15 my team is inting",
+            "i am literally 1v9 right now",
+            "where is my team lol",
+            "this is why i have trust issues",
+            "uninstall please",
+            "my goldfish could play better",
+            "i need better teammates",
+            "actual bots on my team (no offense to me)",
+            "alt f4 for a free skin"
+        };
 
         private static readonly string[] _dyingTaunts =
         {
-    "LAG",
-    "my mouse slipped",
-    "i wasnt even trying",
-    "this keyboard is trash",
-    "didnt want that kill anyway",
-    "that was definitely a misplay on my part... jk report jungle",
-    "nice hack",
-    "reported",
-    "my cat walked on my keyboard",
-    "whatever i have 400 ping",
-    "open mid",
-    "OMG REPORT THIS TROLL I SWEAR ON MY MOMS LIFE I WILL FIND YOU I HAVE YOUR IP I AM A HACKER IN REAL LIFE I WORK FOR THE PENTAGON YOU ARE FINISHED DOG.",
-    "My team is doing 0 dmg report them all",
-    "Better nerf irelia",
-    "My team is feeders",
-    "You are playing a braindead champion, of course you're winning",
-    "Omg this team 0 vision wtf",
-    "WHAT IS THIS BULLSHIT",
-    "ARE YOU KIDDING ME?",
-    "Ooh I got rekt yeah yeah. Go tell your mom",
-    "Wtf that was a bug, it doesn't count",
-    "Just end this"
-
-
-
-
-
-};
+            "LAG",
+            "my mouse slipped",
+            "i wasnt even trying",
+            "this keyboard is trash",
+            "didnt want that kill anyway",
+            "that was definitely a misplay on my part... jk report jungle",
+            "nice hack",
+            "reported",
+            "my cat walked on my keyboard",
+            "whatever i have 400 ping",
+            "open mid",
+            "OMG REPORT THIS TROLL I SWEAR ON MY MOMS LIFE I WILL FIND YOU I HAVE YOUR IP I AM A HACKER IN REAL LIFE I WORK FOR THE PENTAGON YOU ARE FINISHED DOG.",
+            "My team is doing 0 dmg report them all",
+            "Better nerf irelia",
+            "My team is feeders",
+            "You are playing a braindead champion, of course you're winning",
+            "Omg this team 0 vision wtf",
+            "WHAT IS THIS BULLSHIT",
+            "ARE YOU KIDDING ME?",
+            "Ooh I got rekt yeah yeah. Go tell your mom",
+            "Wtf that was a bug, it doesn't count",
+            "Just end this"
+        };
 
         private static readonly string[] _killingTaunts =
         {
-    "too easy",
-    "did you even go to practice tool?",
-    "LOL",
-    "get rekt",
-    "skill diff",
-    "come back when you hit gold",
-    "you should switch to a simpler game",
-    "EZ Clap",
-    "i was shopping that fight btw",
-    "delete this game bro",
-    "go play animal crossing",
-    "thank you for the gold very generous",
-    "you are finished dog",
-    "your father left because of your positioning",
-    "stick to minecraft",
-    "try turning on your monitor",
-    "nice flash",
-    "ez",
-    "I’ve seen better mechanics in a 2008 Honda Civic.",
-    "thanks for the free lp",
-    "That was a nice attempt. Emphasis on attempt.",
-    "I see you're playing the new tutorial difficulty",
-    "You're doing great! ...at feeding",
-    "Your mechanics are sponsored by PowerPoint",
-    "You mad cuz bad",
-    "Git gud",
-    "Do you have are stupid",
-    "RIP bozo",
-    "Get pwned n00b",
-    "This is the worst team I've ever had in my entire life",
-    "You are so bad it's not even funny LMAO",
-    "Boosted bonobo",
-    "I'm not like the rest of you. I'm stronger, I'm smarter, I'm better",
-    "Survival instinct of an orange cat",
-    "Sell your items, it gives you more damage btw",
-    "Do you even know how to move?",
-    "lmao skill issue",
-    "Your positioning is avant-garde",
-    "your skills are trash",
-    "Impressive skill issue",
-    "I respect the confidence more than the execution"
-
-};
+            "too easy",
+            "did you even go to practice tool?",
+            "LOL",
+            "get rekt",
+            "skill diff",
+            "come back when you hit gold",
+            "you should switch to a simpler game",
+            "EZ Clap",
+            "i was shopping that fight btw",
+            "delete this game bro",
+            "go play animal crossing",
+            "thank you for the gold very generous",
+            "you are finished dog",
+            "your father left because of your positioning",
+            "stick to minecraft",
+            "try turning on your monitor",
+            "nice flash",
+            "ez",
+            "I’ve seen better mechanics in a 2008 Honda Civic.",
+            "thanks for the free lp",
+            "That was a nice attempt. Emphasis on attempt.",
+            "I see you're playing the new tutorial difficulty",
+            "You're doing great! ...at feeding",
+            "Your mechanics are sponsored by PowerPoint",
+            "You mad cuz bad",
+            "Git gud",
+            "Do you have are stupid",
+            "RIP bozo",
+            "Get pwned n00b",
+            "This is the worst team I've ever had in my entire life",
+            "You are so bad it's not even funny LMAO",
+            "Boosted bonobo",
+            "I'm not like the rest of you. I'm stronger, I'm smarter, I'm better",
+            "Survival instinct of an orange cat",
+            "Sell your items, it gives you more damage btw",
+            "Do you even know how to move?",
+            "lmao skill issue",
+            "Your positioning is avant-garde",
+            "your skills are trash",
+            "Impressive skill issue",
+            "I respect the confidence more than the execution"
+        };
 
         private static readonly string[] _lowHealthTaunts =
         {
-    "YOLO",
-    "this is fine",
-    "i play better when im tilted",
-    "dont worry i meant to do that",
-    "low health = more damage everyone knows this",
-};
+            "YOLO",
+            "this is fine",
+            "i play better when im tilted",
+            "dont worry i meant to do that",
+            "low health = more damage everyone knows this",
+        };
 
         private static readonly string[] _generalGameTaunts =
         {
-    "mid diff",
-    "jungle diff",
-    "support diff",
-    "this is a skill based game and it shows",
-    "i peaked plat and it wasnt even hard",
-    "diamond is literally elo hell",
-    "bro think he's faker",
-    "just ward bro its not that hard",
-    "how are you level 4 right now",
-    "you built that?",
-};
+            "mid diff",
+            "jungle diff",
+            "support diff",
+            "this is a skill based game and it shows",
+            "i peaked plat and it wasnt even hard",
+            "diamond is literally elo hell",
+            "bro think he's faker",
+            "just ward bro its not that hard",
+            "how are you level 4 right now",
+            "you built that?",
+        };
 
         private void InitializeTrashTalk()
         {
@@ -2992,7 +2984,8 @@ namespace AIScripts
         private void TryTrashTalk(string[] pool = null)
         {
             // Check if trash talk is enabled via BotSettings or local toggle
-            if ((!TrashTalkEnabled && !_botSettings.EnableTrashTalk) || _gameTime - _lastTrashTalkTime < _trashTalkCooldown)
+            if ((!TrashTalkEnabled && !_botSettings.EnableTrashTalk) ||
+                _gameTime - _lastTrashTalkTime < _trashTalkCooldown)
                 return;
 
             // Use the new API for contextual trash talk
@@ -3014,7 +3007,8 @@ namespace AIScripts
             string message = pool[_personalityRandom.Next(pool.Length)];
 
             // Calculate base delay (3-8 seconds)
-            float baseDelay = BaseReactionDelay + (float)(_personalityRandom.NextDouble() * (MaxReactionDelay - BaseReactionDelay));
+            float baseDelay = BaseReactionDelay +
+                              (float)(_personalityRandom.NextDouble() * (MaxReactionDelay - BaseReactionDelay));
 
             // Calculate typing time based on message length (longer messages = more time to "type")
             float typingTime = message.Length / TypingSpeed;
@@ -3031,7 +3025,8 @@ namespace AIScripts
             };
 
             _delayedMessages.Add(delayedMsg);
-            _logger.Debug($"[TrashTalk] Queued reaction message (delay: {totalDelay:F1}s - base: {baseDelay:F1}s, typing: {typingTime:F1}s): {message}");
+            _logger.Debug(
+                $"[TrashTalk] Queued reaction message (delay: {totalDelay:F1}s - base: {baseDelay:F1}s, typing: {typingTime:F1}s): {message}");
         }
 
         /// <summary>

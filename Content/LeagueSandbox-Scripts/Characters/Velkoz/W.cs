@@ -21,6 +21,7 @@ namespace Spells
             TriggersSpellCasts = true,
             IsDamagingSpell = true
         };
+
         // in VelkozWMissile.inibin changed [SpellData] MissileFollowsTerrainHeight to 0 because missile visual was sometimes going inside the terrain.
         public void OnSpellPostCast(Spell spell)
         {
@@ -37,12 +38,14 @@ namespace Spells
             var targetPos = startPos + (direction * 1200f);
             var dir3D = new Vector3(direction.X, 0, direction.Y);
 
-            CreateCustomMissile(owner, "VelkozWMissile", startPos, targetPos, new MissileParameters { Type = MissileType.Circle }, customHeightOffset: -100f);
+            CreateCustomMissile(owner, "VelkozWMissile", startPos, targetPos,
+                new MissileParameters { Type = MissileType.Circle }, customHeightOffset: -100f);
             PlayAnimation(owner, "Spell2", 1f);
 
-            AddParticlePos(owner, "velkoz_base_w_telegraph_green.troy", startPos, targetPos, lifetime: 3f, direction: dir3D, teamOnly: owner.Team);
-            AddParticlePos(owner, "velkoz_base_w_telegraph_red.troy", startPos, targetPos, lifetime: 3f, direction: dir3D, teamOnly: CustomConvert.GetEnemyTeam(owner.Team));
-
+            AddParticlePos(owner, "velkoz_base_w_telegraph_green.troy", startPos, targetPos, lifetime: 3f,
+                direction: dir3D, teamOnly: owner.Team);
+            AddParticlePos(owner, "velkoz_base_w_telegraph_red.troy", startPos, targetPos, lifetime: 3f,
+                direction: dir3D, teamOnly: CustomConvert.GetEnemyTeam(owner.Team));
         }
     }
 
@@ -74,20 +77,19 @@ namespace Spells
             var ap = owner.Stats.AbilityPower.Total;
             var damage = 10f + (20f * missile.SpellOrigin.CastInfo.SpellLevel) + (ap * 0.15f);
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, missile.SpellOrigin);
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false,
+                missile.SpellOrigin);
         }
 
         public void OnMissileEnd(SpellMissile missile)
         {
             var owner = missile.SpellOrigin.CastInfo.Owner;
-            var startPos = new Vector2(missile.CastInfo.SpellCastLaunchPosition.X, missile.CastInfo.SpellCastLaunchPosition.Z);
+            var startPos = new Vector2(missile.CastInfo.SpellCastLaunchPosition.X,
+                missile.CastInfo.SpellCastLaunchPosition.Z);
             var endPos = missile.Position;
             var spell = missile.SpellOrigin;
 
-            owner.RegisterTimer(new GameScriptTimer(0.25f, () =>
-            {
-                DetonateRift(owner, spell, startPos, endPos);
-            }));
+            owner.RegisterTimer(new GameScriptTimer(0.25f, () => { DetonateRift(owner, spell, startPos, endPos); }));
         }
 
         private void DetonateRift(ObjAIBase owner, Spell spell, Vector2 startPos, Vector2 endPos)
@@ -101,17 +103,17 @@ namespace Spells
             var ap = owner.Stats.AbilityPower.Total;
             var damage = 25f + (20f * spell.CastInfo.SpellLevel) + (ap * 0.25f);
 
-            var units = GetUnitsInRange(centerPos, 1200f, true);
+            var units = GetUnitsInRange(owner, centerPos, 1200f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral);
             float halfWidth = 85f;
 
             foreach (var unit in units)
             {
-                if (unit.Team != owner.Team && !unit.IsDead && unit.Status.HasFlag(StatusFlags.Targetable))
+                if (IsPointNearLineSegment(unit.Position, startPos, endPos, halfWidth + unit.CollisionRadius))
                 {
-                    if (IsPointNearLineSegment(unit.Position, startPos, endPos, halfWidth + unit.CollisionRadius))
-                    {
-                        unit.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, spell);
-                    }
+                    unit.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                        false, spell);
                 }
             }
         }

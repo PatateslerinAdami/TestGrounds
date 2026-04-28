@@ -36,6 +36,7 @@ using GameServerCore.Packets.Enums;
 [OnHeal]
 [OnHitUnit]
 [OnKill]
+[OnMinionKill]
 [OnKillUnit]
 [OnLaunchAttack]
 [OnLaunchMissile]
@@ -136,6 +137,9 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnKill
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
 
+        public static DataOnlyDispatcher<AttackableUnit, DeathData> OnMinionKill
+            = new DataOnlyDispatcher<AttackableUnit, DeathData>();
+
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnKillUnit
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
 
@@ -232,6 +236,9 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
+
+        public static Dispatcher<Shield> OnShieldBreak
+            = new Dispatcher<Shield>();
 
         // TODO: Handle crowd control the same as normal dashes.
         public static Dispatcher<AttackableUnit> OnUnitCrowdControlled

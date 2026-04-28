@@ -52,10 +52,15 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     if (s.CastInfo.SpellSlot >= (int)SpellSlotType.InventorySlots && s.CastInfo.SpellSlot < (int)SpellSlotType.BluePillSlot)
                     {
                         var item = s.CastInfo.Owner.Inventory.GetItem(s.SpellName);
-                        if (item != null && item.ItemData.Consumed)
+                        if (item != null)
                         {
-                            var inventory = owner.Inventory;
-                            inventory.RemoveItem(inventory.GetItemSlot(item), owner);
+                            _game.PacketNotifier.NotifyUseItemAns(userId, owner, item);
+
+                            if (item.ItemData.Consumed)
+                            {
+                                var inventory = owner.Inventory;
+                                inventory.RemoveItem(inventory.GetItemSlot(item), owner);
+                            }
                         }
                     }
                     cs.CouldCast = true;

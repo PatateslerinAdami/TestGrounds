@@ -25,8 +25,8 @@ namespace Buffs
             StatsModifier.HealthPoints.FlatBonus = 50.0f * unit.Stats.Level;
             StatsModifier.AttackDamage.FlatBonus = 12.0f * unit.Stats.Level;
             StatsModifier.AbilityPower.FlatBonus = 12.0f * unit.Stats.Level;
-            StatsModifier.ArmorPenetration.PercentBonus = 0.15f;
-            StatsModifier.MagicPenetration.PercentBonus = 0.15f;
+            StatsModifier.ArmorPenetration.PercentBaseBonus = 0.15f;
+            StatsModifier.MagicPenetration.PercentBaseBonus = 0.15f;
             StatsModifier.CooldownReduction.FlatBonus = 0.25f;
             StatsModifier.Size.FlatBonus = 0.5f;
             unit.AddStatModifier(StatsModifier);

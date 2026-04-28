@@ -27,7 +27,8 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             var owner = unit as ObjAIBase;
-            foreach (AttackableUnit target in GetUnitsInRange(unit.Position, 9999.0f, true).Where(x => x is Champion))
+            foreach (AttackableUnit target in EnumerateValidUnitsInRange(unit, unit.Position, 9999.0f, true,
+                         SpellDataFlags.AffectHeroes))
             {
                 // TODO: Use a global "MaxPlayerLevel" variable.
                 if (target.Stats.Level > maxPlayerLevel)
@@ -44,10 +45,12 @@ namespace Buffs
             {
                 if (tickTime > 10000.0f)
                 {
-                    var healthPercent = (owner.Stats.HealthPoints.Total - owner.Stats.CurrentHealth) / owner.Stats.HealthPoints.Total;
+                    var healthPercent = (owner.Stats.HealthPoints.Total - owner.Stats.CurrentHealth) /
+                                        owner.Stats.HealthPoints.Total;
                     if (healthPercent >= 0.99f)
                     {
-                        foreach (AttackableUnit target in GetUnitsInRange(owner.Position, 9999.0f, true).Where(x => x is Champion))
+                        foreach (AttackableUnit target in EnumerateValidUnitsInRange(owner, owner.Position, 9999.0f,
+                                     true, SpellDataFlags.AffectHeroes))
                         {
                             // TODO: Use a global "MaxPlayerLevel" variable.
                             if (target.Stats.Level > maxPlayerLevel)

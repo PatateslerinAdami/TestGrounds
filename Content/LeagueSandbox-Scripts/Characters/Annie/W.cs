@@ -48,7 +48,7 @@ public class Incinerate : ISpellScript {
             }
         }
         
-        var enemiesInRange = GetUnitsInConeRange(_annie, _annie.Position, _direction, 650f, 85f, true,
+        var enemiesInRange = GetUnitsInCone(_annie, _annie.Position, _direction, 650f, 85f, true,
                                                  SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                                                  SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
         

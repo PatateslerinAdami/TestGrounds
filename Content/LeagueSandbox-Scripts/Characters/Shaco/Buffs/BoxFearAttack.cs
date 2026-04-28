@@ -40,7 +40,9 @@ namespace Buffs
                 CheckForTargets(boxMinion);
             }
 
-            var units = GetUnitsInRangeDiffTeam(boxMinion.Position, 500f, true, boxMinion);
+            var units = EnumerateValidUnitsInRange(boxMinion, boxMinion.Position, 500f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral);
             foreach (var u in units)
             {
                 if (u is not LaneTurret)
@@ -49,6 +51,7 @@ namespace Buffs
                 }
             }
         }
+
         public void OnUpdate(float diff)
         {
             var boxMinion = _thisBuff.TargetUnit as Minion;
@@ -56,14 +59,19 @@ namespace Buffs
             {
                 return;
             }
+
             if (!boxMinion.IsAttacking)
             {
                 CheckForTargets(boxMinion);
             }
-            if (boxMinion.TargetUnit != null && Vector2.DistanceSquared(boxMinion.Position, boxMinion.TargetUnit.Position) > (boxMinion.Stats.Range.Total * boxMinion.Stats.Range.Total))
+
+            if (boxMinion.TargetUnit != null &&
+                Vector2.DistanceSquared(boxMinion.Position, boxMinion.TargetUnit.Position) >
+                (boxMinion.Stats.Range.Total * boxMinion.Stats.Range.Total))
             {
                 boxMinion.SetTargetUnit(null, true);
             }
+
             _manaTimer += diff;
             if (_manaTimer >= 1000f)
             {
@@ -71,7 +79,8 @@ namespace Buffs
                 boxMinion.Stats.CurrentMana -= 1;
                 if (boxMinion.Stats.CurrentMana <= 0)
                 {
-                    boxMinion.Die(CreateDeathData(false, 0, boxMinion, boxMinion, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+                    boxMinion.Die(CreateDeathData(false, 0, boxMinion, boxMinion, DamageType.DAMAGE_TYPE_TRUE,
+                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                 }
             }
         }
@@ -80,13 +89,14 @@ namespace Buffs
         {
             if (boxMinion == null) return;
 
-            var units = GetUnitsInRange(boxMinion.Position, boxMinion.Stats.Range.Total - 50f, true);
+            var units = GetUnitsInRange(boxMinion, boxMinion.Position, boxMinion.Stats.Range.Total - 50f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral);
             AttackableUnit nextTarget = null;
             var nextTargetPriority = ClassifyUnit.DEFAULT;
 
             foreach (var u in units)
             {
-                if (u.IsDead || u.Team == boxMinion.Team || !u.Status.HasFlag(StatusFlags.Targetable) || u.Status.HasFlag(StatusFlags.Stealthed) || u == boxMinion)
+                if (u.Status.HasFlag(StatusFlags.Stealthed) || u == boxMinion)
                 {
                     continue;
                 }
@@ -106,6 +116,7 @@ namespace Buffs
                     {
                         continue;
                     }
+
                     if (!(u is Champion)) continue;
 
                     nextTarget = u;

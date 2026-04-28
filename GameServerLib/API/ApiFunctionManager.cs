@@ -209,6 +209,24 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Converts a spell's absolute slot number to a 0-based inventory slot index.
+        /// Returns -1 when the spell is null or does not belong to an inventory slot.
+        /// </summary>
+        /// <param name="spell">Spell to convert.</param>
+        /// <returns>0-based inventory slot index, or -1 if invalid.</returns>
+        public static int ToInventorySlotIndex(Spell spell)
+        {
+            if (spell == null)
+            {
+                return -1;
+            }
+
+            var inventorySlot = spell.CastInfo.SpellSlot - (int)SpellSlotType.InventorySlots;
+            var maxInventorySlot = (int)SpellSlotType.BluePillSlot - (int)SpellSlotType.InventorySlots - 1;
+            return inventorySlot >= 0 && inventorySlot <= maxInventorySlot ? inventorySlot : -1;
+        }
+
+        /// <summary>
         /// Teleports an AI unit to the specified coordinates.
         /// Instant.
         /// TODO: Change to GameObjects.
@@ -340,7 +358,53 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="newStacks">Stacks to set.</param>
         public static void EditBuff(Buff b, byte newStacks)
         {
-            b.SetStacks(newStacks);
+            if (b == null)
+            {
+                return;
+            }
+
+            // Avoid default stack packet routing so counter buffs can use their dedicated packet type.
+            b.SetStacks(newStacks, false);
+            if (b.Hidden || _game?.PacketNotifier == null)
+            {
+                return;
+            }
+
+            if (b.BuffType == BuffType.COUNTER)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(b);
+            }
+            else
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
+            }
+        }
+
+        /// <summary>
+        /// Updates only the client-side timer visuals for a buff icon.
+        /// Useful for infinite buffs that need a custom recharge indicator.
+        /// </summary>
+        /// <param name="b">Buff instance.</param>
+        /// <param name="durationSeconds">Displayed total duration in seconds.</param>
+        /// <param name="runningTimeSeconds">Displayed elapsed/running time in seconds.</param>
+        public static void SetBuffClientTimer(Buff b, float durationSeconds, float runningTimeSeconds = 0f)
+        {
+            if (b == null || b.Hidden)
+            {
+                return;
+            }
+
+            if (durationSeconds < 0f)
+            {
+                durationSeconds = 0f;
+            }
+
+            if (runningTimeSeconds < 0f)
+            {
+                runningTimeSeconds = 0f;
+            }
+
+            _game.PacketNotifier.NotifyNPC_BuffReplace(b, durationSeconds, runningTimeSeconds);
         }
 
         /// <summary>
@@ -362,6 +426,17 @@ namespace LeagueSandbox.GameServer.API
         public static void RemoveBuff(AttackableUnit target, string buff)
         {
             target.RemoveBuffsWithName(buff);
+        }
+        
+        /// <summary>
+        ///     Whether the specified unit is within its team's fountain area.
+        /// </summary>
+        /// <param name="unit">Unit to check.</param>
+        /// <param name="range">Fountain radius to check against. Defaults to 1000.</param>
+        /// <returns>True if within fountain range.</returns>
+        public static bool IsInFountain(AttackableUnit unit, float range = 1000.0f) {
+            var fountainPos = _game.Map.MapScript.GetFountainPosition(unit.Team);
+            return Vector2.DistanceSquared(unit.Position, fountainPos) <= range * range;
         }
 
         /// <summary>
@@ -487,6 +562,22 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Shows or hides the specified unit's health bar on the client.
+        /// </summary>
+        /// <param name="target">Unit whose health bar visibility should change.</param>
+        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="hide">True to hide the health bar, false to show it.</param>
+        public static void HideHealthBar(AttackableUnit target, int userId = -1, bool hide = true)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyShowHealthBar(target, userId, hide);
+        }
+
+        /// <summary>
         /// Checks whether the target uses the specified PAR type.
         /// </summary>
         /// <param name="target">Unit to query.</param>
@@ -594,7 +685,7 @@ namespace LeagueSandbox.GameServer.API
         /// <returns>New particle instance.</returns>
         public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
@@ -623,7 +714,7 @@ namespace LeagueSandbox.GameServer.API
         /// <returns>New particle instance.</returns>
         public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
@@ -652,7 +743,7 @@ namespace LeagueSandbox.GameServer.API
         /// <returns>New particle instance.</returns>
         public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle,
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_NEUTRAL,
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
@@ -885,18 +976,6 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
-        /// Acquires all alive or dead AttackableUnits within the specified range of a target position.
-        /// </summary>
-        /// <param name="targetPos">Origin of the range to check.</param>
-        /// <param name="range">Range to check from the target position.</param>
-        /// <param name="isAlive">Whether or not to return alive AttackableUnits.</param>
-        /// <returns>List of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInRangeOld(Vector2 targetPos, float range, bool isAlive)
-        {
-            return _game.ObjectManager.GetUnitsInRange(targetPos, range, isAlive);
-        }
-
-        /// <summary>
         /// Acquires all dead or alive AttackableUnits within the specified range of a target position.
         /// </summary>
         /// <param name="targetPos">Origin of the range to check.</param>
@@ -914,29 +993,6 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
-        //TODO: replace this function in every script that references this with the filtered version
-        /// <summary>
-        /// Acquires all dead or alive AttackableUnits within the specified range of a target position.
-        /// </summary>
-        /// <param name="targetPos">Origin of the range to check.</param>
-        /// <param name="range">Range to check from the target position.</param>
-        /// <returns>List of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInRange(Vector2 targetPos, float range, bool isAlive)
-        {
-            var returnList = new List<AttackableUnit>();
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
-                         new System.Activities.Presentation.View.Circle(targetPos, range)))
-            {
-                if (obj is AttackableUnit u && (!isAlive || !u.IsDead))
-                {
-                    returnList.Add(u);
-                }
-            }
-
-            returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos));
-            return returnList;
-        }
-
         /// <summary>
         ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
         /// </summary>
@@ -945,8 +1001,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="range">Range to check from the target position.</param>
         /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
         /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
-        /// <returns>Filtered list of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInRange(
+        /// <returns>Filtered enumerable of AttackableUnits.</returns>
+        public static IEnumerable<AttackableUnit> EnumerateValidUnitsInRange(
             AttackableUnit self,
             Vector2 targetPos,
             float range,
@@ -955,7 +1011,28 @@ namespace LeagueSandbox.GameServer.API
         )
         {
             return EnumerateUnitsInRange(targetPos, range, isAlive)
-                .Where(unit => IsValidTarget(self, unit, useFlags))
+                .Where(unit => IsValidTarget(self, unit, useFlags));
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
+        ///     Returns units ordered by distance to <paramref name="targetPos" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered, distance-sorted list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInRange(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            return EnumerateValidUnitsInRange(self, targetPos, range, isAlive, useFlags)
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos))
                 .ToList();
         }
@@ -969,8 +1046,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="outerRadius">Outer radius of the ring.</param>
         /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
         /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
-        /// <returns>Filtered list of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInRing(
+        /// <returns>Filtered enumerable of AttackableUnits.</returns>
+        public static IEnumerable<AttackableUnit> EnumerateUnitsInRing(
             AttackableUnit self,
             Vector2 targetPos,
             float innerRadius,
@@ -989,19 +1066,41 @@ namespace LeagueSandbox.GameServer.API
 
             if (outerRadius <= 0.0f)
             {
-                return [];
+                return Enumerable.Empty<AttackableUnit>();
             }
 
             var innerRadiusSquared = innerRadius * innerRadius;
             var outerRadiusSquared = outerRadius * outerRadius;
 
-            return EnumerateUnitsInRange(targetPos, outerRadius, isAlive)
-                .Where(unit => IsValidTarget(self, unit, useFlags))
+            return EnumerateValidUnitsInRange(self, targetPos, outerRadius, isAlive, useFlags)
                 .Where(unit =>
                 {
                     var distanceSquared = Vector2.DistanceSquared(unit.Position, targetPos);
                     return distanceSquared >= innerRadiusSquared && distanceSquared <= outerRadiusSquared;
-                })
+                });
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a ring and filters them by IsValidTarget using the given flags.
+        ///     Returns units ordered by distance to <paramref name="targetPos" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Center of the ring.</param>
+        /// <param name="innerRadius">Inner radius of the ring.</param>
+        /// <param name="outerRadius">Outer radius of the ring.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered, distance-sorted list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInRing(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float innerRadius,
+            float outerRadius,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            return EnumerateUnitsInRing(self, targetPos, innerRadius, outerRadius, isAlive, useFlags)
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, targetPos))
                 .ToList();
         }
@@ -1017,8 +1116,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="coneAngleDegrees">Total cone angle in degrees.</param>
         /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
         /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
-        /// <returns>Filtered list of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInConeRange(
+        /// <returns>Filtered enumerable of AttackableUnits.</returns>
+        public static IEnumerable<AttackableUnit> EnumerateUnitsInCone(
             AttackableUnit self,
             Vector2 origin,
             Vector2 direction,
@@ -1029,15 +1128,14 @@ namespace LeagueSandbox.GameServer.API
         )
         {
             if (range <= 0.0f || coneAngleDegrees <= 0.0f || direction.LengthSquared() <= float.Epsilon)
-                return [];
+                return Enumerable.Empty<AttackableUnit>();
 
             var normalizedDirection = Vector2.Normalize(direction);
             var halfAngleRadians = MathF.PI * Math.Clamp(coneAngleDegrees, 0.0f, 360.0f) / 360.0f;
             var cosThreshold = MathF.Cos(halfAngleRadians);
             var rangeSquared = range * range;
 
-            return EnumerateUnitsInRange(origin, range, isAlive)
-                .Where(unit => IsValidTarget(self, unit, useFlags))
+            return EnumerateValidUnitsInRange(self, origin, range, isAlive, useFlags)
                 .Where(unit =>
                 {
                     var toTarget = unit.Position - origin;
@@ -1048,7 +1146,33 @@ namespace LeagueSandbox.GameServer.API
 
                     var normalizedToTarget = Vector2.Normalize(toTarget);
                     return Vector2.Dot(normalizedDirection, normalizedToTarget) >= cosThreshold;
-                })
+                });
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a cone and filters them by IsValidTarget using the given flags.
+        ///     The cone angle is expressed in total degrees, not half-angle degrees.
+        ///     Returns units ordered by distance to <paramref name="origin" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Origin of the cone.</param>
+        /// <param name="direction">Forward direction of the cone.</param>
+        /// <param name="range">Maximum cone length.</param>
+        /// <param name="coneAngleDegrees">Total cone angle in degrees.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered, distance-sorted list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInCone(
+            AttackableUnit self,
+            Vector2 origin,
+            Vector2 direction,
+            float range,
+            float coneAngleDegrees,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            return EnumerateUnitsInCone(self, origin, direction, range, coneAngleDegrees, isAlive, useFlags)
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, origin))
                 .ToList();
         }
@@ -1065,8 +1189,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
         /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
         /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
-        /// <returns>Filtered list of AttackableUnits.</returns>
-        public static List<AttackableUnit> GetUnitsInPolygon(
+        /// <returns>Filtered enumerable of AttackableUnits.</returns>
+        public static IEnumerable<AttackableUnit> EnumerateUnitsInPolygon(
             AttackableUnit self,
             Vector2 origin,
             Vector2 direction,
@@ -1081,29 +1205,57 @@ namespace LeagueSandbox.GameServer.API
             length = MathF.Abs(length);
             if (polygonVertices == null || polygonVertices.Length < 3 || width <= 0.0f || length <= 0.0f)
             {
-                return [];
+                return Enumerable.Empty<AttackableUnit>();
             }
 
             if (!TryNormalizeDirection(direction, out var normalizedDirection))
             {
-                return [];
+                return Enumerable.Empty<AttackableUnit>();
             }
 
             var polygon = BuildScaledPolygon(polygonVertices, width, length, out var maxRange);
             if (polygon.Points.Count < 3 || maxRange <= 0.0f)
             {
-                return [];
+                return Enumerable.Empty<AttackableUnit>();
             }
 
             var angleDir = Extensions.UnitVectorToAngle(normalizedDirection);
 
-            return EnumerateUnitsInRange(origin, maxRange, isAlive)
-                .Where(unit => IsValidTarget(self, unit, useFlags))
+            return EnumerateValidUnitsInRange(self, origin, maxRange, isAlive, useFlags)
                 .Where(unit =>
                 {
                     var relativePos = (unit.Position - origin).Rotate(angleDir + 270f);
                     return polygon.IsInside(relativePos);
-                })
+                });
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a polygon and filters them by IsValidTarget using the given flags.
+        ///     Polygon vertices are relative to the origin and are scaled by width (x) and length (y).
+        ///     Returns units ordered by distance to <paramref name="origin" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for team/flag checks.</param>
+        /// <param name="origin">Origin of the polygon.</param>
+        /// <param name="direction">Forward direction of the polygon.</param>
+        /// <param name="width">Scale applied to each vertex's x coordinate.</param>
+        /// <param name="length">Scale applied to each vertex's y coordinate.</param>
+        /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered, distance-sorted list of AttackableUnits.</returns>
+        public static List<AttackableUnit> GetUnitsInPolygon(
+            AttackableUnit self,
+            Vector2 origin,
+            Vector2 direction,
+            float width,
+            float length,
+            Vector2[] polygonVertices,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            return EnumerateUnitsInPolygon(self, origin, direction, width, length, polygonVertices, isAlive,
+                    useFlags)
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, origin))
                 .ToList();
         }
@@ -1118,7 +1270,37 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
         /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
         /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
-        /// <returns>Filtered list of AttackableUnits.</returns>
+        /// <returns>Filtered enumerable of AttackableUnits.</returns>
+        public static IEnumerable<AttackableUnit> EnumerateUnitsInPolygon(
+            Spell spell,
+            float width,
+            float length,
+            Vector2[] polygonVertices,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            if (!TryResolvePolygonSpellContext(spell, out var self, out var origin, out var normalizedDirection))
+            {
+                return Enumerable.Empty<AttackableUnit>();
+            }
+
+            return EnumerateUnitsInPolygon(self, origin, normalizedDirection, width, length, polygonVertices,
+                isAlive, useFlags);
+        }
+
+        /// <summary>
+        ///     Acquires all dead or alive AttackableUnits within a polygon created by a spell and filters them by IsValidTarget
+        ///     using the given flags. Targeted spells use the target's position and facing direction as the polygon origin.
+        ///     Returns units ordered by distance to the resolved polygon origin.
+        /// </summary>
+        /// <param name="spell">Spell which created the polygon area.</param>
+        /// <param name="width">Scale applied to each vertex's x coordinate.</param>
+        /// <param name="length">Scale applied to each vertex's y coordinate.</param>
+        /// <param name="polygonVertices">Polygon vertices relative to the origin.</param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="useFlags">SpellDataFlags used by IsValidTarget.</param>
+        /// <returns>Filtered, distance-sorted list of AttackableUnits.</returns>
         public static List<AttackableUnit> GetUnitsInPolygon(
             Spell spell,
             float width,
@@ -1128,13 +1310,33 @@ namespace LeagueSandbox.GameServer.API
             SpellDataFlags useFlags
         )
         {
-            if (spell?.CastInfo?.Owner == null)
+            if (!TryResolvePolygonSpellContext(spell, out var self, out var origin, out var normalizedDirection))
             {
                 return [];
             }
 
-            var self = spell.CastInfo.Owner;
-            var origin = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X,
+            return GetUnitsInPolygon(self, origin, normalizedDirection, width, length, polygonVertices, isAlive,
+                useFlags);
+        }
+
+        private static bool TryResolvePolygonSpellContext(
+            Spell spell,
+            out AttackableUnit self,
+            out Vector2 origin,
+            out Vector2 normalizedDirection
+        )
+        {
+            self = default;
+            origin = default;
+            normalizedDirection = default;
+
+            if (spell?.CastInfo?.Owner == null)
+            {
+                return false;
+            }
+
+            self = spell.CastInfo.Owner;
+            origin = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X,
                 spell.CastInfo.SpellCastLaunchPosition.Z);
             var direction = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z) -
                             origin;
@@ -1147,7 +1349,7 @@ namespace LeagueSandbox.GameServer.API
                 direction = new Vector2(targetUnit.Direction.X, targetUnit.Direction.Z);
             }
 
-            if (!TryNormalizeDirection(direction, out var normalizedDirection))
+            if (!TryNormalizeDirection(direction, out normalizedDirection))
             {
                 var ownerDirection = new Vector2(self.Direction.X, self.Direction.Z);
                 if (!TryNormalizeDirection(ownerDirection, out normalizedDirection))
@@ -1156,25 +1358,7 @@ namespace LeagueSandbox.GameServer.API
                 }
             }
 
-            return GetUnitsInPolygon(self, origin, normalizedDirection, width, length, polygonVertices, isAlive,
-                useFlags);
-        }
-
-        public static List<AttackableUnit> GetUnitsInRangeDiffTeam(Vector2 targetPos, float range, bool isAlive,
-            AttackableUnit OurGuy)
-        {
-            var returnList = new List<AttackableUnit>();
-            foreach (var obj in _game.Map.CollisionHandler.GetNearestObjects(
-                         new System.Activities.Presentation.View.Circle(targetPos, range)))
-            {
-                if (obj is AttackableUnit u && (!isAlive || !u.IsDead) && u.Team != OurGuy.Team)
-                {
-                    returnList.Add(u);
-                }
-            }
-
-            returnList.OrderBy(unit => Vector2.DistanceSquared(unit.Position, OurGuy.Position));
-            return returnList;
+            return true;
         }
 
         private static Polygon BuildScaledPolygon(
@@ -1228,68 +1412,276 @@ namespace LeagueSandbox.GameServer.API
             SpellDataFlags useFlags
         )
         {
-            return GetUnitsInRange(self, targetPos, range, isAlive, useFlags).FirstOrDefault();
+            AttackableUnit closest = null;
+            float bestDistSq = float.MaxValue;
+
+            foreach (var unit in EnumerateUnitsInRange(targetPos, range, isAlive))
+            {
+                var distSq = Vector2.DistanceSquared(unit.Position, targetPos);
+                if (distSq >= bestDistSq) continue;
+                if (!IsValidTarget(self, unit, useFlags)) continue;
+
+                bestDistSq = distSq;
+                closest = unit;
+                if (distSq <= float.Epsilon) break;
+            }
+
+            return closest;
         }
 
         public static bool IsValidTarget(AttackableUnit self, AttackableUnit target, SpellDataFlags useFlags)
         {
-            return (!target.Model.Contains("Shrine")
-                ) && (
-                    ((useFlags & SpellDataFlags.AlwaysSelf) != 0 && target == self) //TODO: Verify
-                    || (
-                        ((useFlags & SpellDataFlags.AffectMinions) != 0 && target is Minion) //TODO: Verify
-                        || ((useFlags & SpellDataFlags.AffectHeroes) != 0 &&
-                            (target is Champion || (target is Pet p1 && p1.IsClone))
-                        )
-                        || ((useFlags & SpellDataFlags.AffectWards) != 0 && target is Minion m && m.IsWard)
-                        || ((useFlags & SpellDataFlags.AffectTurrets) != 0 &&
-                            (target is BaseTurret || target is ObjBuilding || target is Inhibitor))
-                        || ((useFlags & SpellDataFlags.AffectBuildings) != 0 && target is ObjBuilding)
-                        || ((useFlags & SpellDataFlags.AffectBarracksOnly) != 0 &&
-                            target is Inhibitor) //TODO: Verify
-                        // It is assumed that the monsters are always in the neutral team
-                        || ((useFlags & SpellDataFlags.AffectNeutral) != 0 && target is Monster) //TODO: Verify
-                        || ((useFlags & SpellDataFlags.AffectUseable) != 0 && target.CharData.IsUseable)
-                    )
-                    && (
-                        ((useFlags & SpellDataFlags.AffectFriends) != 0 && target.Team == self.Team)
-                        || ((useFlags & SpellDataFlags.AffectEnemies) != 0 && target.Team != self.Team &&
-                            target.Team != TeamId.TEAM_NEUTRAL)
-                        || ((useFlags & SpellDataFlags.AffectNeutral) != 0 && target.Team == TeamId.TEAM_NEUTRAL)
-                    )
-                    && !(
-                        ((useFlags & SpellDataFlags.NotAffectSelf) != 0 && target == self)
-                        || ((useFlags & SpellDataFlags.AffectNotPet) != 0 && target is Pet) //TODO: Verify
-                        || ((useFlags & SpellDataFlags.IgnoreLaneMinion) != 0 && target is LaneMinion)
-                        || ((useFlags & SpellDataFlags.IgnoreAllyMinion) != 0 && target.Team == self.Team &&
-                            target is Minion)
-                        || ((useFlags & SpellDataFlags.IgnoreEnemyMinion) != 0 && target.Team != self.Team &&
-                            target is Minion)
-                        || ((useFlags & SpellDataFlags.IgnoreClones) != 0 && target is Pet p2 && p2.IsClone)
-                        //|| ((useFlags & SpellDataFlags.NOT_AFFECT_ZOMBIE) != 0 && target.IsDead)
-                    )
-                    && ((useFlags & SpellDataFlags.AffectDead) != 0 || !(target.IsDead))
-                    && ((useFlags & SpellDataFlags.AffectUntargetable) != 0 ||
-                        (target.Status & StatusFlags.Targetable) != 0)
-                );
+            if (target.Model.Contains("Shrine"))
+            {
+                return false;
+            }
+
+            var isSelf = target == self;
+            var hasAlwaysSelf = (useFlags & SpellDataFlags.AlwaysSelf) != 0;
+            if (hasAlwaysSelf && isSelf) // TODO: Verify
+            {
+                return true;
+            }
+
+            var affectDead = (useFlags & SpellDataFlags.AffectDead) != 0;
+            if (!affectDead && target.IsDead)
+            {
+                return false;
+            }
+
+            var affectUntargetable = (useFlags & SpellDataFlags.AffectUntargetable) != 0;
+            if (!affectUntargetable && (target.Status & StatusFlags.Targetable) == 0)
+            {
+                return false;
+            }
+
+            var sameTeam = target.Team == self.Team;
+            var targetIsNeutralTeam = target.Team == TeamId.TEAM_NEUTRAL;
+
+            var minion = target as Minion;
+            var isMinion = minion != null;
+            var isLaneMinion = target is LaneMinion;
+            var pet = target as Pet;
+            var isPet = pet != null;
+            var isClone = isPet && pet.IsClone;
+            var isChampion = target is Champion;
+            var isBaseTurret = target is BaseTurret;
+            var isObjBuilding = target is ObjBuilding;
+            var isInhibitor = target is Inhibitor;
+            var isMonster = target is Monster;
+
+            var notAffectSelf = (useFlags & SpellDataFlags.NotAffectSelf) != 0;
+            //var notAffectZombie = (useFlags & SpellDataFlags.NotAffectZombie) != 0;
+            var affectNotPet = (useFlags & SpellDataFlags.AffectNotPet) != 0;
+            var ignoreLaneMinion = (useFlags & SpellDataFlags.IgnoreLaneMinion) != 0;
+            var ignoreAllyMinion = (useFlags & SpellDataFlags.IgnoreAllyMinion) != 0;
+            var ignoreEnemyMinion = (useFlags & SpellDataFlags.IgnoreEnemyMinion) != 0;
+            var ignoreClones = (useFlags & SpellDataFlags.IgnoreClones) != 0;
+
+            if ((notAffectSelf && isSelf)
+                // TODO: Replace this fallback once explicit zombie-state tracking exists.
+                //|| (notAffectZombie && target.IsDead)
+                || (affectNotPet && isPet) // TODO: Verify
+                || (ignoreLaneMinion && isLaneMinion)
+                || (ignoreAllyMinion && sameTeam && isMinion)
+                || (ignoreEnemyMinion && !sameTeam && isMinion)
+                || (ignoreClones && isClone))
+            {
+                return false;
+            }
+
+            var affectFriends = (useFlags & SpellDataFlags.AffectFriends) != 0;
+            var affectEnemies = (useFlags & SpellDataFlags.AffectEnemies) != 0;
+            var affectNeutral = (useFlags & SpellDataFlags.AffectNeutral) != 0;
+
+            var teamAllowed =
+                (affectFriends && sameTeam)
+                || (affectEnemies && !sameTeam && !targetIsNeutralTeam)
+                || (affectNeutral && targetIsNeutralTeam);
+
+            if (!teamAllowed)
+            {
+                return false;
+            }
+
+            var affectMinions = (useFlags & SpellDataFlags.AffectMinions) != 0;
+            var affectHeroes = (useFlags & SpellDataFlags.AffectHeroes) != 0;
+            var affectWards = (useFlags & SpellDataFlags.AffectWards) != 0;
+            var affectTurrets = (useFlags & SpellDataFlags.AffectTurrets) != 0;
+            var affectBuildings = (useFlags & SpellDataFlags.AffectBuildings) != 0;
+            var affectBarracksOnly = (useFlags & SpellDataFlags.AffectBarracksOnly) != 0;
+            var affectUseable = (useFlags & SpellDataFlags.AffectUseable) != 0;
+
+            var typeAllowed =
+                (affectMinions && isMinion) // TODO: Verify
+                || (affectHeroes && (isChampion || isClone))
+                || (affectWards && isMinion && minion.IsWard)
+                || (affectTurrets && (isBaseTurret || isObjBuilding || isInhibitor))
+                || (affectBuildings && isObjBuilding)
+                || (affectBarracksOnly && isInhibitor) // TODO: Verify
+                // It is assumed that the monsters are always in the neutral team
+                || (affectNeutral && isMonster) // TODO: Verify
+                || (affectUseable && target.CharData.IsUseable);
+
+            return typeAllowed;
+        }
+
+        /// <summary>
+        /// Enumerates all alive or dead Champions within the specified range of a target position.
+        /// Compatibility overload without ally/enemy/neutral filtering.
+        /// </summary>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
+        /// <returns>Enumerable of Champions.</returns>
+        public static IEnumerable<Champion> EnumerateChampionsInRange(Vector2 targetPos, float range, bool isAlive)
+        {
+            return EnumerateUnitsInRange(targetPos, range, isAlive)
+                .OfType<Champion>();
         }
 
         /// <summary>
         /// Acquires all alive or dead Champions within the specified range of a target position.
+        /// Compatibility overload without ally/enemy/neutral filtering.
         /// </summary>
         /// <param name="targetPos">Origin of the range to check.</param>
         /// <param name="range">Range to check from the target position.</param>
-        /// <param name="isAlive">Whether or not the return alive Champions.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
         /// <returns>List of Champions.</returns>
         public static List<Champion> GetChampionsInRange(Vector2 targetPos, float range, bool isAlive)
         {
-            return _game.ObjectManager.GetChampionsInRange(targetPos, range, isAlive);
+            return EnumerateChampionsInRange(targetPos, range, isAlive)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Acquires all alive or dead Champions within the specified range of a target position,
+        /// ordered by distance to <paramref name="targetPos" />.
+        /// Compatibility overload without ally/enemy/neutral filtering.
+        /// </summary>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
+        /// <returns>Distance-sorted list of Champions.</returns>
+        public static List<Champion> GetChampionsInRangeSorted(Vector2 targetPos, float range, bool isAlive)
+        {
+            return EnumerateChampionsInRange(targetPos, range, isAlive)
+                .OrderBy(champion => Vector2.DistanceSquared(champion.Position, targetPos))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Acquires all alive or dead Champions within the specified range of a target position.
+        /// Team filtering is relative to <paramref name="self" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for ally/enemy filtering.</param>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
+        /// <param name="getAllies">Include allied champions.</param>
+        /// <param name="getEnemies">Include enemy champions.</param>
+        /// <param name="getNeutral">Include neutral-team champions.</param>
+        /// <returns>List of Champions.</returns>
+        public static List<Champion> GetChampionsInRange(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            bool getAllies = true,
+            bool getEnemies = true,
+            bool getNeutral = true
+        )
+        {
+            return EnumerateChampionsInRange(self, targetPos, range, isAlive, getAllies, getEnemies, getNeutral)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Acquires all alive or dead Champions within the specified range of a target position,
+        /// filtered by team relative to <paramref name="self" /> and ordered by distance to
+        /// <paramref name="targetPos" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for ally/enemy filtering.</param>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
+        /// <param name="getAllies">Include allied champions.</param>
+        /// <param name="getEnemies">Include enemy champions.</param>
+        /// <param name="getNeutral">Include neutral-team champions.</param>
+        /// <returns>Filtered, distance-sorted list of Champions.</returns>
+        public static List<Champion> GetChampionsInRangeSorted(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            bool getAllies = true,
+            bool getEnemies = true,
+            bool getNeutral = true
+        )
+        {
+            return EnumerateChampionsInRange(self, targetPos, range, isAlive, getAllies, getEnemies, getNeutral)
+                .OrderBy(champion => Vector2.DistanceSquared(champion.Position, targetPos))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Enumerates all alive or dead Champions within the specified range of a target position.
+        /// Team filtering is relative to <paramref name="self" />.
+        /// </summary>
+        /// <param name="self">Unit used as the source for ally/enemy filtering.</param>
+        /// <param name="targetPos">Origin of the range to check.</param>
+        /// <param name="range">Range to check from the target position.</param>
+        /// <param name="isAlive">Whether dead champions should be excluded.</param>
+        /// <param name="getAllies">Include allied champions.</param>
+        /// <param name="getEnemies">Include enemy champions.</param>
+        /// <param name="getNeutral">Include neutral-team champions.</param>
+        /// <returns>Enumerable of champions matching range, alive-state, and team filters.</returns>
+        public static IEnumerable<Champion> EnumerateChampionsInRange(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            bool getAllies = true,
+            bool getEnemies = true,
+            bool getNeutral = true
+        )
+        {
+            if (!getAllies && !getEnemies && !getNeutral)
+            {
+                return Enumerable.Empty<Champion>();
+            }
+
+            return EnumerateChampionsInRange(targetPos, range, isAlive)
+                .Where(champion =>
+                    IsTeamFilterMatch(self, champion.Team, getAllies, getEnemies, getNeutral));
         }
 
         public static bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team,
-            bool onlyAlive = false)
+            bool isAlive = false)
         {
-            return _game.ObjectManager.CheckChampionsInRangeFromTeam(checkPos, range, team, onlyAlive);
+            return _game.ObjectManager.CheckChampionsInRangeFromTeam(checkPos, range, team, isAlive);
+        }
+
+        private static bool IsTeamFilterMatch(
+            AttackableUnit self,
+            TeamId candidateTeam,
+            bool getAllies,
+            bool getEnemies,
+            bool getNeutral
+        )
+        {
+            if (candidateTeam == TeamId.TEAM_NEUTRAL)
+            {
+                return getNeutral;
+            }
+
+            if (self == null)
+            {
+                // Without a reference team, non-neutral units are included when either side is requested.
+                return getAllies || getEnemies;
+            }
+
+            return candidateTeam == self.Team ? getAllies : getEnemies;
         }
 
         /// <summary>
@@ -1895,6 +2287,28 @@ namespace LeagueSandbox.GameServer.API
         public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
+        }
+
+        /// <summary>
+        /// Moves the camera of the player controlling the specified unit to a location.
+        /// </summary>
+        /// <param name="unit">Unit whose owning player's camera should move.</param>
+        /// <param name="cameraTimer">Travel time in seconds.</param>
+        /// <param name="finalCameraPosition">Destination camera position.</param>
+        public static void MoveCamera(ObjAIBase unit, float cameraTimer, Vector3 finalCameraPosition)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var player = _game.PlayerManager.GetPlayers(false).FirstOrDefault(p => p?.Champion?.NetId == unit.NetId);
+            if (player == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
         }
 
         public static void NotifyWaypointGroup(AttackableUnit unit)

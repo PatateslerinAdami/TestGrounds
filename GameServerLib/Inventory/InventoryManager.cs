@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
@@ -32,6 +33,7 @@ namespace LeagueSandbox.GameServer.Inventory
 
             if (owner != null && item != null)
             {
+                InitializeItemSpellCharges(owner, item);
                 //This packet seems to break when buying more than 3 of one of the 250Gold elixirs
                 _packetNotifier.NotifyBuyItem(owner, item);
             }
@@ -49,11 +51,44 @@ namespace LeagueSandbox.GameServer.Inventory
 
             if (owner != null && item != null)
             {
+                InitializeItemSpellCharges(owner, item);
                 //This packet seems to break when buying more than 3 of one of the 250Gold elixirs
                 _packetNotifier.NotifyBuyItem(owner, item);
             }
 
             return KeyValuePair.Create(item, true);
+        }
+
+        private void InitializeItemSpellCharges(ObjAIBase owner, Item item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.ItemData.SpellName))
+            {
+                return;
+            }
+
+            var inventorySlot = _inventory.GetItemSlot(item);
+            var spellSlot = (short)((byte)SpellSlotType.InventorySlots + inventorySlot);
+            if (!owner.Spells.TryGetValue(spellSlot, out var spell))
+            {
+                return;
+            }
+
+            var maxCharges = 0;
+            if (spell.SpellData.MaxAmmo > 1)
+            {
+                maxCharges = spell.SpellData.MaxAmmo;
+            }
+            else if (spell.Script != null && spell.Script.ScriptMetadata.AmmoPerCharge > 1)
+            {
+                maxCharges = spell.Script.ScriptMetadata.AmmoPerCharge;
+            }
+
+            if (maxCharges <= 0 || item.SpellCharges > 0)
+            {
+                return;
+            }
+
+            item.SetSpellCharges(maxCharges);
         }
 
         public Item SetExtraItem(byte slot, ItemData item)
@@ -70,6 +105,53 @@ namespace LeagueSandbox.GameServer.Inventory
         {
             return _inventory.GetItem(itemSpellName);
         }
+
+        public bool SetItemSpellCharges(byte slot, ObjAIBase owner, int charges, bool notify = true)
+        {
+            var item = _inventory.GetItem(slot);
+            if (item == null)
+            {
+                return false;
+            }
+
+            var previousCharges = item.SpellCharges;
+            item.SetSpellCharges(charges);
+            if (owner != null && notify)
+            {
+                _packetNotifier.NotifyS2C_SetItemCharges(owner, slot, (byte)charges);
+                _packetNotifier.NotifySetItem(owner, item);
+                if (charges > previousCharges)
+                {
+                    _packetNotifier.NotifyUseItemAns(-1, owner, item);
+                }
+            }
+
+            return true;
+        }
+
+        public bool SetItemSpellCharges(Item item, ObjAIBase owner, int charges, bool notify = true)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            var slot = _inventory.GetItemSlot(item);
+            var previousCharges = item.SpellCharges;
+            item.SetSpellCharges(charges);
+            if (owner != null && notify)
+            {
+                _packetNotifier.NotifyS2C_SetItemCharges(owner, slot, (byte)charges);
+                _packetNotifier.NotifySetItem(owner, item);
+                if (charges > previousCharges)
+                {
+                    _packetNotifier.NotifyUseItemAns(-1, owner, item);
+                }
+            }
+
+            return true;
+        }
+
         public List<Item> GetAllItems(bool includeRunes = false, bool includeRecallItem = false)
         {
             List<Item> toReturn = new List<Item>(_inventory.Items.ToList());

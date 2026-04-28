@@ -9,6 +9,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Linq;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -81,7 +82,7 @@ namespace Buffs
         }
         public void OnTargetZoneHit(SpellSector sector, AttackableUnit target)
         {
-            var enemies = GetUnitsInRangeDiffTeam(owner.Position, 200f, true, owner);
+            var enemies = EnumerateValidUnitsInRange(owner, owner.Position, 200f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral).ToList();
             if (enemies.Count != 0)
             {
                 if (owner.HasBuff("YasuoQ"))

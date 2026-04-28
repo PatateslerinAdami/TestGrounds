@@ -88,7 +88,10 @@ namespace LeagueSandbox.GameServer.Inventory
             ManaPoints.PercentBonus = file.GetFloat("Data", "PercentMPPoolMod");
             ManaRegeneration.PercentBonus = file.GetFloat("Data", "PercentBaseMPRegenMod");
             
-            MagicPenetration.FlatBonus = file.GetFloat("Data", "FlatMagicPenetrationMod");
+            ArmorPenetration.FlatBonus = file.GetFloat("Data", "FlatArmorPenetrationMod", file.GetFloat("Data", "rFlatArmorPenetrationMod"));
+            ArmorPenetration.PercentBaseBonus = file.GetFloat("Data", "PercentArmorPenetrationMod", file.GetFloat("Data", "rPercentArmorPenetrationMod"));
+            MagicPenetration.FlatBonus = file.GetFloat("Data", "FlatMagicPenetrationMod", file.GetFloat("Data", "rFlatMagicPenetrationMod"));
+            MagicPenetration.PercentBaseBonus = file.GetFloat("Data", "PercentMagicPenetrationMod", file.GetFloat("Data", "rPercentMagicPenetrationMod"));
             MagicResist.FlatBonus = file.GetFloat("Data", "FlatSpellBlockMod");
             MagicResist.PercentBonus = file.GetFloat("Data", "PercentSpellBlockMod");
             

@@ -18,6 +18,7 @@ namespace AIScripts
         {
             baseTurret = owner as BaseTurret;
         }
+
         public void OnUpdate(float diff)
         {
             if (!baseTurret.IsAttacking)
@@ -26,7 +27,9 @@ namespace AIScripts
             }
 
             // Lose focus of the unit target if the target is out of range
-            if (baseTurret.TargetUnit != null && Vector2.DistanceSquared(baseTurret.Position, baseTurret.TargetUnit.Position) > baseTurret.Stats.Range.Total * baseTurret.Stats.Range.Total)
+            if (baseTurret.TargetUnit != null &&
+                Vector2.DistanceSquared(baseTurret.Position, baseTurret.TargetUnit.Position) >
+                baseTurret.Stats.Range.Total * baseTurret.Stats.Range.Total)
             {
                 baseTurret.SetTargetUnit(null, true);
             }
@@ -38,7 +41,15 @@ namespace AIScripts
         /// TODO: Verify if this needs a rewrite or additions to account for special cases.
         public void CheckForTargets()
         {
-            var units = GetUnitsInRange(baseTurret.Position, baseTurret.Stats.Range.Total, true);
+            var units = GetUnitsInRange(
+                baseTurret,
+                baseTurret.Position,
+                baseTurret.Stats.Range.Total,
+                true,
+                SpellDataFlags.AffectEnemies
+                | SpellDataFlags.AffectMinions
+                | SpellDataFlags.AffectHeroes
+            );
             AttackableUnit nextTarget = null;
             var nextTargetPriority = ClassifyUnit.DEFAULT;
 
@@ -67,14 +78,18 @@ namespace AIScripts
                     {
                         continue;
                     }
+
                     // Find the next champion in range targeting an enemy champion who is also in range
                     if (!(u is Champion enemyChamp) || enemyChamp.TargetUnit == null)
                     {
                         continue;
                     }
+
                     if (!(enemyChamp.TargetUnit is Champion enemyChampTarget) ||
-                        Vector2.DistanceSquared(enemyChamp.Position, enemyChampTarget.Position) > enemyChamp.Stats.Range.Total * enemyChamp.Stats.Range.Total ||
-                        Vector2.DistanceSquared(baseTurret.Position, enemyChampTarget.Position) > baseTurret.Stats.Range.Total * baseTurret.Stats.Range.Total)
+                        Vector2.DistanceSquared(enemyChamp.Position, enemyChampTarget.Position) >
+                        enemyChamp.Stats.Range.Total * enemyChamp.Stats.Range.Total ||
+                        Vector2.DistanceSquared(baseTurret.Position, enemyChampTarget.Position) >
+                        baseTurret.Stats.Range.Total * baseTurret.Stats.Range.Total)
                     {
                         continue;
                     }
@@ -91,7 +106,5 @@ namespace AIScripts
 
             baseTurret.SetTargetUnit(nextTarget, true);
         }
-
-
     }
 }

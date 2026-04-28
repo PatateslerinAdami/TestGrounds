@@ -766,8 +766,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var type = damageData.DamageType;
             var source = damageData.DamageSource;
 
-            ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnPreDealDamage.Publish(damageData.Attacker, damageData);
+            ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
             var postMitigationDamage = damageData.PostMitigationDamage;
             if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
@@ -815,9 +815,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
-
+            ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
+            
             if (!IsDead && Stats.CurrentHealth <= 0)
             {
                 IsDead = true;
@@ -971,7 +971,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             // CallForHelpSuppressor
             Stats.SetActionState(ActionState.CAN_ATTACK, Status.HasFlag(StatusFlags.CanAttack));
-            Stats.SetActionState(ActionState.CAN_CAST, Status.HasFlag(StatusFlags.CanCast));
+            bool canCast = Status.HasFlag(StatusFlags.CanCast)
+                && !Status.HasFlag(StatusFlags.Charmed)
+                && !Status.HasFlag(StatusFlags.Feared)
+                && !Status.HasFlag(StatusFlags.Silenced)
+                && !Status.HasFlag(StatusFlags.Sleep)
+                && !Status.HasFlag(StatusFlags.Stunned)
+                && !Status.HasFlag(StatusFlags.Suppressed)
+                && !Status.HasFlag(StatusFlags.Taunted);
+            Stats.SetActionState(ActionState.CAN_CAST, canCast);
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
             Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
             Stats.SetActionState(ActionState.CHARMED, Status.HasFlag(StatusFlags.Charmed));
@@ -1128,7 +1136,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             else
             {
+                if (Waypoints == null || Waypoints.Count <= 1)
+                {
+                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    return frameTime;
+                }
+
                 dir = Waypoints[1] - Position;
+                if (float.IsNaN(dir.X) || float.IsNaN(dir.Y) || float.IsInfinity(dir.X) || float.IsInfinity(dir.Y))
+                {
+                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    return frameTime;
+                }
                 distToDest = dir.Length();
             }
             distRemaining = Math.Min(distToDest, distRemaining);
@@ -1904,9 +1923,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return;
             }
 
-            if (Shields.Remove(shield) && shield.Amount != 0)
+            if (Shields.Remove(shield))
             {
-                _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
+                if (shield.Amount != 0)
+                {
+                    _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
+                }
+                ApiEventManager.OnShieldBreak.Publish(shield);
             }
         }
 
@@ -2221,7 +2244,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 else if (shield.Physical)
                 {
-                    combined.Phyisical += shield.Amount;
+                    combined.Physical += shield.Amount;
                 }
             }
 

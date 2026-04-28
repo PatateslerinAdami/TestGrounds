@@ -35,28 +35,12 @@ public class AatroxPassiveReady : IBuffGameScript {
         ApiEventManager.OnTakeDamage.AddListener(this, _aatrox, OnTakeDamage);
     }
 
-    private void OnTakeDamage(DamageData data) {
-        //TODO: Use this when there Shields are implemented correctly
-        /*var shield       = _aatrox.HasShield();
-        var shieldHealth = 0f;
-        if (shield) {
-            shieldHealth = data.DamageType switch {
-                DamageType.DAMAGE_TYPE_MAGICAL  => _aatrox.GetShield(false, true),
-                DamageType.DAMAGE_TYPE_PHYSICAL => _aatrox.GetShield(true,  false),
-                _                               => shieldHealth
-            };
-            shieldHealth += _aatrox.GetShield(true, true);
-        }
-        if (_aatrox.Stats.CurrentHealth + shieldHealth <= data.PostMitigationDamage) {
-            data.PostMitigationDamage = 0f;
-            AddBuff("AatroxPassiveDeath", 3f, 1, _spell, _aatrox, _aatrox);
-            _buff.DeactivateBuff();
-        }*/
-        if (_aatrox.Stats.CurrentHealth <= data.PostMitigationDamage) {
-            data.PostMitigationDamage = 0f;
-            AddBuff("AatroxPassiveDeath", 3f, 1, _spell, _aatrox, _aatrox);
-            _buff.DeactivateBuff();
-        }
+    private void OnTakeDamage(DamageData data)
+    {
+        if (!(_aatrox.Stats.CurrentHealth <= data.PostMitigationDamage)) return;
+        data.PostMitigationDamage = 0f;
+        AddBuff("AatroxPassiveDeath", 3f, 1, _spell, _aatrox, _aatrox);
+        _buff.DeactivateBuff();
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) { }

@@ -17,8 +17,11 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, QuestClickedRequest req)
         {
-            var msg = $"Clicked quest with netid: {req.QuestID}";
-            _chatCommandManager.SendDebugMsgFormatted(DebugMsgType.NORMAL, msg);
+            var player = _game.PlayerManager.GetPeerInfo(userId);
+            if (player == null || player.Champion == null) return false;
+
+            player.Champion.PlayerQuestManager.OnQuestClicked(req.QuestID);
+
             return true;
         }
     }

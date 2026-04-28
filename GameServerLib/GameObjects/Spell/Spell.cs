@@ -34,6 +34,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         private readonly NetworkIdManager _networkIdManager;
         private float _overrrideCastRange;
         private AttackType _attackType;
+        private bool _scriptActivated;
+        private bool _scriptPostActivated;
         private static ILog _logger = LoggerProvider.GetLogger();
 
         /// <summary>
@@ -133,6 +135,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
                 else
                 {
+                    // Passive slot uses CharScript logic; keep a non-null spell script to avoid null access in shared spell code.
+                    Script = new SpellScriptEmpty();
+                    HasEmptyScript = true;
                     owner.LoadCharScript(this);
                 }
             }
@@ -155,6 +160,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public void LoadScript()
         {
             ApiEventManager.RemoveAllListenersForOwner(Script);
+            _scriptActivated = false;
+            _scriptPostActivated = false;
+
             string nameSpace = "Spells";
             if (CastInfo.SpellSlot >= (byte)SpellSlotType.InventorySlots && CastInfo.SpellSlot < (byte)SpellSlotType.BluePillSlot)
             {
@@ -181,6 +189,39 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 Script.OnActivate(CastInfo.Owner, this);
             }
             catch(Exception e)
+            {
+                _logger.Error(null, e);
+            }
+
+            _scriptActivated = true;
+            TryPostActivateScript();
+        }
+
+        public void TryPostActivateScript()
+        {
+            if (_scriptPostActivated || !_scriptActivated || Script == null || CastInfo.Owner == null)
+            {
+                return;
+            }
+
+            bool hasViewer = false;
+            foreach (var _ in CastInfo.Owner.VisibleForPlayers)
+            {
+                hasViewer = true;
+                break;
+            }
+
+            if (!hasViewer)
+            {
+                return;
+            }
+
+            _scriptPostActivated = true;
+            try
+            {
+                Script.OnPostActivate(CastInfo.Owner, this);
+            }
+            catch (Exception e)
             {
                 _logger.Error(null, e);
             }
@@ -1135,6 +1176,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     State = SpellState.STATE_COOLDOWN;
 
                     CurrentCooldown = GetCooldown();
+                    SetPassiveCooldownStats(CurrentCooldown);
 
                     if (CastInfo.SpellSlot < 4)
                     {
@@ -1244,6 +1286,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             CurrentCooldown = GetCooldown();
+            SetPassiveCooldownStats(CurrentCooldown);
 
             if (CastInfo.SpellSlot < 4)
             {
@@ -1476,8 +1519,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableCooldowns))
             {
-                var cd = SpellData.Cooldown[CastInfo.SpellLevel];
-                if (Script.ScriptMetadata.CooldownIsAffectedByCDR)
+                if (SpellData.Cooldown == null || SpellData.Cooldown.Length == 0)
+                {
+                    return 0.0f;
+                }
+
+                var level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.Cooldown.Length - 1));
+                var cd = SpellData.Cooldown[level];
+                if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
                 {
                     cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
                 }
@@ -1489,9 +1538,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public float GetAmmoRechageTime()
         {
-            var cd = SpellData.AmmoRechargeTime[CastInfo.SpellLevel - 1];
+            if (SpellData.AmmoRechargeTime == null || SpellData.AmmoRechargeTime.Length == 0)
+            {
+                return 0.0f;
+            }
 
-            if (Script.ScriptMetadata.CooldownIsAffectedByCDR)
+            var spellLevel = Math.Max(1, (int)CastInfo.SpellLevel);
+            var level = Math.Clamp(spellLevel - 1, 0, SpellData.AmmoRechargeTime.Length - 1);
+            var cd = SpellData.AmmoRechargeTime[level];
+
+            if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
             {
                 cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
             }
@@ -1684,6 +1740,31 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
+        private void SetPassiveCooldownStats(float newCd)
+        {
+            if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
+            {
+                return;
+            }
+
+            var stats = CastInfo.Owner?.Stats;
+            if (stats == null)
+            {
+                return;
+            }
+
+            if (newCd <= 0)
+            {
+                stats.PassiveCooldownEndTime = 0;
+                stats.PassiveCooldownTotalTime = 0;
+                return;
+            }
+
+            var nowSeconds = _game.GameTime / 1000.0f;
+            stats.PassiveCooldownTotalTime = newCd;
+            stats.PassiveCooldownEndTime = nowSeconds + newCd;
+        }
+
         /// <summary>
         /// Sets the cooldown of this spell.
         /// </summary>
@@ -1694,6 +1775,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (newCd <= 0)
             {
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, 0, 0);
+                SetPassiveCooldownStats(0);
                 // Changing the state of the spell to READY during casting prevents the spell from finishing casting, thus locking the player in the move order CastSpell.
                 if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
                 {
@@ -1711,6 +1793,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, newCd, GetCooldown());
                 State = SpellState.STATE_COOLDOWN;
                 CurrentCooldown = newCd;
+                SetPassiveCooldownStats(newCd);
             }
         }
 

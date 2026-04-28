@@ -13,6 +13,8 @@ namespace Spells
 {
     public class FiddlesticksDarkWind : ISpellScript
     {
+        private ObjAIBase _fiddlesticks;
+
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             MissileParameters = new MissileParameters
@@ -21,29 +23,33 @@ namespace Spells
                 MaximumHits = 5,
                 CanHitSameTarget = true,
                 BounceSpellName = "FiddleSticksDarkWindMissile",
-               
             },
             IsDamagingSpell = true,
             TriggersSpellCasts = true,
-
         };
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
+            _fiddlesticks = owner;
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
 
         public void OnSpellCast(Spell spell)
         {
         }
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+
+        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
-            var owner = spell.CastInfo.Owner;
-
-            float baseDamage = 60 + (25 * (spell.CastInfo.SpellLevel - 1));
-            float apRatio = 0.45f;
-            float damage = baseDamage + (owner.Stats.AbilityPower.Total * apRatio);
-
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
+            AddBuff("Silence", 1.2f, 1, spell, target, _fiddlesticks, false);
+            AddParticleTarget(_fiddlesticks, target, spell.SpellData.HitEffectName, target);
+            target.TakeDamage(_fiddlesticks,
+                (65f + 15f * (spell.CastInfo.SpellLevel - 1) +
+                 _fiddlesticks.Stats.AbilityPower.Total * spell.SpellData.Coefficient) *
+                (IsValidTarget(_fiddlesticks, target,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions)
+                    ? 1.5f
+                    : 1f), DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                DamageResultType.RESULT_NORMAL);
         }
     }
 

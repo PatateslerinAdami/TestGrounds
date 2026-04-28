@@ -15,7 +15,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.STUN, 
+            BuffType = BuffType.STUN,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
@@ -26,30 +26,32 @@ namespace Buffs
         private AttackableUnit _unit;
         private Spell _ownerSpell;
         private Particle p;
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _unit = unit;
             _ownerSpell = ownerSpell;
 
             _hitUnits.Add(unit.NetId);
-            p = AddParticle(ownerSpell.CastInfo.Owner, unit, "sion_base_e_minion", default, lifetime:5f, size:2f);
+            p = AddParticle(ownerSpell.CastInfo.Owner, unit, "sion_base_e_minion", default, lifetime: 5f, size: 2f);
         }
 
         public void OnUpdate(float diff)
         {
             if (_unit == null || _ownerSpell == null) return;
 
-            var nearbyUnits = GetUnitsInRange(_unit.Position, 150f, true);
+            var nearbyUnits = EnumerateValidUnitsInRange(_ownerSpell.CastInfo.Owner, _unit.Position, 150f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral);
             foreach (var target in nearbyUnits)
             {
-                if (target.Team != _ownerSpell.CastInfo.Owner.Team && !_hitUnits.Contains(target.NetId))
-                {
-                    _hitUnits.Add(target.NetId);
+                if (_hitUnits.Contains(target.NetId)) continue;
+                _hitUnits.Add(target.NetId);
 
-                    AddParticleTarget(_ownerSpell.CastInfo.Owner, target, "sion_base_e_buf_champ.troy", target, lifetime: 4f);
+                AddParticleTarget(_ownerSpell.CastInfo.Owner, target, "sion_base_e_buf_champ.troy", target,
+                    lifetime: 4f);
 
-                    // TODO: Apply the pass-through damage and armor shred/slow buff here
-                }
+                // TODO: Apply the pass-through damage and armor shred/slow buff here
             }
         }
 

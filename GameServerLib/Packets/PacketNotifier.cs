@@ -57,6 +57,36 @@ namespace PacketDefinitions420
             _navGrid = navGrid;
         }
 
+        private static byte GetItemsInSlotForDisplay(ObjAIBase owner, Item item)
+        {
+            if (item == null)
+            {
+                return 0;
+            }
+            if (item.StackCount > 1)
+            {
+                return (byte)item.StackCount;
+            }
+
+            var supportsCharges = item.SpellCharges > 0;
+            if (!supportsCharges && owner != null && !string.IsNullOrEmpty(item.ItemData.SpellName))
+            {
+                var spell = owner.GetSpell(item.ItemData.SpellName);
+                if (spell != null)
+                {
+                    supportsCharges = spell.SpellData.MaxAmmo > 1 || (spell.Script?.ScriptMetadata.AmmoPerCharge ?? 1) > 1;
+                }
+            }
+
+            if (!supportsCharges)
+            {
+                return (byte)item.StackCount;
+            }
+
+            var displayCount = Math.Max(1, item.SpellCharges);
+            return (byte)Math.Clamp(displayCount, 0, byte.MaxValue);
+        }
+
         AddRegion ConstructAddRegionPacket(Region region)
         {
             var regionPacket = new AddRegion
@@ -177,10 +207,9 @@ namespace PacketDefinitions420
                             itemDataList.Add(new LeaguePackets.Game.Common.ItemData
                             {
                                 ItemID = (uint)itemData.ItemId,
-                                ItemsInSlot = (byte)item.StackCount,
+                                ItemsInSlot = GetItemsInSlotForDisplay(obj, item),
                                 Slot = obj.Inventory.GetItemSlot(item),
-                                //Unhardcode this when spell ammo gets introduced
-                                SpellCharges = 0
+                                SpellCharges = (byte)item.SpellCharges
                             });
                         }
                     }
@@ -930,8 +959,8 @@ namespace PacketDefinitions420
             {
                 ItemID = (uint)itemInstance.ItemData.ItemId,
                 Slot = gameObject.Inventory.GetItemSlot(itemInstance),
-                ItemsInSlot = (byte)itemInstance.StackCount,
-                SpellCharges = 0 // TODO: Unhardcode
+                ItemsInSlot = GetItemsInSlotForDisplay(gameObject, itemInstance),
+                SpellCharges = (byte)itemInstance.SpellCharges
             };
 
             //TODO find out what bitfield does, currently unknown
@@ -943,6 +972,27 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(gameObject, buyItemPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifySetItem(ObjAIBase ai, Item itemInstance)
+        {
+            if (!(ai is Champion champion))
+            {
+                return;
+            }
+
+            var packet = new SetItem
+            {
+                Item = new LeaguePackets.Game.Common.ItemData
+                {
+                    ItemID = (uint)itemInstance.ItemData.ItemId,
+                    Slot = ai.Inventory.GetItemSlot(itemInstance),
+                    ItemsInSlot = GetItemsInSlotForDisplay(ai, itemInstance),
+                    SpellCharges = (byte)itemInstance.SpellCharges
+                }
+            };
+
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -1129,6 +1179,35 @@ namespace PacketDefinitions420
         public void NotifySetParState(AttackableUnit unit, uint parState, int userId = -1)
         {
             NotifySetPARState(unit, parState, userId);
+        }
+
+        /// <summary>
+        /// Sends a packet to show or hide a unit's health bar.
+        /// </summary>
+        /// <param name="unit">Unit whose health bar visibility should change.</param>
+        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="hide">True to hide, false to show.</param>
+        public void NotifyShowHealthBar(AttackableUnit unit, int userId, bool hide)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            var packet = new S2C_ShowHealthBar
+            {
+                SenderNetID = unit.NetId,
+                ShowHealthBar = !hide
+            };
+
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
         }
 
         /// <summary>
@@ -1410,14 +1489,14 @@ namespace PacketDefinitions420
                 return;
             }
 
-            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL)
+            if (particle.SpecificTeam != TeamId.TEAM_ALL)
             {
                 var fxPacket = ConstructFXCreateGroupPacket(particle, particle.SpecificTeam);
                 _packetHandlerManager.BroadcastPacketTeam(particle.SpecificTeam, fxPacket.GetBytes(), Channel.CHL_S2C);
                 return;
             }
 
-            if (particle.Team != TeamId.TEAM_NEUTRAL)
+            if (particle.Team != TeamId.TEAM_ALL)
             {
                 var allyFxPacket = ConstructFXCreateGroupPacket(particle, particle.Team);
                 _packetHandlerManager.BroadcastPacketTeam(particle.Team, allyFxPacket.GetBytes(), Channel.CHL_S2C);
@@ -1432,28 +1511,15 @@ namespace PacketDefinitions420
                 return;
             }
 
-            var globalFxPacket = ConstructFXCreateGroupPacket(particle, TeamId.TEAM_NEUTRAL);
+            var globalFxPacket = ConstructFXCreateGroupPacket(particle, TeamId.TEAM_ALL);
             _packetHandlerManager.BroadcastPacket(globalFxPacket.GetBytes(), Channel.CHL_S2C);
         }
 
         static bool IsParticleVisibleToRecipient(Particle particle, TeamId team, int userId = -1)
         {
-            if (particle.SpecificTeam != TeamId.TEAM_NEUTRAL && team != particle.SpecificTeam)
-            {
-                return false;
-            }
-
-            if (particle.SpecificUnit is Champion specificChampion)
-            {
-                return specificChampion.ClientId == userId;
-            }
-
-            if (particle.SpecificUnit != null)
-            {
-                return false;
-            }
-
-            return true;
+            return userId >= 0
+                ? particle.IsAudienceVisibleToRecipient(team, userId)
+                : particle.IsAudienceVisibleToTeam(team);
         }
 
         S2C_FX_OnEnterTeamVisibility ConstructFXEnterTeamVisibilityPacket(Particle particle, TeamId team)
@@ -1465,7 +1531,7 @@ namespace PacketDefinitions420
             };
 
             fxVisPacket.VisibilityTeam = 0;
-            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_NEUTRAL)
+            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_ALL)
             {
                 fxVisPacket.VisibilityTeam = 1;
             }
@@ -1528,7 +1594,7 @@ namespace PacketDefinitions420
             };
 
             fxVisPacket.VisibilityTeam = 0;
-            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_NEUTRAL)
+            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_ALL)
             {
                 fxVisPacket.VisibilityTeam = 1;
             }
@@ -2031,14 +2097,16 @@ namespace PacketDefinitions420
         /// Sends a packet to all players with vision of the target of the specified buff detailing that the buff previously in the same slot was replaced by the newly specified buff.
         /// </summary>
         /// <param name="b">Buff that will replace the old buff in the same slot.</param>
-        public void NotifyNPC_BuffReplace(Buff b)
+        /// <param name="duration">Optional override for duration in seconds.</param>
+        /// <param name="runningTime">Optional override for elapsed/running time in seconds.</param>
+        public void NotifyNPC_BuffReplace(Buff b, float? duration = null, float? runningTime = null)
         {
             var replacePacket = new NPC_BuffReplace
             {
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
-                RunningTime = b.TimeElapsed,
-                Duration = b.Duration,
+                RunningTime = runningTime ?? b.TimeElapsed,
+                Duration = duration ?? b.Duration,
                 CasterNetID = 0
             };
 
@@ -2586,6 +2654,22 @@ namespace PacketDefinitions420
                 NotifyInventoryChange = true
             };
             _packetHandlerManager.BroadcastPacketVision(ai, ria.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifyS2C_SetItemCharges(ObjAIBase ai, byte slot, byte charges)
+        {
+            if (!(ai is Champion champion))
+            {
+                return;
+            }
+
+            var packet = new S2C_SetItemCharges
+            {
+                Slot = slot,
+                SpellCharges = charges
+            };
+
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -4210,7 +4294,8 @@ namespace PacketDefinitions420
             {
                 SenderNetID = ai.NetId,
                 Slot = ai.Inventory.GetItemSlot(itemInstance),
-                SpellCharges = (byte)itemInstance.StackCount
+                ItemsInSlot = GetItemsInSlotForDisplay(ai, itemInstance),
+                SpellCharges = (byte)itemInstance.SpellCharges
             };
 
             _packetHandlerManager.BroadcastPacketVision(ai, useItemPacket.GetBytes(), Channel.CHL_S2C);
@@ -4668,6 +4753,24 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+        }
+        public void NotifyS2C_HandleQuestUpdate(int userId, uint questId, string objective, string tooltip, string icon, byte command, QuestType questType, bool success)
+        {
+            var packet = new S2C_HandleQuestUpdate
+            {
+                QuestID = questId,
+                Objective = objective ?? "",
+                Tooltip = tooltip ?? "",
+                Icon = icon ?? "",
+                Reward = "",
+                QuestCommand = command,
+                QuestType = (byte)questType,
+                Success = success,
+                Ceremony = false,
+                HandleRollovers = false
+            };
+
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
         }
     }
 }

@@ -26,7 +26,7 @@ namespace Spells
             AddParticleTarget(_owner, _owner, "Riven_Base_W_Cast.troy", _owner);
             AddParticleTarget(_owner, _owner, "exile_W_weapon_cas.troy", _owner, bone: "weapon");
 
-            var units = GetUnitsInRange(_owner.Position, 250, true);
+            var units = GetUnitsInRange(_owner, _owner.Position, 250, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
 
             float baseDmg = 25f + (30f * spell.CastInfo.SpellLevel);
             float bonusAD = _owner.Stats.AttackDamage.FlatBonus * 1.0f;
@@ -34,21 +34,10 @@ namespace Spells
 
             foreach (var unit in units)
             {
-                if (IsValidTarget(unit, _owner))
-                {
                     unit.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell);
                     AddBuff("RivenMartyr", 0.75f, 1, spell, unit, _owner);
                     AddParticleTarget(_owner, unit, "exile_W_tar_02.troy", unit, 1f);
-                }
             }
-        }
-
-        private bool IsValidTarget(AttackableUnit unit, ObjAIBase _owner)
-        {
-            return unit.Team != _owner.Team
-                   && unit.Status.HasFlag(StatusFlags.Targetable)
-                   && !unit.IsDead
-                   && !(unit is ObjBuilding || unit is BaseTurret);
         }
     }
 }

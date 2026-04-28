@@ -14,30 +14,38 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class MordekaiserSyphonOfDestruction : ISpellScript {
+public class MordekaiserSyphonOfDestruction : ISpellScript
+{
     private ObjAIBase _mordekaiser;
-    private Spell     _spell;
-    private Vector2   _direction;
+    private Spell _spell;
+    private Vector2 _direction;
 
-    public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        IsDamagingSpell    = true,
+    public SpellScriptMetadata ScriptMetadata { get; } = new()
+    {
+        IsDamagingSpell = true,
         TriggersSpellCasts = true
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) { _mordekaiser = owner; }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _spell     = spell;
-        owner.Stats.CurrentHealth = Math.Max(1, owner.Stats.CurrentHealth - (24f + 12 * (_spell.CastInfo.SpellLevel - 1)));
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        _mordekaiser = owner;
     }
 
-    public void OnSpellCast(Spell spell) {
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        _spell = spell;
+        owner.Stats.CurrentHealth =
+            Math.Max(1, owner.Stats.CurrentHealth - (24f + 12 * (_spell.CastInfo.SpellLevel - 1)));
+    }
+
+    public void OnSpellCast(Spell spell)
+    {
         _direction = new Vector2(_mordekaiser.Direction.X, _mordekaiser.Direction.Z);
     }
 
     public void OnSpellPostCast(Spell spell)
     {
-        var enemiesInRange = GetUnitsInConeRange(
+        var enemiesInRange = GetUnitsInCone(
             _mordekaiser,
             _mordekaiser.Position,
             _direction,
@@ -48,15 +56,17 @@ public class MordekaiserSyphonOfDestruction : ISpellScript {
             | SpellDataFlags.AffectHeroes
             | SpellDataFlags.AffectMinions
             | SpellDataFlags.AffectNeutral);
-        
-        if(enemiesInRange.Count != 0) AddBuff("MordekaiserSyphonParticle", 1f, 1, _spell, _mordekaiser, _mordekaiser);
-        foreach (var unit in enemiesInRange) {
-            var ap  = _mordekaiser.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+
+        if (enemiesInRange.Count != 0) AddBuff("MordekaiserSyphonParticle", 1f, 1, _spell, _mordekaiser, _mordekaiser);
+        foreach (var unit in enemiesInRange)
+        {
+            var ap = _mordekaiser.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
             var dmg = 70 + 45f * (_spell.CastInfo.SpellLevel - 1) + ap;
-            
-            AddParticle(_mordekaiser, unit, "mordakaiser_siphonOfDestruction_tar",    unit.Position);
+
+            AddParticle(_mordekaiser, unit, "mordakaiser_siphonOfDestruction_tar", unit.Position);
             AddParticle(_mordekaiser, unit, "mordakaiser_siphonOfDestruction_tar_02", unit.Position);
-            unit.TakeDamage(_mordekaiser, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+            unit.TakeDamage(_mordekaiser, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                false);
         }
     }
 }

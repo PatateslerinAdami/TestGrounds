@@ -15,6 +15,10 @@ namespace GameServerCore.Scripting.CSharp
         {
         }
 
+        void OnPostActivate(ObjAIBase owner, Spell spell)
+        {
+        }
+
         void OnDeactivate(ObjAIBase owner, Spell spell)
         {
         }
