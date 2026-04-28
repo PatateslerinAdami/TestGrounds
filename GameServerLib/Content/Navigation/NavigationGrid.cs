@@ -184,14 +184,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 return null;
             }
-            
+
             var fromNav = TranslateToNavGrid(from);
             var cellFrom = GetCell(fromNav, false);
             //var goal = GetClosestWalkableCell(to, distanceThreshold, true);
             to = GetClosestTerrainExit(to, distanceThreshold);
             var toNav = TranslateToNavGrid(to);
             var cellTo = GetCell(toNav, false);
-            
+
             if (cellFrom == null || cellTo == null)
             {
                 return null;
@@ -201,15 +201,26 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 return new List<Vector2>(2){ from, to };
             }
 
+            // Straight-line LOS first. if the corridor is clear, skip A* entirely.
+            // This matches the client's BuildNavigationPath which always does GridLineOfSightTest2
+            // before falling through to the grid pathfinder.
+            if (!CastCircle(from, to, distanceThreshold))
+            {
+                return new List<Vector2>(2) { from, to };
+            }
+
             // A size large enough not to relocate the array while playing Summoner's Rift
             var priorityQueue = new PriorityQueue<(List<NavigationGridCell>, float), float>(1024);
-            
+            // Best known g-score (path cost) per cell. this is needed because we close cells on dequeue,
+            // so we must reject neighbor-edges that don't improve on a cell's known cost.
+            var gScore = new Dictionary<int, float>();
+            // Cells whose neighbors have been fully expanded.
+            var closedList = new HashSet<int>();
+
             var start = new List<NavigationGridCell>(1);
             start.Add(cellFrom);
             priorityQueue.Enqueue((start, 0), Vector2.Distance(fromNav, toNav));
-
-            var closedList = new HashSet<int>();
-            closedList.Add(cellFrom.ID);
+            gScore[cellFrom.ID] = 0;
 
             List<NavigationGridCell> path = null;
 
@@ -226,6 +237,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 path = element.Item1;
 
                 NavigationGridCell cell = path[path.Count - 1];
+
+                // Closing on dequeue (not enqueue) so if a better path to this cell was already
+                // processed, drop this stale entry. Closing on enqueue would lock in suboptimal
+                // paths because a shorter route discovered later couldn't update the cell.
+                if (closedList.Contains(cell.ID))
+                {
+                    continue;
+                }
+                closedList.Add(cell.ID);
 
                 // found the min solution and return it (path)
                 if (cell.ID == cellTo.ID)
@@ -247,23 +267,41 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     if(neighborCell.ID != cellTo.ID)
                     {
                         neighborCellCoord = neighborCell.GetCenter();
-                        
+
                         Vector2 cellCoord = fromNav;
                         if(cell.ID != cellFrom.ID)
                         {
                             cellCoord = cell.GetCenter();
                         }
 
-                        // close cell if not walkable or circle LOS check fails (start cell skipped as it always fails)
+                        // Skip the edge if blocked, but don't permanently close the neighbor because
+                        // it may be reachable from a different cell at a different angle.
                         if
                         (
                             CastCircle(cellCoord, neighborCellCoord, distanceThreshold, false)
                         )
                         {
-                            closedList.Add(neighborCell.ID);
                             continue;
                         }
                     }
+
+                    // Diagonal moves cost sqrt(2), cardinal moves cost 1. Equal cell-cost would
+                    // bias A* toward zigzag paths and produce visibly wobbly routes.
+                    bool diagonal = (cell.Locator.X != neighborCell.Locator.X)
+                                 && (cell.Locator.Y != neighborCell.Locator.Y);
+                    float stepCost = diagonal ? 1.41421356f : 1f;
+
+                    float tentativeG = currentCost + stepCost
+                        + neighborCell.ArrivalCost
+                        + neighborCell.AdditionalCost;
+
+                    // Drop the edge if we already have an equal-or-better path to this neighbor
+                    // pending in the queue.
+                    if (gScore.TryGetValue(neighborCell.ID, out float existingG) && tentativeG >= existingG)
+                    {
+                        continue;
+                    }
+                    gScore[neighborCell.ID] = tentativeG;
 
                     // calculate the new path and cost +heuristic and add to the priority queue
                     var npath = new List<NavigationGridCell>(path.Count + 1);
@@ -273,18 +311,11 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     }
                     npath.Add(neighborCell);
 
-                    // add 1 for every cell used
-                    float cost = currentCost + 1
-                        + neighborCell.ArrivalCost
-                        + neighborCell.AdditionalCost;
-                    
                     priorityQueue.Enqueue(
-                        (npath, cost), cost
+                        (npath, tentativeG), tentativeG
                         + neighborCell.Heuristic
                         + Vector2.Distance(neighborCellCoord, toNav)
                     );
-
-                    closedList.Add(neighborCell.ID);
                 }
             }
 
