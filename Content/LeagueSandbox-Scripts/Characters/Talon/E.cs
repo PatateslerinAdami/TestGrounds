@@ -50,7 +50,7 @@ public class TalonCutthroat : ISpellScript {
 
         //slow
         var variables      = new BuffVariables();
-        variables.Set("slowAmount", 0.99f);
+        variables.Set("slowPercent", 0.99f);
         AddBuff("Slow", 0.25f, 1, spell, target, owner, buffVariables: variables);
         
         AddParticleTarget(owner, target, "talon_E_tar", target);
