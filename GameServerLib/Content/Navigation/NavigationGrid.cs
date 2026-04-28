@@ -180,6 +180,19 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// <returns>List of points forming a path in order: from -> to</returns>
         public List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0)
         {
+            return GetPath(from, to, out _, distanceThreshold);
+        }
+
+        /// <summary>
+        /// Builds a path from `from` to `to`. If the goal cell is unreachable, returns the path to
+        /// the closest-explored reachable cell instead and sets <paramref name="isPartialPath"/>.
+        /// Returns null only when no progress at all could be made (start cell isolated, same
+        /// position, or out-of-grid coordinates).
+        /// </summary>
+        public List<Vector2> GetPath(Vector2 from, Vector2 to, out bool isPartialPath, float distanceThreshold = 0)
+        {
+            isPartialPath = false;
+
             if(from == to)
             {
                 return null;
@@ -187,7 +200,6 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
             var fromNav = TranslateToNavGrid(from);
             var cellFrom = GetCell(fromNav, false);
-            //var goal = GetClosestWalkableCell(to, distanceThreshold, true);
             to = GetClosestTerrainExit(to, distanceThreshold);
             var toNav = TranslateToNavGrid(to);
             var cellTo = GetCell(toNav, false);
@@ -209,35 +221,30 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 return new List<Vector2>(2) { from, to };
             }
 
-            // A size large enough not to relocate the array while playing Summoner's Rift
-            var priorityQueue = new PriorityQueue<(List<NavigationGridCell>, float), float>(1024);
-            // Best known g-score (path cost) per cell. this is needed because we close cells on dequeue,
-            // so we must reject neighbor-edges that don't improve on a cell's known cost.
+            // Open set, ordered by f = g + h.
+            var priorityQueue = new PriorityQueue<NavigationGridCell, float>(1024);
+            // Best known g-score per cell. needed because we close cells on dequeue, so we must
+            // reject neighbor-edges that don't improve on a cell's known cost.
             var gScore = new Dictionary<int, float>();
+            // Predecessor table for path reconstruction. avoids the per-expansion list copy that
+            // made the previous implementation O(n^2) in memory and time on long paths.
+            var cameFrom = new Dictionary<int, NavigationGridCell>();
             // Cells whose neighbors have been fully expanded.
             var closedList = new HashSet<int>();
 
-            var start = new List<NavigationGridCell>(1);
-            start.Add(cellFrom);
-            priorityQueue.Enqueue((start, 0), Vector2.Distance(fromNav, toNav));
+            priorityQueue.Enqueue(cellFrom, Vector2.Distance(fromNav, toNav));
             gScore[cellFrom.ID] = 0;
 
-            List<NavigationGridCell> path = null;
+            // Closest-explored cell to the goal. used as fallback when the goal is unreachable so
+            // units ordered through a wall walk to the obstacle instead of refusing to move.
+            // Mirrors the client's partialPath / destinationUnchanged behavior.
+            NavigationGridCell bestCell = cellFrom;
+            float bestHeuristic = Vector2.Distance(cellFrom.GetCenter(), toNav);
 
-            // while there are still paths to explore
-            while (true)
+            NavigationGridCell finalCell = null;
+
+            while (priorityQueue.TryDequeue(out var cell, out _))
             {
-                if (!priorityQueue.TryDequeue(out var element, out _))
-                {
-                    // no solution
-                    return null;
-                }
-
-                float currentCost = element.Item2;
-                path = element.Item1;
-
-                NavigationGridCell cell = path[path.Count - 1];
-
                 // Closing on dequeue (not enqueue) so if a better path to this cell was already
                 // processed, drop this stale entry. Closing on enqueue would lock in suboptimal
                 // paths because a shorter route discovered later couldn't update the cell.
@@ -247,23 +254,28 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 }
                 closedList.Add(cell.ID);
 
-                // found the min solution and return it (path)
+                float h = Vector2.Distance(cell.GetCenter(), toNav);
+                if (h < bestHeuristic)
+                {
+                    bestHeuristic = h;
+                    bestCell = cell;
+                }
+
                 if (cell.ID == cellTo.ID)
                 {
+                    finalCell = cell;
                     break;
                 }
 
                 foreach (NavigationGridCell neighborCell in GetCellNeighbors(cell))
                 {
-                    // if the neighbor is in the closed list - skip
                     if (closedList.Contains(neighborCell.ID))
                     {
                         continue;
                     }
 
                     Vector2 neighborCellCoord = toNav;
-                    // The target point is always walkable,
-                    // we made sure of this at the beginning of the function
+                    // The target point is always walkable, we made sure of this above.
                     if(neighborCell.ID != cellTo.ID)
                     {
                         neighborCellCoord = neighborCell.GetCenter();
@@ -291,51 +303,65 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                                  && (cell.Locator.Y != neighborCell.Locator.Y);
                     float stepCost = diagonal ? 1.41421356f : 1f;
 
-                    float tentativeG = currentCost + stepCost
+                    float tentativeG = gScore[cell.ID] + stepCost
                         + neighborCell.ArrivalCost
                         + neighborCell.AdditionalCost;
 
-                    // Drop the edge if we already have an equal-or-better path to this neighbor
-                    // pending in the queue.
                     if (gScore.TryGetValue(neighborCell.ID, out float existingG) && tentativeG >= existingG)
                     {
                         continue;
                     }
-                    gScore[neighborCell.ID] = tentativeG;
 
-                    // calculate the new path and cost +heuristic and add to the priority queue
-                    var npath = new List<NavigationGridCell>(path.Count + 1);
-                    foreach(var pathCell in path)
-                    {
-                        npath.Add(pathCell);
-                    }
-                    npath.Add(neighborCell);
+                    gScore[neighborCell.ID] = tentativeG;
+                    cameFrom[neighborCell.ID] = cell;
 
                     priorityQueue.Enqueue(
-                        (npath, tentativeG), tentativeG
-                        + neighborCell.Heuristic
-                        + Vector2.Distance(neighborCellCoord, toNav)
+                        neighborCell,
+                        tentativeG + neighborCell.Heuristic + Vector2.Distance(neighborCellCoord, toNav)
                     );
                 }
             }
 
-            // shouldn't happen usually
-            if (path == null)
+            if (finalCell == null)
             {
-                return null;
+                if (bestCell.ID == cellFrom.ID)
+                {
+                    // Couldn't even leave the start cell. there is nothing reachable.
+                    return null;
+                }
+                finalCell = bestCell;
+                isPartialPath = true;
             }
+
+            // Reconstruct the path by walking the cameFrom table back to the start.
+            var path = new List<NavigationGridCell>();
+            var current = finalCell;
+            while (current != null)
+            {
+                path.Add(current);
+                cameFrom.TryGetValue(current.ID, out current);
+            }
+            path.Reverse();
 
             SmoothPath(path, distanceThreshold);
 
             var returnList = new List<Vector2>(path.Count);
-            
             returnList.Add(from);
             for (int i = 1; i < path.Count - 1; i++)
             {
                 var navGridCell = path[i];
                 returnList.Add(TranslateFromNavGrid(navGridCell.Locator));
             }
-            returnList.Add(to);
+            // Full path lands on the (possibly off-cell-center) requested position; partial path
+            // lands on the closest reachable cell's center.
+            if (isPartialPath)
+            {
+                returnList.Add(TranslateFromNavGrid(finalCell.Locator));
+            }
+            else
+            {
+                returnList.Add(to);
+            }
 
             return returnList;
         }

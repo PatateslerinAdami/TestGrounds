@@ -135,5 +135,15 @@ namespace LeagueSandbox.GameServer.Handlers
         {
             return _map.NavigationGrid.GetPath(start, target, checkRadius);
         }
+
+        /// <summary>
+        /// Returns a path to the given target position from the given start position. If the goal
+        /// is unreachable, returns a partial path to the closest explored reachable cell and sets
+        /// <paramref name="isPartialPath"/>.
+        /// </summary>
+        public List<Vector2> GetPath(Vector2 start, Vector2 target, out bool isPartialPath, float checkRadius = 0)
+        {
+            return _map.NavigationGrid.GetPath(start, target, out isPartialPath, checkRadius);
+        }
     }
 }
