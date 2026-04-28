@@ -54,6 +54,7 @@ public class AkaliShadowSwipe : ISpellScript {
         AddParticleTarget(_akali, _akali, "akali_shadowSwipe_heal", _akali, bone: "C_BUFFBONE_GLB_CHEST_LOC");
         var energyReturn = 20f + 5f * (_spell.CastInfo.SpellLevel - 1);
         _akali.IncreasePAR(_akali, energyReturn);
+        RemoveBuff(_akali,"AkaliMota");
     }
     
     private void OnStatsUpdate(AttackableUnit unit, float diff) {
