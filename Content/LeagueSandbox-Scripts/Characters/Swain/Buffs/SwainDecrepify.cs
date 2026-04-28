@@ -72,7 +72,7 @@ public class SwainDecrepify : IBuffGameScript
             _p1 = AddParticleTarget(_unit, target, "swain_disintegrationBeam_tar", target, 1f, bone: "head");
 
             var variables = new BuffVariables();
-            variables.Set("slowAmount", 0.2f + 0.05f * (_spell.CastInfo.SpellLevel - 1));
+            variables.Set("slowPercent", 0.2f + 0.05f * (_spell.CastInfo.SpellLevel - 1));
             AddBuff("Slow", 3f, 1, _spell, target, _swain, buffVariables: variables);
             AddBuff("SwainBeamDamage", 3f, 1, _spell, _unit, _swain);
             target.TakeDamage(
