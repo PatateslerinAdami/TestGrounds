@@ -426,11 +426,26 @@ namespace AIScripts
                 }
             }
 
-            float margin = 25f; // Otherwise, interferes with AttackableUnit which stops a little earlier 
+            float margin = 25f; // Otherwise, interferes with AttackableUnit which stops a little earlier
             if (GameServerCore.Extensions.IsVectorWithinRange(currentWaypoint, center, radius + margin))
             {
                 return true;
             }
+
+            // Also count the waypoint as reached once the minion has projected past it along
+            // the segment, so that combat displacement / spread offsets / body-blocking can't
+            // cause the minion to path back toward base to "pick up" a waypoint it already cleared.
+            Vector2 prev = currentWaypointIndex > 0
+                ? GetSpreadedWaypoint(currentWaypointIndex - 1)
+                : LaneMinion.SpawnPosition;
+            Vector2 axis = currentWaypoint - prev;
+            float axisLenSq = axis.LengthSquared();
+            if (axisLenSq > 0.001f
+                && Vector2.Dot(LaneMinion.Position - prev, axis) >= axisLenSq)
+            {
+                return true;
+            }
+
             return false;
         }
 
