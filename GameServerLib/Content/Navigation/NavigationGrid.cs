@@ -383,10 +383,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         }
 
         /// <summary>
-        /// Builds a path from `from` to `to`. If the goal cell is unreachable, returns the path to
-        /// the closest-explored reachable cell instead and sets <paramref name="isPartialPath"/>.
-        /// Returns null only when no progress at all could be made (start cell isolated, same
-        /// position, or out-of-grid coordinates).
+        /// Builds a path from `from` to `to` using bidirectional A*. Two parallel A* searches
+        /// run from start and goal, meeting in the middle. Matches the client's BuildNavigationPath
+        /// behavior so server and client agree on routes (avoids visible divergence-based snaps).
+        ///
+        /// If the goal cell is unreachable, returns the path to the closest-explored reachable
+        /// cell instead (forward direction) and sets <paramref name="isPartialPath"/>. Returns
+        /// null only when no progress at all could be made (start cell isolated, same position,
+        /// or out-of-grid coordinates).
         /// </summary>
         public List<Vector2> GetPath(Vector2 from, Vector2 to, out bool isPartialPath, float distanceThreshold = 0)
         {
@@ -420,142 +424,124 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 return new List<Vector2>(2) { from, to };
             }
 
-            // Open set, ordered by f = g + h.
-            var priorityQueue = new PriorityQueue<NavigationGridCell, float>(1024);
-            // Best known g-score per cell. needed because we close cells on dequeue, so we must
-            // reject neighbor-edges that don't improve on a cell's known cost.
-            var gScore = new Dictionary<int, float>();
-            // Predecessor table for path reconstruction. avoids the per-expansion list copy that
-            // made the previous implementation O(n^2) in memory and time on long paths.
-            var cameFrom = new Dictionary<int, NavigationGridCell>();
-            // Cells whose neighbors have been fully expanded.
-            var closedList = new HashSet<int>();
+            // === Bidirectional A* ===
+            // Forward search expands from cellFrom toward cellTo; backward search expands from cellTo toward cellFrom.
+            // Both run in parallel; at each step, we expand the smaller frontier. The searches
+            // meet in the middle typically resulting in about half the number of cells compared to unidirectional A*.
 
-            priorityQueue.Enqueue(cellFrom, Vector2.Distance(fromNav, toNav));
-            gScore[cellFrom.ID] = 0;
+            var openF = new PriorityQueue<NavigationGridCell, float>(1024);
+            var gF = new Dictionary<int, float>();
+            var cameFromF = new Dictionary<int, NavigationGridCell>();
+            var closedF = new HashSet<int>();
 
-            // Closest-explored cell to the goal. used as fallback when the goal is unreachable so
-            // units ordered through a wall walk to the obstacle instead of refusing to move.
-            // Mirrors the client's partialPath / destinationUnchanged behavior.
-            NavigationGridCell bestCell = cellFrom;
-            float bestHeuristic = Vector2.Distance(cellFrom.GetCenter(), toNav);
+            var openB = new PriorityQueue<NavigationGridCell, float>(1024);
+            var gB = new Dictionary<int, float>();
+            var cameFromB = new Dictionary<int, NavigationGridCell>();
+            var closedB = new HashSet<int>();
 
-            NavigationGridCell finalCell = null;
+            float startToGoal = Vector2.Distance(fromNav, toNav);
+            openF.Enqueue(cellFrom, startToGoal);
+            gF[cellFrom.ID] = 0;
+            openB.Enqueue(cellTo, startToGoal);
+            gB[cellTo.ID] = 0;
 
-            while (priorityQueue.TryDequeue(out var cell, out _))
+            // mu = the best-known total path cost through a meeting. Terminate if
+            // topF + topB >= mu (no future path can be better).
+            float mu = float.PositiveInfinity;
+            NavigationGridCell meetingCell = null;
+
+            // Closest-explored cell to the goal (forward direction). Fallback if cellTo is unreachable
+            // When this happens units will then move toward the wall instead of staying still. Mirrors the
+            // partialPath/destinationUnchanged behavior of the client.
+            NavigationGridCell bestCellF = cellFrom;
+            float bestHeuristicF = Vector2.Distance(cellFrom.GetCenter(), toNav);
+
+            while (openF.Count > 0 && openB.Count > 0)
             {
-                // Closing on dequeue (not enqueue) so if a better path to this cell was already
-                // processed, drop this stale entry. Closing on enqueue would lock in suboptimal
-                // paths because a shorter route discovered later couldn't update the cell.
-                if (closedList.Contains(cell.ID))
+                openF.TryPeek(out _, out float topF);
+                openB.TryPeek(out _, out float topB);
+                if (topF + topB >= mu)
                 {
-                    continue;
-                }
-                closedList.Add(cell.ID);
-
-                float h = Vector2.Distance(cell.GetCenter(), toNav);
-                if (h < bestHeuristic)
-                {
-                    bestHeuristic = h;
-                    bestCell = cell;
-                }
-
-                if (cell.ID == cellTo.ID)
-                {
-                    finalCell = cell;
                     break;
                 }
 
-                foreach (NavigationGridCell neighborCell in GetCellNeighbors(cell))
+                // Smaller-frontier-first reduces the worst-case scenario to the maximum of the two halves.
+                if (openF.Count <= openB.Count)
                 {
-                    if (closedList.Contains(neighborCell.ID))
-                    {
-                        continue;
-                    }
-
-                    Vector2 neighborCellCoord = toNav;
-                    // The target point is always walkable, we made sure of this above.
-                    if(neighborCell.ID != cellTo.ID)
-                    {
-                        neighborCellCoord = neighborCell.GetCenter();
-
-                        Vector2 cellCoord = fromNav;
-                        if(cell.ID != cellFrom.ID)
-                        {
-                            cellCoord = cell.GetCenter();
-                        }
-
-                        // Skip the edge if blocked, but don't permanently close the neighbor because
-                        // it may be reachable from a different cell at a different angle.
-                        if
-                        (
-                            CastCircle(cellCoord, neighborCellCoord, distanceThreshold, false)
-                        )
-                        {
-                            continue;
-                        }
-                    }
-
-                    // Diagonal moves cost sqrt(2), cardinal moves cost 1. Equal cell-cost would
-                    // bias A* toward zigzag paths and produce visibly wobbly routes.
-                    bool diagonal = (cell.Locator.X != neighborCell.Locator.X)
-                                 && (cell.Locator.Y != neighborCell.Locator.Y);
-                    float stepCost = diagonal ? 1.41421356f : 1f;
-
-                    float tentativeG = gScore[cell.ID] + stepCost
-                        + neighborCell.ArrivalCost
-                        + neighborCell.AdditionalCost;
-
-                    if (gScore.TryGetValue(neighborCell.ID, out float existingG) && tentativeG >= existingG)
-                    {
-                        continue;
-                    }
-
-                    gScore[neighborCell.ID] = tentativeG;
-                    cameFrom[neighborCell.ID] = cell;
-
-                    priorityQueue.Enqueue(
-                        neighborCell,
-                        tentativeG + neighborCell.Heuristic + Vector2.Distance(neighborCellCoord, toNav)
+                    ExpandStep(
+                        openF, gF, cameFromF, closedF, gB,
+                        cellFrom, cellTo, fromNav, toNav, distanceThreshold,
+                        forward: true, ref mu, ref meetingCell,
+                        ref bestCellF, ref bestHeuristicF
+                    );
+                }
+                else
+                {
+                    ExpandStep(
+                        openB, gB, cameFromB, closedB, gF,
+                        cellTo, cellFrom, toNav, fromNav, distanceThreshold,
+                        forward: false, ref mu, ref meetingCell,
+                        ref bestCellF, ref bestHeuristicF
                     );
                 }
             }
 
-            if (finalCell == null)
+            // Path reconstruction
+            List<NavigationGridCell> pathCells;
+            if (meetingCell != null)
             {
-                if (bestCell.ID == cellFrom.ID)
+                // Full path: Forward chain (cellFrom → meetingCell) + backward chain (meetingCell → cellTo).
+                pathCells = new List<NavigationGridCell>();
+
+                // Walk backward through the forward half
+                var current = meetingCell;
+                while (current != null)
                 {
-                    // Couldn't even leave the start cell. there is nothing reachable.
+                    pathCells.Add(current);
+                    cameFromF.TryGetValue(current.ID, out current);
+                }
+                pathCells.Reverse();
+
+                // Walk forward through the backward half (cameFromB[X] points to cellTo)
+                cameFromB.TryGetValue(meetingCell.ID, out current);
+                while (current != null)
+                {
+                    pathCells.Add(current);
+                    cameFromB.TryGetValue(current.ID, out current);
+                }
+            }
+            else
+            {
+                // No match — partial path via forward search to the best-explored cell.
+                if (bestCellF.ID == cellFrom.ID)
+                {
                     return null;
                 }
-                finalCell = bestCell;
                 isPartialPath = true;
+
+                pathCells = new List<NavigationGridCell>();
+                var current = bestCellF;
+                while (current != null)
+                {
+                    pathCells.Add(current);
+                    cameFromF.TryGetValue(current.ID, out current);
+                }
+                pathCells.Reverse();
             }
 
-            // Reconstruct the path by walking the cameFrom table back to the start.
-            var path = new List<NavigationGridCell>();
-            var current = finalCell;
-            while (current != null)
-            {
-                path.Add(current);
-                cameFrom.TryGetValue(current.ID, out current);
-            }
-            path.Reverse();
+            SmoothPath(pathCells, distanceThreshold);
 
-            SmoothPath(path, distanceThreshold);
-
-            var returnList = new List<Vector2>(path.Count);
+            var returnList = new List<Vector2>(pathCells.Count);
             returnList.Add(from);
-            for (int i = 1; i < path.Count - 1; i++)
+            for (int i = 1; i < pathCells.Count - 1; i++)
             {
-                var navGridCell = path[i];
-                returnList.Add(TranslateFromNavGrid(navGridCell.Locator));
+                returnList.Add(TranslateFromNavGrid(pathCells[i].Locator));
             }
-            // Full path lands on the (possibly off-cell-center) requested position; partial path
-            // lands on the closest reachable cell's center.
+            // A full path lands exactly on the request target; a partial path lands at the center
+            // of the closest reachable cell.
             if (isPartialPath)
             {
-                returnList.Add(TranslateFromNavGrid(finalCell.Locator));
+                returnList.Add(TranslateFromNavGrid(pathCells[pathCells.Count - 1].Locator));
             }
             else
             {
@@ -563,6 +549,125 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
 
             return returnList;
+        }
+
+        /// <summary>
+        /// An expansion step for forward or backward search. Both directions are structurally
+        /// identical; they differ only in source/target cells and coordinates.
+        ///
+        /// Updates <paramref name="mu"/> and <paramref name="meetingCell"/> if a cell update
+        /// finds a better meeting point with the other search tree (gThis[c] + gOther[c] &lt; mu).
+        /// </summary>
+        private void ExpandStep(
+            PriorityQueue<NavigationGridCell, float> open,
+            Dictionary<int, float> gThis,
+            Dictionary<int, NavigationGridCell> cameFromThis,
+            HashSet<int> closedThis,
+            Dictionary<int, float> gOther,
+            NavigationGridCell sourceCell,
+            NavigationGridCell targetCell,
+            Vector2 sourceNav,
+            Vector2 targetNav,
+            float distanceThreshold,
+            bool forward,
+            ref float mu,
+            ref NavigationGridCell meetingCell,
+            ref NavigationGridCell bestCellF,
+            ref float bestHeuristicF)
+        {
+            if (!open.TryDequeue(out var cell, out _))
+            {
+                return;
+            }
+
+            // Close on dequeue (not enqueue) —> otherwise, better paths discovered later
+            // will no longer be able to update a cell.
+            if (closedThis.Contains(cell.ID))
+            {
+                return;
+            }
+            closedThis.Add(cell.ID);
+
+            // Best-explored tracking only for the forward direction (partial-path fallback).
+            if (forward)
+            {
+                float h = Vector2.Distance(cell.GetCenter(), targetNav);
+                if (h < bestHeuristicF)
+                {
+                    bestHeuristicF = h;
+                    bestCellF = cell;
+                }
+            }
+
+            // Check for collisions on closing: if the other side has already reached this cell,
+            // the path cellFrom -> .. -> cell -> .. -> cellTo is possible.
+            if (gOther.TryGetValue(cell.ID, out float gOtherHere))
+            {
+                float candidate = gThis[cell.ID] + gOtherHere;
+                if (candidate < mu)
+                {
+                    mu = candidate;
+                    meetingCell = cell;
+                }
+            }
+
+            foreach (NavigationGridCell neighborCell in GetCellNeighbors(cell))
+            {
+                if (closedThis.Contains(neighborCell.ID))
+                {
+                    continue;
+                }
+
+                Vector2 neighborCellCoord = targetNav;
+                if (neighborCell.ID != targetCell.ID)
+                {
+                    neighborCellCoord = neighborCell.GetCenter();
+
+                    Vector2 cellCoord = sourceNav;
+                    if (cell.ID != sourceCell.ID)
+                    {
+                        cellCoord = cell.GetCenter();
+                    }
+
+                    if (CastCircle(cellCoord, neighborCellCoord, distanceThreshold, false))
+                    {
+                        continue;
+                    }
+                }
+
+                bool diagonal = (cell.Locator.X != neighborCell.Locator.X)
+                             && (cell.Locator.Y != neighborCell.Locator.Y);
+                float stepCost = diagonal ? 1.41421356f : 1f;
+
+                float tentativeG = gThis[cell.ID] + stepCost
+                    + neighborCell.ArrivalCost
+                    + neighborCell.AdditionalCost;
+
+                if (gThis.TryGetValue(neighborCell.ID, out float existingG) && tentativeG >= existingG)
+                {
+                    continue;
+                }
+
+                gThis[neighborCell.ID] = tentativeG;
+                cameFromThis[neighborCell.ID] = cell;
+
+                open.Enqueue(
+                    neighborCell,
+                    tentativeG + neighborCell.Heuristic + Vector2.Distance(neighborCellCoord, targetNav)
+                );
+
+                // Check for cross-meetings even during edge relaxation — otherwise, some meetings
+                // would not be detected until the next dequeue, which would delay the termination condition.
+                if (gOther.TryGetValue(neighborCell.ID, out float gOtherNb))
+                {
+                    float candidate = tentativeG + gOtherNb;
+                    if (candidate < mu)
+                    {
+                        mu = candidate;
+                        meetingCell = neighborCell;
+                    }
+                }
+            }
         }
 
         /// <summary>

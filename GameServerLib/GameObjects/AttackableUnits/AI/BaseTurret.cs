@@ -104,18 +104,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.OnAdded();
             _game.ObjectManager.AddTurret(this);
-
-            // Bake the turret footprint into the navgrid. Use the real mesh polygon from the
-            // .sco.json (via ParentObject.Vertices2D) when available; fall back to a circle of
-            // PathfindingRadius for turrets created without a MapObject (e.g. AzirTurret).
-            if (ParentObject.Vertices2D != null && ParentObject.Vertices2D.Length >= 3)
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(ParentObject.Vertices2D);
-            }
-            else
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, PathfindingRadius);
-            }
+            
+            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, PathfindingRadius);
 
             // TODO: Handle this via map script for LaneTurret and via CharScript for AzirTurret.
             BubbleRegion = new Region

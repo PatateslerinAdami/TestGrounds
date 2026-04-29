@@ -1184,6 +1184,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Implement interpolation (assuming all other desync related issues are already fixed).
         public virtual bool Move(float delta)
         {
+            Vector2 originalPos = Position;
+            bool walked = false;
+
             if (CurrentWaypointKey < Waypoints.Count)
             {
                 float speed = GetMoveSpeed() * 0.001f;
@@ -1197,7 +1200,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     if (maxDist < dist)
                     {
                         Position += dir / dist * maxDist;
-                        return true;
+                        break;
                     }
                     else
                     {
@@ -1207,12 +1210,205 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         CurrentWaypointKey++;
                         if (CurrentWaypointKey == Waypoints.Count || maxDist == 0)
                         {
-                            return true;
+                            break;
                         }
                     }
                 }
+                walked = true;
             }
-            return false;
+
+            // (body-blocking): Separation also occurs without an active waypoint walk
+            // otherwise, units that reach their waypoint within an overlap get stuck.
+            // Dashes completely bypass separation so as not to disrupt dash trajectories.
+            bool pushed = false;
+            if (MovementParameters == null)
+            {
+                var nearby = _game.Map.CollisionHandler.GetNearestObjects(this);
+
+                // calculate Separation-Push
+                Vector2 push = ComputeSeparationPush(nearby);
+
+                // Clamp the push against the original movement distance for this tick
+                Vector2 originalDelta = Position - originalPos;
+                push = ClampSeparationPush(push, originalDelta);
+
+                if (push.LengthSquared() > 0.0001f)
+                {
+                    Position += push;
+                    pushed = true;
+                }
+
+                // Stuck Detection + Extra Push Along the Centroid Direction
+                Vector2 newDelta = Position - originalPos;
+                Vector2 stuckPush = ComputeStuckExtraPush(nearby, newDelta, originalDelta, delta);
+                if (stuckPush.LengthSquared() > 0.0001f)
+                {
+                    Position += stuckPush;
+                    pushed = true;
+                }
+            }
+
+            return walked || pushed;
+        }
+
+        /// <summary>
+        /// Body blocking -> Calculates a push vector that pushes this unit out of any overlap
+        /// with AttackableUnit neighbors. Half of the overlap is applied per tick
+        /// Also the opposing unit pushes itself by the remainder in its own tick, so that a pair is
+        /// completely separated in one tick (before Phase 2 Clamp).
+        /// </summary>
+        private Vector2 ComputeSeparationPush(List<GameObject> nearby)
+        {
+            if (nearby.Count == 0) return Vector2.Zero;
+
+            // FirstWave -> Ignore ally lane minion collision until reaching your own outer turret,
+            // so that champions cannot manipulate the initial wave by body-blocking.
+            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
+                                       && firstWaveSelf.IsFirstWave
+                                       && !firstWaveSelf.HasPassedFirstTurret;
+
+            Vector2 totalPush = Vector2.Zero;
+            foreach (var other in nearby)
+            {
+                if (other == this || other.IsToRemove()) continue;
+                if (!(other is AttackableUnit)) continue;
+                if (skipAllyLaneMinions && other is LaneMinion && other.Team == Team) continue;
+
+                var diff = Position - other.Position;
+                float distSq = diff.LengthSquared();
+                float combinedRadius = CollisionRadius + other.CollisionRadius;
+                if (distSq >= combinedRadius * combinedRadius) continue; // kein Overlap
+
+                float distance = (float)Math.Sqrt(distSq);
+                Vector2 pushDir;
+                float overlap;
+
+                if (distance < 0.01f)
+                {
+                    //TODO: this needs tuning
+                    // Perfect overlap -> deterministic fallback via NetId, so that the same pair
+                    // always chooses the same direction -> should be no visual jitter.
+                    float angle = (NetId * 2.39996f) % 6.28318f;
+                    pushDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                    overlap = combinedRadius;
+                }
+                else
+                {
+                    pushDir = diff / distance;
+                    overlap = combinedRadius - distance;
+                }
+
+                totalPush += pushDir * (overlap * 0.5f);
+            }
+
+            return totalPush;
+        }
+
+        /// <summary>
+        /// Stuck Branch -> If, after the other checks above dont work, the effective movement for this tick is less
+        /// than a certain fraction of the originally intended movement, the unit
+        /// is considered stuck -> should happen typically in dense crowds where push vectors cancel each other out or
+        /// are completely clamped out by the above clamp.
+        ///
+        /// Formula based on actor_client.cpp L6620-6681 thanks to Feta:
+        ///   pushSpeed = ExtraSeparationSpeed × CollisionRadius  (units/sec)
+        ///   pushSpeed = min(pushSpeed, maxSpeed × 1.5)
+        ///   pushSpeed = min(pushSpeed, 95 units/sec)
+        ///   push = (Position - centroid_of_neighbors).normalized × pushSpeed × deltaSeconds
+        ///
+        /// This push bypasses the clamp (in S1: (so this could be wrong) bypasses ±37.5% clamp) and is the only
+        /// way for units to break free from stuck crowds when their normal
+        /// movement has been reduced to zero by push cancellation.
+        ///
+        /// Constants estimated:
+        ///   - MinSpeedRatioBeforeStuck = 0.1 (10% — if less than that remains → stuck)
+        ///   - ExtraSeparationSpeed = 50.0 (suggested by a friend, might be off)
+        /// TODO: find exact values
+        /// </summary>
+        private Vector2 ComputeStuckExtraPush(List<GameObject> nearby, Vector2 newDelta, Vector2 originalDelta, float deltaMs)
+        {
+            const float MinSpeedRatioBeforeStuck = 0.1f;
+            const float ExtraSeparationSpeed = 50.0f;
+            const float HardCapPerSec = 95.0f;
+            const float MaxSpeedMultiplier = 1.5f;
+
+            // Stuck Check requires a meaningful initial movement as a reference
+            // otherwise we won't detect “stuck” at all (stationary units are already pushed indefinitely
+            // by Early Exit).
+            float originalMagSq = originalDelta.LengthSquared();
+            if (originalMagSq <= 0.01f) return Vector2.Zero;
+
+            float stuckThresholdSq = originalMagSq * (MinSpeedRatioBeforeStuck * MinSpeedRatioBeforeStuck);
+            if (newDelta.LengthSquared() >= stuckThresholdSq) return Vector2.Zero; // nicht stuck
+
+            // FirstWave -> ignore ally lane minion collisions until reaching your own outer turret
+            // (similar to ComputeSeparationPush — otherwise the stuck push between ally minions
+            // would trigger again even though Phase 1 correctly skips it).
+            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
+                                       && firstWaveSelf.IsFirstWave
+                                       && !firstWaveSelf.HasPassedFirstTurret;
+
+            // this is the center of all overlapping neighbors. (Centoid)
+            int count = 0;
+            Vector2 centroid = Vector2.Zero;
+            foreach (var other in nearby)
+            {
+                if (other == this || other.IsToRemove()) continue;
+                if (!(other is AttackableUnit)) continue;
+                if (skipAllyLaneMinions && other is LaneMinion && other.Team == Team) continue;
+
+                var diff = Position - other.Position;
+                float combinedRadius = CollisionRadius + other.CollisionRadius;
+                if (diff.LengthSquared() >= combinedRadius * combinedRadius) continue;
+
+                centroid += other.Position;
+                count++;
+            }
+            if (count == 0) return Vector2.Zero;
+            centroid /= count;
+
+            Vector2 awayFromCentroid = Position - centroid;
+            Vector2 pushDir;
+            if (awayFromCentroid.LengthSquared() < 0.01f)
+            {
+                // The centroid lies on the unit (perfectly symmetrical crowd). So a deterministic
+                // fallback via NetId, to prevent the same setup from shifting between frames.
+                float angle = (NetId * 2.39996f) % 6.28318f;
+                pushDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            }
+            else
+            {
+                pushDir = Vector2.Normalize(awayFromCentroid);
+            }
+
+            float maxSpeed = GetMoveSpeed();
+            float pushSpeedPerSec = ExtraSeparationSpeed * CollisionRadius;
+            pushSpeedPerSec = Math.Min(pushSpeedPerSec, maxSpeed * MaxSpeedMultiplier);
+            pushSpeedPerSec = Math.Min(pushSpeedPerSec, HardCapPerSec);
+
+            float deltaSec = deltaMs * 0.001f;
+            return pushDir * (pushSpeedPerSec * deltaSec);
+        }
+
+        /// <summary>
+        /// Clamp: Limits the magnitude of the separation push to ±37.5% of the original
+        /// movement distance for this tick. Prevents walking units from being pushed extremely far
+        /// out of the way when they encounter neighbors. This makes body blocking smoother and
+        /// there is no more back and forth oscillation.
+        /// </summary>
+        private static Vector2 ClampSeparationPush(Vector2 push, Vector2 originalDelta)
+        {
+            const float ClampRatio = 0.375f;
+            const float MinOriginalMagSq = 0.01f;
+
+            float originalMagSq = originalDelta.LengthSquared();
+            if (originalMagSq <= MinOriginalMagSq) return push; // Stationär → Phase-3-Workaround: kein Clamp
+
+            float maxPushMag = (float)Math.Sqrt(originalMagSq) * ClampRatio;
+            float pushMagSq = push.LengthSquared();
+            if (pushMagSq <= maxPushMag * maxPushMag) return push;
+
+            return push * (maxPushMag / (float)Math.Sqrt(pushMagSq));
         }
 
         public bool PathTrueEndIs(Vector2 location)

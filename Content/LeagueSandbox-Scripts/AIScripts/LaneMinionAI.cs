@@ -28,6 +28,16 @@ namespace AIScripts
         float localTime = 0f;
         bool callsForHelpMayBeCleared = false;
         bool followsWaypoints = true;
+        bool _useFirstAcquisitionRange = false;
+        bool _firstTargetSearchActive = false;
+
+        const float LATERAL_SPREAD_DISTANCE = 150.0f;
+
+        const float WAVE_DETECT_RANGE = 1500.0f;
+
+        bool _engagementTriggered = false;
+
+        static Dictionary<(TeamId, string, int, MinionSpawnType), int> _engagementSlotCounters = new Dictionary<(TeamId, string, int, MinionSpawnType), int>();
 
         private bool hadTarget = false;
         private bool TargetJustDied()
@@ -40,9 +50,36 @@ namespace AIScripts
             else if(hadTarget)
             {
                 hadTarget = false;
+                ExitFirstWaveBehavior();
                 return true;
             }
             return false;
+        }
+
+        private void ExitFirstWaveBehavior()
+        {
+            if (LaneMinion == null || !LaneMinion.IsFirstWave) return;
+            LaneMinion.IsFirstWave = false;
+            LaneMinion.IsAsleep = false;
+            _useFirstAcquisitionRange = false;
+            _firstTargetSearchActive = false;
+        }
+
+        private void UpdateHasPassedFirstTurret()
+        {
+            if (LaneMinion.HasPassedFirstTurret) return;
+            if (!LaneMinion.OuterTurretPosition.HasValue) return;
+
+            var spawnToTurret = LaneMinion.OuterTurretPosition.Value - LaneMinion.SpawnPosition;
+            var spawnToMinion = LaneMinion.Position - LaneMinion.SpawnPosition;
+            var axisLengthSq = spawnToTurret.LengthSquared();
+            if (axisLengthSq < 1f) return;
+
+            var dot = Vector2.Dot(spawnToMinion, spawnToTurret);
+            if (dot > axisLengthSq)
+            {
+                LaneMinion.HasPassedFirstTurret = true;
+            }
         }
 
         public void OnActivate(ObjAIBase owner)
@@ -56,6 +93,28 @@ namespace AIScripts
 
             if(LaneMinion != null && !LaneMinion.IsDead)
             {
+                UpdateHasPassedFirstTurret();
+
+                if(LaneMinion.IsFirstWave && LaneMinion.TargetUnit is Champion)
+                {
+                    ExitFirstWaveBehavior();
+                }
+
+                if(LaneMinion.IsAsleep && HasEnemyInRange(LaneMinion.CharData.WakeUpRange))
+                {
+                    LaneMinion.IsAsleep = false;
+                    _useFirstAcquisitionRange = true;
+                    _firstTargetSearchActive = true;
+                }
+
+                if(!_engagementTriggered && HasEnemyLaneMinionInWaveDetectRange())
+                {
+                    _engagementTriggered = true;
+                    AssignSpreadSlot();
+                    LogInfo($"[SPREAD] {LaneMinion.Team} {LaneMinion.BarracksName} netId={LaneMinion.NetId} " +
+                            $"wave={LaneMinion.WaveNumber} → assigned SlotIndex={LaneMinion.SpreadSlotIndex} " +
+                            $"at pos={LaneMinion.Position} asleep={LaneMinion.IsAsleep}");
+                }
 
                 if(LaneMinion.IsAttacking || LaneMinion.TargetUnit == null)
                 {
@@ -89,6 +148,9 @@ namespace AIScripts
                     OrderType nextBehaviour = ReevaluateBehavior(delta);
                     LaneMinion.UpdateMoveOrder(nextBehaviour);
                     minionActionTimer = 0;
+
+                    _useFirstAcquisitionRange = false;
+                    _firstTargetSearchActive = false;
                 }
 
                 if(callsForHelpMayBeCleared)
@@ -101,6 +163,16 @@ namespace AIScripts
 
         public void OnCallForHelp(AttackableUnit attacker, AttackableUnit victium)
         {
+            if(LaneMinion != null && LaneMinion.IsFirstWave && attacker is Champion)
+            {
+                ExitFirstWaveBehavior();
+            }
+
+            if(LaneMinion != null && LaneMinion.IsFirstWave)
+            {
+                return;
+            }
+
             if(unitsAttackingAllies != null)
             {
                 int priority = Math.Min(
@@ -113,20 +185,114 @@ namespace AIScripts
 
         bool UnitInRange(AttackableUnit u, float range)
         {
-            return Vector2.DistanceSquared(LaneMinion.Position, u.Position) < (range * range);
+            var effectiveRange = range + u.CollisionRadius;
+            return Vector2.DistanceSquared(LaneMinion.Position, u.Position) < (effectiveRange * effectiveRange);
         }
 
         bool IsValidTarget(AttackableUnit u)
         {
+            if (LaneMinion.IsAsleep) return false;
+
+            if (_firstTargetSearchActive
+                && u is LaneMinion enemyLane
+                && enemyLane.MinionSpawnType == MinionSpawnType.MINION_TYPE_CASTER)
+            {
+                return false;
+            }
+
             return (
                 u != null
                 && !u.IsDead
                 && u.Team != LaneMinion.Team
-                && UnitInRange(u, LaneMinion.Stats.AcquisitionRange.Total)
+                && UnitInRange(u, GetEffectiveAcquisitionRange())
                 && u.IsVisibleByTeam(LaneMinion.Team)
                 && u.Status.HasFlag(StatusFlags.Targetable)
                 && !UnitIsProtectionActive(u)
             );
+        }
+
+        float GetEffectiveAcquisitionRange()
+        {
+            if (_useFirstAcquisitionRange)
+            {
+                return LaneMinion.CharData.FirstAcquisitionRange;
+            }
+            return LaneMinion.Stats.AcquisitionRange.Total;
+        }
+
+        bool HasEnemyInRange(float range)
+        {
+            foreach (var obj in EnumerateUnitsInRange(LaneMinion.Position, range, true))
+            {
+                if (obj is AttackableUnit u
+                    && !u.IsDead
+                    && u.Team != LaneMinion.Team
+                    && u.IsVisibleByTeam(LaneMinion.Team)
+                    && u.Status.HasFlag(StatusFlags.Targetable)
+                    && UnitInRange(u, range))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool HasEnemyLaneMinionInWaveDetectRange()
+        {
+            foreach (var obj in EnumerateUnitsInRange(LaneMinion.Position, WAVE_DETECT_RANGE, true))
+            {
+                if (obj is LaneMinion enemyLane
+                    && !enemyLane.IsDead
+                    && enemyLane.Team != LaneMinion.Team
+                    && enemyLane.Status.HasFlag(StatusFlags.Targetable)
+                    && UnitInRange(enemyLane, WAVE_DETECT_RANGE))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void AssignSpreadSlot()
+        {
+            var key = (LaneMinion.Team, LaneMinion.BarracksName, LaneMinion.WaveNumber, LaneMinion.MinionSpawnType);
+            int counter = _engagementSlotCounters.TryGetValue(key, out var current) ? current : 0;
+            LaneMinion.SpreadSlotIndex = counter;
+            _engagementSlotCounters[key] = counter + 1;
+        }
+
+        Vector2 ComputeLateralOffset(int slot, Vector2 leftPerp)
+        {
+            if (slot <= 0) return Vector2.Zero;
+            int rank = (slot + 1) / 2;
+            bool isLeft = (slot % 2) == 1;
+            float magnitude = rank * LATERAL_SPREAD_DISTANCE;
+            return (isLeft ? leftPerp : -leftPerp) * magnitude;
+        }
+
+        bool _loggedFirstSpreadOffset = false;
+        Vector2 GetSpreadedWaypoint(int waypointIndex)
+        {
+            Vector2 baseWaypoint = LaneMinion.PathingWaypoints[waypointIndex];
+            if (LaneMinion.SpreadSlotIndex < 1) return baseWaypoint;
+
+            Vector2 prevWaypoint = waypointIndex > 0
+                ? LaneMinion.PathingWaypoints[waypointIndex - 1]
+                : LaneMinion.SpawnPosition;
+            Vector2 axis = baseWaypoint - prevWaypoint;
+            if (axis.LengthSquared() <= 0.001f) return baseWaypoint;
+
+            Vector2 dirAxis = Vector2.Normalize(axis);
+            Vector2 leftPerp = new Vector2(-dirAxis.Y, dirAxis.X);
+            Vector2 offset = ComputeLateralOffset(LaneMinion.SpreadSlotIndex, leftPerp);
+            if (!_loggedFirstSpreadOffset)
+            {
+                _loggedFirstSpreadOffset = true;
+                LogInfo($"[SPREAD] netId={LaneMinion.NetId} slot={LaneMinion.SpreadSlotIndex} " +
+                        $"wpIdx={waypointIndex} base={baseWaypoint} offset={offset} " +
+                        $"target={baseWaypoint + offset}");
+            }
+            return baseWaypoint + offset;
         }
 
         void Ignore(AttackableUnit unit, float time = 500)
@@ -155,7 +321,7 @@ namespace AIScripts
             AttackableUnit currentTarget = null;
             AttackableUnit nextTarget = currentTarget;
             int nextTargetPriority = (int)ClassifyUnit.DEFAULT;
-            float acquisitionRange = LaneMinion.Stats.AcquisitionRange.Total;
+            float acquisitionRange = GetEffectiveAcquisitionRange();
             float nextTargetDistanceSquared = acquisitionRange * acquisitionRange;
             int nextTargetAttackers = 0;
             if(targetIsStillValid)
@@ -164,7 +330,7 @@ namespace AIScripts
                 nextTarget = currentTarget;
                 nextTargetPriority = targetUnitPriority;
                 nextTargetDistanceSquared = Vector2.DistanceSquared(LaneMinion.Position, nextTarget.Position);
-                nextTargetAttackers = 0; //LaneMinion.IsMelee ? CountUnitsAttackingUnit(nextTarget) : 0; // First Wave Behaviour is unfinished
+                nextTargetAttackers = LaneMinion.IsFirstWave ? CountUnitsAttackingUnit(nextTarget) : 0;
             }
             
             FilterTemporaryIgnoredList();
@@ -191,7 +357,7 @@ namespace AIScripts
                         : (int)LaneMinion.ClassifyTarget(u)
                     ;
                     float distanceSquared = Vector2.DistanceSquared(LaneMinion.Position, u.Position);
-                    int attackers = 0; //LaneMinion.IsMelee ? CountUnitsAttackingUnit(u) : 0; // First Wave Behaviour is unfinished
+                    int attackers = LaneMinion.IsFirstWave ? CountUnitsAttackingUnit(u) : 0;
                     if (
                         nextTarget == null
                         || attackers < nextTargetAttackers
@@ -229,7 +395,7 @@ namespace AIScripts
 
         bool WaypointReached()
         {
-            Vector2 currentWaypoint = LaneMinion.PathingWaypoints[currentWaypointIndex];
+            Vector2 currentWaypoint = GetSpreadedWaypoint(currentWaypointIndex);
 
             float radius = LaneMinion.CollisionRadius;
             Vector2 center = LaneMinion.Position;
@@ -313,13 +479,13 @@ namespace AIScripts
             //Quote: Walk towards the target waypoint.
             if(notYetOutOfRange)
             {
-                Vector2 currentWaypoint = LaneMinion.PathingWaypoints[currentWaypointIndex];
+                Vector2 currentWaypoint = GetSpreadedWaypoint(currentWaypointIndex);
                 Vector2 currentDestination = LaneMinion.Waypoints[LaneMinion.Waypoints.Count - 1];
 
                 if(currentDestination != currentWaypoint)
                 {
                     List<Vector2> path = null;
-                    
+
                     // If the minion returns to lane
                     // Instead of continuing to move along the waypoints
                     if(!followsWaypoints)
@@ -330,17 +496,40 @@ namespace AIScripts
 
                     if(path == null)
                     {
-                        path = new List<Vector2>()
+                        if(LaneMinion.SpreadSlotIndex >= 1)
                         {
-                            LaneMinion.Position,
-                            currentWaypoint
-                        };
+                            Vector2 prev = currentWaypointIndex > 0
+                                ? LaneMinion.PathingWaypoints[currentWaypointIndex - 1]
+                                : LaneMinion.SpawnPosition;
+                            Vector2 axis = LaneMinion.PathingWaypoints[currentWaypointIndex] - prev;
+                            if(axis.LengthSquared() > 0.001f)
+                            {
+                                Vector2 dirAxis = Vector2.Normalize(axis);
+                                Vector2 leftPerp = new Vector2(-dirAxis.Y, dirAxis.X);
+                                Vector2 offset = ComputeLateralOffset(LaneMinion.SpreadSlotIndex, leftPerp);
+
+                                Vector2 toAxis = LaneMinion.Position - prev;
+                                float along = Vector2.Dot(toAxis, dirAxis);
+                                Vector2 onAxis = prev + dirAxis * along;
+                                float forwardLength = MathF.Max(300f, offset.Length() * 3f);
+                                Vector2 intermediate = onAxis + dirAxis * forwardLength + offset;
+
+                                path = new List<Vector2> { LaneMinion.Position, intermediate, currentWaypoint };
+                            }
+                        }
+
+                        if(path == null)
+                        {
+                            path = new List<Vector2>()
+                            {
+                                LaneMinion.Position,
+                                currentWaypoint
+                            };
+                        }
                     }
                     LaneMinion.SetWaypoints(path);
                 }
                 
-                // It might be better to use the AttackMove state,
-                // but it forces ObjAIBase to look for a target instead of LaneMinionAI 
                 return OrderType.MoveTo;
             }
 

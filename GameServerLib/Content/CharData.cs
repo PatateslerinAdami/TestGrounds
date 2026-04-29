@@ -18,6 +18,12 @@ namespace LeagueSandbox.GameServer.Content
     public class CharData
     {
         public float AcquisitionRange { get; private set; } = 475;
+        // First Wave Special Rules -> The Wake-Up Range is smaller than the normal
+        // Acquisition Range. While a First Wave Minion is asleep, it only checks this radius
+        // before waking up. The FirstAcquisitionRange is larger and is used exactly once immediately
+        // after waking up to obtain a wider selection of targets.
+        public float WakeUpRange { get; private set; } = 600;
+        public float FirstAcquisitionRange { get; private set; } = 1100;
         public bool AllyCanUse { get; private set; } = false;
         public bool AlwaysVisible { get; private set; } = false;
         public bool AlwaysUpdatePAR { get; private set; } = false;
@@ -93,6 +99,10 @@ namespace LeagueSandbox.GameServer.Content
             string name = file.Name;
 
             AcquisitionRange = file.GetFloat("Data", "AcquisitionRange", AcquisitionRange);
+            //Does not exist
+            WakeUpRange = file.GetFloat("Data", "WakeUpRange", WakeUpRange);
+            FirstAcquisitionRange = file.GetFloat("Data", "FirstAcquisitionRange", FirstAcquisitionRange);
+            //
             Armor = file.GetFloat("Data", "Armor", Armor);
             ArmorPerLevel = file.GetFloat("Data", "ArmorPerLevel", ArmorPerLevel);
 

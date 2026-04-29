@@ -16,6 +16,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public string BarracksName { get; }
         public MinionSpawnType MinionSpawnType { get; }
+        
+        public bool IsFirstWave { get; set; }
+
+        public Vector2? OuterTurretPosition { get; set; }
+
+        public bool HasPassedFirstTurret { get; set; }
+
+        public Vector2 SpawnPosition { get; }
+
+        public bool IsAsleep { get; set; }
+
+        public int WaveNumber { get; }
+
+        public int SpreadSlotIndex { get; set; } = -1;
 
         public override bool SpawnShouldBeHidden => false;
 
@@ -29,13 +43,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             uint netId = 0,
             TeamId team = TeamId.TEAM_BLUE,
             Stats stats = null,
-            string AIScript = ""
+            string AIScript = "",
+            bool isFirstWave = false,
+            Vector2? outerTurretPosition = null,
+            int waveNumber = 0
         ) : base(game, null, new Vector2(), model, model, netId, team, stats: stats, AIScript: AIScript)
         {
             IsLaneMinion = true;
             MinionSpawnType = spawnType;
             BarracksName = barracksName;
             PathingWaypoints = mainWaypoints;
+            IsFirstWave = isFirstWave;
+            IsAsleep = isFirstWave; // FirstWave Minions start asleep
+            OuterTurretPosition = outerTurretPosition;
+            SpawnPosition = position;
+            WaveNumber = waveNumber;
             _aiPaused = false;
 
             SetPosition(position);

@@ -28,15 +28,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
         {
             base.OnAdded();
 
-            var mo = FindMatchingMapObject();
-            if (mo.Vertices2D != null && mo.Vertices2D.Length >= 3)
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(mo.Vertices2D);
-            }
-            else
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, CollisionRadius);
-            }
+            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, CollisionRadius);
         }
 
         public override void OnRemoved()
@@ -51,20 +43,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
 
         public override void SetToRemove()
         {
-        }
-
-        private MapObject FindMatchingMapObject()
-        {
-            foreach (var kv in _game.Map.MapData.MapObjects)
-            {
-                var mo = kv.Value;
-                if (Math.Abs(mo.CentralPoint.X - Position.X) < 1f
-                    && Math.Abs(mo.CentralPoint.Z - Position.Y) < 1f)
-                {
-                    return mo;
-                }
-            }
-            return MapObject.Empty;
         }
     }
 }
