@@ -97,6 +97,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             get { return Waypoints[CurrentWaypointKey]; }
         }
         private Vector2 OldPoint = new Vector2(0, 0);
+        private Vector2 _smoothedSeparationPush = Vector2.Zero;
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
         private bool _isInGrass = false;
@@ -1225,16 +1226,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 var nearby = _game.Map.CollisionHandler.GetNearestObjects(this);
 
-                // calculate Separation-Push
-                Vector2 push = ComputeSeparationPush(nearby);
+                Vector2 originalDelta = Position - originalPos;
+
+                Vector2 rawPush = ComputeSeparationPush(nearby, originalDelta);
 
                 // Clamp the push against the original movement distance for this tick
-                Vector2 originalDelta = Position - originalPos;
-                push = ClampSeparationPush(push, originalDelta);
+                rawPush = ClampSeparationPush(rawPush, originalDelta);
 
-                if (push.LengthSquared() > 0.0001f)
+                const float PushSmoothingAlpha = 0.4f;
+                _smoothedSeparationPush = _smoothedSeparationPush * (1f - PushSmoothingAlpha)
+                                        + rawPush * PushSmoothingAlpha;
+
+                if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                 {
-                    Position += push;
+                    Position += _smoothedSeparationPush;
                     pushed = true;
                 }
 
@@ -1247,6 +1252,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     pushed = true;
                 }
             }
+            else
+            {
+                _smoothedSeparationPush = Vector2.Zero;
+            }
 
             return walked || pushed;
         }
@@ -1256,8 +1265,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// with AttackableUnit neighbors. Half of the overlap is applied per tick
         /// Also the opposing unit pushes itself by the remainder in its own tick, so that a pair is
         /// completely separated in one tick (before Phase 2 Clamp).
+        ///
+        /// Tangential Slide
         /// </summary>
-        private Vector2 ComputeSeparationPush(List<GameObject> nearby)
+        private Vector2 ComputeSeparationPush(List<GameObject> nearby, Vector2 movementDelta)
         {
             if (nearby.Count == 0) return Vector2.Zero;
 
@@ -1266,6 +1277,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
                                        && firstWaveSelf.IsFirstWave
                                        && !firstWaveSelf.HasPassedFirstTurret;
+
+            float movementMag = movementDelta.Length();
+            Vector2 movementDir = movementMag > 0.001f ? movementDelta / movementMag : Vector2.Zero;
+            const float TangentialMix = 0.7f;
+            const float RadialMix = 0.3f;
 
             Vector2 totalPush = Vector2.Zero;
             foreach (var other in nearby)
@@ -1280,7 +1296,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (distSq >= combinedRadius * combinedRadius) continue; // kein Overlap
 
                 float distance = (float)Math.Sqrt(distSq);
-                Vector2 pushDir;
+                Vector2 radialDir;
                 float overlap;
 
                 if (distance < 0.01f)
@@ -1289,13 +1305,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // Perfect overlap -> deterministic fallback via NetId, so that the same pair
                     // always chooses the same direction -> should be no visual jitter.
                     float angle = (NetId * 2.39996f) % 6.28318f;
-                    pushDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                    radialDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
                     overlap = combinedRadius;
                 }
                 else
                 {
-                    pushDir = diff / distance;
+                    radialDir = diff / distance;
                     overlap = combinedRadius - distance;
+                }
+
+                Vector2 pushDir;
+                if (movementMag > 0.001f)
+                {
+                    Vector2 tangent1 = new Vector2(-radialDir.Y, radialDir.X);
+                    Vector2 tangent2 = new Vector2(radialDir.Y, -radialDir.X);
+                    Vector2 tangentDir = Vector2.Dot(tangent1, movementDir) > Vector2.Dot(tangent2, movementDir)
+                        ? tangent1 : tangent2;
+                    Vector2 mixed = radialDir * RadialMix + tangentDir * TangentialMix;
+                    float mixedMag = mixed.Length();
+                    pushDir = mixedMag > 0.001f ? mixed / mixedMag : radialDir;
+                }
+                else
+                {
+                    pushDir = radialDir;
                 }
 
                 totalPush += pushDir * (overlap * 0.5f);
