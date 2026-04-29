@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Activities.Presentation.View;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
@@ -15,6 +16,8 @@ namespace LeagueSandbox.GameServer.Handlers
     {
         private MapScriptHandler _map;
         private readonly List<GameObject> _objects = new List<GameObject>();
+        // Static target objects (turrets, buildings) which are not in _quadDynamic but still need to be findable by targeting AIs.
+        private readonly List<GameObject> _staticTargets = new List<GameObject>();
         private QuadTree<GameObject> _quadDynamic;
 
         public CollisionHandler(MapScriptHandler map)
@@ -58,6 +61,13 @@ namespace LeagueSandbox.GameServer.Handlers
             return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is ObjBuilding || obj is BaseTurret);
         }
 
+        // Static targetable objects (turrets/buildings) are excluded from _quadDynamic but still need to be returned
+        // by EnumerateUnitsInRange so targeting AIs (lane minions, champion auto-aim, etc.) can see them.
+        private static bool IsStaticTargetObject(GameObject obj)
+        {
+            return obj is BaseTurret || obj is ObjBuilding;
+        }
+
         Circle GetBounds(GameObject obj)
         {
             return new Circle(obj.Position, Math.Max(0.5f, obj.CollisionRadius));
@@ -79,6 +89,10 @@ namespace LeagueSandbox.GameServer.Handlers
             {
                 _quadDynamic.Insert(obj, GetBounds(obj));
             }
+            if (IsStaticTargetObject(obj))
+            {
+                _staticTargets.Add(obj);
+            }
         }
 
         /// <summary>
@@ -88,7 +102,26 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <returns>true if item is successfully removed; false otherwise.</returns>
         public bool RemoveObject(GameObject obj)
         {
+            _staticTargets.Remove(obj);
             return _objects.Remove(obj);
+        }
+
+        /// <summary>
+        /// Linear-scan enumerates static target objects (turrets, buildings) within the given range of a position.
+        /// Used to compensate for the fact that turrets/buildings are not in _quadDynamic.
+        /// </summary>
+        public IEnumerable<GameObject> EnumerateStaticTargetsInRange(Vector2 position, float range)
+        {
+            var rangeSquared = range * range;
+            for (var i = 0; i < _staticTargets.Count; i++)
+            {
+                var obj = _staticTargets[i];
+                if (obj.IsToRemove()) continue;
+                if (Vector2.DistanceSquared(obj.Position, position) <= rangeSquared)
+                {
+                    yield return obj;
+                }
+            }
         }
 
         /// <summary>

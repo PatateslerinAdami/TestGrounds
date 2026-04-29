@@ -992,6 +992,16 @@ namespace LeagueSandbox.GameServer.API
                     yield return u;
                 }
             }
+
+            // Turrets and buildings are intentionally excluded from the dynamic QuadTree (their footprints live in the navgrid),
+            // so they need to be mixed in here via a separate linear scan or targeting AIs would never see them.
+            foreach (var obj in _game.Map.CollisionHandler.EnumerateStaticTargetsInRange(targetPos, range))
+            {
+                if (obj is AttackableUnit u && (!isAlive || !u.IsDead))
+                {
+                    yield return u;
+                }
+            }
         }
 
         /// <summary>
