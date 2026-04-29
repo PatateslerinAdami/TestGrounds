@@ -237,6 +237,7 @@ namespace MapScripts.Map1
                         if (SetUpLaneMinion())
                         {
                             _minionNumber = 0;
+                            _waveCount++;
                             NextSpawnTime = (long)gameTime + MapScriptMetadata.SpawnInterval;
                         }
                         else
@@ -331,6 +332,7 @@ namespace MapScripts.Map1
 
         public int _minionNumber;
         public int _cannonMinionCount;
+        public int _waveCount;
         public bool SetUpLaneMinion()
         {
             int cannonMinionCap = 2;
@@ -352,7 +354,20 @@ namespace MapScripts.Map1
                     waypoint.Reverse();
                 }
 
-                CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI);
+                while (waypoint.Count >= 2)
+                {
+                    Vector2 axis = waypoint[1] - waypoint[0];
+                    Vector2 spawnRel = position - waypoint[0];
+                    if (Vector2.Dot(spawnRel, axis) <= 0) break;
+                    waypoint.RemoveAt(0);
+                }
+
+                var outerTurret = LevelScriptObjects.TurretList[barrackTeam][lane]
+                    .Find(t => t.Type == TurretType.OUTER_TURRET);
+                Vector2? outerTurretPos = outerTurret != null ? (Vector2?)outerTurret.Position : null;
+
+                CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
+                    isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount);
             }
 
             if (_minionNumber < 8)

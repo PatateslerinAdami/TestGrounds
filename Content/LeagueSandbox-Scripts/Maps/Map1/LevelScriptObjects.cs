@@ -25,7 +25,7 @@ namespace MapScripts.Map1
         static List<Nexus> NexusList = new List<Nexus>();
         public static string LaneTurretAI = "TurretAI";
 
-        static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
+        public static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
         {
             {TeamId.TEAM_BLUE, new Dictionary<Lane, List<LaneTurret>>{
                 { Lane.LANE_Unknown, new List<LaneTurret>()},

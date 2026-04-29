@@ -51,10 +51,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
 
         public override void Die(DeathData data)
         {
-            // Inhibitors respawn -> release the navgrid cells so units can walk through the area
-            // while it's down. SetState(Respawning) on respawn re-bakes via the path below.
-            UnbakeFootprint();
-
             base.Die(data);
 
             if (data.Killer is Champion c)
@@ -72,15 +68,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
             {
                 return;
             }
-            var mo = FindMatchingMapObject();
-            if (mo.Vertices2D != null && mo.Vertices2D.Length >= 3)
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(mo.Vertices2D);
-            }
-            else
-            {
-                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, CollisionRadius);
-            }
+            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, CollisionRadius);
         }
 
         private void UnbakeFootprint()
@@ -90,20 +78,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
                 _game.Map.NavigationGrid.RemoveDynamicBlocker(_blockedNavCells);
                 _blockedNavCells = null;
             }
-        }
-
-        private MapObject FindMatchingMapObject()
-        {
-            foreach (var kv in _game.Map.MapData.MapObjects)
-            {
-                var mo = kv.Value;
-                if (Math.Abs(mo.CentralPoint.X - Position.X) < 1f
-                    && Math.Abs(mo.CentralPoint.Z - Position.Y) < 1f)
-                {
-                    return mo;
-                }
-            }
-            return MapObject.Empty;
         }
 
         //TODO: Investigate if we want the switch of states to be handled by each script
