@@ -526,7 +526,7 @@ namespace AIScripts
                                 Vector2 toAxis = LaneMinion.Position - prev;
                                 float along = Vector2.Dot(toAxis, dirAxis);
                                 Vector2 onAxis = prev + dirAxis * along;
-                                float forwardLength = MathF.Max(300f, offset.Length() * 3f);
+                                float forwardLength = MathF.Max(300f, offset.Length() * 8f);
                                 Vector2 intermediate = onAxis + dirAxis * forwardLength + offset;
 
                                 path = new List<Vector2> { LaneMinion.Position, intermediate, currentWaypoint };
