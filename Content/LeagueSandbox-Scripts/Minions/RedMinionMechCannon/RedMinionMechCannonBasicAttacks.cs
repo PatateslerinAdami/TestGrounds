@@ -14,8 +14,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells;
 
 public class Red_Minion_MechCannonBasicAttack : ISpellScript {
-    private ObjAIBase      _owner;
-
     public SpellScriptMetadata ScriptMetadata => new() {
         
         MissileParameters = new MissileParameters {
@@ -25,19 +23,9 @@ public class Red_Minion_MechCannonBasicAttack : ISpellScript {
         TriggersSpellCasts   = true,
         CastingBreaksStealth = true
     };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _owner = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
-    }
-
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-    }
 }
 
 public class Red_Minion_MechCannonBasicAttack2 : ISpellScript {
-    private ObjAIBase      _owner;
-
     public SpellScriptMetadata ScriptMetadata => new() {
         
         MissileParameters = new MissileParameters {
@@ -47,13 +35,4 @@ public class Red_Minion_MechCannonBasicAttack2 : ISpellScript {
         TriggersSpellCasts   = true,
         CastingBreaksStealth = true
     };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _owner = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
-    }
-
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        
-    }
 }
