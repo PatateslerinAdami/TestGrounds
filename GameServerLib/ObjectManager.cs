@@ -38,6 +38,13 @@ namespace LeagueSandbox.GameServer
 
         private bool _currentlyInUpdate = false;
 
+        // Periodic full-sync of all unit positions. Real server replays show one bulk packet
+        // every ~5s carrying every visible unit (24-26 entries), on top of the event-driven
+        // small packets. Without this heartbeat, a unit that started a long path silently
+        // drifts on the client until SetWaypoints/Stop/teleport/DriftResync fires.
+        private float _timeSinceFullSync;
+        private const float FULL_SYNC_INTERVAL_MS = 5000f;
+
         // Locks for each dictionary. Depricated since #1302.
         //private object _objectsLock = new object();
         //private object _turretsLock = new object();
@@ -80,6 +87,19 @@ namespace LeagueSandbox.GameServer
         public void Update(float diff)
         {
             _currentlyInUpdate = true;
+
+            _timeSinceFullSync += diff;
+            if (_timeSinceFullSync >= FULL_SYNC_INTERVAL_MS)
+            {
+                _timeSinceFullSync = 0f;
+                foreach (var obj in _objects.Values)
+                {
+                    if (obj is AttackableUnit u)
+                    {
+                        u.RequestMovementSync();
+                    }
+                }
+            }
 
             // For all existing objects
             foreach (var obj in _objects.Values)
