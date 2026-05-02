@@ -36,10 +36,11 @@ namespace ItemPassives
         {
             ApiEventManager.OnLaunchAttack.RemoveListener(this);
             ApiEventManager.OnUpdateStats.RemoveListener(this);
-
-            if (HasBuff(owner, "ItemStatikShankCharge"))
+            var buff = owner.GetBuffWithName("ItemStatikShankCharge");
+            if (buff != null)
             {
-                RemoveBuff(owner, "ItemStatikShankCharge");
+                buff.SetStacks(1);
+                owner.RemoveBuffsWithName("ItemStatikShankCharge");
             }
         }
 
@@ -58,12 +59,7 @@ namespace ItemPassives
             var cur = _owner.Position;
             var moved = Vector2.Distance(cur, _lastPos);
 
-            if (moved > 1500f)
-            {
-                _lastPos = cur;
-                return;
-            }
-
+            if (moved > 1500f) { _lastPos = cur; return; }
             if (moved <= 0f) return;
 
             _movedAccum += moved;
@@ -80,7 +76,6 @@ namespace ItemPassives
                 {
                     int stacksToAdd = steps * MOVE_STEP_STACKS;
                     int currentStacks = buff.StackCount;
-                    
                     buff.SetStacks(Math.Min(100, currentStacks + stacksToAdd));
                 }
             }
