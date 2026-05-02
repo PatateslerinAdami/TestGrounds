@@ -20,7 +20,6 @@ namespace Buffs
         private const float PROC_DAMAGE = 100f;
         private const float CHAIN_RANGE = 550f;
         private const int MAX_EXTRA_TARGETS = 3;
-
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
@@ -61,6 +60,7 @@ namespace Buffs
 
             _self.SetStacks(1);
             ApplyShiv(primary, data);
+            
             SpellDataFlags hitFlags = SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectEnemies;
             
             var extras = GetUnitsInRange(_owner, primary.Position, CHAIN_RANGE, true, hitFlags)
@@ -80,8 +80,10 @@ namespace Buffs
         private void ApplyShiv(AttackableUnit target, DamageData data)
         {
             if (target == null || target.IsDead) return;
+            
             float dmg = PROC_DAMAGE;
             bool isCrit = new System.Random().NextDouble() < _owner.Stats.CriticalChance.Total;
+            
             if (isCrit)
             {
                 dmg *= _owner.Stats.CriticalDamage.Total;
@@ -90,8 +92,8 @@ namespace Buffs
             {
                 dmg *= 0.9f;
             }
-            target.TakeDamage(_owner, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, isCrit);
             
+            target.TakeDamage(_owner, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, isCrit);
             AddParticleTarget(_owner, target, "kennen_btl_tar.troy", target, 1.0f);
         }
     }
