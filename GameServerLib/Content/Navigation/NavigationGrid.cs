@@ -368,6 +368,51 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         // on the PathInformation struct, not on cells.
         private const float BACKWARD_HEURISTIC_SCALE = 0.25f;
 
+        // Weight applied to the hint grid cost in the heuristic. Client (S1) sets this per-search
+        // as `mAmountOfHintToUse`, ranging from ~3.0 (short paths) up to several units (long paths).
+        // We use a fixed lower-bound default; tune if paths under-/over-attract to lane splines.
+        // Hint-grid weight, computed per-search to match the client's `mAmountOfHintToUse`
+        // in S1 navigationgrid.cpp:9941–9961, "slow but accurate" branch, which is the only branch that
+        // matters for proper grade A* searches; the other branch falls back to a Cheat-system
+        // constant). Saturates at 3.0 for distances ≤100 cells, climbs gently for longer paths.
+        private static float ComputeHintMultiplier(Vector2 fromNav, Vector2 toNav)
+        {
+            float distInCells = Vector2.Distance(fromNav, toNav);
+            return Math.Max(0f, distInCells - 100f) / 140f * 0.5f + 3.0f;
+        }
+
+        /// <summary>
+        /// Returns the hint grid network cost between two cells via bilinear interpolation over
+        /// each cell's two RefHintNodes and RefHintWeight, mirroring the client's
+        /// NavHintGrid&lt;30&gt;::GetCost. Returns 0 if either cell has invalid hint references.
+        /// </summary>
+        private float GetHintCost(NavigationGridCell from, NavigationGridCell to)
+        {
+            short fromA = from.RefHintNode[0];
+            short fromB = from.RefHintNode[1];
+            short toA   = to.RefHintNode[0];
+            short toB   = to.RefHintNode[1];
+
+            int hintCount = HintGrid?.HintNodes?.Length ?? 0;
+            if (hintCount == 0) return 0f;
+            if (fromA < 0 || fromA >= hintCount || fromB < 0 || fromB >= hintCount) return 0f;
+            if (toA   < 0 || toA   >= hintCount || toB   < 0 || toB   >= hintCount) return 0f;
+
+            float wF = from.RefHintWeight;
+            float wT = to.RefHintWeight;
+            var nodes = HintGrid.HintNodes;
+
+            // Bilinear blend over (fromA, fromB) × (toA, toB) using the two weights.
+            float dAA = nodes[fromA].Distances[toA];
+            float dAB = nodes[fromA].Distances[toB];
+            float dBA = nodes[fromB].Distances[toA];
+            float dBB = nodes[fromB].Distances[toB];
+
+            float costAtFromA = wT * dAA + (1f - wT) * dAB;
+            float costAtFromB = wT * dBA + (1f - wT) * dBB;
+            return wF * costAtFromA + (1f - wF) * costAtFromB;
+        }
+
         // Polygon must be CCW (which ConvexHull above produces). Returns true for points on the
         // boundary as well — that's fine for blocker rasterization (over-block at the edge by at
         // most one cell, which matches what the client does).
@@ -460,6 +505,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             openB.Enqueue(cellTo, startToGoal);
             gB[cellTo.ID] = 0;
 
+            float hintMultiplier = ComputeHintMultiplier(fromNav, toNav);
+
             // mu = the best-known total path cost through a meeting. Terminate if
             // topF + topB >= mu (no future path can be better).
             float mu = float.PositiveInfinity;
@@ -500,7 +547,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         forward: true, ref mu, ref meetingCell,
                         ref bestCellF, ref bestHeuristicF,
                         ref bestCellB, ref bestHeuristicB,
-                        ref convergenceAccumulator, ref convergenceCount
+                        ref convergenceAccumulator, ref convergenceCount,
+                        hintMultiplier
                     );
                 }
                 else
@@ -511,7 +559,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         forward: false, ref mu, ref meetingCell,
                         ref bestCellF, ref bestHeuristicF,
                         ref bestCellB, ref bestHeuristicB,
-                        ref convergenceAccumulator, ref convergenceCount
+                        ref convergenceAccumulator, ref convergenceCount,
+                        hintMultiplier
                     );
                 }
             }
@@ -607,7 +656,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             ref NavigationGridCell bestCellB,
             ref float bestHeuristicB,
             ref float convergenceAccumulator,
-            ref int convergenceCount)
+            ref int convergenceCount,
+            float hintMultiplier)
         {
             if (!open.TryDequeue(out var cell, out _))
             {
@@ -705,11 +755,17 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 float convergenceMean = convergenceAccumulator / convergenceCount;
                 float convergenceBias = distToOtherBest / convergenceMean * 0.03f;
 
+                // Hint grid network distance -> each cell carries refs into a 30×30 hint mesh
+                // (RefHintNode + RefHintWeight) with precomputed all-pairs shortest paths.
+                // The client adds this term to bias paths along baked Lane/Jungle splines.
+                float hintCost = GetHintCost(neighborCell, targetCell) * hintMultiplier;
+
                 open.Enqueue(
                     neighborCell,
                     tentativeG + neighborCell.Heuristic
                         + ManhattanDistance(neighborCellCoord, targetNav) * directionScale
                         + convergenceBias
+                        + hintCost
                 );
 
                 // Check for cross-meetings even during edge relaxation — otherwise, some meetings
