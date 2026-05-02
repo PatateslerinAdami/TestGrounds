@@ -507,20 +507,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
             float hintMultiplier = ComputeHintMultiplier(fromNav, toNav);
 
-            // mu = the best-known total path cost through a meeting. Terminate if
-            // topF + topB >= mu (no future path can be better).
-            float mu = float.PositiveInfinity;
-            NavigationGridCell meetingCell = null;
-
-            // Closest-explored cell to the goal (forward direction). Fallback if cellTo is unreachable
-            // When this happens units will then move toward the wall instead of staying still. Mirrors the
-            // partialPath/destinationUnchanged behavior of the client.
+            // Closest-explored cell to the goal (forward direction). Fallback if cellTo is unreachable;
+            // also forms the client's mLastKnownGoodLocation that the convergence bias uses.
             NavigationGridCell bestCellF = cellFrom;
             float bestHeuristicF = ManhattanDistance(cellFrom.GetCenter(), toNav);
 
-            // Backward analogue. Used for the bidirectional convergence bias (client's
-            // mOther.mLastKnownGoodLocation): each side's heuristic discounts cells that are
-            // close to where the OTHER side has been reaching. Pulls the two frontiers together.
+            // Backward analogue -> closest explored cell toward fromNav. Feeds the convergence bias
+            // when forward expands (other side's lastKnownGoodLocation) and is the partial-path
+            // fallback for the backward direction.
             NavigationGridCell bestCellB = cellTo;
             float bestHeuristicB = ManhattanDistance(cellTo.GetCenter(), fromNav);
 
@@ -529,50 +523,50 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             float convergenceAccumulator = 0f;
             int convergenceCount = 0;
 
-            while (openF.Count > 0 && openB.Count > 0)
-            {
-                openF.TryPeek(out _, out float topF);
-                openB.TryPeek(out _, out float topB);
-                if (topF + topB >= mu)
-                {
-                    break;
-                }
+            // Client style  first meeting termination (S1 navigationgrid.cpp:10112-10142): two break conditions —>
+            // (1) forward dequeues its own goal cell (standard A* end), or (2) forward expansion
+            // sees a neighbor that backward has already closed (first meeting via 0x80 flag in the
+            // client; here via closedB membership). The backward search itself never breaks the
+            // loop; it only feeds the heuristic and the meeting set.
+            bool goalReached = false;
+            NavigationGridCell meetingCell = null;
 
+            while (openF.Count > 0 && openB.Count > 0 && !goalReached && meetingCell == null)
+            {
                 // Smaller-frontier-first reduces the worst-case scenario to the maximum of the two halves.
                 if (openF.Count <= openB.Count)
                 {
                     ExpandStep(
-                        openF, gF, cameFromF, closedF, gB,
+                        openF, gF, cameFromF, closedF, closedB,
                         cellFrom, cellTo, fromNav, toNav, distanceThreshold,
-                        forward: true, ref mu, ref meetingCell,
+                        forward: true,
                         ref bestCellF, ref bestHeuristicF,
                         ref bestCellB, ref bestHeuristicB,
                         ref convergenceAccumulator, ref convergenceCount,
-                        hintMultiplier
+                        hintMultiplier, ref goalReached, ref meetingCell
                     );
                 }
                 else
                 {
                     ExpandStep(
-                        openB, gB, cameFromB, closedB, gF,
+                        openB, gB, cameFromB, closedB, closedF,
                         cellTo, cellFrom, toNav, fromNav, distanceThreshold,
-                        forward: false, ref mu, ref meetingCell,
+                        forward: false,
                         ref bestCellF, ref bestHeuristicF,
                         ref bestCellB, ref bestHeuristicB,
                         ref convergenceAccumulator, ref convergenceCount,
-                        hintMultiplier
+                        hintMultiplier, ref goalReached, ref meetingCell
                     );
                 }
             }
 
-            // Path reconstruction
-            List<NavigationGridCell> pathCells;
+            // Path reconstruction. Three cases:
+            //   1. meetingCell set -> forward chain (cellFrom→meeting) + backward chain (meeting→cellTo)
+            //   2. goalReached    -> single forward chain ending at cellTo
+            //   3. neither       -> partial path via bestCellF (closest-explored forward cell)
+            var pathCells = new List<NavigationGridCell>();
             if (meetingCell != null)
             {
-                // Full path: Forward chain (cellFrom → meetingCell) + backward chain (meetingCell → cellTo).
-                pathCells = new List<NavigationGridCell>();
-
-                // Walk backward through the forward half
                 var current = meetingCell;
                 while (current != null)
                 {
@@ -580,8 +574,6 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     cameFromF.TryGetValue(current.ID, out current);
                 }
                 pathCells.Reverse();
-
-                // Walk forward through the backward half (cameFromB[X] points to cellTo)
                 cameFromB.TryGetValue(meetingCell.ID, out current);
                 while (current != null)
                 {
@@ -591,15 +583,22 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
             else
             {
-                // No match — partial path via forward search to the best-explored cell.
-                if (bestCellF.ID == cellFrom.ID)
+                NavigationGridCell pathTail;
+                if (goalReached)
                 {
-                    return null;
+                    pathTail = cellTo;
                 }
-                isPartialPath = true;
+                else
+                {
+                    if (bestCellF.ID == cellFrom.ID)
+                    {
+                        return null;
+                    }
+                    isPartialPath = true;
+                    pathTail = bestCellF;
+                }
 
-                pathCells = new List<NavigationGridCell>();
-                var current = bestCellF;
+                var current = pathTail;
                 while (current != null)
                 {
                     pathCells.Add(current);
@@ -634,30 +633,32 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// An expansion step for forward or backward search. Both directions are structurally
         /// identical; they differ only in source/target cells and coordinates.
         ///
-        /// Updates <paramref name="mu"/> and <paramref name="meetingCell"/> if a cell update
-        /// finds a better meeting point with the other search tree (gThis[c] + gOther[c] &lt; mu).
+        /// Sets <paramref name="goalReached"/> when the forward search dequeues its target cell.
+        /// Sets <paramref name="meetingCell"/> when forward expansion encounters a neighbor that
+        /// backward has already closed (first-meeting termination, mirrors client 0x80 detection).
+        /// Backward expansion never terminates the loop because it only feeds the heuristic.
         /// </summary>
         private void ExpandStep(
             PriorityQueue<NavigationGridCell, float> open,
             Dictionary<int, float> gThis,
             Dictionary<int, NavigationGridCell> cameFromThis,
             HashSet<int> closedThis,
-            Dictionary<int, float> gOther,
+            HashSet<int> closedOther,
             NavigationGridCell sourceCell,
             NavigationGridCell targetCell,
             Vector2 sourceNav,
             Vector2 targetNav,
             float distanceThreshold,
             bool forward,
-            ref float mu,
-            ref NavigationGridCell meetingCell,
             ref NavigationGridCell bestCellF,
             ref float bestHeuristicF,
             ref NavigationGridCell bestCellB,
             ref float bestHeuristicB,
             ref float convergenceAccumulator,
             ref int convergenceCount,
-            float hintMultiplier)
+            float hintMultiplier,
+            ref bool goalReached,
+            ref NavigationGridCell meetingCell)
         {
             if (!open.TryDequeue(out var cell, out _))
             {
@@ -692,16 +693,12 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 }
             }
 
-            // Check for collisions on closing: if the other side has already reached this cell,
-            // the path cellFrom -> .. -> cell -> .. -> cellTo is possible.
-            if (gOther.TryGetValue(cell.ID, out float gOtherHere))
+            // Forward dequeued its goal then done. Skip neighbor expansion; the path is reconstructible
+            // from cameFromF starting at targetCell.
+            if (forward && cell.ID == targetCell.ID)
             {
-                float candidate = gThis[cell.ID] + gOtherHere;
-                if (candidate < mu)
-                {
-                    mu = candidate;
-                    meetingCell = cell;
-                }
+                goalReached = true;
+                return;
             }
 
             foreach (NavigationGridCell neighborCell in GetCellNeighbors(cell))
@@ -744,6 +741,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 gThis[neighborCell.ID] = tentativeG;
                 cameFromThis[neighborCell.ID] = cell;
 
+                // First meeting check —> client's 0x80 flag onneighbor detection in equivalent
+                // form. Only forward expansion looks for the meeting; matches client's `if (v15)`
+                // gating in S1 navigationgrid.cpp:10121.
+                if (forward && closedOther.Contains(neighborCell.ID))
+                {
+                    meetingCell = neighborCell;
+                    return;
+                }
+
                 float directionScale = forward ? 1.0f : BACKWARD_HEURISTIC_SCALE;
 
                 // Bidirectional convergence bias -> discounts cells that are close to the OTHER
@@ -767,18 +773,6 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         + convergenceBias
                         + hintCost
                 );
-
-                // Check for cross-meetings even during edge relaxation — otherwise, some meetings
-                // would not be detected until the next dequeue, which would delay the termination condition.
-                if (gOther.TryGetValue(neighborCell.ID, out float gOtherNb))
-                {
-                    float candidate = tentativeG + gOtherNb;
-                    if (candidate < mu)
-                    {
-                        mu = candidate;
-                        meetingCell = neighborCell;
-                    }
-                }
             }
         }
 
