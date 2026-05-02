@@ -26,6 +26,20 @@ namespace Buffs
             if (unit is ObjAIBase ai)
             {
                 SetSpell(ai, "YasuoQ2W", SpellSlotType.SpellSlots, 0);
+
+                int charLevel = ai.Stats.Level;
+                int trueQLevel = charLevel >= 9 ? 5 : charLevel >= 7 ? 4 : charLevel >= 5 ? 3 : charLevel >= 4 ? 2 : 1;
+
+                float baseCooldown = 5.25f - (0.25f * trueQLevel);
+                
+                float bonusAS = ai.Stats.AttackSpeedMultiplier.Total - 1.0f; 
+                if (bonusAS < 0) bonusAS = 0;
+
+                float cdReduction = bonusAS / 1.67f;
+                float finalCooldown = baseCooldown * (1f - cdReduction);
+                if (finalCooldown < 1.33f) finalCooldown = 1.33f;
+                
+                ai.Spells[0].SetCooldown(finalCooldown, true);
             }
         }
 
