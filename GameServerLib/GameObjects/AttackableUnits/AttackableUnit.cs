@@ -386,6 +386,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             Replication.MarkAsUnchanged();
             _teleportedDuringThisFrame = false;
+            if (_movementUpdated)
+            {
+                // The packet that just went out used the current Position as origin, so the
+                // accumulated drift is now reflected on the client.
+                _unreplicatedDrift = Vector2.Zero;
+            }
             _movementUpdated = false;
         }
 
@@ -1231,16 +1237,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                 Vector2 rawPush = ComputeSeparationPush(nearby, originalDelta);
 
-                // Clamp the push against the original movement distance for this tick
-                rawPush = ClampSeparationPush(rawPush, originalDelta);
+                // Clamp the push against a per tick movement budget. Includes a walk-speed
+                // fallback so stationary units (e.g. auto-attacking) are also clamped instead
+                // of being teleported by the full overlap push.
+                rawPush = ClampSeparationPush(rawPush, originalDelta, delta);
 
-                const float PushSmoothingAlpha = 0.4f;
-                _smoothedSeparationPush = _smoothedSeparationPush * (1f - PushSmoothingAlpha)
-                                        + rawPush * PushSmoothingAlpha;
+                // Frametime correct smoothing. alpha = 1 - exp(-delta/tau). Keeps the response
+                // consistent at different tick rates and shortens the tail after the overlap clears.
+                const float PushSmoothingTauMs = 60f;
+                float alpha = 1f - (float)Math.Exp(-delta / PushSmoothingTauMs);
+                _smoothedSeparationPush = _smoothedSeparationPush * (1f - alpha)
+                                        + rawPush * alpha;
 
                 if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                 {
                     Position += _smoothedSeparationPush;
+                    _unreplicatedDrift += _smoothedSeparationPush;
                     pushed = true;
                 }
 
@@ -1250,7 +1262,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (stuckPush.LengthSquared() > 0.0001f)
                 {
                     Position += stuckPush;
+                    _unreplicatedDrift += stuckPush;
                     pushed = true;
+                }
+
+                // Force a movement data resync once the unreplicated drift gets large enough
+                // that the client would otherwise see a visible snap on the next SetWaypoints.
+                // Skip stopped units (Waypoints.Count == 1) -> GetCenteredWaypoints can't build a
+                // valid packet for them.
+                const float DriftResyncThreshold = 25f;
+                if (Waypoints.Count > 1
+                    && _unreplicatedDrift.LengthSquared() > DriftResyncThreshold * DriftResyncThreshold)
+                {
+                    _movementUpdated = true;
                 }
             }
             else
@@ -1424,20 +1448,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
-        /// Clamp: Limits the magnitude of the separation push to ±37.5% of the original
-        /// movement distance for this tick. Prevents walking units from being pushed extremely far
-        /// out of the way when they encounter neighbors. This makes body blocking smoother and
-        /// there is no more back and forth oscillation.
+        /// Clamp: Limits the magnitude of the separation push to a fraction of the unit's
+        /// per-tick movement budget (max of actual walk delta and what the unit could walk
+        /// at full move speed). This prevents stationary units from being shoved out
+        /// instantly and keeps walking-unit body blocking smooth without oscillation.
         /// </summary>
-        private static Vector2 ClampSeparationPush(Vector2 push, Vector2 originalDelta)
+        private Vector2 ClampSeparationPush(Vector2 push, Vector2 originalDelta, float deltaMs)
         {
             const float ClampRatio = 0.375f;
-            const float MinOriginalMagSq = 0.01f;
 
-            float originalMagSq = originalDelta.LengthSquared();
-            if (originalMagSq <= MinOriginalMagSq) return push; // Stationär → Phase-3-Workaround: kein Clamp
+            float walkBudget = GetMoveSpeed() * 0.001f * deltaMs;
+            float originalMag = originalDelta.Length();
+            float budget = Math.Max(originalMag, walkBudget);
+            if (budget <= 0.0001f) return push;
 
-            float maxPushMag = (float)Math.Sqrt(originalMagSq) * ClampRatio;
+            float maxPushMag = budget * ClampRatio;
             float pushMagSq = push.LengthSquared();
             if (pushMagSq <= maxPushMag * maxPushMag) return push;
 
