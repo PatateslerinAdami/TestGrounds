@@ -29,6 +29,21 @@ namespace Buffs
         {
             var caster = ownerSpell.CastInfo.Owner;
             SetSpell(caster, "YasuoQ3W", SpellSlotType.SpellSlots, 0);
+
+            int charLevel = caster.Stats.Level;
+            int trueQLevel = charLevel >= 9 ? 5 : charLevel >= 7 ? 4 : charLevel >= 5 ? 3 : charLevel >= 4 ? 2 : 1;
+
+            float baseCooldown = 5.25f - (0.25f * trueQLevel);
+            
+            float bonusAS = caster.Stats.AttackSpeedMultiplier.Total - 1.0f; 
+            if (bonusAS < 0) bonusAS = 0;
+
+            float cdReduction = bonusAS / 1.67f;
+            float finalCooldown = baseCooldown * (1f - cdReduction);
+            if (finalCooldown < 1.33f) finalCooldown = 1.33f;
+            
+            caster.Spells[0].SetCooldown(finalCooldown, true);
+
             p1 = AddParticleTarget(caster, caster, "Yasuo_Base_Q3_Indicator_Ring", caster); p1.isInfinite = true;
             p2 = AddParticleTarget(caster, caster, "Yasuo_Base_Q3_Indicator_Ring_alt", caster); p2.isInfinite = true;
             p3 = AddParticleTarget(caster, caster, "Yasuo_Base_Q_wind_ready_buff", caster); p3.isInfinite = true;

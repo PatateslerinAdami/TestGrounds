@@ -10,13 +10,22 @@ namespace Spells
 {
     public class YasuoDashWrapper : ISpellScript
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-        };
+        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata() { };
+        
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
+            if (target.HasBuff("YasuoDashWrapperChaos"))
+            {
+                return;
+            }
+            float lockDuration = 11f - spell.CastInfo.SpellLevel; 
+            
+            // Aplicăm blocajul pe adversar
+            AddBuff("YasuoDashWrapperChaos", lockDuration, 1, spell, target, owner);
+            
+            // Pornim Dash-ul și animațiile
             AddBuff("YasoAnimTest", 4f, 1, spell, owner, owner);
-            AddBuff("YasuoEBlock", 11f, 1, spell, target, owner);
+            AddBuff("YasuoEBlock", 0.5f, 1, spell, target, owner);
         }
     }
 }
