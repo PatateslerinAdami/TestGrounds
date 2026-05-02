@@ -353,6 +353,21 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             return (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
         }
 
+        // Manhattan distance, used as the A* heuristic to mirror the client's BuildNavGridPath
+        // source is this: NavGrid.cpp::ComputeCellDistHeuristic. Inadmissible with 8-neighbor + 1.0/√2 step
+        // costs, so paths can be slightly suboptimal in real distance but biases toward
+        // axis-aligned shapes that match what the client produces.
+        private static float ManhattanDistance(Vector2 a, Vector2 b)
+        {
+            return Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
+        }
+
+        // Heuristic scale for cells flagged OTHER_DIRECTION_END_TO_START in the navgrid file.
+        // Riot bakes 0x80 onto cells along preferred routes (lane splines, jungle paths) so A*
+        // discounts their f-cost and steers paths toward them. Constants 0.25 / 1.0 from the
+        // client binary at DAT_01061de0 (selected by `(flag & 0x80) == 0 ? 1.0 : 0.25`).
+        private const float HINT_CELL_HEURISTIC_SCALE = 0.25f;
+
         // Polygon must be CCW (which ConvexHull above produces). Returns true for points on the
         // boundary as well — that's fine for blocker rasterization (over-block at the edge by at
         // most one cell, which matches what the client does).
@@ -439,7 +454,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             var cameFromB = new Dictionary<int, NavigationGridCell>();
             var closedB = new HashSet<int>();
 
-            float startToGoal = Vector2.Distance(fromNav, toNav);
+            float startToGoal = ManhattanDistance(fromNav, toNav);
             openF.Enqueue(cellFrom, startToGoal);
             gF[cellFrom.ID] = 0;
             openB.Enqueue(cellTo, startToGoal);
@@ -454,7 +469,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // When this happens units will then move toward the wall instead of staying still. Mirrors the
             // partialPath/destinationUnchanged behavior of the client.
             NavigationGridCell bestCellF = cellFrom;
-            float bestHeuristicF = Vector2.Distance(cellFrom.GetCenter(), toNav);
+            float bestHeuristicF = ManhattanDistance(cellFrom.GetCenter(), toNav);
 
             while (openF.Count > 0 && openB.Count > 0)
             {
@@ -591,7 +606,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // Best-explored tracking only for the forward direction (partial-path fallback).
             if (forward)
             {
-                float h = Vector2.Distance(cell.GetCenter(), targetNav);
+                float h = ManhattanDistance(cell.GetCenter(), targetNav);
                 if (h < bestHeuristicF)
                 {
                     bestHeuristicF = h;
@@ -651,9 +666,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 gThis[neighborCell.ID] = tentativeG;
                 cameFromThis[neighborCell.ID] = cell;
 
+                float heuristicScale = neighborCell.HasFlag(NavigationGridCellFlags.OTHER_DIRECTION_END_TO_START)
+                    ? HINT_CELL_HEURISTIC_SCALE
+                    : 1.0f;
                 open.Enqueue(
                     neighborCell,
-                    tentativeG + neighborCell.Heuristic + Vector2.Distance(neighborCellCoord, targetNav)
+                    tentativeG + neighborCell.Heuristic
+                        + ManhattanDistance(neighborCellCoord, targetNav) * heuristicScale
                 );
 
                 // Check for cross-meetings even during edge relaxation — otherwise, some meetings
