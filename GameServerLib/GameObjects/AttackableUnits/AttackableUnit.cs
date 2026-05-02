@@ -98,6 +98,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
         private Vector2 OldPoint = new Vector2(0, 0);
         private Vector2 _smoothedSeparationPush = Vector2.Zero;
+        private Vector2 _unreplicatedDrift = Vector2.Zero;
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
         private bool _isInGrass = false;
@@ -1514,6 +1515,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             PathHasTrueEnd = false;
 
             return true;
+        }
+
+        /// <summary>
+        /// Marks this unit for re-broadcasting its movement state on the next sync. Used by the
+        /// periodic full-sync heartbeat — without it, a unit that started a long path silently
+        /// drifts on the client until something else triggers a packet.
+        /// </summary>
+        public void RequestMovementSync()
+        {
+            _movementUpdated = true;
         }
 
         /// <summary>

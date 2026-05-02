@@ -362,11 +362,11 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             return Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
         }
 
-        // Heuristic scale for cells flagged OTHER_DIRECTION_END_TO_START in the navgrid file.
-        // Riot bakes 0x80 onto cells along preferred routes (lane splines, jungle paths) so A*
-        // discounts their f-cost and steers paths toward them. Constants 0.25 / 1.0 from the
-        // client binary at DAT_01061de0 (selected by `(flag & 0x80) == 0 ? 1.0 : 0.25`).
-        private const float HINT_CELL_HEURISTIC_SCALE = 0.25f;
+        // Backward search heuristic scale. The client gives the backward bidirectional search
+        // a 4× discount on its heuristic so it expands more aggressively when both heaps share
+        // a global priority pop — verified against S1 source where it's `mFlags & 0x80 ? 0.25 : 1.0`
+        // on the PathInformation struct, not on cells.
+        private const float BACKWARD_HEURISTIC_SCALE = 0.25f;
 
         // Polygon must be CCW (which ConvexHull above produces). Returns true for points on the
         // boundary as well — that's fine for blocker rasterization (over-block at the edge by at
@@ -471,6 +471,17 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             NavigationGridCell bestCellF = cellFrom;
             float bestHeuristicF = ManhattanDistance(cellFrom.GetCenter(), toNav);
 
+            // Backward analogue. Used for the bidirectional convergence bias (client's
+            // mOther.mLastKnownGoodLocation): each side's heuristic discounts cells that are
+            // close to where the OTHER side has been reaching. Pulls the two frontiers together.
+            NavigationGridCell bestCellB = cellTo;
+            float bestHeuristicB = ManhattanDistance(cellTo.GetCenter(), fromNav);
+
+            // Running mean of |neighbor to otherSide.bestCell| across both directions, used for the
+            // 0.03-weight convergence bias term. Shared between forward and backward as in the client.
+            float convergenceAccumulator = 0f;
+            int convergenceCount = 0;
+
             while (openF.Count > 0 && openB.Count > 0)
             {
                 openF.TryPeek(out _, out float topF);
@@ -487,7 +498,9 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         openF, gF, cameFromF, closedF, gB,
                         cellFrom, cellTo, fromNav, toNav, distanceThreshold,
                         forward: true, ref mu, ref meetingCell,
-                        ref bestCellF, ref bestHeuristicF
+                        ref bestCellF, ref bestHeuristicF,
+                        ref bestCellB, ref bestHeuristicB,
+                        ref convergenceAccumulator, ref convergenceCount
                     );
                 }
                 else
@@ -496,7 +509,9 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         openB, gB, cameFromB, closedB, gF,
                         cellTo, cellFrom, toNav, fromNav, distanceThreshold,
                         forward: false, ref mu, ref meetingCell,
-                        ref bestCellF, ref bestHeuristicF
+                        ref bestCellF, ref bestHeuristicF,
+                        ref bestCellB, ref bestHeuristicB,
+                        ref convergenceAccumulator, ref convergenceCount
                     );
                 }
             }
@@ -588,7 +603,11 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             ref float mu,
             ref NavigationGridCell meetingCell,
             ref NavigationGridCell bestCellF,
-            ref float bestHeuristicF)
+            ref float bestHeuristicF,
+            ref NavigationGridCell bestCellB,
+            ref float bestHeuristicB,
+            ref float convergenceAccumulator,
+            ref int convergenceCount)
         {
             if (!open.TryDequeue(out var cell, out _))
             {
@@ -603,14 +622,23 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
             closedThis.Add(cell.ID);
 
-            // Best-explored tracking only for the forward direction (partial-path fallback).
+            // Best explored tracking per direction. Forward side feeds the partial-path fallback
+            // (bestCellF replaces unreachable cellTo); both feed the convergence bias heuristic.
+            float hToTarget = ManhattanDistance(cell.GetCenter(), targetNav);
             if (forward)
             {
-                float h = ManhattanDistance(cell.GetCenter(), targetNav);
-                if (h < bestHeuristicF)
+                if (hToTarget < bestHeuristicF)
                 {
-                    bestHeuristicF = h;
+                    bestHeuristicF = hToTarget;
                     bestCellF = cell;
+                }
+            }
+            else
+            {
+                if (hToTarget < bestHeuristicB)
+                {
+                    bestHeuristicB = hToTarget;
+                    bestCellB = cell;
                 }
             }
 
@@ -666,13 +694,22 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 gThis[neighborCell.ID] = tentativeG;
                 cameFromThis[neighborCell.ID] = cell;
 
-                float heuristicScale = neighborCell.HasFlag(NavigationGridCellFlags.OTHER_DIRECTION_END_TO_START)
-                    ? HINT_CELL_HEURISTIC_SCALE
-                    : 1.0f;
+                float directionScale = forward ? 1.0f : BACKWARD_HEURISTIC_SCALE;
+
+                // Bidirectional convergence bias -> discounts cells that are close to the OTHER
+                // side's best known location relative to the running mean of the same.
+                Vector2 otherBest = forward ? bestCellB.GetCenter() : bestCellF.GetCenter();
+                float distToOtherBest = ManhattanDistance(neighborCellCoord, otherBest);
+                convergenceAccumulator += distToOtherBest;
+                convergenceCount++;
+                float convergenceMean = convergenceAccumulator / convergenceCount;
+                float convergenceBias = distToOtherBest / convergenceMean * 0.03f;
+
                 open.Enqueue(
                     neighborCell,
                     tentativeG + neighborCell.Heuristic
-                        + ManhattanDistance(neighborCellCoord, targetNav) * heuristicScale
+                        + ManhattanDistance(neighborCellCoord, targetNav) * directionScale
+                        + convergenceBias
                 );
 
                 // Check for cross-meetings even during edge relaxation — otherwise, some meetings
