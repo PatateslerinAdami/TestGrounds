@@ -22,8 +22,8 @@ namespace GameServerCore
 
         public MovementVector(Game game, float x, float y)
         {
-            X = FormatCoordinate(x, game.Map.NavigationGrid.MiddleOfMap.Y);
-            Y = FormatCoordinate(y, game.Map.NavigationGrid.MiddleOfMap.X);
+            X = FormatCoordinate(x, game.Map.NavigationGrid.MiddleOfMap.X);
+            Y = FormatCoordinate(y, game.Map.NavigationGrid.MiddleOfMap.Y);
         }
 
         /// <summary>
