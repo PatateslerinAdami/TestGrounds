@@ -18,14 +18,19 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.INTERNAL };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
+        
         private Vector2 _lastPos;
         private bool _isParStateActive = false; 
+        
+        private float _lastHealth; 
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _lastPos = unit.Position;
+            _lastHealth = unit.Stats.CurrentHealth; 
+
             ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdate, false);
-            ApiEventManager.OnTakeDamage.AddListener(this, unit, OnTakeDamage, false);
+            
             SetPARState(unit, 0); 
             _isParStateActive = false;
         }
@@ -63,25 +68,25 @@ namespace Buffs
             {
                 hud.SetStacks((byte)Math.Clamp(stacks, 1, 100));
             }
-        }
 
-        public void OnTakeDamage(DamageData damageData)
-        {
-            var yasuo = damageData.Target as ObjAIBase;
-            if (yasuo != null && yasuo.Stats.CurrentMana >= (yasuo.Stats.ManaPoints.Total - 1))
+            if (yasuo.Stats.CurrentHealth < _lastHealth)
             {
-                yasuo.Stats.CurrentMana = 0;
-                SetPARState(yasuo, 0); 
-                _isParStateActive = false;
-                
-                AddBuff("YasuoPassiveMSShieldOn", 1.0f, 1, null, yasuo, yasuo);
+
+                if (yasuo.Stats.CurrentMana >= (yasuo.Stats.ManaPoints.Total - 1))
+                {
+                    yasuo.Stats.CurrentMana = 0;
+                    SetPARState(yasuo, 0); 
+                    _isParStateActive = false;
+                    AddBuff("YasuoPassiveMSShieldOn", 1.0f, 1, null, yasuo, yasuo);
+                }
             }
+
+            _lastHealth = yasuo.Stats.CurrentHealth;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ApiEventManager.OnUpdateStats.RemoveListener(this);
-            ApiEventManager.OnTakeDamage.RemoveListener(this);
         }
     }
 }
