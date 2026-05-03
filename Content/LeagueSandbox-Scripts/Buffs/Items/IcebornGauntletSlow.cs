@@ -1,5 +1,6 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -10,17 +11,17 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class ItemSlow : IBuffGameScript
+public class IcebornGauntletSlow : IBuffGameScript
 {
-    private Particle _particle;
+    private Particle _freezeParticle;
     private AttackableUnit _unit;
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    public BuffScriptMetaData BuffMetaData { get; } = new()
     {
         BuffType = BuffType.SLOW,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1,
-        IsHidden = false
+        IsHidden = true
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -29,10 +30,19 @@ internal class ItemSlow : IBuffGameScript
     {
         _unit = unit;
 
+        var slowPercent = buff.Variables.GetFloat("slowPercent", 0.30f);
+        if (slowPercent < 0.0f)
+        {
+            slowPercent = -slowPercent;
+        }
+
+        StatsModifier.MoveSpeed.PercentBonus -= slowPercent;
+        unit.AddStatModifier(StatsModifier);
+
         var owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
         var caster = owner ?? unit;
 
-        _particle = AddParticleTarget(
+        _freezeParticle = AddParticleTarget(
             caster,
             null,
             "Global_Freeze",
@@ -44,6 +54,7 @@ internal class ItemSlow : IBuffGameScript
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
+        unit.RemoveStatModifier(StatsModifier);
         KillParticle();
     }
 
@@ -57,6 +68,6 @@ internal class ItemSlow : IBuffGameScript
 
     private void KillParticle()
     {
-        _particle?.SetToRemove();
+        _freezeParticle?.SetToRemove();
     }
 }

@@ -1,0 +1,18 @@
+{
+    "MetaData": {
+        "ContentFormatVersion": 4,
+        "Id": "TrinityForce",
+        "Name": "TrinityForce",
+        "ResourcePath": "DATA/Spells/TrinityForce.inibin"
+    },
+    "Values": {
+        "BuffData": {
+            "DynamicTooltip": "game_buff_tooltip_TrinityForce",
+            "InventoryIcon": "3078_Trinity_Force.dds",
+            "ShowInTrackerUI": 1
+        },
+        "SpellData": {
+            "InventoryIcon": "3078_Trinity_Force.dds"
+        }
+    }
+}
