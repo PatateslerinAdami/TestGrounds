@@ -18,7 +18,7 @@ namespace ItemPassives
 
         private ObjAIBase _owner;
         private Shield _btShield;
-        private Particle _shieldParticle; // Itemul gestionează acum particula vizuală!
+        private Particle _shieldParticle;
         private float _shieldAmount = 0f;
         private float _decayTimer = 0f; 
 
@@ -40,7 +40,7 @@ namespace ItemPassives
             ApiEventManager.OnTakeDamage.RemoveListener(this);
             _owner.RemoveStatModifier(StatsModifier);
 
-            RemoveShieldAndVisuals(false); // La vânzare, doar dispare, fără "explozia" de Proc
+            RemoveShieldAndVisuals(false); 
         }
 
         private void RemoveShieldAndVisuals(bool triggerProc)
@@ -61,8 +61,6 @@ namespace ItemPassives
             
             var buff = _owner.GetBuffWithName("BloodthirsterDummySpell");
             if (buff != null) buff.DeactivateBuff();
-
-            // Dacă scutul a fost spart sau s-a topit complet, declanșăm animația de sfârșit (Proc)
             if (triggerProc)
             {
                 AddParticleTarget(_owner, _owner, "Item_BTOverheal_Proc.troy", _owner, 1f, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
@@ -79,7 +77,7 @@ namespace ItemPassives
 
             if (_shieldAmount <= 0)
             {
-                RemoveShieldAndVisuals(true); // Dacă a ajuns la 0, ștergem și afișăm Proc!
+                RemoveShieldAndVisuals(true);
                 return;
             }
 
@@ -106,16 +104,10 @@ namespace ItemPassives
                     {
                         _shieldAmount = 0f;
                     }
-
                     _shieldAmount += overheal;
                     if (_shieldAmount > maxShield) _shieldAmount = maxShield;
-
                     UpdateNativeShield();
-
-                    // Reînnoim cronometrul de 25s pe HUD
                     AddBuff("BloodthirsterDummySpell", 25f, 1, null, _owner, _owner);
-
-                    // Adăugăm vizualul scutului DOAR dacă nu îl avem deja pe noi
                     if (_shieldParticle == null)
                     {
                         _shieldParticle = AddParticleTarget(_owner, _owner, "Item_BTOverheal_Shield.troy", _owner, float.MaxValue, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
@@ -128,14 +120,9 @@ namespace ItemPassives
         {
             if (_shieldAmount > 0)
             {
-                // Resetăm timer-ul de pe ecran la fiecare lovitură primită
                 AddBuff("BloodthirsterDummySpell", 25f, 1, null, _owner, _owner);
-
-                // Sincronizăm tracker-ul manual cu daunele
                 float absorbed = Math.Min(_shieldAmount, data.PostMitigationDamage);
                 _shieldAmount -= absorbed;
-
-                // Dacă s-a spart, ștergem totul și apare Proc
                 if (_shieldAmount <= 0)
                 {
                     RemoveShieldAndVisuals(true);
@@ -153,18 +140,15 @@ namespace ItemPassives
                     return;
                 }
 
-                // Când timer-ul de 25s de pe HUD expiră
                 if (!_owner.HasBuff("BloodthirsterDummySpell"))
                 {
                     _decayTimer -= diff;
                     
                     if (_decayTimer <= 0)
                     {
-                        // Scade scutul și păstrează scutul vizual
-                        _shieldAmount -= 25f; 
-                        _decayTimer = 100f; 
-                        
-                        UpdateNativeShield(); // Dacă ajunge la 0 în această funcție, va apela singur RemoveShieldAndVisuals!
+                        _shieldAmount -= 10f; 
+                        _decayTimer = 1f; 
+                        UpdateNativeShield(); 
                     }
                 }
             }

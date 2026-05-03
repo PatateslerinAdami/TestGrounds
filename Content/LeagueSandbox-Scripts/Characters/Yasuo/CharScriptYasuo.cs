@@ -22,6 +22,8 @@ namespace CharScripts
             AddBuff("YasuoRAvailableTest", float.MaxValue, 1, spell, owner, owner, true);
 
             ApiEventManager.OnLevelUp.AddListener(this, owner, OnLevelUp, false);
+            ApiEventManager.OnUpdateStats.AddListener(this, owner, OnUpdateStats, false);
+
             UpdateFlowCapacity();
             _yasuo.Stats.CurrentMana = _yasuo.Stats.ManaPoints.Total;
         }
@@ -34,6 +36,13 @@ namespace CharScripts
             {
                 _yasuo.Stats.CurrentMana = _yasuo.Stats.ManaPoints.Total;
             }
+        }
+
+        private void OnUpdateStats(AttackableUnit unit, float diff)
+        {
+            _yasuo.Stats.ManaPoints.FlatBonus = 0f;
+            _yasuo.Stats.ManaPoints.PercentBonus = 0f;
+            UpdateFlowCapacity();
         }
 
         private void UpdateFlowCapacity()

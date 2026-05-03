@@ -18,7 +18,7 @@ namespace ItemSpells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            AddBuff("ZhonyasRingShield", 5.0f, 1, spell, owner, owner);//zhonyas_ring
+            AddBuff("ZhonyasRingShield", 2.5f, 1, spell, owner, owner);//zhonyas_ring
         }
     }
 }
