@@ -255,6 +255,10 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
         }
 
+        // Persearch counter —> each GetPath bumps this. Cells with stale SearchSessionF/B are
+        // treated as untouched, eliminating the need to allocate HashSet/Dictionary per search.
+        private int _searchSession;
+
         // Manhattan distance, used as the A* heuristic to mirror the client's BuildNavGridPath
         // source is this: NavGrid.cpp::ComputeCellDistHeuristic. Inadmissible with 8-neighbor + 1.0/√2 step
         // costs, so paths can be slightly suboptimal in real distance but biases toward
@@ -374,21 +378,24 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // Both run in parallel; at each step, we expand the smaller frontier. The searches
             // meet in the middle typically resulting in about half the number of cells compared to unidirectional A*.
 
-            var openF = new PriorityQueue<NavigationGridCell, float>(1024);
-            var gF = new Dictionary<int, float>();
-            var cameFromF = new Dictionary<int, NavigationGridCell>();
-            var closedF = new HashSet<int>();
+            // Bump session —> cells with stale SearchSession*F/B fields are now treated as
+            // "untouched by current search", so we don't have to clear anything per call.
+            int session = ++_searchSession;
 
+            var openF = new PriorityQueue<NavigationGridCell, float>(1024);
             var openB = new PriorityQueue<NavigationGridCell, float>(1024);
-            var gB = new Dictionary<int, float>();
-            var cameFromB = new Dictionary<int, NavigationGridCell>();
-            var closedB = new HashSet<int>();
 
             float startToGoal = ManhattanDistance(fromNav, toNav);
             openF.Enqueue(cellFrom, startToGoal);
-            gF[cellFrom.ID] = 0;
+            cellFrom.SearchSessionF = session;
+            cellFrom.SearchClosedF = false;
+            cellFrom.SearchGF = 0f;
+            cellFrom.SearchCameFromF = null;
             openB.Enqueue(cellTo, startToGoal);
-            gB[cellTo.ID] = 0;
+            cellTo.SearchSessionB = session;
+            cellTo.SearchClosedB = false;
+            cellTo.SearchGB = 0f;
+            cellTo.SearchCameFromB = null;
 
             float hintMultiplier = ComputeHintMultiplier(fromNav, toNav);
 
@@ -422,7 +429,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 if (openF.Count <= openB.Count)
                 {
                     ExpandStep(
-                        openF, gF, cameFromF, closedF, closedB,
+                        openF, session,
                         cellFrom, cellTo, fromNav, toNav, distanceThreshold,
                         forward: true,
                         ref bestCellF, ref bestHeuristicF,
@@ -434,7 +441,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 else
                 {
                     ExpandStep(
-                        openB, gB, cameFromB, closedB, closedF,
+                        openB, session,
                         cellTo, cellFrom, toNav, fromNav, distanceThreshold,
                         forward: false,
                         ref bestCellF, ref bestHeuristicF,
@@ -456,14 +463,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 while (current != null)
                 {
                     pathCells.Add(current);
-                    cameFromF.TryGetValue(current.ID, out current);
+                    current = current.SearchSessionF == session ? current.SearchCameFromF : null;
                 }
                 pathCells.Reverse();
-                cameFromB.TryGetValue(meetingCell.ID, out current);
+                current = meetingCell.SearchSessionB == session ? meetingCell.SearchCameFromB : null;
                 while (current != null)
                 {
                     pathCells.Add(current);
-                    cameFromB.TryGetValue(current.ID, out current);
+                    current = current.SearchSessionB == session ? current.SearchCameFromB : null;
                 }
             }
             else
@@ -487,7 +494,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 while (current != null)
                 {
                     pathCells.Add(current);
-                    cameFromF.TryGetValue(current.ID, out current);
+                    current = current.SearchSessionF == session ? current.SearchCameFromF : null;
                 }
                 pathCells.Reverse();
             }
@@ -525,10 +532,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// </summary>
         private void ExpandStep(
             PriorityQueue<NavigationGridCell, float> open,
-            Dictionary<int, float> gThis,
-            Dictionary<int, NavigationGridCell> cameFromThis,
-            HashSet<int> closedThis,
-            HashSet<int> closedOther,
+            int session,
             NavigationGridCell sourceCell,
             NavigationGridCell targetCell,
             Vector2 sourceNav,
@@ -552,11 +556,16 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
             // Close on dequeue (not enqueue) —> otherwise, better paths discovered later
             // will no longer be able to update a cell.
-            if (closedThis.Contains(cell.ID))
+            if (forward)
             {
-                return;
+                if (cell.SearchSessionF == session && cell.SearchClosedF) return;
+                cell.SearchClosedF = true;
             }
-            closedThis.Add(cell.ID);
+            else
+            {
+                if (cell.SearchSessionB == session && cell.SearchClosedB) return;
+                cell.SearchClosedB = true;
+            }
 
             // Best explored tracking per direction. Forward side feeds the partial-path fallback
             // (bestCellF replaces unreachable cellTo); both feed the convergence bias heuristic.
@@ -586,9 +595,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 return;
             }
 
+            float thisG = forward ? cell.SearchGF : cell.SearchGB;
+
             foreach (NavigationGridCell neighborCell in GetCellNeighbors(cell))
             {
-                if (closedThis.Contains(neighborCell.ID))
+                if (forward
+                    ? (neighborCell.SearchSessionF == session && neighborCell.SearchClosedF)
+                    : (neighborCell.SearchSessionB == session && neighborCell.SearchClosedB))
                 {
                     continue;
                 }
@@ -614,22 +627,33 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                              && (cell.Locator.Y != neighborCell.Locator.Y);
                 float stepCost = diagonal ? 1.41421356f : 1f;
 
-                float tentativeG = gThis[cell.ID] + stepCost
+                float tentativeG = thisG + stepCost
                     + neighborCell.ArrivalCost
                     + neighborCell.AdditionalCost;
 
-                if (gThis.TryGetValue(neighborCell.ID, out float existingG) && tentativeG >= existingG)
+                if (forward)
                 {
-                    continue;
+                    if (neighborCell.SearchSessionF == session && tentativeG >= neighborCell.SearchGF)
+                        continue;
+                    neighborCell.SearchSessionF = session;
+                    neighborCell.SearchClosedF = false;
+                    neighborCell.SearchGF = tentativeG;
+                    neighborCell.SearchCameFromF = cell;
                 }
-
-                gThis[neighborCell.ID] = tentativeG;
-                cameFromThis[neighborCell.ID] = cell;
+                else
+                {
+                    if (neighborCell.SearchSessionB == session && tentativeG >= neighborCell.SearchGB)
+                        continue;
+                    neighborCell.SearchSessionB = session;
+                    neighborCell.SearchClosedB = false;
+                    neighborCell.SearchGB = tentativeG;
+                    neighborCell.SearchCameFromB = cell;
+                }
 
                 // First meeting check —> client's 0x80 flag onneighbor detection in equivalent
                 // form. Only forward expansion looks for the meeting; matches client's `if (v15)`
                 // gating in S1 navigationgrid.cpp:10121.
-                if (forward && closedOther.Contains(neighborCell.ID))
+                if (forward && neighborCell.SearchSessionB == session && neighborCell.SearchClosedB)
                 {
                     meetingCell = neighborCell;
                     return;
@@ -894,6 +918,60 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         {
             NavigationGridCell cell = GetCell(coords, translate);
             return IsVisible(cell); //TODO: implement bush logic here
+        }
+
+        /// <summary>
+        /// Whether the given position lies on a "wall of grass" — port of the client's
+        /// NavGrid::IsWallOfGrass (S4 NavGrid.cpp:8881). Two-mode query:
+        ///   * radius &lt; 35: single-cell HAS_GRASS check.
+        ///   * radius &gt;= 35: scan cells within (clamped) radius around pos and return true if
+        ///     at least 40% of non-wall cells are flagged HAS_GRASS. Walls (NOT_PASSABLE without
+        ///     HAS_GRASS) are excluded from the denominator.
+        /// Used by the client for spell-missile + vision logic at bush edges.
+        /// </summary>
+        public bool IsWallOfGrass(Vector2 pos, float radius)
+        {
+            if (radius < 35f)
+            {
+                NavigationGridCell single = GetCell(pos);
+                return single != null && single.HasFlag(NavigationGridCellFlags.HAS_GRASS);
+            }
+
+            float r = Math.Min(radius, 500f);
+            float r2 = r * r;
+
+            var navMin = TranslateToNavGrid(new Vector2(pos.X - r, pos.Y - r));
+            var navMax = TranslateToNavGrid(new Vector2(pos.X + r, pos.Y + r));
+            short cx0 = (short)Math.Floor(navMin.X);
+            short cx1 = (short)Math.Floor(navMax.X);
+            short cy0 = (short)Math.Floor(navMin.Y);
+            short cy1 = (short)Math.Floor(navMax.Y);
+
+            int grassCount = 0;
+            int totalCount = 0;
+            for (short cy = cy0; cy <= cy1; cy++)
+            {
+                for (short cx = cx0; cx <= cx1; cx++)
+                {
+                    var c = GetCell(cx, cy);
+                    if (c == null) continue;
+                    var center = TranslateFromNavGrid(c.Locator);
+                    if (Vector2.DistanceSquared(center, pos) > r2) continue;
+
+                    if (c.HasFlag(NavigationGridCellFlags.HAS_GRASS))
+                    {
+                        grassCount++;
+                        totalCount++;
+                    }
+                    else if (!c.HasFlag(NavigationGridCellFlags.NOT_PASSABLE))
+                    {
+                        totalCount++;
+                    }
+                }
+            }
+
+            if (grassCount == 0) return false;
+            return totalCount * 0.4f <= grassCount;
         }
 
         bool IsVisible(NavigationGridCell cell)

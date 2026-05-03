@@ -44,6 +44,20 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         public short ArrivalDirection { get; private set; } = 9;
         public short[] RefHintNode { get; private set; } = new short[2] { -32768, -32768 };
 
+        // Per search runtime state (mutable, written by GetPath/ExpandStep). The Session field is
+        // the discriminator: any value other than NavigationGrid._searchSession means "not touched
+        // by current search yet". Mirrors the client's mSessionID-based scratch state on cells and
+        // avoids per search HashSet/Dictionary allocations.
+        public int SearchSessionF;
+        public bool SearchClosedF;
+        public float SearchGF;
+        public NavigationGridCell SearchCameFromF;
+
+        public int SearchSessionB;
+        public bool SearchClosedB;
+        public float SearchGB;
+        public NavigationGridCell SearchCameFromB;
+
         private NavigationGridCell() { }
 
         public static NavigationGridCell ReadVersion5(BinaryReader br, int id)
