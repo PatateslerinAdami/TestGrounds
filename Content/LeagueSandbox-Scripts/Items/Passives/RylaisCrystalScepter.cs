@@ -3,6 +3,7 @@ using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -14,7 +15,8 @@ public class ItemID_3116 : IItemScript
     private const float SingleTargetSlowPercent = 0.35f;
     private const float AreaOrPeriodicSlowPercent = 0.15f;
     private const float SlowDuration = 1.5f;
-    private const string SlowBuffName = "RylaiCrystalScepterSlow";
+    private const string InternalSlowBuffName = "RylaiInternalSlow";
+    private const string VisualSlowBuffName = "ItemSlow";
 
     private ObjAIBase _owner;
 
@@ -53,9 +55,13 @@ public class ItemID_3116 : IItemScript
 
         var variables = new BuffVariables();
         variables.Set("slowPercent", slowPercent);
+        variables.Set("attackSpeedSlowAmount", 0.0f);
 
+        ApplyInternalSlow(data.Target, slowPercent, variables);
+
+        // Visual slow (icon + VFX).
         AddBuff(
-            SlowBuffName,
+            VisualSlowBuffName,
             SlowDuration,
             1,
             null,
@@ -119,5 +125,55 @@ public class ItemID_3116 : IItemScript
             // Do not trigger on autos, procs, raw/internal damage, pets, death/reactive damage, etc.
             _ => 0.0f
         };
+    }
+
+    private void ApplyInternalSlow(AttackableUnit target, float slowPercent, BuffVariables variables)
+    {
+        var normalizedNewSlow = slowPercent;
+        if (normalizedNewSlow < 0.0f)
+        {
+            normalizedNewSlow = -normalizedNewSlow;
+        }
+
+        var existingSlows = target.GetBuffsWithName(InternalSlowBuffName);
+
+        foreach (var existing in existingSlows)
+        {
+            // Only compare Rylai slows from this item owner.
+            // Do not touch slows from other sources.
+            if (existing.SourceUnit != _owner)
+            {
+                continue;
+            }
+
+            var existingSlow = existing.Variables.GetFloat("slowPercent", 0.0f);
+            if (existingSlow < 0.0f)
+            {
+                existingSlow = -existingSlow;
+            }
+
+            // Existing slow is stronger or equal:
+            // refresh duration and do not apply the weaker new internal slow.
+            if (normalizedNewSlow <= existingSlow)
+            {
+                existing.Refresh();
+                return;
+            }
+
+            // New slow is stronger:
+            // remove weaker same-source internal slow, then apply the stronger one below.
+            target.RemoveBuff(existing);
+            break;
+        }
+
+        AddBuff(
+            InternalSlowBuffName,
+            SlowDuration,
+            1,
+            null,
+            target,
+            _owner,
+            buffVariables: variables
+        );
     }
 }

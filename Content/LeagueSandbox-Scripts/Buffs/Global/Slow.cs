@@ -11,52 +11,105 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class Slow : IBuffGameScript {
+internal class Slow : IBuffGameScript
+{
     private ObjAIBase _owner;
     private AttackableUnit _unit;
-
     private Particle _slow;
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.SLOW,
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.SLOW,
         BuffAddType = BuffAddType.STACKS_AND_OVERLAPS,
-        MaxStacks   = 10
+        MaxStacks = 10,
+        IsHidden = false
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _unit    = unit;
-        _owner = ownerSpell.CastInfo.Owner;
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        _unit = unit;
 
-        // Refresh instead of stack for the same source: if a Slow effect from the same caster already exists on the target,
-        // only its duration is refreshed, and this new buff ends immediately (so no particles or modifiers).
-        var existingSlows = unit.GetBuffsWithName("Slow");
-        for (var i = 0; i < existingSlows.Count; i++) {
-            var existing = existingSlows[i];
-            if (existing == buff) continue;
-            if (existing.SourceUnit == _owner) {
-                existing.Refresh();
-                buff.SetToExpired();
-                return;
-            }
-        }
+        // Null-safe for item passives such as Rylai that pass originSpell = null.
+        _owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
 
         var movementSlowAmount = buff.Variables.GetFloat("slowPercent");
         var attackSpeedSlowAmount = buff.Variables.GetFloat("attackSpeedSlowAmount");
-        StatsModifier.MoveSpeed.PercentBonus   -= movementSlowAmount;
+
+        if (movementSlowAmount < 0.0f)
+        {
+            movementSlowAmount = -movementSlowAmount;
+        }
+
+        if (attackSpeedSlowAmount < 0.0f)
+        {
+            attackSpeedSlowAmount = -attackSpeedSlowAmount;
+        }
+
+        // Same-source slow handling: keep the strongest slow.
+        var existingSlows = unit.GetBuffsWithName("Slow");
+        for (var i = 0; i < existingSlows.Count; i++)
+        {
+            var existing = existingSlows[i];
+            if (existing == buff)
+            {
+                continue;
+            }
+
+            if (_owner != null && existing.SourceUnit == _owner)
+            {
+                var existingMoveSlow = existing.Variables.GetFloat("slowPercent");
+                if (existingMoveSlow < 0.0f)
+                {
+                    existingMoveSlow = -existingMoveSlow;
+                }
+
+                if (movementSlowAmount <= existingMoveSlow)
+                {
+                    // Weaker or equal: refresh the existing buff and discard this one.
+                    existing.Refresh();
+                    buff.SetToExpired();
+                    return;
+                }
+
+                // Stronger slow: remove the existing one and apply the new one.
+                unit.RemoveBuff(existing);
+                break;
+            }
+        }
+
+        StatsModifier.MoveSpeed.PercentBonus -= movementSlowAmount;
         StatsModifier.AttackSpeed.PercentBonus -= attackSpeedSlowAmount;
         _unit.AddStatModifier(StatsModifier);
-        // Particle infinite (lifetime < 0), so that it survives a refresh; manual cleanup in OnDeactivate.
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, -1f, bone: "BUFFBONE_GLB_GROUND_LOC");
-        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
 
-        // For attack speed and move speed mod changes:
-        //ApiEventManager.OnUpdateBuffs.AddListener(this, buff, OnUpdateBuffs, false);
+        var particleCaster = _owner ?? unit;
+
+        _slow = AddParticleTarget(
+            particleCaster,
+            null,
+            "Global_Slow",
+            unit,
+            -1f,
+            bone: "BUFFBONE_GLB_GROUND_LOC"
+        );
+
+        if (_owner != null)
+        {
+            ApplyAssistMarker(unit, _owner, 10.0f);
+        }
     }
 
-    // Removes the slow particle. Null check because no particle was spawned on the refresh path.
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        if (_slow != null) RemoveParticle(_slow);
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        if (_slow != null)
+        {
+            RemoveParticle(_slow);
+            _slow = null;
+        }
+    }
+
+    public void OnUpdate(float diff)
+    {
     }
 }
