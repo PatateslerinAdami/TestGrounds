@@ -54,7 +54,6 @@ public class IcebornGauntletSlow : IBuffGameScript
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        unit.RemoveStatModifier(StatsModifier);
         KillParticle();
     }
 

@@ -41,7 +41,12 @@ namespace ItemPassives
 
         private void OnSpellCast(Spell spell)
         {
-            if (_owner == null || spell == null || !spell.Script.ScriptMetadata.TriggersSpellCasts)
+            if (_owner == null || spell == null)
+            {
+                return;
+            }
+
+            if (!spell.Script.ScriptMetadata.TriggersSpellCasts)
             {
                 return;
             }
@@ -56,12 +61,14 @@ namespace ItemPassives
                 return;
             }
 
-            Spell LichBaneItemSpell = GetLichBaneSpell();
+            var itemSpell = GetLichBaneSpell();
 
-            if (LichBaneItemSpell != null && LichBaneItemSpell.CurrentCooldown <= 0f && !_owner.HasBuff("LichBane"))
+            if (itemSpell == null || itemSpell.CurrentCooldown > 0f)
             {
-                AddBuff("LichBane", 10.0f, 1, spell, _owner, _owner);
+                return;
             }
+
+            AddBuff("LichBane", 10.0f, 1, spell, _owner, _owner);
         }
 
         private Spell GetLichBaneSpell()
