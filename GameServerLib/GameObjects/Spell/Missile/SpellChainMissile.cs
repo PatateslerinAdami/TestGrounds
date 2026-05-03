@@ -29,9 +29,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         private float _bounceRadius;
         SpellDataFlags OverrideFlags { get; }
 
-        private bool _isPendingDestroy = false;
-        private float _destroyTimer = 0.0f;
-        private const float DESTROY_DELAY = 50.0f;
         public SpellChainMissile(
             Game game,
             int collisionRadius,
@@ -53,17 +50,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
+            base.Update(diff);
+
             if (_isPendingDestroy)
             {
-                _destroyTimer -= diff;
-                if (_destroyTimer <= 0)
-                {
-                    base.SetToRemove();
-                }
                 return;
             }
-
-            base.Update(diff);
 
             // TODO: Verify if we can move this into CheckFlagsForUnit instead of checking every Update.
             if (HitCount >= Parameters.MaximumHits)
@@ -223,16 +215,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // Otherwise, we can hit this unit because we haven't hit it yet.
 
             return valid;
-        }
-        public override void SetToRemove()
-        {
-            // Instead of removing immediately, delay destruction slightly
-            // so the client has time to process the hit.
-            if (!_isPendingDestroy && !IsToRemove())
-            {
-                _isPendingDestroy = true;
-                _destroyTimer = DESTROY_DELAY;
-            }
         }
 
     }

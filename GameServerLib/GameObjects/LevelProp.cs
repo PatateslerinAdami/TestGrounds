@@ -15,6 +15,9 @@ namespace LeagueSandbox.GameServer.GameObjects
         public string Name { get; set; }
         public string Model { get; set; }
 
+        public bool DisableFoW { get; set; } = false;
+        public override bool IsAffectedByFoW => !DisableFoW;
+
         public LevelProp(
             Game game,
             byte netNodeId,
@@ -28,7 +31,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             byte skillLevel = 0,
             byte rank = 0,
             byte type = 2,
-            uint netId = 64
+            uint netId = 64,
+            bool disableFoW = false
 
 
         ) : base(game, new Vector2(position.X, position.Z),0, 0, 0, netId)
@@ -44,6 +48,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             Type = type;
             Name = name;
             Model = model;
+            DisableFoW = disableFoW;
         }
     }
 }

@@ -106,7 +106,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 NetId = _networkIdManager.GetNewNetId(); // base class assigns a netId
             }
             Position = position;
-            Direction = new Vector3(0, 0, 1);//Vector3.Zero; FUCK YOU!!
+            Direction = Vector3.Zero;
             CollisionRadius = collisionRadius;
             PathfindingRadius = pathingRadius;
             VisionRadius = visionRadius;
@@ -302,7 +302,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 SetVisibleForPlayer(userId, visible);
                 SetSpawnedForPlayer(userId);
             }
-            
+
             if (forceSpawn)
             {
                 _lastFadeSeenByPlayer[userId] = _defaultFade;
@@ -458,9 +458,9 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// TODO: Verify if this description is correct, if not, correct it.
         /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        public void PlayAnimation(string animName, float timeScale = 1.0f, float startTime = 0, float speedScale = 0, AnimationFlags flags = 0)
+        public void PlayAnimation(string animName, float scaleTime = 1.0f, float startProgress = 0.0f, float speedRatio = 1.0f, AnimationFlags flags = 0)
         {
-            _game.PacketNotifier.NotifyS2C_PlayAnimation(this, animName, flags, timeScale, startTime, speedScale);
+            _game.PacketNotifier.NotifyS2C_PlayAnimation(this, animName, flags, scaleTime, startProgress, speedRatio);
         }
 
         /// <summary>
@@ -505,7 +505,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             _fades.Add(_currentFade);
             return _currentFade;
         }
-        
+
         public bool FadeIn(Fade fade, float duration = 1.0f)
         {
             duration *= 1000;

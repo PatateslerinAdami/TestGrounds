@@ -145,11 +145,11 @@ namespace MapScripts.Map8
         public void OnMatchStart()
         {
             LevelScriptObjects.OnMatchStart();
-            AddParticle(null, Nexus[TeamId.TEAM_BLUE], "Odin_Crystal_blue", Nexus[TeamId.TEAM_BLUE].Position, 25000, bone: "center_crystal");
-            AddParticle(null, Nexus[TeamId.TEAM_PURPLE], "Odin_Crystal_purple", Nexus[TeamId.TEAM_PURPLE].Position, 25000, bone: "center_crystal");
+            AddParticle(null, Nexus[TeamId.TEAM_BLUE], "Odin_Crystal_blue", Nexus[TeamId.TEAM_BLUE].Position, 25000, bone: "center_crystal").DisableFoW = true;
+            AddParticle(null, Nexus[TeamId.TEAM_PURPLE], "Odin_Crystal_purple", Nexus[TeamId.TEAM_PURPLE].Position, 25000, bone: "center_crystal").DisableFoW = true;
 
-            AddParticle(null, null, "Odin_Forcefield_blue", new Vector2(580f, 4124f), 80.0f);
-            AddParticle(null, null, "Odin_Forcefield_purple", new Vector2(13310f, 4124f), 80.0f);
+            AddParticle(null, null, "Odin_Forcefield_blue", new Vector2(580f, 4124f), 80.0f).DisableFoW = true;
+            AddParticle(null, null, "Odin_Forcefield_purple", new Vector2(13310f, 4124f), 80.0f).DisableFoW = true;
 
             foreach (var stair in TeamStairs.Values)
             {
@@ -297,16 +297,16 @@ namespace MapScripts.Map8
             else if (gameTime >= 80.0f * 1000 && !AnimationsNotified.Contains("Particles4"))
             {
                 //Blue Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
 
                 //Purple Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_1_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
 
                 AnimationsNotified.Add("Particles4");
             }
@@ -321,16 +321,16 @@ namespace MapScripts.Map8
             else if (gameTime >= 59.6f * 1000 && !AnimationsNotified.Contains("Particles3"))
             {
                 //Blue Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
 
                 //Purple Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_2_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
 
                 AnimationsNotified.Add("Particles3");
             }
@@ -345,16 +345,16 @@ namespace MapScripts.Map8
             else if (gameTime >= 40.0f * 1000 && !AnimationsNotified.Contains("Particles2"))
             {
                 //Blue Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000, 1, "Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
 
                 //Purple Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_3_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
 
                 AnimationsNotified.Add("Particles2");
             }
@@ -370,20 +370,20 @@ namespace MapScripts.Map8
             else if (gameTime >= 16.0f * 1000 && !AnimationsNotified.Contains("Particles1"))
             {
                 //Blue Team Lasers
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_4_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_4_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_4_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_4_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE);
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_4_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_4_aim", "center_crystal", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_l_4_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, TeamStairs[TeamId.TEAM_BLUE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_BLUE], 25000.0f, 1, "Crystal_r_4_aim", "center_crystal", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
 
                 //Purple Team Lasers
-                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_4_aim", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_4_aim", teamOnly: TeamId.TEAM_PURPLE);
-                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_4_aim", teamOnly: TeamId.TEAM_BLUE);
-                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_4_aim", teamOnly: TeamId.TEAM_BLUE);
+                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_4_aim", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_green", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_4_aim", teamOnly: TeamId.TEAM_PURPLE).DisableFoW = true;
+                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_l_4_aim", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
+                AddParticleTarget(null, Nexus[TeamId.TEAM_PURPLE], "odin_crystal_beam_red", Nexus[TeamId.TEAM_PURPLE], 25000.0f, 1, "chaos_Crystal_r_4_aim", teamOnly: TeamId.TEAM_BLUE).DisableFoW = true;
 
                 //Center Crystal Particles
-                AddParticle(null, Nexus[TeamId.TEAM_BLUE], "Odin_crystal_beam_hit_blue", Nexus[TeamId.TEAM_BLUE].Position, 25000.0f, 1, "center_crystal");
-                AddParticle(null, Nexus[TeamId.TEAM_PURPLE], "Odin_crystal_beam_hit_purple", Nexus[TeamId.TEAM_PURPLE].Position, 25000.0f, 1, "center_crystal");
+                AddParticle(null, Nexus[TeamId.TEAM_BLUE], "Odin_crystal_beam_hit_blue", Nexus[TeamId.TEAM_BLUE].Position, 25000.0f, 1, "center_crystal").DisableFoW = true;
+                AddParticle(null, Nexus[TeamId.TEAM_PURPLE], "Odin_crystal_beam_hit_purple", Nexus[TeamId.TEAM_PURPLE].Position, 25000.0f, 1, "center_crystal").DisableFoW = true;
 
                 AnimationsNotified.Add("Particles1");
             }

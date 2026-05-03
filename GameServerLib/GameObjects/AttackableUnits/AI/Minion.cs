@@ -57,9 +57,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             int damageBonus = 0,
             int healthBonus = 0,
             int initialLevel = 1,
-            bool enableScripts = true
+            bool enableScripts = true,
+            Vector3 direction = default
         ) : base(game, model, name, 40, position, 1100, skinId, netId, team, stats, AIScript, enableScripts)
         {
+            if (direction != default)
+            {
+                Direction = direction;
+            }
+
             Owner = owner;
 
             IsLaneMinion = false;
@@ -123,7 +129,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         Vector2 pushDirection = -(toCollider / distance);
 
                         Vector2 myDir = Waypoints.Count > CurrentWaypointKey ? (Waypoints[CurrentWaypointKey] - Position) : Vector2.Zero;
-                        if (myDir != Vector2.Zero) myDir = Vector2.Normalize(myDir); 
+                        if (myDir != Vector2.Zero) myDir = Vector2.Normalize(myDir);
 
                         Vector2 otherDir = otherUnit.Waypoints.Count > otherUnit.CurrentWaypointKey ? (otherUnit.Waypoints[otherUnit.CurrentWaypointKey] - otherUnit.Position) : Vector2.Zero;
                         if (otherDir != Vector2.Zero) otherDir = Vector2.Normalize(otherDir);

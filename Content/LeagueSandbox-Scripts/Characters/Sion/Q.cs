@@ -128,7 +128,7 @@ namespace Spells
 
             if (currentCharge >= 1.0f)
             {
-                PlayAnimation(_owner, "Spell1_Hit2", timeScale: 0.3f);
+                PlayAnimation(_owner, "Spell1_Hit2", scaleTime: 0.3f);
                 AddParticlePos(_owner, "sion_base_q_hit3.troy", _owner.Position, GetPointFromUnit(_owner, currentRange),
                     lifetime: 1, direction: _owner.Direction);
                 //SpellCast(_owner, 7, SpellSlotType.ExtraSlots, _owner.Position, _owner.Position, false, Vector2.Zero);
@@ -136,7 +136,7 @@ namespace Spells
             }
             else
             {
-                PlayAnimation(_owner, "Spell1_Hit1", timeScale: 0.3f);
+                PlayAnimation(_owner, "Spell1_Hit1", scaleTime: 0.3f);
                 CreateCustomMissile(_owner, "SionQHitParticleMissile2", _owner.Position,
                     GetPointFromUnit(_owner, currentRange - 200f), new MissileParameters { Type = MissileType.Arc });
             }

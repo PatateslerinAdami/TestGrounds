@@ -102,15 +102,15 @@ namespace MapScripts.Map8
         {
             CreateTimer(3.0f, () =>
             {
-                foreach (var infoPoint in InfoPoints)
-                {
-                    uint netId = infoPoint.Point.NetId;
-                    byte cpIndex = infoPoint.Index;
+            });
+            foreach (var infoPoint in InfoPoints)
+            {
+                uint netId = infoPoint.Point.NetId;
+                byte cpIndex = infoPoint.Index;
 
                     NotifyAttachFlexParticle(netId, 0, cpIndex, 1, userId);
                     NotifyHandleCapturePointUpdate(cpIndex, netId, 0, (byte)0, (CapturePointUpdateCommand)0, userId);
-                }
-            });
+            }
         }
     }
 
@@ -121,22 +121,25 @@ namespace MapScripts.Map8
         public byte Index;
         public InfoPoint(Vector2 position, byte index, char id)
         {
-            Point = CreateMinion("OdinNeutralGuardian", "OdinNeutralGuardian", position, ignoreCollision: true, aiScript: "OdinCapturePointAI");
+            Point = CreateMinion("OdinNeutralGuardian", "OdinNeutralGuardian", position, ignoreCollision: true, aiScript: "OdinCapturePointAI", direction: new Vector3(0, 0, 1));
             if (Point.AIScript is AIScripts.OdinCapturePointAI captureAI)
             {
                 captureAI.PointLetter = id;
                 captureAI.PointIndex = index;
             }
-
+            Point.SetStatus(StatusFlags.CanMoveEver, false);
             Point.Stats.CurrentMana = 25000f;
             Point.DisableFoW = true;
             Id = id;
             Index = index;
 
+            NotifyAttachFlexParticle(Point.NetId, 0, Index, 1);
+            NotifyHandleCapturePointUpdate(Index, Point.NetId, 0, (byte)0, (CapturePointUpdateCommand)0);
+
+            AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_BLUE, false, collisionArea: 120.0f, grassRadius: 150f, regionType: RegionType.Unknown2);
+            AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_PURPLE, false, collisionArea: 120.0f, grassRadius: 150f, regionType:RegionType.Unknown2);
             CreateTimer(0.1f, () =>
             {
-                NotifyAttachFlexParticle(Point.NetId, 0, Index, 1);
-                NotifyHandleCapturePointUpdate(Index, Point.NetId, 0, (byte)0, (CapturePointUpdateCommand)0);
             });
         }
     }

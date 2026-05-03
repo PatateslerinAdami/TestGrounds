@@ -39,7 +39,7 @@ namespace Buffs
         {
             unit.RemoveAnimStates(buff);
 
-            PlayAnimation(unit, "Sheath", timeScale: 1.4f);
+            PlayAnimation(unit, "Sheath", scaleTime: 1.4f);
         }
     }
 }

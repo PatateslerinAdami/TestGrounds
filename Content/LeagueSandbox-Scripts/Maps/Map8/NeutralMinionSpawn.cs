@@ -139,7 +139,8 @@ namespace MapScripts.Map8
 
         public void SpawnCrystal()
         {
-            var crystal = CreateMinion("OdinCenterRelic", "OdinCenterRelic", Position, team: Team);
+            var crystal = CreateMinion("OdinCenterRelic", "OdinCenterRelic", Position, team: Team, direction: new Vector3(0, 0, 1));
+            NotifyAttachFlexParticle(crystal.NetId, 0, 0, 2);
 
             Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_BLUE, collisionArea: 38.08f));
             Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_PURPLE, collisionArea: 38.08f));

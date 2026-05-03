@@ -60,7 +60,7 @@ namespace Buffs
                     knockUp = true;
                 }
                 AddParticleTarget(owner, owner, "yasuo_base_eq_cas", owner);
-                PlayAnimation(owner, "Spell1_Dash", timeScale: 0.8f);
+                PlayAnimation(owner, "Spell1_Dash", scaleTime: 0.8f);
                 var timerAnm = new GameScriptTimer(0.5f, () =>
                 {
                     StopAnimation(unit, "Spell1_Dash", fade: true);

@@ -9,12 +9,12 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells
 {
-    public class OdinCaptureChannel : ISpellScript
+    public class OdinCaptureChannelBomb : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata => new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
-            ChannelDuration = 30f,
+            ChannelDuration = 4.50f, 
         };
 
         private Particle _beamParticle;
@@ -28,24 +28,25 @@ namespace Spells
         {
             _owner = spell.CastInfo.Owner as Champion;
             _captureMinion = spell.CastInfo.Targets[0].Unit as Minion;
-            _capturePoint = _captureMinion?.AIScript as IOdinCapturePoint;
+            //_capturePoint = _captureMinion?.AIScript as IOdinCapturePoint;
 
-            _beamParticle = AddParticleTarget(_owner, _owner, "OdinCaptureBeam.troy", _captureMinion, 25000f, boneNameHash: 4929107, targetBoneNameHash: 178301468);
+            _beamParticle = AddParticleTarget(_owner, _owner, "OdinCaptureBeam.troy", _captureMinion, 25000f, boneNameHash: 4929107, targetBoneNameHash: 8024133);
             _captureBuff = AddBuff("OdinCaptureChannel", 30f, 1, spell, _owner, _owner);
 
         }
 
         public void OnSpellChannel(Spell spell)
         {
-            CreateTimer(1.5f, () =>
+            CreateTimer(1.25f, () =>
             {
                 if (_owner.ChannelSpell != spell) return;
 
-                _capturePoint?.AddCapturer(_owner);
+                //_capturePoint?.AddCapturer(_owner);
                 PlayAnimation(_owner, "Channel", flags: AnimationFlags.Unknown6 | AnimationFlags.Unknown7 | AnimationFlags.Unknown8);
 
-                _engagedBeamParticle = AddParticleTarget(_owner, _owner, "OdinCaptureBeamEngaged_green.troy", _captureMinion, 25000f, boneNameHash: 4929107, targetBoneNameHash: 178301468, enemyParticle: "OdinCaptureBeamEngaged_red.troy");
+                _engagedBeamParticle = AddParticleTarget(_owner, _owner, "OdinCaptureBeamEngaged_green.troy", _captureMinion, 25000f, boneNameHash: 4929107, targetBoneNameHash: 8024133, enemyParticle: "OdinCaptureBeamEngaged_red.troy");
                 _owner.SetTargetUnit(null, true);
+                AddBuff("OdinBombSupression", 10f, 1, spell, _captureMinion, _owner);
             });
         }
 
@@ -61,7 +62,7 @@ namespace Spells
 
         private void Cleanup(Spell spell)
         {
-            _capturePoint?.RemoveCapturer(_owner);
+            //_capturePoint?.RemoveCapturer(_owner);
             _beamParticle?.SetToRemove();
             _engagedBeamParticle?.SetToRemove();
             _captureBuff?.DeactivateBuff();

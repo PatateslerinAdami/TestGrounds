@@ -304,8 +304,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 var spellTarget = CastInfo.Targets[0].Unit;
 
                 if (!spellTarget.IsVisibleByTeam(CastInfo.Owner.Team)
-                || !spellTarget.Status.HasFlag(StatusFlags.Targetable)
-                || !spellTarget.GetIsTargetableToTeam(CastInfo.Owner.Team)
+                || (!spellTarget.Status.HasFlag(StatusFlags.Targetable) && !spellTarget.CharData.IsUseable)
+                || (!spellTarget.GetIsTargetableToTeam(CastInfo.Owner.Team) && !spellTarget.CharData.IsUseable)
                 || spellTarget.IsDead)
                 {
                     if (CastInfo.IsAutoAttack)

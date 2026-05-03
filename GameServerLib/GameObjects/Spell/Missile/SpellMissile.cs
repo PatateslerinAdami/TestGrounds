@@ -11,6 +11,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         // Function Vars.
         protected float _moveSpeed;
         protected float _timeSinceCreation;
+        protected bool _isPendingDestroy = false;
+        protected float _destroyTimer = 0.0f;
+        protected const float DESTROY_DELAY = 450.0f;
 
         /// <summary>
         /// Information about this missile's path.
@@ -69,6 +72,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
+            if (_isPendingDestroy)
+            {
+                _destroyTimer -= diff;
+                if (_destroyTimer <= 0)
+                {
+                    API.ApiEventManager.OnSpellMissileEnd.Publish(this);
+                    base.SetToRemove();
+                    _game.PacketNotifier.NotifyDestroyClientMissile(this);
+                }
+                return;
+            }
+
             if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))
             {
                 _timeSinceCreation += diff;
@@ -182,6 +197,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public virtual void CheckFlagsForUnit(AttackableUnit unit)
         {
+            if (_isPendingDestroy)
+            {
+                return;
+            }
+
             if (unit == null || !HasTarget() || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit) || TargetUnit != unit)
             {
                 return;
@@ -203,13 +223,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void SetToRemove()
         {
-            if (!IsToRemove())
+            if (!_isPendingDestroy && !IsToRemove())
             {
-                API.ApiEventManager.OnSpellMissileEnd.Publish(this);
-
-                base.SetToRemove();
-
-                _game.PacketNotifier.NotifyDestroyClientMissile(this);
+                _isPendingDestroy = true;
+                _destroyTimer = DESTROY_DELAY;
             }
         }
 

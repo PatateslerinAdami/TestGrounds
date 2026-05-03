@@ -19,7 +19,7 @@ namespace Spells
         };
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            PlayAnimation(owner, "Spell3", 0.3f, flags: AnimationFlags.Override);
+            PlayAnimation(owner, "Spell3", scaleTime: 0f, startProgress: 0, speedRatio: 1, flags: AnimationFlags.Override | AnimationFlags.Unknown6 | AnimationFlags.Unknown7);
             if (target.Team != owner.Team)
             {
                 float AP = owner.Stats.AbilityPower.Total * 0.4f;

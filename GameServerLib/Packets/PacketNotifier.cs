@@ -353,8 +353,8 @@ namespace PacketDefinitions420
             {
                 EffectNameHash = HashString(particle.GetEffectNameForTeam(viewingTeam)),
                 Flags = (ushort)particle.Flags,
-                TargetBoneNameHash = HashString(particle.TargetBoneName),
-                BoneNameHash = HashString(particle.BoneName),
+                TargetBoneNameHash = particle.TargetBoneNameHash,
+                BoneNameHash = particle.BoneNameHash,
 
                 FXCreateData = fxDataList
             };

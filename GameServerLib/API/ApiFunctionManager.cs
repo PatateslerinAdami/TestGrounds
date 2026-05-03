@@ -427,7 +427,7 @@ namespace LeagueSandbox.GameServer.API
         {
             target.RemoveBuffsWithName(buff);
         }
-        
+
         /// <summary>
         ///     Whether the specified unit is within its team's fountain area.
         /// </summary>
@@ -687,11 +687,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
             return p;
         }
 
@@ -716,11 +717,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
         }
 
         /// <summary>
@@ -745,11 +747,12 @@ namespace LeagueSandbox.GameServer.API
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
             return p;
         }
 
@@ -795,11 +798,12 @@ namespace LeagueSandbox.GameServer.API
             ObjAIBase visibilityOwner = null,
             bool isVisible = true,
             bool aiPaused = true,
-            bool useSpells = true
+            bool useSpells = true,
+            Vector3 direction = default
         )
         {
             var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable,
-                isWard, visibilityOwner, enableScripts: useSpells);
+                isWard, visibilityOwner, null, "", 0, 0, 1, useSpells, direction: direction);
             m.Stats.IsTargetableToTeam = targetingFlags;
             _game.ObjectManager.AddObject(m);
             if (owner != null)
@@ -833,7 +837,8 @@ namespace LeagueSandbox.GameServer.API
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
             RegionType regionType = RegionType.Default,
-            bool ignoresLoS = false
+            bool ignoresLoS = false,
+            float grassRadius = 0f
         )
         {
             return new Region
@@ -845,7 +850,8 @@ namespace LeagueSandbox.GameServer.API
                 collisionRadius: collisionArea,
                 lifetime: duration,
                 onlyShowTarget: revealSpecificUnitOnly != null,
-                ignoresLoS: ignoresLoS
+                ignoresLoS: ignoresLoS,
+                grassRadius: grassRadius
             );
         }
 
@@ -1450,7 +1456,8 @@ namespace LeagueSandbox.GameServer.API
             }
 
             var affectUntargetable = (useFlags & SpellDataFlags.AffectUntargetable) != 0;
-            if (!affectUntargetable && (target.Status & StatusFlags.Targetable) == 0)
+            var affectUseable = (useFlags & SpellDataFlags.AffectUseable) != 0;
+            if (!affectUntargetable && (target.Status & StatusFlags.Targetable) == 0 && !(affectUseable && target.CharData.IsUseable))
             {
                 return false;
             }
@@ -1510,7 +1517,6 @@ namespace LeagueSandbox.GameServer.API
             var affectTurrets = (useFlags & SpellDataFlags.AffectTurrets) != 0;
             var affectBuildings = (useFlags & SpellDataFlags.AffectBuildings) != 0;
             var affectBarracksOnly = (useFlags & SpellDataFlags.AffectBarracksOnly) != 0;
-            var affectUseable = (useFlags & SpellDataFlags.AffectUseable) != 0;
 
             var typeAllowed =
                 (affectMinions && isMinion) // TODO: Verify
@@ -1519,7 +1525,7 @@ namespace LeagueSandbox.GameServer.API
                 || (affectTurrets && (isBaseTurret || isObjBuilding || isInhibitor))
                 || (affectBuildings && isObjBuilding)
                 || (affectBarracksOnly && isInhibitor) // TODO: Verify
-                // It is assumed that the monsters are always in the neutral team
+                                                       // It is assumed that the monsters are always in the neutral team
                 || (affectNeutral && isMonster) // TODO: Verify
                 || (affectUseable && target.CharData.IsUseable);
 
@@ -1831,10 +1837,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
         /// TODO: Implement AnimationFlags enum for this and fill it in.
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        public static void PlayAnimation(GameObject obj, string animName, float timeScale = 1.0f, float startTime = 0,
-            float speedScale = 0, AnimationFlags flags = 0)
+        public static void PlayAnimation(GameObject obj, string animName, float scaleTime = 1.0f, float startProgress = 0.0f, float speedRatio = 1.0f, AnimationFlags flags = 0)
         {
-            obj.PlayAnimation(animName, timeScale, startTime, speedScale, flags);
+            obj.PlayAnimation(animName, scaleTime, startProgress, speedRatio, flags);
         }
 
         /// <summary>
@@ -2392,6 +2397,19 @@ namespace LeagueSandbox.GameServer.API
         public static Vector2 GetFountainPosition(TeamId team)
         {
             return _game.Map.MapScript.GetFountainPosition(team);
+        }
+
+        //Tried the packet, but it doesn’t seem to work.
+        public static void SetMovementRestriction(Champion champion, Vector2 center, float radius, bool restrictCam = false)
+        {
+            if (champion != null)
+            {
+                _game.PacketNotifier.NotifySetCircularMovementRestriction(champion, center, radius, champion.ClientId, restrictCam);
+            }
+        }
+        public static Champion GetPlayerChampion(int userId)
+        {
+            return _game.PlayerManager.GetPeerInfo(userId)?.Champion;
         }
     }
 }

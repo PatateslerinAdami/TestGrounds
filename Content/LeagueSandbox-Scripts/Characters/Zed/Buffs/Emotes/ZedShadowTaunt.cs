@@ -27,7 +27,7 @@ internal class ZedShadowTaunt : IBuffGameScript {
         var facingPos = GetPointFromUnit(_zed, 100f, 20f);
         _minion = AddMinion(_zed, "ZedShadow", "ZedShadow", pos, _zed.Team, _zed.SkinID, true, false);
         FaceDirection(facingPos, _minion, true);
-        PlayAnimation(_minion, "Taunt_SH", timeScale: 10f);
+        PlayAnimation(_minion, "Taunt_SH", scaleTime: 10f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
