@@ -18,14 +18,21 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.INTERNAL };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
+        
         private Vector2 _lastPos;
         private bool _isParStateActive = false; 
+        
+        private float _lastHealth; 
+        private float _lastMaxHealth; 
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _lastPos = unit.Position;
+            _lastHealth = unit.Stats.CurrentHealth; 
+            _lastMaxHealth = unit.Stats.HealthPoints.Total; 
+
             ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdate, false);
-            ApiEventManager.OnTakeDamage.AddListener(this, unit, OnTakeDamage, false);
+            
             SetPARState(unit, 0); 
             _isParStateActive = false;
         }
@@ -34,7 +41,6 @@ namespace Buffs
         {
             var yasuo = unit as ObjAIBase;
             if (yasuo == null) return;
-
             float dist = Vector2.Distance(unit.Position, _lastPos);
             _lastPos = unit.Position;
             float gain = (dist / 5000f) * yasuo.Stats.ManaPoints.Total;
@@ -63,25 +69,27 @@ namespace Buffs
             {
                 hud.SetStacks((byte)Math.Clamp(stacks, 1, 100));
             }
-        }
 
-        public void OnTakeDamage(DamageData damageData)
-        {
-            var yasuo = damageData.Target as ObjAIBase;
-            if (yasuo != null && yasuo.Stats.CurrentMana >= (yasuo.Stats.ManaPoints.Total - 1))
+            float currentHealth = yasuo.Stats.CurrentHealth;
+            float currentMaxHealth = yasuo.Stats.HealthPoints.Total;
+            if (currentHealth < _lastHealth && currentMaxHealth >= _lastMaxHealth)
             {
-                yasuo.Stats.CurrentMana = 0;
-                SetPARState(yasuo, 0); 
-                _isParStateActive = false;
-                
-                AddBuff("YasuoPassiveMSShieldOn", 1.0f, 1, null, yasuo, yasuo);
+                if (yasuo.Stats.CurrentMana >= (yasuo.Stats.ManaPoints.Total - 1))
+                {
+                    yasuo.Stats.CurrentMana = 0;
+                    SetPARState(yasuo, 0); 
+                    _isParStateActive = false;
+                    
+                    AddBuff("YasuoPassiveMSShieldOn", 1.0f, 1, null, yasuo, yasuo);
+                }
             }
+            _lastHealth = currentHealth;
+            _lastMaxHealth = currentMaxHealth;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ApiEventManager.OnUpdateStats.RemoveListener(this);
-            ApiEventManager.OnTakeDamage.RemoveListener(this);
         }
     }
 }

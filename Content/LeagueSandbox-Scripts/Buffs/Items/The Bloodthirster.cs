@@ -14,7 +14,7 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.REPLACE_EXISTING, // Asta dă reset timer-ului pe ecran!
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
 
@@ -24,7 +24,6 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            // Particula Shield rămâne atașată cele 25 de secunde!
             _shieldParticle = AddParticleTarget(unit, unit, "Item_BTOverheal_Shield.troy", unit, buff.Duration, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
         }
 
