@@ -12,7 +12,8 @@ namespace Buffs;
 
 internal class ItemSlow : IBuffGameScript
 {
-    private Particle _freezeParticle;
+    private Particle _particle;
+    private AttackableUnit _unit;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
@@ -26,29 +27,48 @@ internal class ItemSlow : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
+        _unit = unit;
+
         var owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
         var caster = owner ?? unit;
 
-        _freezeParticle = AddParticleTarget(
+        _particle = AddParticleTarget(
             caster,
             null,
             "Global_Freeze",
             unit,
-            -1f,
+            buff.Duration,
             bone: "BUFFBONE_GLB_GROUND_LOC"
         );
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        if (_freezeParticle != null)
-        {
-            RemoveParticle(_freezeParticle);
-            _freezeParticle = null;
-        }
+        KillParticle();
     }
 
     public void OnUpdate(float diff)
     {
+        if (_unit == null)
+        {
+            KillParticle();
+            return;
+        }
+
+        if (_unit.IsDead)
+        {
+            KillParticle();
+        }
+    }
+
+    private void KillParticle()
+    {
+        if (_particle == null)
+        {
+            return;
+        }
+
+        _particle.SetToRemove();
+        _particle = null;
     }
 }
