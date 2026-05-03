@@ -10,11 +10,12 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemPassives;
 
-public class ItemID_3116 : IItemScript
+public class ItemID_3022 : IItemScript
 {
-    private const float SingleTargetSlowPercent = 0.35f;
-    private const float AreaOrPeriodicSlowPercent = 0.15f;
     private const float SlowDuration = 1.5f;
+    private const float MeleeSlowPercent = 0.40f;
+    private const float RangedSlowPercent = 0.30f;
+
     private const string InternalSlowBuffName = "ItemInternalSlow";
     private const string VisualSlowBuffName = "ItemSlow";
 
@@ -25,14 +26,13 @@ public class ItemID_3116 : IItemScript
     public void OnActivate(ObjAIBase owner)
     {
         _owner = owner;
-
-        // Rylai triggers when the owner deals valid spell damage.
-        ApiEventManager.OnDealDamage.AddListener(this, owner, OnDealDamage, false);
+        ApiEventManager.OnHitUnit.AddListener(this, owner, OnHitUnit, false);
+        owner.AddStatModifier(StatsModifier);
     }
 
     public void OnDeactivate(ObjAIBase owner)
     {
-        ApiEventManager.RemoveAllListenersForOwner(this);
+        ApiEventManager.OnHitUnit.RemoveListener(this);
         _owner = null;
     }
 
@@ -40,26 +40,21 @@ public class ItemID_3116 : IItemScript
     {
     }
 
-    private void OnDealDamage(DamageData data)
+    private void OnHitUnit(DamageData data)
     {
-        if (!ShouldApplyRylai(data))
+        if (!ShouldApplyFrozenMallet(data))
         {
             return;
         }
 
-        var slowPercent = GetSlowPercent(data.DamageSource);
-        if (slowPercent <= 0.0f)
-        {
-            return;
-        }
+        var slowPercent = _owner.IsMelee ? MeleeSlowPercent : RangedSlowPercent;
 
         var variables = new BuffVariables();
         variables.Set("slowPercent", slowPercent);
         variables.Set("attackSpeedSlowAmount", 0.0f);
 
-        ApplyInternalSlow(data.Target, slowPercent, variables);
+        ApplyItemInternalSlow(data.Target, slowPercent, variables);
 
-        // Visual slow (icon + VFX).
         AddBuff(
             VisualSlowBuffName,
             SlowDuration,
@@ -71,7 +66,7 @@ public class ItemID_3116 : IItemScript
         );
     }
 
-    private bool ShouldApplyRylai(DamageData data)
+    private bool ShouldApplyFrozenMallet(DamageData data)
     {
         if (data == null || _owner == null)
         {
@@ -93,7 +88,7 @@ public class ItemID_3116 : IItemScript
             return false;
         }
 
-        if (data.IsAutoAttack)
+        if (!data.IsAutoAttack)
         {
             return false;
         }
@@ -103,7 +98,6 @@ public class ItemID_3116 : IItemScript
             return false;
         }
 
-        // Do not slow towers/structures.
         if (data.Target is LaneTurret)
         {
             return false;
@@ -112,22 +106,7 @@ public class ItemID_3116 : IItemScript
         return true;
     }
 
-    private float GetSlowPercent(DamageSource damageSource)
-    {
-        return damageSource switch
-        {
-            DamageSource.DAMAGE_SOURCE_SPELL => SingleTargetSlowPercent,
-
-            DamageSource.DAMAGE_SOURCE_SPELLAOE
-                or DamageSource.DAMAGE_SOURCE_PERIODIC
-                or DamageSource.DAMAGE_SOURCE_SPELLPERSIST => AreaOrPeriodicSlowPercent,
-
-            // Do not trigger on autos, procs, raw/internal damage, pets, death/reactive damage, etc.
-            _ => 0.0f
-        };
-    }
-
-    private void ApplyInternalSlow(AttackableUnit target, float slowPercent, BuffVariables variables)
+    private void ApplyItemInternalSlow(AttackableUnit target, float slowPercent, BuffVariables variables)
     {
         var normalizedNewSlow = slowPercent;
         if (normalizedNewSlow < 0.0f)
@@ -139,8 +118,6 @@ public class ItemID_3116 : IItemScript
 
         foreach (var existing in existingSlows)
         {
-            // Only compare Rylai slows from this item owner.
-            // Do not touch slows from other sources.
             if (existing.SourceUnit != _owner)
             {
                 continue;
@@ -152,16 +129,12 @@ public class ItemID_3116 : IItemScript
                 existingSlow = -existingSlow;
             }
 
-            // Existing slow is stronger or equal:
-            // refresh duration and do not apply the weaker new internal slow.
             if (normalizedNewSlow <= existingSlow)
             {
                 existing.Refresh();
                 return;
             }
 
-            // New slow is stronger:
-            // remove weaker same-source internal slow, then apply the stronger one below.
             target.RemoveBuff(existing);
             break;
         }
