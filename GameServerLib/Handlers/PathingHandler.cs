@@ -81,14 +81,24 @@ namespace LeagueSandbox.GameServer.Handlers
                 return;
             }
 
-            var newPath = new List<Vector2>();
-            newPath.Add(obj.Position);
-            
+            // Fast path: when the corridor between every consecutive waypoint pair is still
+            // clear at the unit's pathfinding radius, no rebuild is needed. This catches the
+            // case the per-waypoint loop below misses so a new blocker (e.g., a freshly built
+            // turret, a respawned inhibitor) sitting between two still-walkable waypoints.
+            // Big win in the common case: no allocation, no A*.
+            if (path.ValidateLineOfSight(_map.NavigationGrid, obj.PathfindingRadius))
+            {
+                return;
+            }
+
+            var newPath = new NavigationPath(path.Count);
+            newPath.AddWaypoint(obj.Position);
+
             foreach (Vector2 waypoint in path)
             {
                 if (IsWalkable(waypoint, obj.PathfindingRadius))
                 {
-                    newPath.Add(waypoint);
+                    newPath.AddWaypoint(waypoint);
                 }
                 else
                 {
@@ -123,33 +133,25 @@ namespace LeagueSandbox.GameServer.Handlers
         /// Returns a path to the given target position from the given unit's position. Uses the
         /// unit's <see cref="ObjAIBase.UsesFastPath"/> setting to pick the client A* mode
         /// (champions = fast, minions = slow-accurate). Also threads an actor-aware path filter
-        /// so the search routes around other units that would block this attacker.
+        /// so the search routes around other units that would block this attacker. The returned
+        /// <see cref="NavigationPath.IsPartial"/> flag signals that the goal was unreachable
+        /// and the path lands at the closest reachable cell.
         /// </summary>
-        public List<Vector2> GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true)
+        public NavigationPath GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true)
         {
             bool useFastPath = obj is ObjAIBase ai && ai.UsesFastPath;
             float radius = usePathingRadius ? obj.PathfindingRadius : 0f;
             var actorBlocked = BuildActorBlockedPredicate(obj);
-            return _map.NavigationGrid.GetPath(obj.Position, target, out _, radius, useFastPath, actorBlocked);
+            return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked);
         }
 
         /// <summary>
         /// Returns a path to the given target position from the given start position. No attacker
         /// is supplied, so actor-aware blocking is disabled (terrain-only pathing).
         /// </summary>
-        public List<Vector2> GetPath(Vector2 start, Vector2 target, float checkRadius = 0, bool useFastPath = false)
+        public NavigationPath GetPath(Vector2 start, Vector2 target, float checkRadius = 0, bool useFastPath = false)
         {
             return _map.NavigationGrid.GetPath(start, target, checkRadius, useFastPath);
-        }
-
-        /// <summary>
-        /// Returns a path to the given target position from the given start position. If the goal
-        /// is unreachable, returns a partial path to the closest explored reachable cell and sets
-        /// <paramref name="isPartialPath"/>.
-        /// </summary>
-        public List<Vector2> GetPath(Vector2 start, Vector2 target, out bool isPartialPath, float checkRadius = 0, bool useFastPath = false)
-        {
-            return _map.NavigationGrid.GetPath(start, target, out isPartialPath, checkRadius, useFastPath);
         }
 
         /// <summary>

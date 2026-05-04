@@ -521,25 +521,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// <param name="actorBlocked">Optional actor-aware path filter (A1). When supplied, cells
         /// for which it returns true are skipped during expansion just like statically-blocked
         /// cells. Null = terrain-only pathing (pre-A1 behavior).</param>
-        /// <returns>List of points forming a path in order: from -> to</returns>
-        public List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null)
+        /// <returns>
+        /// A <see cref="NavigationPath"/> from <paramref name="from"/> to <paramref name="to"/>,
+        /// or <c>null</c> when no progress could be made (start cell isolated, same position, or
+        /// out-of-grid coordinates). When the goal is unreachable, the result lands at the
+        /// closest reachable cell and <see cref="NavigationPath.IsPartial"/> is set.
+        /// </returns>
+        public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null)
         {
-            return GetPath(from, to, out _, distanceThreshold, useFastPath, actorBlocked);
-        }
-
-        /// <summary>
-        /// Builds a path from `from` to `to` using bidirectional A*. Two parallel A* searches
-        /// run from start and goal, meeting in the middle. Matches the client's BuildNavigationPath
-        /// behavior so server and client agree on routes (avoids visible divergence-based snaps).
-        ///
-        /// If the goal cell is unreachable, returns the path to the closest-explored reachable
-        /// cell instead (forward direction) and sets <paramref name="isPartialPath"/>. Returns
-        /// null only when no progress at all could be made (start cell isolated, same position,
-        /// or out-of-grid coordinates).
-        /// </summary>
-        public List<Vector2> GetPath(Vector2 from, Vector2 to, out bool isPartialPath, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null)
-        {
-            isPartialPath = false;
+            bool isPartialPath = false;
 
             if(from == to)
             {
@@ -558,7 +548,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
             if(cellFrom.ID == cellTo.ID)
             {
-                return new List<Vector2>(2){ from, to };
+                return new NavigationPath(new[] { from, to });
             }
 
             // Straight-line LOS first. if the corridor is clear, skip A* entirely.
@@ -566,7 +556,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // before falling through to the grid pathfinder.
             if (!CastCircle(from, to, distanceThreshold))
             {
-                return new List<Vector2>(2) { from, to };
+                return new NavigationPath(new[] { from, to });
             }
 
             // === Bidirectional A* ===
@@ -801,24 +791,24 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
             SmoothPath(pathCells, distanceThreshold);
 
-            var returnList = new List<Vector2>(pathCells.Count);
-            returnList.Add(from);
+            var returnPath = new NavigationPath(pathCells.Count) { IsPartial = isPartialPath };
+            returnPath.AddWaypoint(from);
             for (int i = 1; i < pathCells.Count - 1; i++)
             {
-                returnList.Add(TranslateFromNavGrid(pathCells[i].Locator));
+                returnPath.AddWaypoint(TranslateFromNavGrid(pathCells[i].Locator));
             }
             // A full path lands exactly on the request target; a partial path lands at the center
             // of the closest reachable cell.
             if (isPartialPath)
             {
-                returnList.Add(TranslateFromNavGrid(pathCells[pathCells.Count - 1].Locator));
+                returnPath.AddWaypoint(TranslateFromNavGrid(pathCells[pathCells.Count - 1].Locator));
             }
             else
             {
-                returnList.Add(to);
+                returnPath.AddWaypoint(to);
             }
 
-            return returnList;
+            return returnPath;
         }
 
         /// <summary>

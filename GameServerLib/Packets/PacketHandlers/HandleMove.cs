@@ -3,6 +3,7 @@ using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
 using System.Numerics;
 using System.Collections.Generic;
+using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 
@@ -34,7 +35,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
                 var u = _game.ObjectManager.GetObjectById(req.TargetNetID) as AttackableUnit;
                 var pet = champion.GetPet();
-                List<Vector2> waypoints;
+                NavigationPath waypoints;
 
                 switch (req.OrderType)
                 {
@@ -55,7 +56,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         }
                         else
                         {
-                            waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
+                            waypoints = new NavigationPath(req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates));
 
                             // Client-prediction smoothing: snap server-side position to client's
                             // claimed start if it's a small drift. Gated on walkability — if the
@@ -89,7 +90,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                 }
                             }
 
-                            waypoints[0] = champion.Position;
+                            waypoints.Replace(0, champion.Position);
 
                             for(int i = 0; i < waypoints.Count - 1; i++)
                             {
@@ -107,9 +108,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                     // would land waypoints = [currentPos, currentPos] for i==0,
                                     // silently dropping every subsequent move order ("stuck"
                                     // bug Vayne/Katarina at Inhibitor/Nexus/walls).
+                                    Vector2 snappedFrom = ithWaypoint;
                                     if (path == null)
                                     {
-                                        var snappedFrom = nav.GetClosestTerrainExit(ithWaypoint, 0f);
+                                        snappedFrom = nav.GetClosestTerrainExit(ithWaypoint, 0f);
                                         if (snappedFrom != ithWaypoint)
                                         {
                                             path = nav.GetPath(snappedFrom, lastWaypoint, champion.PathfindingRadius, champion.UsesFastPath);
@@ -120,6 +122,32 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                                 // location. Without this they'd be left in the
                                                 // blocker cell with a path starting elsewhere.
                                                 champion.SetPosition(snappedFrom, repath: false);
+                                            }
+                                        }
+                                    }
+
+                                    // Second-tier snap-retry: champion's position may pass radius=0
+                                    // walkability but fail the PathfindingRadius corridor check
+                                    // (sitting right at a wall edge -> cell is walkable but cells
+                                    // within PathfindingRadius are not). GetPath rejects expansion
+                                    // from a non-radius-clear start, the radius=0 snap above doesn't
+                                    // help (origin already walkable at 0), and the fallback below
+                                    // would just clamp to a tiny wall-grazing distance — unit only
+                                    // walks far when the click direction happens to be along the
+                                    // wall edge (the "click opposite direction works, nothing else
+                                    // does" Vayne-at-wall symptom). Snap to a PathfindingRadius-
+                                    // clear cell so A* has a viable starting cell, then route from
+                                    // there to the click destination — unit naturally walks out and
+                                    // around to the click instead of stopping at the edge.
+                                    if (path == null)
+                                    {
+                                        var snappedClear = nav.GetClosestTerrainExit(ithWaypoint, champion.PathfindingRadius);
+                                        if (snappedClear != ithWaypoint && snappedClear != snappedFrom)
+                                        {
+                                            path = nav.GetPath(snappedClear, lastWaypoint, champion.PathfindingRadius, champion.UsesFastPath);
+                                            if (path != null)
+                                            {
+                                                champion.SetPosition(snappedClear, repath: false);
                                             }
                                         }
                                     }
@@ -170,9 +198,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                         // corridor check, common near building blocker boundaries).
                                         if (waypoints.Count == 0)
                                         {
-                                            waypoints.Add(champion.Position);
+                                            waypoints.AddWaypoint(champion.Position);
                                         }
-                                        waypoints.Add(clamped);
+                                        waypoints.AddWaypoint(clamped);
                                     }
                                     break;
                                 }

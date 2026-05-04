@@ -2173,7 +2173,7 @@ namespace LeagueSandbox.GameServer.API
         /// <returns></returns>
         public static List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0)
         {
-            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold);
+            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold)?.ToList();
         }
 
         /// <summary>

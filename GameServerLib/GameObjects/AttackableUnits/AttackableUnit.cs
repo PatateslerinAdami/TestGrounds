@@ -7,6 +7,7 @@ using GameServerLib.GameObjects.AttackableUnits;
 using LeaguePackets.Game;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.Content;
+using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
@@ -87,7 +88,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Waypoints that make up the path a game object is walking in.
         /// </summary>
-        public List<Vector2> Waypoints { get; protected set; }
+        public NavigationPath Waypoints { get; protected set; }
         /// <summary>
         /// Index of the waypoint in the list of waypoints that the object is currently on.
         /// </summary>
@@ -170,7 +171,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Stats = stats;
             }
 
-            Waypoints = new List<Vector2> { Position };
+            Waypoints = NavigationPath.OfSingle(Position);
             CurrentWaypointKey = 1;
             SetStatus(
                 StatusFlags.CanAttack | StatusFlags.CanCast |
@@ -247,7 +248,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // account via the per-cell HasStuckActor gate. Sharp-corner repath loops
                     // (safe -> unsafe oscillation) should be reduced because the safe path now
                     // routes around the actor that caused the collision in the first place.
-                    List<Vector2> safePath = _game.Map.PathingHandler.GetPath(this, safeExit);
+                    NavigationPath safePath = _game.Map.PathingHandler.GetPath(this, safeExit);
 
                     if (safePath != null)
                     {
@@ -260,7 +261,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 else
                 {
-                    Waypoints[0] = Position;
+                    Waypoints.Replace(0, Position);
                 }
             }
         }
@@ -1682,7 +1683,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private void ResetWaypoints()
         {
-            Waypoints = new List<Vector2> { Position };
+            Waypoints = NavigationPath.OfSingle(Position);
             CurrentWaypointKey = 1;
 
             PathHasTrueEnd = false;
@@ -1700,8 +1701,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Sets this unit's movement path to the given waypoints. *NOTE*: Requires current position to be prepended.
         /// </summary>
         /// <param name="newWaypoints">New path of Vector2 coordinates that the unit will move to.</param>
-        /// <param name="networked">Whether or not clients should be notified of this change in waypoints at the next ObjectManager.Update.</param>
-        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
+        /// <param name="isForced">Bypass the <see cref="CanChangeWaypoints"/> guard (used by dashes / forced movement).</param>
+        public bool SetWaypoints(NavigationPath newWaypoints, bool isForced = false)
         {
             // Waypoints should always have an origin at the current position.
             // Dashes are excluded as their paths should be set before being applied.
@@ -1712,13 +1713,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return false;
             }
 
-            _movementUpdated = true;
+            // Skip the per-tick WaypointGroup broadcast when the new path is identical to
+            // the existing one. The unit's traversal state is unaffected; clients already
+            // know this path. Reduces wire-format noise from periodic recomputes that
+            // produce the same route.
+            bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints);
+
             Waypoints = newWaypoints;
             CurrentWaypointKey = 1;
 
             PathHasTrueEnd = false;
 
+            if (!sameAsExisting)
+            {
+                _movementUpdated = true;
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Backward-compat overload — wraps the supplied list in a fresh <see cref="NavigationPath"/>.
+        /// Existing call sites that still build paths as <c>new List&lt;Vector2&gt; { ... }</c> keep
+        /// compiling. Prefer the <see cref="NavigationPath"/> overload for new code.
+        /// </summary>
+        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
+        {
+            if (newWaypoints == null) return false;
+            return SetWaypoints(new NavigationPath(newWaypoints), isForced);
         }
 
         /// <summary>
