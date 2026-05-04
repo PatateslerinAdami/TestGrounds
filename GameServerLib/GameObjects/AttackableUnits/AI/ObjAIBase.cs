@@ -74,6 +74,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Name assigned to this unit.
         /// </summary>
         public string Name { get; }
+
+        /// <summary>
+        /// Whether this entity should use the client's fast (less accurate) A* mode when
+        /// requesting paths from <see cref="NavigationGrid.GetPath"/>. Mirrors the client's
+        /// per-actor `m_UseSlowerButMoreAccurateSearch` flag inverted: client default is
+        /// slow-accurate=false (= fast=true here); only `obj_AI_Minion` instances override
+        /// the actor flag to true (S1 obj_ai_minion.cpp:1716), which corresponds to fast=false
+        /// here.
+        ///
+        /// Default in this class is false (slow-accurate) so that all `Minion`/`Pet`/jungle
+        /// subclasses get the right behavior without per-class overrides; <see cref="Champion"/>
+        /// overrides to true.
+        /// </summary>
+        public virtual bool UsesFastPath => false;
         /// <summary>
         /// Variable storing all the data related to this AI's current auto attack. *NOTE*: Will be deprecated as the spells system gets finished.
         /// </summary>
@@ -855,12 +869,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 else
                 {
-                    if (!_game.Map.PathingHandler.IsWalkable(targetPos, PathfindingRadius))
+                    // F2 Phase 1: path to a stand-position computed from the target's edge instead
+                    // of the target's exact center. Mirrors the client's `Actor_Common::GetClosestAttackPoint`
+                    // chain (S4 NavGrid.cpp:3706) -> the C++ backend of the Lua API
+                    // `SetStateAndCloseToTarget` that every AI script (Minion.lua / Hero.lua /
+                    // BaronMinionAI.lua / Aggro.lua / Pet AIs) uses to approach a target. Without
+                    // this, ranged units overshoot their attack range while approaching, and
+                    // multiple attackers cluster on the target's exact position.
+                    Vector2 pathDestination = TargetUnit != null
+                        ? _game.Map.PathingHandler.GetAttackStandPosition(this, TargetUnit, idealRange)
+                        : targetPos;
+
+                    if (!_game.Map.PathingHandler.IsWalkable(pathDestination, PathfindingRadius))
                     {
-                        targetPos = _game.Map.NavigationGrid.GetClosestTerrainExit(targetPos, PathfindingRadius);
+                        pathDestination = _game.Map.NavigationGrid.GetClosestTerrainExit(pathDestination, PathfindingRadius);
                     }
 
-                    var newWaypoints = _game.Map.PathingHandler.GetPath(Position, targetPos, PathfindingRadius);
+                    // Unit-aware overload threads the actor-blocked predicate (A1) so the search
+                    // routes around blocking enemy units instead of producing a path that would
+                    // immediately need post-process collision correction.
+                    var newWaypoints = _game.Map.PathingHandler.GetPath(this, pathDestination);
                     if (newWaypoints != null && newWaypoints.Count > 1)
                     {
                         SetWaypoints(newWaypoints);
@@ -1497,7 +1525,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (location != Vector2.Zero)
             {
                 var exit = _game.Map.NavigationGrid.GetClosestTerrainExit(location, PathfindingRadius);
-                var path = _game.Map.PathingHandler.GetPath(Position, exit, PathfindingRadius);
+                var path = _game.Map.PathingHandler.GetPath(Position, exit, PathfindingRadius, UsesFastPath);
 
                 if (path != null)
                 {

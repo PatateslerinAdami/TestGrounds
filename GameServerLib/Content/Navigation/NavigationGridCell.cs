@@ -44,19 +44,29 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         public short ArrivalDirection { get; private set; } = 9;
         public short[] RefHintNode { get; private set; } = new short[2] { -32768, -32768 };
 
-        // Per search runtime state (mutable, written by GetPath/ExpandStep). The Session field is
-        // the discriminator: any value other than NavigationGrid._searchSession means "not touched
-        // by current search yet". Mirrors the client's mSessionID-based scratch state on cells and
-        // avoids per search HashSet/Dictionary allocations.
-        public int SearchSessionF;
-        public bool SearchClosedF;
-        public float SearchGF;
-        public NavigationGridCell SearchCameFromF;
-
-        public int SearchSessionB;
-        public bool SearchClosedB;
-        public float SearchGB;
-        public NavigationGridCell SearchCameFromB;
+        // Per-search runtime state, single shared layout matching the client's per-cell scratch
+        // (S4 NavGrid offsets: 4 = mSessionID, 0xc = mIsOpen, 8 = mArrivalCost, 0x10 = mHeuristic,
+        // 0x30 = mArrivalDirection). SearchSession is the discriminator: any value other than the
+        // current NavigationGrid._searchSession means "not touched by current search yet", which
+        // lets us avoid per-search HashSet/Dictionary allocations.
+        //
+        // SearchHeuristic caches H computed at the cell's first AddCell (per direction's
+        // directionScale at that moment); AdjustCell branches reuse it without recomputing
+        // (S1:7998 vs S1:7950).
+        //
+        // LastTouchByBackward records the last direction that mutated this cell (= client
+        // `mFlags & 0x80` at S1:7966-7972 / S4:11680-11686). Drives the popped-cell-tag-based
+        // expansion direction (S1:10044-10048 / S4:296-371) and the meeting-detection condition.
+        //
+        // CellInBackwardHeap is the heap-ownership marker -> set once at first AddCell, immutable
+        // across cross-direction adjusts so re-adds always return to the originating heap.
+        public int SearchSession;
+        public bool SearchClosed;
+        public float SearchG;
+        public float SearchHeuristic;
+        public NavigationGridCell SearchCameFrom;
+        public bool LastTouchByBackward;
+        public bool CellInBackwardHeap;
 
         private NavigationGridCell() { }
 

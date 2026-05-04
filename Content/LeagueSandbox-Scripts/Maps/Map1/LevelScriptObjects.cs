@@ -301,7 +301,18 @@ namespace MapScripts.Map1
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1700, nexusStats);
+                // Riot ObjectCFG.cfg HQ_T1/T2 has Collision Radius=319.4445, PathfindingCollisionRadius=352.7778 (found this out with help of Yashiro)
+                // those values are what the client bakes into ITS internal nav grid (NOT_PASSABLE flags
+                // via NavCellFlagManager::WriteFlagsToFilledCircleOriginal at S4 obj_HQ.cpp:926). They are
+                // NOT the right values for the SERVER's body push collision-response radius: with 319,
+                // body push activates at distance < 319 + champion_radius (~65) = ~385 from nexus center,
+                // far beyond the visual model (~150 world units). Symptom: champion paths past the nexus,
+                // body-push triggers before visual contact, OnCollision-snap then drift-loops the unit
+                // back toward the nexus on each tick.
+                // Reduced both args to 150 to match visual size; pathing+body-push now both fire only at
+                // visible contact. Server diverges from client's internal pathing-blocker bake by design
+                // if I see this correctly the server's role is collision response and waypoint replication, not nav-grid sync.
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 150, 1700, nexusStats, 150);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
@@ -318,7 +329,17 @@ namespace MapScripts.Map1
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 0, inhibitorStats);
+                // Riot ObjectCFG.cfg has Order Barracks_T1=186 / Chaos Barracks_T2=214 — the client's
+                // internal nav-grid NOT_PASSABLE bake (S1 barrackdampener.cpp:1896, S4 obj_HQ.cpp:926).
+                // Same reason as the nexus comment above: those are CLIENT pathing-blocker values, not
+                // suitable for the SERVER's body-push trigger which fires whenever
+                // distance < CollisionRadius + champion_radius. With 214, body-push triggers at ~280
+                // from inhib center while the visual model is ~100 — Vayne and other small-radius
+                // champions get caught in a drift loop where each OnCollision-snap pushes them deeper
+                // toward the inhib. Reduced to 100 to match visual: body-push and dynamic blocker now
+                // both fire only at visible contact. Server diverges from client pathing-blocker bake by
+                // design (server's role is response, not nav-grid sync).
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 100, 0, inhibitorStats);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;

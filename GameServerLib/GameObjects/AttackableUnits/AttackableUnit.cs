@@ -99,6 +99,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Vector2 OldPoint = new Vector2(0, 0);
         private Vector2 _smoothedSeparationPush = Vector2.Zero;
         private Vector2 _unreplicatedDrift = Vector2.Zero;
+
+        // Stuck recovery state, mirrors client `Actor_Common::m_StuckTimer` + `m_RepathedCount`
+        // (S1 actor_client.cpp:5040-5078). Detects "actor wants to move but isn't making
+        // progress" (e.g., dynamic-blocker overlap on Inhibitor/Nexus respawn, force move into
+        // terrain, post collision wedge into walls) and triggers escalating repath attempts.
+        // Without this, a unit stuck inside a building footprint silently consumes Move Orders
+        // without progress
+        private float _stuckTimerMs = 0f;
+        private int _stuckRepathCount = 0;
+        private Vector2 _stuckLastCheckPos = Vector2.Zero;
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
         private bool _isInGrass = false;
@@ -232,11 +242,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (repath)
                 {
                     Vector2 safeExit = _game.Map.NavigationGrid.GetClosestTerrainExit(Waypoints.Last(), PathfindingRadius);
-                    List<Vector2> safePath = _game.Map.PathingHandler.GetPath(Position, safeExit, PathfindingRadius);
+                    // Unit aware overload threads the A1 actor-blocked predicate, addressing the
+                    // long standing TODO below: pathfinding now does take collision radius into
+                    // account via the per-cell HasStuckActor gate. Sharp-corner repath loops
+                    // (safe -> unsafe oscillation) should be reduced because the safe path now
+                    // routes around the actor that caused the collision in the first place.
+                    List<Vector2> safePath = _game.Map.PathingHandler.GetPath(this, safeExit);
 
-                    // TODO: When using this safePath, sometimes we collide with the terrain again, so we use an unsafe path the next collision, however,
-                    // sometimes we collide again before we can finish the unsafe path, so we end up looping collisions between safe and unsafe paths, never actually escaping (ex: sharp corners).
-                    // This is a more fundamental issue where the pathfinding should be taking into account collision radius, rather than simply pathing from center of an object.
                     if (safePath != null)
                     {
                         SetWaypoints(safePath);
@@ -251,6 +263,133 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     Waypoints[0] = Position;
                 }
             }
+        }
+
+        /// <summary>
+        /// Per tick stuck detection + escalating repath. Mirrors client
+        /// <c>Actor_Common::m_StuckTimer</c> + <c>m_RepathedCount</c> logic at S1 actor_client.cpp:5040-5078.
+        /// "Stuck" = actual per tick distance is less than <c>MinSpeedRatioBeforeStuck</c> of
+        /// expected (movespeed * diff). Constants from playable_client_420 NSEAI.cfg defaults.
+        ///
+        /// On trigger: snap position to nearest walkable cell (handles dynamic blocker overlap),
+        /// then re-issue path to the existing goal. Each repath escalates the next trigger threshold by
+        /// <c>TimeBetweenRepathsInMS</c>, capped at 15 (= S1:5034). The ghost fallback layer
+        /// (S1:5044 <c>++mGettingOutOfCollisionGhosted</c> → temporary <c>mIgnoreCollisions</c>
+        /// after 15 45 stuck ticks) is intentionally not ported it would conflict with the
+        /// player facing <c>StatusFlags.Ghosted</c>
+        /// </summary>
+        private void UpdateStuckRecovery(float diff)
+        {
+            // Skip cases where stuck detection isn't meaningful.
+            // NOTE: deliberately do NOT bail on IsPathEnded() if HandleMove's null fallback
+            // produced degenerate `[currentPos, currentPos]` waypoints, the path appears "ended"
+            // immediately even though the unit is in a stuck cell. We still want recovery in that
+            // case if the unit is actually on a non-walkable cell.
+            bool wantsToMove = Waypoints.Count > 1 || !_game.Map.PathingHandler.IsWalkable(Position, 0f);
+            if (!CanMove() || MovementParameters != null || !wantsToMove)
+            {
+                _stuckTimerMs = 0f;
+                _stuckRepathCount = 0;
+                _stuckLastCheckPos = Position;
+                return;
+            }
+
+            float dx = Position.X - _stuckLastCheckPos.X;
+            float dy = Position.Y - _stuckLastCheckPos.Y;
+            float actualDist = MathF.Sqrt(dx * dx + dy * dy);
+            float expectedDist = GetMoveSpeed() * (diff / 1000f);
+            _stuckLastCheckPos = Position;
+
+            // S1 NSEAI.cfg `MinSpeedRatioBeforeStuck = 0.25` actual < 25% of expected = stuck.
+            // Naturally handles slow effects since GetMoveSpeed already accounts for them.
+            // Special case `expectedDist <= 0` only when the unit ALSO has no path; otherwise
+            // a path ended unit on a blocked cell would never get unstuck.
+            const float MIN_SPEED_RATIO = 0.25f;
+            if (expectedDist <= 0.001f && Waypoints.Count <= 1)
+            {
+                _stuckTimerMs = 0f;
+                _stuckRepathCount = 0;
+                return;
+            }
+            if (expectedDist > 0.001f && actualDist >= expectedDist * MIN_SPEED_RATIO)
+            {
+                _stuckTimerMs = 0f;
+                _stuckRepathCount = 0;
+                return;
+            }
+
+            _stuckTimerMs += diff;
+
+            // S1 NSEAI.cfg defaults: StuckDelayInMS=200, TimeBetweenRepathsInMS=250, max-cap=15
+            // (S1:5034). Threshold escalates so a unit stuck and repath loop doesn't spam.
+            const float STUCK_DELAY_MS = 200f;
+            const float STUCK_REPATH_INTERVAL_MS = 250f;
+            const int STUCK_MAX_REPATHS = 15;
+
+            int countCapped = Math.Min(_stuckRepathCount, STUCK_MAX_REPATHS);
+            float threshold = STUCK_DELAY_MS + countCapped * STUCK_REPATH_INTERVAL_MS;
+
+            if (_stuckTimerMs > threshold)
+            {
+                bool unstuck = TryUnstuckRepath();
+                _stuckTimerMs = 0f;
+                if (unstuck)
+                {
+                    // Reset escalation and treat next stuck-event as fresh.
+                    _stuckRepathCount = 0;
+                }
+                else
+                {
+                    // Repath made no change then escalate so we don't spam, and after the cap give
+                    // up entirely (clear waypoints) so subsequent player orders aren't shadowed.
+                    _stuckRepathCount++;
+                    if (_stuckRepathCount > STUCK_MAX_REPATHS)
+                    {
+                        ResetWaypoints();
+                        _stuckRepathCount = 0;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Stuck recovery action meaning we snap position to nearest walkable cell (escapes dynamic blocker
+        /// overlap, e.g. Inhibitor/Nexus respawn or knockback into terrain), then issue a fresh
+        /// actor aware path to the existing goal. <see cref="SetPosition"/> with <c>repath: false</c>
+        /// avoids recursing through the SafePath logic. If repath fails, position is at least
+        /// snapped to walkable so the next tick's path-following starts from a clean state.
+        /// </summary>
+        private bool TryUnstuckRepath()
+        {
+            // Snap to nearest walkable cell. Use radius=0 (= cell walkable check, ignore
+            // PathfindingRadius clearance) this is for stuck recovery we just need to escape the
+            // blocking cell, even if the destination has tighter clearance than usual. This is
+            // what makes the stuck fix work for cases where the unit is wedged in narrow gaps
+            // (Inhibitor edges, lane wall corners) where no PathfindingRadius clear position
+            // exists nearby.
+            Vector2 snappedFrom = _game.Map.NavigationGrid.GetClosestTerrainExit(Position, 0f);
+            bool positionChanged = snappedFrom != Position;
+            if (positionChanged)
+            {
+                SetPosition(snappedFrom, repath: false);
+            }
+
+            // No goal to repath to (degenerate waypoints) at least the position snap counts as
+            // progress if it happened.
+            if (Waypoints == null || Waypoints.Count <= 1)
+            {
+                return positionChanged;
+            }
+            Vector2 goal = Waypoints[Waypoints.Count - 1];
+
+            var newPath = _game.Map.PathingHandler.GetPath(this, goal);
+            if (newPath != null && newPath.Count >= 2)
+            {
+                SetWaypoints(newPath);
+                return true;
+            }
+
+            return positionChanged;
         }
 
         public override void Update(float diff)
@@ -288,6 +427,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     UpdateGrassState();
                 }
+                UpdateStuckRecovery(diff);
             }
             UpdateFacing();
             if (IsDead && _death != null)
@@ -357,7 +497,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (MovementParameters != null) return;
 
                 Vector2 exit = _game.Map.NavigationGrid.GetClosestTerrainExit(Position, PathfindingRadius + 1.0f);
-                SetPosition(exit, false);
+                // repath:true triggers SetPosition's SafePath branch which re-routes the existing
+                // waypoints around whatever blocker we just collided with. With repath:false the
+                // goal-side of the path stays unchanged — when the unit collides with a building
+                // dynamic-blocker (Inhibitor/Nexus footprint), Waypoints[1..] still point INTO the
+                // blocker, so the next tick walks the unit straight back in, OnCollision fires
+                // again, and the unit drifts deeper with each oscillation. Symptom: clicking
+                // beyond an inhibitor pushes the unit further INTO it instead of around. The
+                // historical reason for repath:false was fear of a safe/unsafe path oscillation
+                // loop (per the older `SetPosition` TODO), which A1 actor-aware A* + the
+                // UpdateStuckRecovery watchdog now mitigate.
+                SetPosition(exit, repath: true);
             }
             else
             {
@@ -1223,9 +1373,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                 }
                 walked = true;
+
+                // No terrain check on the natural waypoint walk because the path was produced by the
+                // actor aware A* (PathingHandler.GetPath, A1) which only emits walkable cells, so
+                // a check here would only fire on precision artifacts at blocker edges. The S1 client's terrain check at
+                // actor_client.cpp:2241-2259 fires inside HandleActorCollision after the
+                // collision response push i.e., the bodyblocking equivalent below but not on the
+                // natural walk.
             }
 
-            // (body-blocking): Separation also occurs without an active waypoint walk
+            // (bodyblocking) Separation also occurs without an active waypoint walk
             // otherwise, units that reach their waypoint within an overlap get stuck.
             // Dashes completely bypass separation so as not to disrupt dash trajectories.
             bool pushed = false;
@@ -1249,11 +1406,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _smoothedSeparationPush = _smoothedSeparationPush * (1f - alpha)
                                         + rawPush * alpha;
 
+                // Body blocking push, terrain gated. Mirrors S1 actor_client.cpp:2241-2259: if
+                // the collision response would land Position in a NOT_PASSABLE / dynamic blocker
+                // cell, drop the push instead of applying it. Without this, units crowded against
+                // a wall (champion attacking Inhibitor/Nexus surrounded by minions) get body-shoved
+                // into the building's dynamic blocker. Drained smoothed state on rejection so the
+                // next tick starts with a fresh push attempt rather than carrying the bad push.
                 if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                 {
-                    Position += _smoothedSeparationPush;
-                    _unreplicatedDrift += _smoothedSeparationPush;
-                    pushed = true;
+                    Vector2 candidate = Position + _smoothedSeparationPush;
+                    if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
+                    {
+                        Position = candidate;
+                        _unreplicatedDrift += _smoothedSeparationPush;
+                        pushed = true;
+                    }
+                    else
+                    {
+                        _smoothedSeparationPush = Vector2.Zero;
+                    }
                 }
 
                 // Stuck Detection + Extra Push Along the Centroid Direction
@@ -1261,9 +1432,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Vector2 stuckPush = ComputeStuckExtraPush(nearby, newDelta, originalDelta, delta);
                 if (stuckPush.LengthSquared() > 0.0001f)
                 {
-                    Position += stuckPush;
-                    _unreplicatedDrift += stuckPush;
-                    pushed = true;
+                    Vector2 candidate = Position + stuckPush;
+                    if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
+                    {
+                        Position = candidate;
+                        _unreplicatedDrift += stuckPush;
+                        pushed = true;
+                    }
+                    // else: drop the stuck push too. UpdateStuckRecovery's escalating-repath
+                    // watchdog still runs and will snap the unit out via TryUnstuckRepath if
+                    // genuinely wedged.
                 }
 
                 // Force a movement data resync once the unreplicated drift gets large enough
@@ -1487,7 +1665,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (CanChangeWaypoints())
             {
                 var nav = _game.Map.NavigationGrid;
-                var path = nav.GetPath(Position, location, PathfindingRadius);
+                bool useFast = (this as ObjAIBase)?.UsesFastPath ?? false;
+                var path = nav.GetPath(Position, location, PathfindingRadius, useFast);
                 if (path != null)
                 {
                     SetWaypoints(path); // resets `PathHasTrueEnd`
