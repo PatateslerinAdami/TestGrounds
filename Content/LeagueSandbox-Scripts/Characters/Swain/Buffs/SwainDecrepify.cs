@@ -73,7 +73,7 @@ public class SwainDecrepify : IBuffGameScript
 
             var variables = new BuffVariables();
             variables.Set("slowPercent", 0.2f + 0.05f * (_spell.CastInfo.SpellLevel - 1));
-            AddBuff("SwainBeamDamage", 3f, 1, _spell, _unit, _swain, buffVariables: variables);
+            AddBuff("Slow", 3f, 1, _spell, target, _swain, buffVariables: variables);
             target.TakeDamage(
                 _swain,
                 30f + 17.5f * (_swain.GetSpell("SwainDecrepify").CastInfo.SpellLevel - 1) +

@@ -228,12 +228,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell LevelUpSpell(byte slot, bool spendSkillPoint) {
             if (spendSkillPoint && SkillPoints == 0) return null;
 
-            var spell = base.LevelUpSpell(slot);
+            var spell = Spells[slot];
             if (spell == null) return null;
 
+            spell.LevelUp();
+            
             if (spell.CastInfo.SpellLevel == 1) {
                 Stats.SetSpellEnabled(slot, true);
             }
+
+            ApiEventManager.OnLevelUpSpell.Publish(spell);
 
             if (spendSkillPoint) {
                 SkillPoints--;
