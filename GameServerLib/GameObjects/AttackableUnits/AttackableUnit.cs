@@ -1768,8 +1768,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ResetWaypoints();
             if (networked)
             {
+                // Bug fix: Set only the flag; DO NOT make a direct Notify call.
+                // The batching system (OnSync -> HoldMovementDataUntilWaypointGroup-
+                // Notification -> ObjectManager.Update -> NotifyWaypointGroup()-Flush)
+                // consolidates multiple movement updates from the same frame into ONE
+                // packet per client containing all units in the movementData[] array. This
+                // is the original S4 format.
+                //
+                // Previously: in addition to _movementUpdated=true,
+                // NotifyWaypointGroup(this) was called directly. Result: per StopMovement
+                // TWO packets to the client one from the direct call, one from the
+                // batch flush. Race condition between the two -> inconsistent
+                // waypoint state on the client -> OMW_HandlePing cannot draw a green
+                // path line because the “current waypoints” snapshot
+                // is not stable.
+                //
+                // With the fix: one packet per frame per client (S4-compliant),
+                // OMW lines are drawn correctly as on the
+                // wave-avoidance-progress branch.
+                //
+                // SetWaypoints and RequestMovementSync already use the correct
+                // path (just set a flag). This was the only outlier
+                // spot that bypassed the batching.
                 _movementUpdated = true;
-                _game.PacketNotifier.NotifyWaypointGroup(this);
             }
         }
 
