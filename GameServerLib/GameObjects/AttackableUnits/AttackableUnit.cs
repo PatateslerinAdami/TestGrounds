@@ -101,6 +101,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Vector2 _smoothedSeparationPush = Vector2.Zero;
         private Vector2 _unreplicatedDrift = Vector2.Zero;
 
+        // Mirrors NSEAI.cfg [Collision] `CanActorsSlideIntoOccupiedGridSquares = 1` (patch 4.20).
+        // S4 Actor_Common.cpp:1265+ has 12 call sites gating the per-step movement-collision
+        // hard-stop on this flag; loaded from CFG at S4:8042-8044, default false in code but
+        // CFG sets it true in patch 4.20.
+        //
+        // 2026-05-04 attempt set this to true → stuck regression at multiple positions around
+        // the nexus → reverted under hypothesis "needs Phase-1 inner-loop terrain check first".
+        // 2026-05-05: that regression may have been amplified or fully caused by the unrelated
+        // StopMovement double-Notify race-condition (commit 24bba97) which was fixed afterward.
+        // RE-TEST: with StopMovement now batched cleanly, this flag may work without the
+        // Phase-1 inner-loop port. If regression returns, full Phase-1 port (S1 actor_client.cpp
+        // :2241-2259) is genuinely needed. Either way, this flag changes ONLY whether body-push
+        // applied lands the unit in NOT_PASSABLE; the unit slides into the cell instead of being
+        // hard-stopped at the boundary. Subsequent ticks' OnCollision-isTerrain extracts via
+        // `SetPosition(exit, repath:true)` basically the same recovery flow as before.
+        private const bool ENABLE_ACTORS_SLIDE_INTO_OCCUPIED = true;
+
         // Stuck recovery state, mirrors client `Actor_Common::m_StuckTimer` + `m_RepathedCount`
         // (S1 actor_client.cpp:5040-5078). Detects "actor wants to move but isn't making
         // progress" (e.g., dynamic-blocker overlap on Inhibitor/Nexus respawn, force move into
@@ -1416,7 +1433,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                 {
                     Vector2 candidate = Position + _smoothedSeparationPush;
-                    if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
+                    bool canApply = ENABLE_ACTORS_SLIDE_INTO_OCCUPIED
+                        || _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
+                    if (canApply)
                     {
                         Position = candidate;
                         _unreplicatedDrift += _smoothedSeparationPush;
@@ -1434,7 +1453,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (stuckPush.LengthSquared() > 0.0001f)
                 {
                     Vector2 candidate = Position + stuckPush;
-                    if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
+                    bool canApply = ENABLE_ACTORS_SLIDE_INTO_OCCUPIED
+                        || _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
+                    if (canApply)
                     {
                         Position = candidate;
                         _unreplicatedDrift += stuckPush;
