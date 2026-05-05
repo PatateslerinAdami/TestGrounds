@@ -19,6 +19,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameServerConsole", "GameSe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameMaths", "GameMaths\GameMaths.csproj", "{EC083DDC-F476-8AB1-2F62-DA961C5B8DA7}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Custom Scripts", "Custom Scripts", "{70BD38AC-BD5E-4D65-8622-DB66BD01C094}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Ashe", "Ashe", "{352D4EAC-518D-4443-9E07-932549CD098A}"
+	ProjectSection(SolutionItems) = preProject
+		E.cs = E.cs
+		Q.cs = Q.cs
+		R.cs = R.cs
+		W.cs = W.cs
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +69,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{4F9F5305-388D-7ED0-95A0-7E3D57660849} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{352D4EAC-518D-4443-9E07-932549CD098A} = {70BD38AC-BD5E-4D65-8622-DB66BD01C094}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {B19E30FD-65F0-418C-9E10-237966DCB531}
