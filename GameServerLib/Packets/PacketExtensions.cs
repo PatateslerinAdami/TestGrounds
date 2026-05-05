@@ -96,17 +96,18 @@ namespace PacketDefinitions420
 
         private static List<CompressedWaypoint> GetCenteredWaypoints(AttackableUnit unit, NavigationGrid grid)
         {
-            var currentWaypoints = new List<Vector2>(unit.Waypoints);
-            currentWaypoints[0] = unit.Position;
-
-            int count = 2 + ((currentWaypoints.Count - 1) - unit.CurrentWaypointKey);
-            if (count >= 2)
+            // When CurrentWaypointKey >= Waypoints.Count (path ended) the prior `count = 2 + ...`
+            // arithmetic underflows to <2 and the trim branch is skipped, so the packet carries the
+            // full stale path with [0] overwritten by Position. Client interprets that as "still
+            // moving, teleport between old waypoints" each time the keepalive WaypointGroup fires.
+            // Building the list explicitly from CurrentWaypointKey forward keeps it [Position] (=
+            // stationary) once the path is done.
+            var result = new List<Vector2> { unit.Position };
+            for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count; i++)
             {
-                currentWaypoints.RemoveRange(1, currentWaypoints.Count - count);
+                result.Add(unit.Waypoints[i]);
             }
-
-            return currentWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
-
+            return result.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
         }
 
         /// <summary>
