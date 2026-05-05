@@ -2,7 +2,6 @@ using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -29,8 +28,11 @@ internal class ItemSlow : IBuffGameScript
     {
         _unit = unit;
 
-        var owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
-        var caster = owner ?? unit;
+        var caster = buff.SourceUnit;
+        if (caster == null)
+        {
+            return;
+        }
 
         _particle = AddParticleTarget(
             caster,
