@@ -29,10 +29,6 @@ internal class ItemSlow : IBuffGameScript
         _unit = unit;
 
         var caster = buff.SourceUnit;
-        if (caster == null)
-        {
-            return;
-        }
 
         _particle = AddParticleTarget(
             caster,
