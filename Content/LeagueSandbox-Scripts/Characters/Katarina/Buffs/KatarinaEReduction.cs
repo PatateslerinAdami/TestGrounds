@@ -4,6 +4,7 @@ using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
@@ -15,6 +16,8 @@ namespace Buffs
 {
     class KatarinaEReduction : IBuffGameScript
     {
+        private ObjAIBase _katarina;
+        private Particle _p;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
@@ -24,20 +27,23 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         
-        Particle p;
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage, false);
-            p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "katarina_e_buf.troy", unit, buff.Duration);
+            _katarina = ownerSpell.CastInfo.Owner;
+            ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage);
+            _p = _katarina.SkinID switch {
+                9 => AddParticleTarget(unit, unit, "katarina_Skin09_E_buf", unit, 1.5f, flags: 0),
+                _ => AddParticleTarget(unit, unit, "katarina_e_buf", unit, 1.5f, flags: 0)
+            };
         }
-        public void OnPreTakeDamage(DamageData data)
+        private void OnPreTakeDamage(DamageData data)
         {
             data.PostMitigationDamage *= 0.85f;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            RemoveParticle(p);
+            RemoveParticle(_p);
         }
     }
 }
