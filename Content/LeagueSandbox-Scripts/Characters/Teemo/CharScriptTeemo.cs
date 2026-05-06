@@ -27,6 +27,7 @@ public class CharScriptTeemo : ICharScript {
         ApiEventManager.OnSpellCast.AddListener(this, owner.GetSpell("BlindingDart"), OnSpellsCast);
         ApiEventManager.OnSpellCast.AddListener(this, owner.GetSpell("BantamTrap"),   OnSpellsCast);
         ApiEventManager.OnLaunchAttack.AddListener(this, owner, OnSpellsCast);
+        ApiEventManager.OnTakeDamage.AddListener(this, owner, OnTakeDamage);
     }
 
     public void OnUpdate(float diff) {
@@ -43,6 +44,12 @@ public class CharScriptTeemo : ICharScript {
         if (ticks != 1) return;
         AddBuff("CamouflageStealth", 100000f, 1, _spell, _teemo, _teemo, infiniteduration: true);
         _stealthTimerEnable = false;
+    }
+
+    private void OnTakeDamage(DamageData data)
+    {
+        _stealthTimerEnable = false;
+        _periodicTicker.Reset();
     }
 
     private void OnSpellsCast(Spell spell) { BreakStealth(); }
