@@ -76,6 +76,7 @@
         "COOLDOWNS_ENABLED": false,
         "CHEATS_ENABLED": true,
         "MINION_SPAWNS_ENABLED": false,
+        "DEATH_TIMER_ENABLED": true,
         "CONTENT_PATH": "../../../../../Content",
         "IS_DAMAGE_TEXT_GLOBAL": false
     },

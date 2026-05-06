@@ -61,6 +61,7 @@ namespace LeagueSandbox.GameServer
             SetGameFeatures(FeatureFlags.EnableCooldowns, (bool)gameInfo.SelectToken("COOLDOWNS_ENABLED"));
             SetGameFeatures(FeatureFlags.EnableManaCosts, (bool)gameInfo.SelectToken("MANACOSTS_ENABLED"));
             SetGameFeatures(FeatureFlags.EnableLaneMinions, (bool)gameInfo.SelectToken("MINION_SPAWNS_ENABLED"));
+            SetGameFeatures(FeatureFlags.EnableDeathTimer, (bool)gameInfo.SelectToken("DEATH_TIMER_ENABLED"));
 
             // Read if chat commands are enabled
             ChatCheatsEnabled = (bool)gameInfo.SelectToken("CHEATS_ENABLED");

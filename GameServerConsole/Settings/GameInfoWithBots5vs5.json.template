@@ -670,6 +670,7 @@
         "COOLDOWNS_ENABLED": true,
         "CHEATS_ENABLED": true,
         "MINION_SPAWNS_ENABLED": true,
+        "DEATH_TIMER_ENABLED": true,
         "CONTENT_PATH": "../../../../../Content",
         "IS_DAMAGE_TEXT_GLOBAL": false
     },
