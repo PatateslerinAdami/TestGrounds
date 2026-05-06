@@ -22,7 +22,10 @@
             }
             else
             {
+                var enabled = input != 0;
                 Game.Map.MapScript.MapScriptMetadata.MinionSpawnEnabled = input != 0;
+                ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.INFO,
+    enabled ? "Minion spawn enabled!" : "Minion spawn disabled!");
             }
         }
     }

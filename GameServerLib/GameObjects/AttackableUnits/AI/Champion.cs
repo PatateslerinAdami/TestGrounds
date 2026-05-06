@@ -437,7 +437,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override void Die(DeathData data)
         {
             IsDead = true;
-            RespawnTimer = _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f;
+            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
+                ? _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f
+                : 100.0f;
             ChampStats.Deaths++;
 
             _game.ObjectManager.StopTargeting(this);
