@@ -41,6 +41,7 @@ public class AkaliSmokeBomb : ISpellScript {
     private bool _shroudActivated;
     private bool _wasInsideShroud;
     private bool _hasAppliedTwilightShroudThisCast;
+    private bool _hasAppliedEntryMoveSpeedThisCast;
     private bool _hasSpawnedInvisibilityEntryParticleThisCast;
     private float _shroudElapsedMs;
     private float _invisibilityBreakRemainingMs;
@@ -77,6 +78,7 @@ public class AkaliSmokeBomb : ISpellScript {
         _invisibilityBreakRemainingMs = 0f;
         _wasInsideShroud             = false;
         _hasAppliedTwilightShroudThisCast = false;
+        _hasAppliedEntryMoveSpeedThisCast = false;
         _hasSpawnedInvisibilityEntryParticleThisCast = false;
 
         var castPosition = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
@@ -115,7 +117,10 @@ public class AkaliSmokeBomb : ISpellScript {
     private void UpdateAkaliShroudState() {
         var isInsideShroud = Vector2.DistanceSquared(_akali.Position, _shroudPos) <= ShroudRadius * ShroudRadius;
         if (isInsideShroud && !_wasInsideShroud) {
-            AddBuff("AkaliTwilightShroudBuff", EntryMoveSpeedDurationSeconds, 1, _spell, _akali, _akali);
+            if (!_hasAppliedEntryMoveSpeedThisCast) {
+                AddBuff("AkaliTwilightShroudBuff", EntryMoveSpeedDurationSeconds, 1, _spell, _akali, _akali);
+                _hasAppliedEntryMoveSpeedThisCast = true;
+            }
 
             if (!_hasSpawnedInvisibilityEntryParticleThisCast) {
                 RemoveParticle(_invisible);
@@ -185,6 +190,7 @@ public class AkaliSmokeBomb : ISpellScript {
         _shroudActivated = false;
         _wasInsideShroud = false;
         _hasAppliedTwilightShroudThisCast = false;
+        _hasAppliedEntryMoveSpeedThisCast = false;
         _hasSpawnedInvisibilityEntryParticleThisCast = false;
         _invisibilityBreakRemainingMs = 0f;
     }
