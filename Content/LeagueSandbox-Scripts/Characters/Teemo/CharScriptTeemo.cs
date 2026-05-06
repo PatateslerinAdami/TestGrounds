@@ -48,6 +48,7 @@ public class CharScriptTeemo : ICharScript {
 
     private void OnTakeDamage(DamageData data)
     {
+        if ( data.DamageResultType is DamageResultType.RESULT_MISS or DamageResultType.RESULT_DODGE or DamageResultType.RESULT_INVULNERABLE) return;
         _stealthTimerEnable = false;
         _periodicTicker.Reset();
     }
