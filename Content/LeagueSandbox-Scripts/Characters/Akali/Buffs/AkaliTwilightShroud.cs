@@ -41,6 +41,8 @@ public class AkaliTwilightShroud : IBuffGameScript {
                 _akali.SetVisibleByTeam(TeamId.TEAM_BLUE, false);
                 break;
         }
+        _akali.SetVisibleByTeam(TeamId.TEAM_NEUTRAL, false);
+        
 
         _id                 = PushCharacterFade(_akali, 0.2f, 0.02f);
     }
@@ -58,6 +60,7 @@ public class AkaliTwilightShroud : IBuffGameScript {
                 _akali.SetVisibleByTeam(TeamId.TEAM_BLUE, true);
                 break;
         }
+        _akali.SetVisibleByTeam(TeamId.TEAM_NEUTRAL, true);
         _id                 = PushCharacterFade(_akali, 1, 0.02f);
     }
 }

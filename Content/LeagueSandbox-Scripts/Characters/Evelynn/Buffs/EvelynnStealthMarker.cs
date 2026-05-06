@@ -244,15 +244,19 @@ public class EvelynnStealthMarker : IBuffGameScript {
         }
     }
 
-    private void SetEnemyVisibility(bool visible) {
+    private void SetEnemyVisibility(bool visible)
+    {
         switch (_evelynn.Team) {
             case TeamId.TEAM_BLUE:
                 _evelynn.SetVisibleByTeam(TeamId.TEAM_PURPLE, visible);
+
                 break;
             case TeamId.TEAM_PURPLE:
                 _evelynn.SetVisibleByTeam(TeamId.TEAM_BLUE, visible);
                 break;
         }
+
+        _evelynn.SetVisibleByTeam(TeamId.TEAM_NEUTRAL, visible);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
