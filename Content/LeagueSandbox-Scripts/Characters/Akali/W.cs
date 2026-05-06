@@ -16,6 +16,8 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells;
 
 public class AkaliSmokeBomb : ISpellScript {
+    private const string StealthBuffName               = "AkaliWStealth";
+    private const string LegacyStealthBuffName         = "AkaliTwilightShroud";
     private const float ShroudDurationSeconds           = 8.0f;
     private const float ShroudDurationMs                = 8000.0f;
     private const float InvisibilityBreakDurationMs     = 650.0f;
@@ -26,9 +28,7 @@ public class AkaliSmokeBomb : ISpellScript {
         SpellDataFlags.AffectHeroes
         | SpellDataFlags.AffectMinions
         | SpellDataFlags.AffectNeutral
-        | SpellDataFlags.AffectEnemies
-        | SpellDataFlags.AffectFriends
-        | SpellDataFlags.NotAffectSelf;
+        | SpellDataFlags.AffectEnemies;
 
     private readonly HashSet<AttackableUnit> _slowTargets = [];
     private readonly HashSet<Spell> _stealthBreakWatchedSpells = [];
@@ -40,7 +40,7 @@ public class AkaliSmokeBomb : ISpellScript {
     private Particle _invisible;
     private bool _shroudActivated;
     private bool _wasInsideShroud;
-    private bool _hasAppliedTwilightShroudThisCast;
+    private bool _hasAppliedStealthThisCast;
     private bool _hasAppliedEntryMoveSpeedThisCast;
     private bool _hasSpawnedInvisibilityEntryParticleThisCast;
     private float _shroudElapsedMs;
@@ -66,7 +66,8 @@ public class AkaliSmokeBomb : ISpellScript {
         }
 
         _invisibilityBreakRemainingMs = InvisibilityBreakDurationMs;
-        RemoveBuff(_akali, "AkaliTwilightShroud");
+        RemoveBuff(_akali, StealthBuffName);
+        RemoveBuff(_akali, LegacyStealthBuffName);
     }
 
     public void OnSpellPostCast(Spell spell) {
@@ -77,7 +78,7 @@ public class AkaliSmokeBomb : ISpellScript {
         _shroudElapsedMs             = 0f;
         _invisibilityBreakRemainingMs = 0f;
         _wasInsideShroud             = false;
-        _hasAppliedTwilightShroudThisCast = false;
+        _hasAppliedStealthThisCast = false;
         _hasAppliedEntryMoveSpeedThisCast = false;
         _hasSpawnedInvisibilityEntryParticleThisCast = false;
 
@@ -132,15 +133,16 @@ public class AkaliSmokeBomb : ISpellScript {
         _wasInsideShroud = isInsideShroud;
 
         if (isInsideShroud && _invisibilityBreakRemainingMs <= 0f) {
-            if (!_akali.HasBuff("AkaliTwilightShroud")) {
+            if (!_akali.HasBuff(StealthBuffName) && !_akali.HasBuff(LegacyStealthBuffName)) {
                 var variables = new BuffVariables();
-                variables.Set("isFirstCast", !_hasAppliedTwilightShroudThisCast);
-                AddBuff("AkaliTwilightShroud", GetRemainingDurationSeconds(), 1, _spell, _akali, _akali,
+                variables.Set("isFirstCast", !_hasAppliedStealthThisCast);
+                AddBuff(StealthBuffName, GetRemainingDurationSeconds(), 1, _spell, _akali, _akali,
                         buffVariables: variables);
-                _hasAppliedTwilightShroudThisCast = true;
+                _hasAppliedStealthThisCast = true;
             }
-        } else if (_akali.HasBuff("AkaliTwilightShroud")) {
-            RemoveBuff(_akali, "AkaliTwilightShroud");
+        } else if (_akali.HasBuff(StealthBuffName) || _akali.HasBuff(LegacyStealthBuffName)) {
+            RemoveBuff(_akali, StealthBuffName);
+            RemoveBuff(_akali, LegacyStealthBuffName);
         }
     }
 
@@ -176,8 +178,9 @@ public class AkaliSmokeBomb : ISpellScript {
     }
 
     private void EndShroud() {
-        if (_akali != null && _akali.HasBuff("AkaliTwilightShroud")) {
-            RemoveBuff(_akali, "AkaliTwilightShroud");
+        if (_akali != null && (_akali.HasBuff(StealthBuffName) || _akali.HasBuff(LegacyStealthBuffName))) {
+            RemoveBuff(_akali, StealthBuffName);
+            RemoveBuff(_akali, LegacyStealthBuffName);
         }
 
         foreach (var unit in _slowTargets.ToList()) {
@@ -189,7 +192,7 @@ public class AkaliSmokeBomb : ISpellScript {
         _invisible = null;
         _shroudActivated = false;
         _wasInsideShroud = false;
-        _hasAppliedTwilightShroudThisCast = false;
+        _hasAppliedStealthThisCast = false;
         _hasAppliedEntryMoveSpeedThisCast = false;
         _hasSpawnedInvisibilityEntryParticleThisCast = false;
         _invisibilityBreakRemainingMs = 0f;
