@@ -43,7 +43,7 @@ public class JaxEvasion : IBuffGameScript {
         _spell         = ownerspell;
         _step          = 0;
         _periodicTicker.Reset();
-        _attacksDodged = 0f;
+        _attacksDodged = 1f;
         SealSpellSlot(_jax, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerspell.SetCooldown(0f);
         ApiEventManager.OnPreTakeDamage.AddListener(this, _jax, OnPreTakeDamage);
@@ -62,7 +62,7 @@ public class JaxEvasion : IBuffGameScript {
     }
 
     private void OnPreTakeDamage(DamageData data) {
-        if (!IsValidTarget(_jax, data.Target,
+        if (!IsValidTarget(_jax, data.Attacker,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         switch (data.DamageSource) {

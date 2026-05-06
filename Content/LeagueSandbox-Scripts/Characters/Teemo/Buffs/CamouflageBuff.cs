@@ -1,5 +1,7 @@
+using System.Threading;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -11,21 +13,16 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class RunePrison : IBuffGameScript {
-    private ObjAIBase        _ryze;
+public class CamouflageBuff : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.SNARE,
-        BuffAddType = BuffAddType.REPLACE_EXISTING
+        BuffType    = BuffType.COMBAT_DEHANCER,
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ryze = ownerSpell.CastInfo.Owner;
-        SetStatus(unit, StatusFlags.Rooted, true);
-    }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        SetStatus(unit, StatusFlags.Rooted, true);
+        StatsModifier.AttackSpeed.PercentBonus += 0.4f;
+        unit.AddStatModifier(StatsModifier);
     }
 }

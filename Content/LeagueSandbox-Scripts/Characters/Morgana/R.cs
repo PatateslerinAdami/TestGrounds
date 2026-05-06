@@ -65,7 +65,11 @@ public class SoulShackles : ISpellScript {
         _indicatorRing = AddParticleTarget(_morgana, _morgana, "Morgana_base_R_Indicator_Ring", _morgana, 3f);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(float diff)
+    {
+        var shouldSeal = GetUnitsInRange(_morgana, _morgana.Position, TetherRange, true,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes).Count == 0;
+        SealSpellSlot(_morgana, SpellSlotType.SpellSlots, 3, SpellbookType.SPELLBOOK_CHAMPION, shouldSeal);
         if (_enemiesTethered.Count == 0) return;
 
         _timerMs += diff;
