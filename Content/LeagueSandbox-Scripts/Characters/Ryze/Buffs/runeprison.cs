@@ -26,6 +26,6 @@ internal class runeprison : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        SetStatus(unit, StatusFlags.Rooted, true);
+        SetStatus(unit, StatusFlags.Rooted, false);
     }
 }
