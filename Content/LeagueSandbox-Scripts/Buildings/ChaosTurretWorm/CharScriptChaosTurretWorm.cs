@@ -8,15 +8,4 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace CharScripts;
 //Purple 3rd Lane Turret
-public class CharScriptChaosTurretWorm : ICharScript {
-    private ObjAIBase _turret;
-
-    public StatsModifier StatsModifier { get; } = new();
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _turret = owner;
-        AddBuff("TurretFortification", 420000f, 1, spell, _turret, _turret);
-        AddBuff("ReinforcedArmor",     420000f, 1, spell, _turret, _turret, infiniteduration: true);
-        AddBuff("PenetratingBullets",  420000f, 1, spell, _turret, _turret, infiniteduration: true);
-    }
-}
+public class CharScriptChaosTurretWorm : ICharScript { }
