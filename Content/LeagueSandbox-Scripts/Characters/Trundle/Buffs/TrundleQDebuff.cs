@@ -29,7 +29,7 @@ public class TrundleQDebuff : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _trundle                             = ownerSpell.CastInfo.Owner;
         _spell                               = ownerSpell;
-        StatsModifier.AttackDamage.FlatBonus -= 20f + 5f * (ownerSpell.CastInfo.SpellLevel - 1);
+        StatsModifier.AttackDamage.FlatBonus -= (20f + 5f * (ownerSpell.CastInfo.SpellLevel - 1)) * 0.5f;
         unit.AddStatModifier(StatsModifier);
         _p1 = AddParticleTarget(_trundle, unit, "TrundleQDebuff_buf", unit, buff.Duration);
     }
