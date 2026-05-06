@@ -11,7 +11,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class RunePrison : IBuffGameScript {
+internal class runeprison : IBuffGameScript {
     private ObjAIBase        _ryze;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SNARE,
