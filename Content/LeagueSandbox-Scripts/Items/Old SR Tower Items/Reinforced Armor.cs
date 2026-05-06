@@ -25,6 +25,10 @@ public class ItemID_1502 : IItemScript
         _turret = owner;
         StatsModifier.Armor.FlatBonus = 200f;
         StatsModifier.MagicResist.FlatBonus = 200f;
+        
+        //buff names:
+        //TurretFortification
+        //TurretInitialArmor
     }
 
     public void OnUpdate(float diff)
