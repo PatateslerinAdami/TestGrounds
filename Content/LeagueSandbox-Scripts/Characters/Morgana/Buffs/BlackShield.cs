@@ -36,7 +36,10 @@ internal class BlackShield : IBuffGameScript {
         ApiEventManager.OnShieldBreak.AddListener(this, _blackShield, OnShieldBreak);
     }
 
-    private bool OnAllowAddBuff(AttackableUnit target, AttackableUnit unit, Buff buff) { return buff.BuffType is not (BuffType.BLIND or BuffType.CHARM or BuffType.DISARM or BuffType.FEAR or BuffType.FLEE or BuffType.FRENZY or BuffType.KNOCKBACK or BuffType.KNOCKUP or BuffType.NEAR_SIGHT or BuffType.POLYMORPH or BuffType.SLEEP or BuffType.SILENCE or BuffType.SLOW or BuffType.SNARE or BuffType.STUN or BuffType.TAUNT or BuffType.SUPPRESSION); }
+    private bool OnAllowAddBuff(AttackableUnit target, AttackableUnit unit, Buff buff)
+    {
+        return buff.BuffType is not (BuffType.BLIND or BuffType.CHARM or BuffType.DISARM or BuffType.FEAR or BuffType.FLEE or BuffType.FRENZY or BuffType.KNOCKBACK or BuffType.KNOCKUP or BuffType.NEAR_SIGHT or BuffType.POLYMORPH or BuffType.SLEEP or BuffType.SILENCE or BuffType.SLOW or BuffType.SNARE or BuffType.STUN or BuffType.TAUNT or BuffType.SUPPRESSION);
+    }
 
     private void OnShieldBreak(Shield shield) {
         _buff.DeactivateBuff();
