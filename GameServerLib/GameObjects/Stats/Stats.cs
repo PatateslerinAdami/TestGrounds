@@ -41,6 +41,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat CooldownReduction { get; }
         public Stat CriticalChance { get; }
         public Stat CriticalDamage { get; }
+        public Stat DeathTimerReduction { get; }
         public Stat ExpGivenOnDeath { get; }
         public Stat GoldPerGoldTick { get; }
         public Stat GoldGivenOnDeath { get; }
@@ -110,6 +111,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CooldownReduction = new Stat();
             CriticalChance = new Stat();
             CriticalDamage = new Stat();
+            DeathTimerReduction = new Stat();
             ExpGivenOnDeath = new Stat();
             GoldPerGoldTick = new Stat();
             GoldGivenOnDeath = new Stat();
@@ -168,6 +170,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CooldownReduction.ApplyStatModifier(modifier.CooldownReduction);
             CriticalChance.ApplyStatModifier(modifier.CriticalChance);
             CriticalDamage.ApplyStatModifier(modifier.CriticalDamage);
+            DeathTimerReduction.ApplyStatModifier(modifier.DeathTimerReduction);
             ExpGivenOnDeath.ApplyStatModifier(modifier.ExpGivenOnDeath);
             GoldGivenOnDeath.ApplyStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.ApplyStatModifier(modifier.GoldPerSecond);
@@ -207,6 +210,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CooldownReduction.RemoveStatModifier(modifier.CooldownReduction);
             CriticalChance.RemoveStatModifier(modifier.CriticalChance);
             CriticalDamage.RemoveStatModifier(modifier.CriticalDamage);
+            DeathTimerReduction.RemoveStatModifier(modifier.DeathTimerReduction);
             ExpGivenOnDeath.RemoveStatModifier(modifier.ExpGivenOnDeath);
             GoldGivenOnDeath.RemoveStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.RemoveStatModifier(modifier.GoldPerSecond);
@@ -239,6 +243,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float GetTotalAttackSpeed()
         {
             return AttackSpeedFlat * AttackSpeedMultiplier.Total;
+        }
+
+        public float GetRespawnTimer(float baseTimer)
+        {
+            return Math.Max(1000.0f, baseTimer * (1 + DeathTimerReduction.Total));
         }
 
         public float GetTrueMoveSpeed()

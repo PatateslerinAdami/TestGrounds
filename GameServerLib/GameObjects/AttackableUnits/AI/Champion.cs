@@ -438,7 +438,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             IsDead = true;
             RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
-                ? _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f
+                ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
                 : 100.0f;
             ChampStats.Deaths++;
 
