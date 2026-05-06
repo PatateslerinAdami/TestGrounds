@@ -62,7 +62,7 @@ public class JaxEvasion : IBuffGameScript {
     }
 
     private void OnPreTakeDamage(DamageData data) {
-        if (!IsValidTarget(_jax, data.Target,
+        if (!IsValidTarget(_jax, data.Attacker,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         switch (data.DamageSource) {
