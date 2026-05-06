@@ -40,7 +40,7 @@ public class runeprison : ISpellScript {
         var dmg   = 60 * spell.CastInfo.SpellLevel + ap + mana;
         var duration = 0.75f                          + 0.25f * (spell.CastInfo.SpellLevel - 1);
         AddParticleTarget(_ryze, _target, "RunePrison_tar.troy", _target);
-        AddBuff("RunePrison", duration, 1, spell, _target, _ryze);
+        AddBuff("runeprison", duration, 1, spell, _target, _ryze);
         _target.TakeDamage(_ryze, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
         if (!_ryze.HasBuff("DesperatePower")) return;
         AddParticle(_ryze, _target, "DesperatePower_aoe.troy", _target.Position);

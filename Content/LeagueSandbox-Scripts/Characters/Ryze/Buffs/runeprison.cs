@@ -11,7 +11,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class RunePrison : IBuffGameScript {
+internal class runeprison : IBuffGameScript {
     private ObjAIBase        _ryze;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SNARE,
@@ -26,6 +26,6 @@ internal class RunePrison : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        SetStatus(unit, StatusFlags.Rooted, true);
+        SetStatus(unit, StatusFlags.Rooted, false);
     }
 }
