@@ -118,7 +118,7 @@ public class AkaliSmokeBomb : ISpellScript {
         var isInsideShroud = Vector2.DistanceSquared(_akali.Position, _shroudPos) <= ShroudRadius * ShroudRadius;
         if (isInsideShroud && !_wasInsideShroud) {
             if (!_hasAppliedEntryMoveSpeedThisCast) {
-                AddBuff("AkaliTwilightShroudBuff", EntryMoveSpeedDurationSeconds, 1, _spell, _akali, _akali);
+                AddBuff("AkaliWBuff", EntryMoveSpeedDurationSeconds, 1, _spell, _akali, _akali);
                 _hasAppliedEntryMoveSpeedThisCast = true;
             }
 
@@ -161,7 +161,7 @@ public class AkaliSmokeBomb : ISpellScript {
         var unitsInShroud = GetUnitsInRange(_akali, _shroudPos, ShroudRadius, true, SlowTargetFlags).ToHashSet();
 
         foreach (var unit in _slowTargets.Where(unit => !unitsInShroud.Contains(unit)).ToList()) {
-            RemoveBuff(unit, "AkaliTwilightShroudDebuff");
+            RemoveBuff(unit, "AkaliWDebuff");
             _slowTargets.Remove(unit);
         }
 
@@ -169,7 +169,7 @@ public class AkaliSmokeBomb : ISpellScript {
             var variables = new BuffVariables();
             variables.Set("slowAmount", 0.14f + 0.04f * (_spell.CastInfo.SpellLevel - 1));
             variables.Set("attackSpeedSlowAmount", 0f);
-            AddBuff("AkaliTwilightShroudDebuff", GetRemainingDurationSeconds(), 1, _spell, unit, _akali,
+            AddBuff("AkaliWDebuff", GetRemainingDurationSeconds(), 1, _spell, unit, _akali,
                     buffVariables: variables);
             _slowTargets.Add(unit);
         }
@@ -181,7 +181,7 @@ public class AkaliSmokeBomb : ISpellScript {
         }
 
         foreach (var unit in _slowTargets.ToList()) {
-            RemoveBuff(unit, "AkaliTwilightShroudDebuff");
+            RemoveBuff(unit, "AkaliWDebuff");
         }
 
         _slowTargets.Clear();
