@@ -23,6 +23,7 @@ internal class runeprison : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _ryze = ownerSpell.CastInfo.Owner;
         SetStatus(unit, StatusFlags.Rooted, true);
+        unit.StopMovement();
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
