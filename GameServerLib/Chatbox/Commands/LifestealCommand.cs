@@ -25,7 +25,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             }
             else if (float.TryParse(split[1], out var Lifesteal))
             {
-                _playerManager.GetPeerInfo(userId).Champion.Stats.LifeSteal.FlatBonus += Lifesteal;
+                _playerManager.GetPeerInfo(userId).Champion.Stats.LifeSteal.FlatBonus += Lifesteal / 100f;
             }
         }
     }
