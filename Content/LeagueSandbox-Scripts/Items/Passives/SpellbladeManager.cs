@@ -82,7 +82,6 @@ public static class SpellbladeManager
         }
 
         return owner.HasBuff("Sheen")
-            || owner.HasBuff("TrinityForce")
             || owner.HasBuff("LichBane")
             || owner.HasBuff("ItemFrozenFist")
             || owner.HasBuff("IcebornGauntletProc");

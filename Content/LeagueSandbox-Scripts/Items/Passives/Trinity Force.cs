@@ -45,7 +45,7 @@ public class ItemID_3078 : IItemScript {
         var variables = new BuffVariables();
         variables.Set("sourceItemId", ItemId);
         variables.Set("damageAmount", _owner.Stats.AttackDamage.BaseValue * 2f);
-        AddBuff("TrinityForce", 10f, 1, spell, _owner, _owner, buffVariables: variables);
+        AddBuff("Sheen", 10f, 1, spell, _owner, _owner, buffVariables: variables);
     }
 
     private void OnHit(DamageData data) {
