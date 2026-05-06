@@ -42,7 +42,7 @@ internal class VayneTumble : IBuffGameScript {
         _vayne = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
         _buff  = buff;
-        
+        SealSpellSlot(_vayne, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
         if (_vayne.HasBuff("VayneInquisition")) {
             _vayne.SetAnimStates(new Dictionary<string, string> {
                 { "Idle1", "Idle_TumbleUlt" },
@@ -123,5 +123,6 @@ internal class VayneTumble : IBuffGameScript {
             _vayne.ResetAutoAttackSpell();
         }
         ApiEventManager.RemoveAllListenersForOwner(this);
+        SealSpellSlot(_vayne, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);
     }
 }

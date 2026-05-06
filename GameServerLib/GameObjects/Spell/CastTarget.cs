@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 {
@@ -19,7 +20,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (isAutoAttack)
             {
                 // TODO: Implement Dodge and Miss
-                if (isNextAutoCrit)
+                if (isNextAutoCrit && unit is not LaneTurret)
                 {
                     return HitResult.HIT_Critical;
                 }

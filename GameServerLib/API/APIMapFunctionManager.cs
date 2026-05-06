@@ -66,9 +66,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="nexusRadius"></param>
         /// <param name="sightRange"></param>
         /// <returns></returns>
-        public static Nexus CreateNexus(string name, string model, Vector2 position, TeamId team, int nexusRadius, int sightRange, Stats stats = null)
+        public static Nexus CreateNexus(string name, string model, Vector2 position, TeamId team, int nexusRadius, int sightRange, Stats stats = null, int nexusPathfindingRadius = 0)
         {
-            return new Nexus(_game, model, team, nexusRadius, position, sightRange, stats, Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
+            return new Nexus(_game, model, team, nexusRadius, position, sightRange, stats, Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000, nexusPathfindingRadius);
         }
  
         /// <summary>

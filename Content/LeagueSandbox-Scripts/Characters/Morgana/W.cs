@@ -25,8 +25,8 @@ public class TormentedSoil : ISpellScript {
 
     private readonly List<ActiveZone> _activeZones = new();
     private          ObjAIBase        _morgana;
-    private const float     MaxTickTime  = 500f;
-    private const short     MaxTickCount = 10;
+    private const float     MaxTickTime  = 1000f;
+    private const short     MaxTickCount = 5;
 
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts   = true

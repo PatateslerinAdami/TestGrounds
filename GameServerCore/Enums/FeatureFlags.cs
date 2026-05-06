@@ -12,6 +12,7 @@ namespace GameServerCore.Enums
         None,
         EnableCooldowns = 1 << 1,
         EnableManaCosts = 1 << 2,
-        EnableLaneMinions = 1 << 3
+        EnableLaneMinions = 1 << 3,
+        EnableDeathTimer = 1 << 4
     }
 }

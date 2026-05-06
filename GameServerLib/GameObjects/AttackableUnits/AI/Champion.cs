@@ -23,6 +23,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     {
         private float _championHitFlagTimer;
         private static ILog _logger = LoggerProvider.GetLogger();
+
+        // Champions use the client's fast A* mode (mTravelFactor=2.5, hint multiplier=6.0).
+        // Mirrors the client default for `Actor_Common`-derived entities that don't override
+        // `m_UseSlowerButMoreAccurateSearch` (S1 actor_client.cpp:4109 sets default 0 = fast).
+        // Only `obj_AI_Minion` (= our `Minion`/`Pet` subclasses) overrides to slow-accurate.
+        public override bool UsesFastPath => true;
         /// <summary>
         /// Player number ordered by the config file.
         /// </summary>
@@ -222,12 +228,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell LevelUpSpell(byte slot, bool spendSkillPoint) {
             if (spendSkillPoint && SkillPoints == 0) return null;
 
-            var spell = base.LevelUpSpell(slot);
+            var spell = Spells[slot];
             if (spell == null) return null;
 
+            spell.LevelUp();
+            
             if (spell.CastInfo.SpellLevel == 1) {
                 Stats.SetSpellEnabled(slot, true);
             }
+
+            ApiEventManager.OnLevelUpSpell.Publish(spell);
 
             if (spendSkillPoint) {
                 SkillPoints--;
@@ -338,7 +348,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool OnDisconnect()
         {
             this.StopMovement();
-            this.SetWaypoints(_game.Map.PathingHandler.GetPath(Position, GetRespawnPosition(), PathfindingRadius));
+            this.SetWaypoints(_game.Map.PathingHandler.GetPath(Position, GetRespawnPosition(), PathfindingRadius, UsesFastPath));
             this.UpdateMoveOrder(OrderType.MoveTo, true);
 
             return true;
@@ -427,7 +437,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override void Die(DeathData data)
         {
             IsDead = true;
-            RespawnTimer = _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f;
+            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
+                ? _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f
+                : 100.0f;
             ChampStats.Deaths++;
 
             _game.ObjectManager.StopTargeting(this);

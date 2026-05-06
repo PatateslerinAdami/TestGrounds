@@ -39,7 +39,7 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
             { "idle1",   "Idle1c"   }
         });
 
-        ApiEventManager.OnHitUnit.AddListener(this, ownerSpell.CastInfo.Owner, TargetExecute);
+        ApiEventManager.OnHitUnit.AddListener(this, ownerSpell.CastInfo.Owner, OnHit);
         _activate = AddParticleTarget(_irelia, _irelia, "irelia_hitenStyle_activate", _irelia,
                                       bone: "BUFFBONE_GLB_WEAPON_1");
         _activeGlow = AddParticleTarget(_irelia, _irelia, "irelia_hitenStyle_active_glow", _irelia,
@@ -60,15 +60,15 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
         AddBuff("IreliaHitenStyle", 999999f, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner, true);
     }
 
-    public void TargetExecute(DamageData data) {
+    private void OnHit(DamageData data) {
         if (data.Attacker != _irelia || !data.IsAutoAttack || data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK)
             return;
 
         var wSpell = _irelia.GetSpell("IreliaHitenStyle").CastInfo.SpellLevel;
         _dmg  = 15 + 15 * (wSpell - 1);
-        _heal = 3  + 3  * (wSpell - 1);
+        _heal = (3  + 3  * (wSpell - 1)) * 2;
 
-        _irelia.Stats.CurrentHealth += _heal;
+        _irelia.TakeHeal(_irelia, _heal, HealType.SelfHeal);
         data.Target.TakeDamage(_irelia, _dmg, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_PROC,
                                DamageResultType.RESULT_NORMAL);
     }

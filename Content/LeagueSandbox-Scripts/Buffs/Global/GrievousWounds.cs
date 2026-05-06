@@ -12,8 +12,8 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class GrievousWounds : IBuffGameScript {
-    private const float HealMultiplier = 0.4f;
-    private Particle _grievousWoundsOverheadParticle;
+    private const float HealMultiplier = 0.6f;
+    private Particle _grievousWoundsoverHeadParticle;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
@@ -23,18 +23,18 @@ internal class GrievousWounds : IBuffGameScript {
     public StatsModifier StatsModifier { get; }
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        ApiEventManager.OnReceiveHeal.AddListener(this, unit, OnTakeHeal);
-        _grievousWoundsOverheadParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_grievousWound_tar", unit,
+        ApiEventManager.OnReceiveHeal.AddListener(this, unit, OnReceiveHeal);
+        _grievousWoundsoverHeadParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_grievousWound_tar", unit,
             buff.Duration,             bone: "C_BUFFBONE_GLB_OVERHEAD_LOC");
     }
 
-    private void OnTakeHeal(HealData healData) {
+    private void OnReceiveHeal(HealData healData) {
         if (healData.HealAmount <= 0.0f) return;
         healData.HealAmount *= HealMultiplier;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         ApiEventManager.RemoveAllListenersForOwner(this);
-        RemoveParticle(_grievousWoundsOverheadParticle);
+        RemoveParticle(_grievousWoundsoverHeadParticle);
     }
 }

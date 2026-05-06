@@ -58,24 +58,42 @@ namespace LeagueSandbox.GameServer
             var data = JObject.Parse(json);
 
             var gameInfo = data.SelectToken("gameInfo");
-            SetGameFeatures(FeatureFlags.EnableCooldowns, (bool)gameInfo.SelectToken("COOLDOWNS_ENABLED"));
-            SetGameFeatures(FeatureFlags.EnableManaCosts, (bool)gameInfo.SelectToken("MANACOSTS_ENABLED"));
-            SetGameFeatures(FeatureFlags.EnableLaneMinions, (bool)gameInfo.SelectToken("MINION_SPAWNS_ENABLED"));
+
+            // Defensive null checks
+            bool ReadBool(string key, bool defaultValue)
+            {
+                var token = gameInfo?.SelectToken(key);
+                return token != null && token.Type != JTokenType.Null
+                    ? (bool)token
+                    : defaultValue;
+            }
+            string ReadString(string key, string defaultValue)
+            {
+                var token = gameInfo?.SelectToken(key);
+                return token != null && token.Type != JTokenType.Null
+                    ? (string)token
+                    : defaultValue;
+            }
+
+            SetGameFeatures(FeatureFlags.EnableCooldowns,   ReadBool("COOLDOWNS_ENABLED",     false));
+            SetGameFeatures(FeatureFlags.EnableManaCosts,   ReadBool("MANACOSTS_ENABLED",     false));
+            SetGameFeatures(FeatureFlags.EnableLaneMinions, ReadBool("MINION_SPAWNS_ENABLED", false));
+            SetGameFeatures(FeatureFlags.EnableDeathTimer,  ReadBool("DEATH_TIMER_ENABLED",   true));
 
             // Read if chat commands are enabled
-            ChatCheatsEnabled = (bool)gameInfo.SelectToken("CHEATS_ENABLED");
+            ChatCheatsEnabled = ReadBool("CHEATS_ENABLED", true);
 
             // Read where the content is
-            ContentPath = (string)gameInfo.SelectToken("CONTENT_PATH");
+            ContentPath = ReadString("CONTENT_PATH", null);
 
             // Evaluate if content path is correct, if not try to path traversal to find it
-            if (!Directory.Exists(ContentPath))
+            if (string.IsNullOrEmpty(ContentPath) || !Directory.Exists(ContentPath))
             {
                 ContentPath = GetContentPath();
             }
 
             // Read global damage text setting
-            IsDamageTextGlobal = (bool)gameInfo.SelectToken("IS_DAMAGE_TEXT_GLOBAL");
+            IsDamageTextGlobal = ReadBool("IS_DAMAGE_TEXT_GLOBAL", false);
 
             // Read the game configuration
             var gameToken = data.SelectToken("game");

@@ -2173,7 +2173,39 @@ namespace LeagueSandbox.GameServer.API
         /// <returns></returns>
         public static List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0)
         {
-            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold);
+            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold)?.ToList();
+        }
+
+        /// <summary>
+        /// Cheap local window reachability check (A2 — S1:9069 / S4:1694). Returns true if
+        /// <paramref name="to"/> is reachable from <paramref name="unit"/>'s current position
+        /// within about ~4 cells, considering both static terrain and actor blocking. Use as a
+        /// pre engagement check in AI scripts before committing to a full <see cref="GetPath"/> —
+        /// e.g., "is this melee target reachable right now?". Returns false if path is blocked
+        /// inside the local window. For long-range reachability use <see cref="GetPath"/> and
+        /// check for null/partial result.
+        /// </summary>
+        public static bool CheckIsGetToAble(AttackableUnit unit, Vector2 to,
+            float radius = 0, float ignoreTargetRadius = 0)
+        {
+            return _game.Map.PathingHandler.CheckIsGetToAble(unit, to, radius, ignoreTargetRadius);
+        }
+
+        /// <summary>
+        /// Spiral-snap helper (A2 — S1:9686 / S4:12581). Returns the requested
+        /// <paramref name="target"/> if <paramref name="unit"/> can locally reach it, otherwise
+        /// spirals outward from <paramref name="target"/> and returns the nearest cell that's
+        /// locally reachable from the unit's position. Useful for "snap movement target to a
+        /// reachable cell" when the user/AI requested an occluded destination — actor-aware,
+        /// unlike server's plain <c>GetClosestTerrainExit</c> which only considers static terrain.
+        /// Falls back to the original <paramref name="target"/> if no reachable cell is found
+        /// within the spiral cap.
+        /// </summary>
+        public static Vector2 SetToNearestGetToAbleCell(AttackableUnit unit, Vector2 target,
+            float radius = 0, float ignoreTargetRadius = 0, float targetRadius = 0)
+        {
+            return _game.Map.PathingHandler.SetToNearestGetToAbleCell(unit, target,
+                radius, ignoreTargetRadius, targetRadius);
         }
 
         public static void OverrideUnitAttackSpeedCap(AttackableUnit unit, bool doOverrideMax,

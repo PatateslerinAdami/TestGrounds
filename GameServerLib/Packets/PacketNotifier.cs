@@ -4555,7 +4555,10 @@ namespace PacketDefinitions420
             {
                 SenderNetID = unit.NetId,
                 SyncID = Environment.TickCount,
-                Waypoints = unit.Waypoints
+                // Defensive copy because the game loop can mutate `unit.Waypoints` between packet
+                // construction and the serialization that happens inside GetBytes() -> without
+                // the snapshot the client receives an empty list and renders no path-line.
+                Waypoints = unit.Waypoints.ToList()
             };
 
             _packetHandlerManager.BroadcastPacketVision(unit, wpList.GetBytes(), Channel.CHL_S2C);
@@ -4628,7 +4631,8 @@ namespace PacketDefinitions420
                 SyncID = Environment.TickCount,
                 // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
                 WaypointSpeedParams = speeds,
-                Waypoints = u.Waypoints
+                // Defensive copy -> same reasoning as `NotifyWaypointList` above.
+                Waypoints = u.Waypoints.ToList()
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);

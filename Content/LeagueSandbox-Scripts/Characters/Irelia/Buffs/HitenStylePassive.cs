@@ -39,7 +39,7 @@ public class IreliaHitenStyle : IBuffGameScript {
             { "idle1",   "Idle1b"   },
             { "run",     "Runb"     }
         });
-        ApiEventManager.OnHitUnit.AddListener(this, _irelia, Heal);
+        ApiEventManager.OnHitUnit.AddListener(this, _irelia, OnHit);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
@@ -57,10 +57,10 @@ public class IreliaHitenStyle : IBuffGameScript {
                           lifetime: 0.25f);*/
     }
 
-    private void Heal(DamageData data) {
+    private void OnHit(DamageData data) {
         var wSpell = _irelia.GetSpell("IreliaHitenStyle").CastInfo.SpellLevel;
         _heal = 3 + 3 * (wSpell - 1);
 
-        _irelia.Stats.CurrentHealth += _heal;
+        _irelia.TakeHeal(_irelia, _heal, HealType.SelfHeal);
     }
 }

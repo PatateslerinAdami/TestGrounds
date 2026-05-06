@@ -43,7 +43,6 @@ internal class TrundleTrollSmash : IBuffGameScript {
 
         // Hook damage and hit events to apply bonus damage and splash behavior.
         ApiEventManager.OnHitUnit.AddListener(this, _trundle, OnHit);
-        ApiEventManager.OnPreAttack.AddListener(this, _trundle, OnPreAttack);
     }
 
     public void OnUpdate(float diff) {
@@ -55,9 +54,6 @@ internal class TrundleTrollSmash : IBuffGameScript {
         ApiEventManager.RemoveAllListenersForOwner(this);
         ownerSpell.SetCooldown(ownerSpell.CastInfo.Cooldown, false);
         SealSpellSlot(_trundle, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);
-    }
-
-    private void OnPreAttack(Spell spell) {
     }
 
     private void OnHit(DamageData data) {

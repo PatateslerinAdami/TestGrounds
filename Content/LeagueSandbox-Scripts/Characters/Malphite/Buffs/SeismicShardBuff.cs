@@ -30,7 +30,7 @@ internal class SeismicShardBuff : IBuffGameScript {
         var slowPercentage = 0.14f + 0.03f * (ownerSpell.CastInfo.SpellLevel - 1);
         var stolenMovespeed      = _malphite.Stats.MoveSpeed.Total * slowPercentage;
         
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
+        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration);
         ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= slowPercentage;
