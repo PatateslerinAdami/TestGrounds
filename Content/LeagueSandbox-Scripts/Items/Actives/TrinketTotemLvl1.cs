@@ -46,11 +46,11 @@ public class TrinketTotemLvl1 : ISpellScript {
         _ward.Stats.ManaPoints.BaseValue = duration;
         _ward.Stats.CurrentMana          = duration;
         AddParticle(owner, _ward, "TrinketOrbLvl1Audio", _ward.Position);
-        if (owner.HasBuff("YellowTrinketTracker")) {
-            var buff = owner.GetBuffWithName("YellowTrinketTracker").BuffScript as YellowTrinketTracker;
+        if (owner.HasBuff("SharedWardBuff")) {
+            var buff = owner.GetBuffWithName("SharedWardBuff").BuffScript as SharedWardBuff;
             buff?.AddWard(_ward);
         } else {
-           var buff = AddBuff("YellowTrinketTracker", 25000f, 1, spell, owner, owner, true).BuffScript as YellowTrinketTracker;
+           var buff = AddBuff("SharedWardBuff", 25000f, 1, spell, owner, owner, true).BuffScript as SharedWardBuff;
            buff?.AddWard(_ward);
         }
     }
