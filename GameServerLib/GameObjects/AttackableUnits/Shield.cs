@@ -51,5 +51,30 @@ namespace GameServerLib.GameObjects.AttackableUnits
         {
             return Amount <= 0;
         }
+
+        // Reduces Amount by the given value, clamped at 0. Returns
+        // the actual delta applied so the caller can mirror it in packets.
+        public float Reduce(float amount)
+        {
+            if (amount <= 0)
+            {
+                return 0;
+            }
+            float applied = amount > Amount ? Amount : amount;
+            Amount -= applied;
+            return applied;
+        }
+
+        // Increases Amount by the given value. Returns the delta
+        // applied so the caller can mirror it in packets.
+        public float Increase(float amount)
+        {
+            if (amount <= 0)
+            {
+                return 0;
+            }
+            Amount += amount;
+            return amount;
+        }
     }
 }

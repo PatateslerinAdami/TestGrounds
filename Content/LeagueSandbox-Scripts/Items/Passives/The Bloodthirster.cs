@@ -18,8 +18,10 @@ namespace ItemPassives
 
         private ObjAIBase _owner;
         private Shield _btShield;
-        private Particle _shieldParticle;
+        private Particle _shieldParticle; 
         private float _shieldAmount = 0f;
+        
+        // Reintroducem cronometrul pentru ritmul fix
         private float _decayTimer = 0f; 
 
         public void OnActivate(ObjAIBase owner)
@@ -40,10 +42,10 @@ namespace ItemPassives
             ApiEventManager.OnTakeDamage.RemoveListener(this);
             _owner.RemoveStatModifier(StatsModifier);
 
-            RemoveShieldAndVisuals(false); 
+            RemoveShieldAndBuffs(false); 
         }
 
-        private void RemoveShieldAndVisuals(bool triggerProc)
+        private void RemoveShieldAndBuffs(bool triggerProc = false)
         {
             _shieldAmount = 0f;
 
@@ -58,9 +60,13 @@ namespace ItemPassives
                 RemoveParticle(_shieldParticle);
                 _shieldParticle = null;
             }
+
+            var timerBuff = _owner.GetBuffWithName("ItemBTOverhealTimer");
+            if (timerBuff != null) timerBuff.DeactivateBuff();
             
-            var buff = _owner.GetBuffWithName("BloodthirsterDummySpell");
-            if (buff != null) buff.DeactivateBuff();
+            var decayBuff = _owner.GetBuffWithName("ItemBTOverhealDecay");
+            if (decayBuff != null) decayBuff.DeactivateBuff();
+
             if (triggerProc)
             {
                 AddParticleTarget(_owner, _owner, "Item_BTOverheal_Proc.troy", _owner, 1f, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
@@ -77,12 +83,20 @@ namespace ItemPassives
 
             if (_shieldAmount <= 0)
             {
-                RemoveShieldAndVisuals(true);
+                RemoveShieldAndBuffs(true);
                 return;
             }
 
             _btShield = new Shield(_owner, _owner, true, true, _shieldAmount);
             _owner.AddShield(_btShield);
+        }
+
+        private void EnterCombatState()
+        {
+            var decayBuff = _owner.GetBuffWithName("ItemBTOverhealDecay");
+            if (decayBuff != null) decayBuff.DeactivateBuff();
+
+            AddBuff("ItemBTOverhealTimer", 25f, 1, null, _owner, _owner);
         }
 
         private void OnHitUnit(DamageData data)
@@ -104,10 +118,13 @@ namespace ItemPassives
                     {
                         _shieldAmount = 0f;
                     }
+                    
                     _shieldAmount += overheal;
                     if (_shieldAmount > maxShield) _shieldAmount = maxShield;
+                    
                     UpdateNativeShield();
-                    AddBuff("BloodthirsterDummySpell", 25f, 1, null, _owner, _owner);
+                    EnterCombatState(); 
+
                     if (_shieldParticle == null)
                     {
                         _shieldParticle = AddParticleTarget(_owner, _owner, "Item_BTOverheal_Shield.troy", _owner, float.MaxValue, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
@@ -120,12 +137,14 @@ namespace ItemPassives
         {
             if (_shieldAmount > 0)
             {
-                AddBuff("BloodthirsterDummySpell", 25f, 1, null, _owner, _owner);
+                EnterCombatState(); 
+                
                 float absorbed = Math.Min(_shieldAmount, data.PostMitigationDamage);
                 _shieldAmount -= absorbed;
+                
                 if (_shieldAmount <= 0)
                 {
-                    RemoveShieldAndVisuals(true);
+                    RemoveShieldAndBuffs(true); 
                 }
             }
         }
@@ -136,19 +155,38 @@ namespace ItemPassives
             {
                 if (_btShield.IsConsumed())
                 {
-                    RemoveShieldAndVisuals(true);
+                    RemoveShieldAndBuffs(true);
                     return;
                 }
 
-                if (!_owner.HasBuff("BloodthirsterDummySpell"))
+                if (!_owner.HasBuff("ItemBTOverhealTimer"))
                 {
-                    _decayTimer -= diff;
-                    
-                    if (_decayTimer <= 0)
+                    if (!_owner.HasBuff("ItemBTOverhealDecay"))
                     {
-                        _shieldAmount -= 10f; 
-                        _decayTimer = 1f; 
-                        UpdateNativeShield(); 
+                        AddBuff("ItemBTOverhealDecay", float.MaxValue, 1, null, _owner, _owner);
+                    }
+                    else
+                    {
+                        // Scădem timpul trecut din cronometrul nostru
+                        _decayTimer -= diff;
+                        
+                        if (_decayTimer <= 0)
+                        {
+                            // Valoare Flat: Scădem fix 8.5 scut
+                            _shieldAmount -= 8.5f; 
+                            
+                            // Resetăm cronometrul pentru următorul "puls" la fix 250 milisecunde
+                            _decayTimer = 250f; 
+                            
+                            if (_shieldAmount <= 0)
+                            {
+                                RemoveShieldAndBuffs(true);
+                            }
+                            else
+                            {
+                                UpdateNativeShield(); 
+                            }
+                        }
                     }
                 }
             }

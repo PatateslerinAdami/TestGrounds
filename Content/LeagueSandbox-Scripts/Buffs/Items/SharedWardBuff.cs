@@ -15,13 +15,14 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class YellowTrinketTracker : IBuffGameScript {
+internal class SharedWardBuff : IBuffGameScript {
     private          ObjAIBase    _owner;
     private readonly List<Minion> _wards = [];
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
+        IsHidden = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

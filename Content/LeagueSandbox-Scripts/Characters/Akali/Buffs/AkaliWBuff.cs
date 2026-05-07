@@ -10,7 +10,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class AkaliTwilightShroudBuff : IBuffGameScript {
+internal class AkaliWBuff : IBuffGameScript {
     private const float          DecayIntervalMs = 250.0f;
     private const int            MaxDecaySteps   = 4;
     
