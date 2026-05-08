@@ -327,14 +327,21 @@ namespace LeagueSandbox.GameServer.Handlers
         /// </summary>
         public Vector2 GetAttackStandPosition(AttackableUnit attacker, AttackableUnit target, float effectiveRange)
         {
-            return GetAttackStandPosition(attacker.Position, target.Position, effectiveRange);
+            // Per-champion engagement multiplier from CharData (4.20 client per-character
+            // ChasingAttackRangePercent). ADCs typically 0.8 (lands at 80% of range), bruisers
+            // 0.5, melee carries 0.3 (close to the target). Falls back to the legacy 0.95
+            // global inset when no CharData is available (non-ObjAIBase units like turrets).
+            float inset = (attacker as ObjAIBase)?.CharData?.ChasingAttackRangePercent ?? DefaultStandInset;
+            return GetAttackStandPosition(attacker.Position, target.Position, effectiveRange, inset);
         }
 
         /// <summary>
-        /// Pure-geometry overload an exposed static so unit tests can exercise the math without
-        /// constructing AttackableUnit instances.
+        /// Pure-geometry overload exposed as a static so unit tests can exercise the math
+        /// without constructing AttackableUnit instances. <paramref name="insetMultiplier"/>
+        /// defaults to <see cref="DefaultStandInset"/> (the global 0.95 buffer); pass a smaller
+        /// value to push the stand-position deeper inside attack range.
         /// </summary>
-        public static Vector2 GetAttackStandPosition(Vector2 attackerPos, Vector2 targetPos, float effectiveRange)
+        public static Vector2 GetAttackStandPosition(Vector2 attackerPos, Vector2 targetPos, float effectiveRange, float insetMultiplier = DefaultStandInset)
         {
             Vector2 toAttacker = attackerPos - targetPos;
             float distSq = toAttacker.LengthSquared();
@@ -345,22 +352,25 @@ namespace LeagueSandbox.GameServer.Handlers
                 return attackerPos;
             }
             Vector2 dir = toAttacker / MathF.Sqrt(distSq);
-            return targetPos + dir * (effectiveRange * StandInsetMultiplier);
+            return targetPos + dir * (effectiveRange * insetMultiplier);
         }
 
         /// <summary>
-        /// Fraction of effective range used for the chase stand-position (S4:4275). Lands the
-        /// attacker definitively *inside* attack range rather than on the boundary, so per-tick
-        /// range checks can fire reliably without racing target-movement out of range.
+        /// Default fraction of effective range used by <see cref="GetAttackStandPosition"/>
+        /// when no per-character override (CharData.ChasingAttackRangePercent) is available
+        /// — non-ObjAIBase units like turrets, or unit tests. Mirrors the client's S4:4275
+        /// 0.95 multiplier.
         ///
         /// Tracking (per-frame chase smoothing in <see cref="AttackableUnit.UpdateTracking"/>)
-        /// MUST use the same multiplier when overriding the path's last waypoint — otherwise
-        /// the orbit point would sit exactly on the range boundary and produce an attack/chase
-        /// jitter loop: AI tick sees in-range -> tries to AA -> StopMovement -> ClearTracking ->
-        /// target drifts a hair -> AI tick sees out-of-range -> repath -> tracking pulls back
-        /// onto the boundary -> repeat.
+        /// MUST use the same effective inset (per-champion or this default) when overriding
+        /// the path's last waypoint — otherwise the orbit point would sit at a different
+        /// distance than the path destination, producing an attack/chase jitter loop:
+        /// AI tick sees in-range -> tries to AA -> StopMovement -> ClearTracking -> target
+        /// drifts a hair -> AI tick sees out-of-range -> repath -> tracking pulls back onto
+        /// boundary -> repeat. Two-tier hysteresis (TargetInAttackRange vs
+        /// TargetInCancelAttackRange in 4.20 Hero.lua) is the proper structural fix.
         /// </summary>
-        public const float StandInsetMultiplier = 0.95f;
+        public const float DefaultStandInset = 0.95f;
 
         /// <summary>
         /// Local-window reachability check (A2 — S1:9069 / S4:1694). Returns true if <paramref name="to"/>

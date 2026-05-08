@@ -36,6 +36,18 @@ namespace LeagueSandbox.GameServer.Content
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
+
+        // Tight engagement-range multiplier used by the chase logic. The chaser must close
+        // to <c>AttackRange * ChasingAttackRangePercent</c> before AA fires. Together with
+        // the wider Cancel range (<c>AttackRange + ar_StopAttackRangeModifier</c>) this gives
+        // the trigger/hold hysteresis of the 4.20 client. Per-champion: ADCs typically 0.8,
+        // bruisers 0.5, melee carries (Vi/XinZhao) 0.3. Default 1.0 = no inset (legacy).
+        public float ChasingAttackRangePercent { get; private set; } = 1.0f;
+
+        // Cooldown in seconds after a finished AA before move orders that aren't a continuation
+        // of the AA chain are accepted. Zero by default (most champs); a few special-cased
+        // characters use it to prevent stutter cancel bypassing their windup.
+        public float PostAttackMoveDelay { get; private set; } = 0.0f;
         public float BaseAttackProbability { get; private set; } = 0.5f;
         public float BaseDamage { get; private set; } = 10.0f;
         public float BaseHp { get; private set; } = 100.0f;
@@ -113,6 +125,8 @@ namespace LeagueSandbox.GameServer.Content
             AttackRange = file.GetFloat("Data", "AttackRange", AttackRange);
             AttackSpeedPerLevel = file.GetFloat("Data", "AttackSpeedPerLevel", AttackSpeedPerLevel);
             AttackTotalTime = file.GetFloat("Data", "AttackTotalTime", AttackTotalTime);
+            ChasingAttackRangePercent = file.GetFloat("Data", "ChasingAttackRangePercent", ChasingAttackRangePercent);
+            PostAttackMoveDelay = file.GetFloat("Data", "PostAttackMoveDelay", PostAttackMoveDelay);
 
             BaseAttackProbability = file.GetFloat("Data", "BaseAttack_Probability", BaseAttackProbability);
             BaseDamage = file.GetFloat("Data", "BaseDamage", BaseDamage);

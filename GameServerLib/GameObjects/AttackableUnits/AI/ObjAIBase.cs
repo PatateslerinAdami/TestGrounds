@@ -3,6 +3,7 @@ using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeaguePackets.Game;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
@@ -115,6 +116,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public bool IsAttacking { get; private set; }
         public bool IsAutoAttackOverridden { get; private set; }
+
+        // Hysteresis state for the chase/AA range checks. Once the target enters the tight
+        // trigger range (idealRange * ChasingAttackRangePercent), the unit is "engaged" and
+        // keeps attacking until the target leaves the wider cancel range
+        // (idealRange + StopAttackRangeModifier). Reset on target swap. Mirrors the
+        // TargetInAttackRange / TargetInCancelAttackRange split from Hero.lua / Aggro.lua.
+        private bool _engagedWithTarget;
+
+        // Countdown after a fired auto-attack during which player-issued move orders are
+        // ignored. Mirrors the per-character PostAttackMoveDelay from CharData (4.20 client
+        // CharData::mPostAttackMoveDelay). Most champions use 0 (free stutter step), a few
+        // special-cased characters use a positive value to prevent stutter cancel from
+        // bypassing their windup. AI-driven repaths still go through (CanChangeWaypoints
+        // doesn't check this) so chasing keeps working — only the human input is gated.
+        private float _postAttackMoveDelayRemainingMs;
+
+        // Last-known-location chase state. When TargetUnit is lost via fog or stealth (not
+        // death) the unit doesn't fully drop the chase — it walks toward where the target
+        // was last visible and re-acquires it without a player click if the target reappears
+        // within visibility. Mirrors AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION + GetLostTargetIfVisible
+        // from Hero.lua (functions 0_3 OnTargetLost and 0_16 TimerDistanceScan). Both fields
+        // are cleared by any new player-issued target/move order, by reaching the last-known
+        // position without re-acquire, or by the target dying.
+        public AttackableUnit LostTarget { get; private set; }
+        private Vector2 _lostTargetLastPosition;
+
+        // Mirrors the client's "[General]AutoAcquireTarget" game option. When true the unit
+        // scans for nearby enemies on idle/movement-stop and engages a soft attack without a
+        // player click. Default true matches the client default; the player toggles via the
+        // game-options checkbox and the client pushes packet 0x47 (C2S_UpdateGameOptions),
+        // handled in HandleAutoAttackOption -> Champion.AutoAcquireTargetEnabled. Minions and
+        // other non-player AI keep the default true.
+        public bool AutoAcquireTargetEnabled { get; set; } = true;
         /// <summary>
         /// Spell this unit will cast when in range of its target.
         /// Overrides auto attack spell casting.
@@ -458,6 +492,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || !Status.HasFlag(StatusFlags.CanMove))
                 return false;
 
+            // PostAttackMoveDelay window: a fired auto-attack arms a per-character cooldown
+            // during which player move orders are rejected (prevents stutter cancel bypassing
+            // windup). Unit's own AI repaths still go through CanChangeWaypoints, which
+            // doesn't check this — so chase keeps working.
+            if (_postAttackMoveDelayRemainingMs > 0f)
+                return false;
+
             return true;
         }
         /// <summary>
@@ -620,6 +661,124 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 HasMadeInitialAttack = false;
             }
             if (reset || fullCancel) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+        }
+
+        /// <summary>
+        /// Reason-based cancel — mirrors the 4.20 client's AutoAttackStopReason / Lua
+        /// STOPREASON_* values. Three behavioural tiers:
+        ///
+        ///   * <see cref="AutoAttackStopReason.Moving"/> /
+        ///     <see cref="AutoAttackStopReason.OtherFinishAnim"/>: soft. Damage that's
+        ///     already been dispatched stays out, the cooldown keeps running, but the
+        ///     attack-state flags drop and the client gets a stop-attack notification.
+        ///     Equivalent to the legacy <c>CancelAutoAttack(reset: false, fullCancel: true)</c>.
+        ///
+        ///   * <see cref="AutoAttackStopReason.AttackDelayed"/>: interrupt + re-arm. Cooldown
+        ///     is reset (so a freshly-overridden auto-attack can fire immediately) and the
+        ///     spell cast is rolled back, but <c>IsAttacking</c> stays so the swap is
+        ///     visually fluid. Equivalent to legacy <c>CancelAutoAttack(reset: true, fullCancel: false)</c>.
+        ///     Used by AA-override paths (buffs replacing auto-attacks at runtime).
+        ///
+        ///   * <see cref="AutoAttackStopReason.TargetLost"/> /
+        ///     <see cref="AutoAttackStopReason.OtherImmediately"/>: hard kill. Windup
+        ///     dies, cooldown reset, all state cleared. Equivalent to legacy
+        ///     <c>CancelAutoAttack(reset: true, fullCancel: true)</c>.
+        /// </summary>
+        public void CancelAutoAttack(AutoAttackStopReason reason)
+        {
+            switch (reason)
+            {
+                case AutoAttackStopReason.Moving:
+                case AutoAttackStopReason.OtherFinishAnim:
+                    CancelAutoAttack(reset: false, fullCancel: true);
+                    break;
+
+                case AutoAttackStopReason.AttackDelayed:
+                    CancelAutoAttack(reset: true, fullCancel: false);
+                    break;
+
+                case AutoAttackStopReason.TargetLost:
+                case AutoAttackStopReason.OtherImmediately:
+                default:
+                    CancelAutoAttack(reset: true, fullCancel: true);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Called by Spell when an auto-attack actually fires (damage dispatched). Arms the
+        /// PostAttackMoveDelay window: for the next CharData.PostAttackMoveDelay seconds
+        /// player-issued move orders are rejected, preventing stutter cancel from bypassing
+        /// windup on champions with non-zero values. Default 0 (most champs) makes this a
+        /// no-op. AI-driven repaths and the unit's own waypoint mutation are unaffected.
+        /// </summary>
+        public void NotifyAutoAttackFired()
+        {
+            if (CharData == null || CharData.PostAttackMoveDelay <= 0f)
+            {
+                return;
+            }
+            _postAttackMoveDelayRemainingMs = CharData.PostAttackMoveDelay * 1000f;
+        }
+
+        /// <summary>
+        /// Records a target as "lost via fog/stealth" — chase continues toward the last-known
+        /// position and the target is auto-re-acquired if it becomes visible again before any
+        /// other player order. Mirrors the second argument of OnTargetLost(LOST_VISIBILITY, target)
+        /// in Hero.lua.
+        /// </summary>
+        public void SetLostTarget(AttackableUnit lost)
+        {
+            if (lost == null || lost.IsDead)
+            {
+                LostTarget = null;
+                return;
+            }
+            LostTarget = lost;
+            _lostTargetLastPosition = lost.Position;
+        }
+
+        /// <summary>
+        /// Drops any pending last-known-location chase. Called from any new player order
+        /// (Stop, MoveTo, AttackTo on a different target, AttackMove) — mirrors how Lua's
+        /// OnOrder transitions out of AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION on any new state.
+        /// </summary>
+        public void ClearLostTarget()
+        {
+            LostTarget = null;
+        }
+
+        /// <summary>
+        /// Scans the closest visible+targetable enemy unit within <see cref="Stats.AcquisitionRange"/>.
+        /// Used by the auto-acquire-on-stop branch in <see cref="UpdateTarget"/> when the
+        /// unit is idle and <see cref="AutoAcquireTargetEnabled"/> is on. Includes a
+        /// visibility check (<see cref="AttackableUnit.IsVisibleByTeam"/>) so the AI doesn't
+        /// snap onto fog/stealthed enemies — matches Lua's <c>CanSeeMe(target)</c> gate at
+        /// Hero.lua function 0_16.
+        /// </summary>
+        private AttackableUnit FindAutoAcquireTarget()
+        {
+            float range = Stats.AcquisitionRange.Total;
+            float bestDistSq = range * range;
+            AttackableUnit best = null;
+
+            foreach (var kv in _game.ObjectManager.GetObjects())
+            {
+                if (kv.Value is not AttackableUnit u) continue;
+                if (u == this) continue;
+                if (u.IsDead || u.IsToRemove()) continue;
+                if (u.Team == Team) continue;
+                if (!u.Status.HasFlag(StatusFlags.Targetable)) continue;
+                if (!u.IsVisibleByTeam(Team)) continue;
+
+                float dSq = Vector2.DistanceSquared(Position, u.Position);
+                if (dSq > bestDistSq) continue;
+
+                bestDistSq = dSq;
+                best = u;
+            }
+
+            return best;
         }
 
         /// <summary>
@@ -851,7 +1010,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (MoveOrder == OrderType.AttackTo && targetPos != Vector2.Zero)
             {
-                if (Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange)
+                // Two-tier range hysteresis matching the 4.20 Hero.lua / Aggro.lua flow:
+                //   - Tight trigger: must close to (idealRange * ChasingAttackRangePercent)
+                //     before AA fires. Per-champion (ADCs 0.8, melee 0.3-0.5).
+                //   - Loose hold: keep attacking until target moves beyond
+                //     (idealRange + ar_StopAttackRangeModifier).
+                //   - Between trigger and cancel: keep current state (no AA start, no chase).
+                // Without this hysteresis the boundary at idealRange would oscillate as the
+                // target jitters by sub-cell amounts, producing the "stutter cast then cancel"
+                // loop visible on Trundle Q etc.
+                float chasingPct = CharData?.ChasingAttackRangePercent ?? 1.0f;
+                float triggerRange = idealRange * chasingPct;
+                float cancelRange = idealRange + GlobalData.AttackRangeVariables.StopAttackRangeModifier;
+                float distSq = Vector2.DistanceSquared(Position, targetPos);
+
+                if (distSq <= triggerRange * triggerRange)
+                {
+                    _engagedWithTarget = true;
+                }
+                else if (distSq > cancelRange * cancelRange)
+                {
+                    _engagedWithTarget = false;
+                }
+                // else: in the hysteresis band — leave _engagedWithTarget unchanged.
+
+                if (_engagedWithTarget)
                 {
                     bool isReadyToAttack = CanAttack() &&
                        _autoAttackCurrentCooldown <= 0 &&
@@ -876,6 +1059,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // BaronMinionAI.lua / Aggro.lua / Pet AIs) uses to approach a target. Without
                     // this, ranged units overshoot their attack range while approaching, and
                     // multiple attackers cluster on the target's exact position.
+                    //
+                    // The instance overload of GetAttackStandPosition picks up
+                    // CharData.ChasingAttackRangePercent automatically — so the path destination
+                    // matches the trigger threshold above, not the legacy global 0.95 inset.
                     Vector2 pathDestination = TargetUnit != null
                         ? _game.Map.PathingHandler.GetAttackStandPosition(this, TargetUnit, idealRange)
                         : targetPos;
@@ -893,17 +1080,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     {
                         SetWaypoints(newWaypoints);
                         // Activate per-frame chase smoothing: between AI-tick repaths,
-                        // UpdateTracking drags the last waypoint toward a point idealRange in
-                        // front of the target — no new A* search per frame, just a smooth
-                        // arc onto the moving target instead of straight-line snapping.
-                        //
-                        // Orbit radius MUST match the inset used by GetAttackStandPosition above,
-                        // otherwise the orbit point sits exactly on the attack-range boundary
-                        // and the AA range check oscillates: in-range fires AA -> StopMovement
-                        // clears tracking -> target drifts a hair -> next tick sees out-of-range
-                        // -> repath/SetTracking pulls back onto boundary -> repeat. With the
-                        // same 0.95x inset, the orbit lands well inside range so AA fires stably.
-                        SetTracking(TargetUnit, idealRange * Handlers.PathingHandler.StandInsetMultiplier);
+                        // UpdateTracking drags the last waypoint toward a point idealRange *
+                        // ChasingAttackRangePercent in front of the target — same inset as
+                        // GetAttackStandPosition used above. Without matching insets, the
+                        // orbit point would sit at a different distance than the path
+                        // destination and pull the unit back onto the trigger boundary,
+                        // producing the AA stutter loop. (The two-tier hysteresis below is
+                        // the structural fix; matching insets is the per-tick consistency.)
+                        float chaseInset = CharData?.ChasingAttackRangePercent ?? Handlers.PathingHandler.DefaultStandInset;
+                        SetTracking(TargetUnit, idealRange * chaseInset);
                     }
                 }
             }
@@ -1298,7 +1483,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // AA-override path: a buff/effect just installed a new AA spell, and the
+                // caller wants the next attack to fire on a fresh cooldown. AttackDelayed
+                // matches that semantic — cooldown reset, but IsAttacking isn't yanked, so
+                // the swap is visually fluid.
+                CancelAutoAttack(AutoAttackStopReason.AttackDelayed);
             }
         }
 
@@ -1325,7 +1514,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = true;
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // AA-override path: a buff/effect just installed a new AA spell, and the
+                // caller wants the next attack to fire on a fresh cooldown. AttackDelayed
+                // matches that semantic — cooldown reset, but IsAttacking isn't yanked, so
+                // the swap is visually fluid.
+                CancelAutoAttack(AutoAttackStopReason.AttackDelayed);
             }
 
             return AutoAttackSpell;
@@ -1369,7 +1562,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = true;
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // AA-override path: a buff/effect just installed a new AA spell, and the
+                // caller wants the next attack to fire on a fresh cooldown. AttackDelayed
+                // matches that semantic — cooldown reset, but IsAttacking isn't yanked, so
+                // the swap is visually fluid.
+                CancelAutoAttack(AutoAttackStopReason.AttackDelayed);
             }
 
             return AutoAttackSpell;
@@ -1414,7 +1611,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = true;
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // AA-override path: a buff/effect just installed a new AA spell, and the
+                // caller wants the next attack to fire on a fresh cooldown. AttackDelayed
+                // matches that semantic — cooldown reset, but IsAttacking isn't yanked, so
+                // the swap is visually fluid.
+                CancelAutoAttack(AutoAttackStopReason.AttackDelayed);
             }
 
             return AutoAttackSpell;
@@ -1666,7 +1867,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Sets this AI's current target unit. This relates to both auto attacks as well as general spell targeting.
         /// </summary>
         /// <param name="target">Unit to target.</param>
-        public void SetTargetUnit(AttackableUnit target, bool networked = false)
+        public void SetTargetUnit(AttackableUnit target, bool networked = false, bool keepLostTarget = false)
         {
             if (TargetUnit == target)
             {
@@ -1679,6 +1880,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             TargetUnit = target;
+            // Target swap or loss invalidates the engagement-range hysteresis — the next
+            // chase decision must re-cross the tight trigger threshold to engage.
+            _engagedWithTarget = false;
+            // Default: any explicit SetTargetUnit drops the last-known-location chase (the
+            // player picked something new, or the AI re-acquired). UpdateTarget passes
+            // keepLostTarget=true when it is itself transitioning the unit *into* the
+            // last-known chase (target lost to fog).
+            if (!keepLostTarget)
+            {
+                LostTarget = null;
+            }
 
             if (networked)
             {
@@ -1783,6 +1995,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override void Update(float diff)
         {
             if (delayedSpellPackets.Count > 0) invisSent = true;
+            if (_postAttackMoveDelayRemainingMs > 0f)
+            {
+                _postAttackMoveDelayRemainingMs = Math.Max(0f, _postAttackMoveDelayRemainingMs - diff);
+            }
             base.Update(diff);
             try
             {
@@ -1921,38 +2137,173 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 if (TargetUnit != null)
                 {
-                    CancelAutoAttack(true, true);
+                    CancelAutoAttack(AutoAttackStopReason.OtherImmediately);
                     SetTargetUnit(null, true);
                 }
+                ClearLostTarget();
                 return;
             }
-            else if (TargetUnit == null)
+
+            // Last-known-location pre-check (mirrors Hero.lua TimerDistanceScan branch
+            // for AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION at function 0_16). If a target was
+            // lost to fog/stealth, we keep watching it: once it dies, drop the hunt; once
+            // it becomes visible+targetable again, re-acquire it as TargetUnit without
+            // requiring a new player click.
+            if (LostTarget != null)
             {
-                if ((IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp) || HasMadeInitialAttack)
+                if (LostTarget.IsDead || LostTarget.IsToRemove())
                 {
-                    CancelAutoAttack(!HasAutoAttacked, true);
+                    ClearLostTarget();
                 }
-            }
-            else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
-            {
-                // If the attack already connected (e.g. HasAutoAttacked), let the animation
-                // finish instead of cancelling it mid-animation.
-                if (IsAttacking && !HasAutoAttacked)
+                else if (LostTarget.IsVisibleByTeam(Team) && LostTarget.Status.HasFlag(StatusFlags.Targetable))
                 {
-                    CancelAutoAttack(true, true);
+                    // SetTargetUnit clears LostTarget by default (keepLostTarget=false).
+                    SetTargetUnit(LostTarget, true);
+                }
+                // else: still hidden — fall through to the chase logic below, which will
+                // path the unit toward _lostTargetLastPosition.
+            }
+
+            // Lua-style LastAutoAttackFinished gate: an AA whose damage has already been
+            // dispatched (HasAutoAttacked) but whose recovery animation is still running
+            // (state != READY) gets to finish naturally before we touch the target. Mirrors
+            // Hero.lua TimerCheckAttack's "if LastAutoAttackFinished() == false then return"
+            // wait. Without this, a Stop order or target loss issued during recovery cuts
+            // the wind-down animation short. Cheap, safe — recovery completes within a few
+            // frames, the next UpdateTarget tick picks up where we left off.
+            bool aaRecoveryPending = IsAttacking
+                && HasAutoAttacked
+                && AutoAttackSpell != null
+                && AutoAttackSpell.State != SpellState.STATE_READY;
+
+            if (TargetUnit == null)
+            {
+                if (aaRecoveryPending) return;
+
+                // Sync the IsAttacking flag once recovery has actually finished (state has
+                // gone back to READY but flag was still set from before).
+                if (IsAttacking && AutoAttackSpell.State == SpellState.STATE_READY)
+                {
+                    IsAttacking = false;
                 }
 
+                if ((IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp) || HasMadeInitialAttack)
+                {
+                    // !HasAutoAttacked => damage was never dispatched => hard cancel of the
+                    // windup. HasAutoAttacked => damage already out (animation interrupted
+                    // mid-recovery), so the chain reset alone suffices.
+                    CancelAutoAttack(HasAutoAttacked
+                        ? AutoAttackStopReason.OtherFinishAnim
+                        : AutoAttackStopReason.OtherImmediately);
+                }
+
+                // Last-known-location chase: target was lost to fog and the pre-check above
+                // didn't re-acquire (still hidden). Walk toward the last-known position; if
+                // we reach it without re-acquiring, give up the hunt.
+                if (LostTarget != null)
+                {
+                    const float ARRIVAL_THRESHOLD_SQ = 25f * 25f;
+                    if (Vector2.DistanceSquared(Position, _lostTargetLastPosition) < ARRIVAL_THRESHOLD_SQ)
+                    {
+                        ClearLostTarget();
+                        return;
+                    }
+                    var lostPath = _game.Map.PathingHandler.GetPath(this, _lostTargetLastPosition);
+                    if (lostPath != null && lostPath.Count > 1)
+                    {
+                        SetWaypoints(lostPath);
+                    }
+                    return;
+                }
+
+                // Auto-acquire-on-stop: idle/stopped unit scans for nearby visible enemies
+                // and engages a soft attack. Mirrors Hero.lua TimerDistanceScan branches at
+                // function 0_16 (AI_STANDING/IDLE and AI_MOVE+IsMovementStopped). Gated by
+                // the per-champion AutoAcquireTargetEnabled (= the client's "Auto Attack"
+                // game option, pushed via packet 0x47 / C2S_UpdateGameOptions). We avoid
+                // scanning when the player is actively attack-moving — that path has its
+                // own (broader) acquire pass below.
+                if (AutoAcquireTargetEnabled
+                    && IsPathEnded()
+                    && _autoAttackCurrentCooldown <= 0f
+                    && MoveOrder != OrderType.AttackMove
+                    && MoveOrder != OrderType.AttackTo
+                    && MoveOrder != OrderType.AttackTerrainOnce
+                    && MoveOrder != OrderType.AttackTerrainSustained)
+                {
+                    var acquired = FindAutoAcquireTarget();
+                    if (acquired != null)
+                    {
+                        SetTargetUnit(acquired, true);
+                        UpdateMoveOrder(OrderType.AttackTo, true);
+                        return;
+                    }
+                }
+            }
+            else if (TargetUnit.IsDead)
+            {
+                if (aaRecoveryPending) return;
+
+                if (IsAttacking && !HasAutoAttacked)
+                {
+                    CancelAutoAttack(AutoAttackStopReason.TargetLost);
+                }
+
+                // Hard clear — death is permanent, no last-known chase.
                 SetTargetUnit(null, true);
+                return;
+            }
+            else if (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.CharData.IsUseable)
+            {
+                if (aaRecoveryPending) return;
+
+                if (IsAttacking && !HasAutoAttacked)
+                {
+                    CancelAutoAttack(AutoAttackStopReason.TargetLost);
+                }
+
+                // Useable units that go untargetable (Zhonya, etc.) — hard clear, the chase
+                // semantics differ from fog (target is right there, just immune).
+                SetTargetUnit(null, true);
+                return;
+            }
+            else if (!TargetUnit.IsVisibleByTeam(Team))
+            {
+                if (aaRecoveryPending) return;
+
+                if (IsAttacking && !HasAutoAttacked)
+                {
+                    CancelAutoAttack(AutoAttackStopReason.TargetLost);
+                }
+
+                // LOST_VISIBILITY — target is alive and targetable but slipped into fog or
+                // stealth. Switch to last-known-location chase: remember the target and its
+                // last position, drop TargetUnit but keep LostTarget so the pre-check above
+                // can re-acquire on the next UpdateTarget once the target reappears. Mirrors
+                // OnTargetLost(LOST_VISIBILITY, target) -> AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION
+                // in Hero.lua function 0_3.
+                SetLostTarget(TargetUnit);
+                SetTargetUnit(null, networked: true, keepLostTarget: true);
                 return;
             }
             else if (IsAttacking)
             {
-                float cancelBuffer = 300.0f;
+                // Mid-windup cancel buffer — sourced from the CVar so it can be tuned at the
+                // Globals.ini level (ar_ClosingAttackRangeModifier, default 300). Wider than
+                // the StopAttackRangeModifier hold range above so the in-flight AA only gets
+                // killed when the target really runs away, not on small drift.
+                float cancelBuffer = GlobalData.AttackRangeVariables.ClosingAttackRangeModifier;
                 float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius + cancelBuffer;
                 if (Vector2.Distance(TargetUnit.Position, Position) > maxCancelRange
                         && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
                 {
-                    CancelAutoAttack(!HasAutoAttacked, true);
+                    // !HasAutoAttacked => damage was never dispatched => hard cancel of the
+                    // windup. HasAutoAttacked => damage already out, soft cancel (recovery
+                    // animation gets stopped client-side via NotifyStop, but cooldown keeps
+                    // running so the next AA isn't free).
+                    CancelAutoAttack(HasAutoAttacked
+                        ? AutoAttackStopReason.OtherFinishAnim
+                        : AutoAttackStopReason.OtherImmediately);
                 }
 
                 if (AutoAttackSpell.State == SpellState.STATE_READY)
@@ -2050,7 +2401,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // TODO: Make a function which uses this method and use it for every case of target acquisition (ex minions, turrets, attackmove).
                     if (MoveOrder == OrderType.AttackMove)
                     {
-                        if (_autoAttackCurrentCooldown > 0)
+                        // Wait for the previous AA animation to finish before re-scanning.
+                        // Equivalent to Lua TimerCheckAttack's LastAutoAttackFinished() gate
+                        // (Hero.lua function 0_15). Previously this gated on
+                        // _autoAttackCurrentCooldown > 0, which is more conservative — cooldown
+                        // runs 1/AttackSpeed seconds, longer than the recovery animation, so
+                        // the champion would idle 200-400 ms longer than the client AI between
+                        // target-death and the next acquire scan. The animation-state gate
+                        // matches client cadence and feels more responsive.
+                        if (IsAttacking
+                            && AutoAttackSpell != null
+                            && AutoAttackSpell.State != SpellState.STATE_READY)
                         {
                             return;
                         }

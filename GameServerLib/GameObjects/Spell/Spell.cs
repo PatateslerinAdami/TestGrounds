@@ -310,7 +310,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     if (CastInfo.IsAutoAttack)
                     {
-                        CastInfo.Owner.CancelAutoAttack(true);
+                        // Target became invalid before the AA cast resolved — hard cancel,
+                        // damage was never dispatched.
+                        CastInfo.Owner.CancelAutoAttack(AutoAttackStopReason.TargetLost);
                         return true;
                     }
 
@@ -319,7 +321,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
 
                 // Regular auto attacks can lose their target due to untargetability and distance.
-                float cancelBuffer = 300.0f;
+                // Mid-windup cancel buffer is the same CVar the chase logic uses
+                // (ar_ClosingAttackRangeModifier, default 300) — keeps the two cancel paths
+                // consistent and tunable from a single Globals.ini value.
+                float cancelBuffer = GlobalData.AttackRangeVariables.ClosingAttackRangeModifier;
                 float maxCancelRange = CastInfo.Owner.Stats.Range.Total + spellTarget.CollisionRadius + CastInfo.Owner.CollisionRadius + cancelBuffer;
                 if (CastInfo.IsAutoAttack
                 && (spellTarget != CastInfo.Owner.TargetUnit
@@ -327,7 +332,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 || CastInfo.Owner.GetCastSpell() != null
                 || CastInfo.Owner.ChannelSpell != null))
                 {
-                    CastInfo.Owner.CancelAutoAttack(!CastInfo.Owner.HasAutoAttacked, true);
+                    // Soft if damage already dispatched (let it apply), hard otherwise.
+                    CastInfo.Owner.CancelAutoAttack(CastInfo.Owner.HasAutoAttacked
+                        ? AutoAttackStopReason.OtherFinishAnim
+                        : AutoAttackStopReason.OtherImmediately);
                     return true;
                 }
             }
@@ -335,7 +343,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 if (CastInfo.IsAutoAttack)
                 {
-                    CastInfo.Owner.CancelAutoAttack(true);
+                    // Spell-cast aborted (no live target object) — hard cancel.
+                    CastInfo.Owner.CancelAutoAttack(AutoAttackStopReason.OtherImmediately);
                     return true;
                 }
             }
@@ -1146,6 +1155,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.IsAutoAttack || CastInfo.UseAttackCastTime)
             {
                 CastInfo.Owner.HasAutoAttacked = true;
+                // Arm the per-character PostAttackMoveDelay (CharData) — prevents stutter
+                // cancel from bypassing windup on champions with non-zero values. Most use 0
+                // (no-op).
+                CastInfo.Owner.NotifyAutoAttackFired();
                 bool shouldAdvanceBasicAttackChain = CastInfo.IsAutoAttack && IsBasicAttackSlotSpell();
                 if (shouldAdvanceBasicAttackChain && !CastInfo.Owner.HasMadeInitialAttack)
                 {
