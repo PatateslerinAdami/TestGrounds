@@ -167,6 +167,11 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             c.UpdateMoveOrder(OrderType.Stop);
             c.LevelUp();
 
+            // Test dummies should stay idle until the user explicitly orders them — the
+            // default-on auto-acquire would otherwise have spawned bots immediately chase
+            // the nearest enemy.
+            c.AutoAcquireTargetEnabled = false;
+
             Game.ObjectManager.AddObject(c);
 
             ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.INFO, $"Spawned Bot {c.Name} as {c.Model} with NetID: {c.NetId}.");
