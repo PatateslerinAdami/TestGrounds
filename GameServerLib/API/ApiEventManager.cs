@@ -91,6 +91,55 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
+        // Reduces the given shield's Amount by `amount` and notifies the client so the
+        // shield-bar shrinks. If the shield drains to 0 it is removed from the unit and
+        // OnShieldBreak fires (same path as ConsumeShields). `amount` must be positive.
+        public static void ReduceShield(Shield shield, float amount)
+        {
+            if (shield == null || amount <= 0)
+            {
+                return;
+            }
+
+            float applied = shield.Reduce(amount);
+            if (applied <= 0)
+            {
+                return;
+            }
+
+            var unit = shield.TargetUnit;
+            if (unit != null)
+            {
+                _game.PacketNotifier.NotifyModifyShield(unit, -applied, shield.Physical, shield.Magical, false);
+                if (shield.IsConsumed())
+                {
+                    unit.RemoveShield(shield);
+                }
+            }
+        }
+
+        // Increases the given shield's Amount by `amount` and notifies the client so the
+        // shield-bar grows. `amount` must be positive.
+        public static void IncShield(Shield shield, float amount)
+        {
+            if (shield == null || amount <= 0)
+            {
+                return;
+            }
+
+            float applied = shield.Increase(amount);
+            if (applied <= 0)
+            {
+                return;
+            }
+
+            var unit = shield.TargetUnit;
+            if (unit != null)
+            {
+                _game.PacketNotifier.NotifyModifyShield(unit, applied, shield.Physical, shield.Magical, false);
+            }
+        }
+
         // Unused
         public static Dispatcher<AttackableUnit, AttackableUnit> OnAddPAR
             = new Dispatcher<AttackableUnit, AttackableUnit>();

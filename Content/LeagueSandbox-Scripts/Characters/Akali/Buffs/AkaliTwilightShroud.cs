@@ -11,7 +11,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class AkaliTwilightShroud : IBuffGameScript {
+public class AkaliWStealth : IBuffGameScript {
     private ObjAIBase _akali;
     private Fade      _id;
     private Particle  _p1, _p2;
