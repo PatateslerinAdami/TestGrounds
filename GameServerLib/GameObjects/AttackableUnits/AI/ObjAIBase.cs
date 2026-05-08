@@ -144,11 +144,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         // Mirrors the client's "[General]AutoAcquireTarget" game option. When true the unit
         // scans for nearby enemies on idle/movement-stop and engages a soft attack without a
-        // player click. Default true matches the client default; the player toggles via the
-        // game-options checkbox and the client pushes packet 0x47 (C2S_UpdateGameOptions),
-        // handled in HandleAutoAttackOption -> Champion.AutoAcquireTargetEnabled. Minions and
-        // other non-player AI keep the default true.
-        public bool AutoAcquireTargetEnabled { get; set; } = true;
+        // player click. Default false for all units. The client pushes packet 0x47
+        // (C2S_UpdateGameOptions, handled in HandleAutoAttackOption) when the player ticks
+        // the checkbox, which flips this on per-champion. Minions and other non-player AI
+        // stay off; their target acquisition runs through dedicated AI scripts (Minion.lua,
+        // LaneMinionAI, etc.), not this idle-scan path.
+        public bool AutoAcquireTargetEnabled { get; set; } = false;
+
+        // Mirrors the 4.20 client's command-issue throttle (m_lastCommandSentTime in the
+        // CommandQueue). Rapid MoveTo / AttackTo / AttackMove / Use inputs that arrive
+        // faster than MoveOrderThrottleMs apart are dropped server-side. Without this,
+        // each click produces a fresh WaypointGroup broadcast → client receives many
+        // path-tangent changes per second → model facing oscillates faster than the
+        // turn animation can settle, giving the "jitter" the player sees while spam-
+        // clicking. Stop / Hold / PetHard* are not throttle, they need to register
+        // immediately. AttackTerrain* also pass through, identical reasoning to AttackTo.
+        public float LastMoveOrderTimeMs { get; set; }
+        public const float MoveOrderThrottleMs = 75f;
         /// <summary>
         /// Spell this unit will cast when in range of its target.
         /// Overrides auto attack spell casting.
@@ -1871,6 +1883,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (TargetUnit == target)
             {
+                // Even on a no-op (target == current), honor the LostTarget reset so callers
+                // that defensively pass null while TargetUnit is already null still cancel the
+                // last-known-location chase. Without this, HandleMove's trailing
+                // SetTargetUnit(null) for a player MoveTo never reaches the LostTarget = null
+                // line below and the chase logic later overwrites the player's waypoints.
+                if (!keepLostTarget && LostTarget != null)
+                {
+                    LostTarget = null;
+                }
                 return;
             }
             bool wasTargetingChampion = TargetUnit is Champion;
@@ -2142,6 +2163,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 ClearLostTarget();
                 return;
+            }
+
+            // Player override: any non-attack movement order cancels the last-known-location
+            // hunt. Mirrors the client's AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION semantics
+            // where MoveTo/Stop/Hold replaces the chase, while AttackTo/AttackMove preserves
+            // it. Without this, the chase block below would re-route the player's manually
+            // issued waypoints back toward _lostTargetLastPosition on every UpdateTarget tick.
+            if (LostTarget != null
+                && MoveOrder != OrderType.AttackTo
+                && MoveOrder != OrderType.AttackMove)
+            {
+                ClearLostTarget();
             }
 
             // Last-known-location pre-check (mirrors Hero.lua TimerDistanceScan branch

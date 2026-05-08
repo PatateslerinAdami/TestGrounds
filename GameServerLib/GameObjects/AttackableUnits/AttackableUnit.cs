@@ -1327,6 +1327,43 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             SetStatus(StatusFlags.None, true);
         }
 
+        // TEMP DEBUG: dumps full champion / AI state for the "stuck after AA kill"
+        // investigation. Remove once the bug is pinpointed and fixed.
+        public void DumpStuckDiagnosis(string trigger)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"[STUCK-DIAG/{trigger}] {Model} NetID={NetId}");
+            sb.AppendLine($"  IsDead={IsDead}");
+            sb.AppendLine($"  Status={Status} (raw=0x{(uint)Status:X})");
+            sb.AppendLine($"  buffEnable={_buffEffectsToEnable} buffDisable={_buffEffectsToDisable} dashDisable={_dashEffectsToDisable}");
+            sb.AppendLine($"  MovementParameters={(MovementParameters != null ? "SET" : "null")}");
+            sb.AppendLine($"  Waypoints.Count={Waypoints.Count} CurrentWaypointKey={CurrentWaypointKey} IsPathEnded={IsPathEnded()}");
+
+            if (this is ObjAIBase ai)
+            {
+                sb.AppendLine($"  IsAttacking={ai.IsAttacking} HasAutoAttacked={ai.HasAutoAttacked} HasMadeInitialAttack={ai.HasMadeInitialAttack}");
+                var aaSpell = ai.AutoAttackSpell;
+                sb.AppendLine($"  AutoAttackSpell={aaSpell?.SpellName ?? "null"} State={aaSpell?.State.ToString() ?? "null"} CantCancelWindup={aaSpell?.SpellData?.CantCancelWhileWindingUp.ToString() ?? "n/a"}");
+                sb.AppendLine($"  _castingSpell={ai.GetCastSpell()?.SpellName ?? "null"}");
+                sb.AppendLine($"  ChannelSpell={ai.ChannelSpell?.SpellName ?? "null"}");
+                sb.AppendLine($"  TargetUnit={ai.TargetUnit?.Model ?? "null"} TargetUnit.IsDead={ai.TargetUnit?.IsDead.ToString() ?? "n/a"}");
+                sb.AppendLine($"  LostTarget={ai.LostTarget?.Model ?? "null"}");
+                sb.AppendLine($"  MoveOrder={ai.MoveOrder} IgnoreMoveOrders={ai.IgnoreMoveOrders}");
+                sb.AppendLine($"  CanMove={ai.CanMove()} CanCast={ai.CanCast()} CanIssueMoveOrders={ai.CanIssueMoveOrders()} CanAttack={ai.CanAttack()}");
+            }
+
+            sb.Append("  Buffs=[");
+            for (int i = 0; i < BuffList.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                var b = BuffList[i];
+                sb.Append($"{b.Name}(en=0x{(uint)b.StatusEffectsToEnable:X},dis=0x{(uint)b.StatusEffectsToDisable:X})");
+            }
+            sb.Append("]");
+
+            _logger.Info(sb.ToString());
+        }
+
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>

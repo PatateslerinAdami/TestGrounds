@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -29,6 +30,13 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             var champion = peerInfo.Champion;
+            // TEMP DEBUG: log when a player movement order is rejected by the gate.
+            // This is the "stuck after AA kill" trigger — captures the exact state at
+            // rejection time so we can see which gate failed.
+            if (champion.MovementParameters != null || !champion.CanIssueMoveOrders())
+            {
+                champion.DumpStuckDiagnosis($"HandleMove-rejected/{req.OrderType}");
+            }
             if (champion.MovementParameters == null && champion.CanIssueMoveOrders())
             {
                 var nav = _game.Map.NavigationGrid;
@@ -47,6 +55,18 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             return false;
                         }
+
+                        // Mirror of the 4.20 client's command-issue throttle. We drop rapid
+                        // MoveTo/AttackTo/AttackMove inputs that arrive within the throttle
+                        // window. Without this, spam-clicking generates a WaypointGroup per
+                        // tick and the client model's facing oscillates faster than the turn
+                        // animation can settle. Stop/Hold/Pet* are intentionally outside this
+                        // gate so they register immediately.
+                        if (_game.GameTime - champion.LastMoveOrderTimeMs < ObjAIBase.MoveOrderThrottleMs)
+                        {
+                            return true;
+                        }
+                        champion.LastMoveOrderTimeMs = _game.GameTime;
 
 
                         if (u != null)

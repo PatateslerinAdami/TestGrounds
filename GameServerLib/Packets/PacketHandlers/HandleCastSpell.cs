@@ -40,6 +40,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             };
             var ownerCastingSpell = owner.GetCastSpell();
 
+            // TEMP DEBUG: log when a spell cast is rejected by CanCast. Captures state
+            // at rejection time so we can see which gate failed (used together with
+            // HandleMove's diag for the "stuck after AA kill" investigation).
+            if (s != null && !owner.CanCast(s))
+            {
+                owner.DumpStuckDiagnosis($"HandleCastSpell-rejected/slot={req.Slot}/{s.SpellName}");
+            }
+
             // Instant cast spells can be cast during other spell casts.
             if (s != null && owner.CanCast(s)
                 && (ownerCastingSpell == null
