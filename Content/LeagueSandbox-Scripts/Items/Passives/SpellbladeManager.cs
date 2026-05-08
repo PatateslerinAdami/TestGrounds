@@ -219,6 +219,7 @@ public static class SpellbladeManager
         return owner.Spells.ContainsKey(spellSlot) ? owner.Spells[spellSlot] : null;
     }
 
+    private static void Prune(ObjAIBase owner, List<int> order)
     {
         order.RemoveAll(itemId => !OwnerHasItem(owner, itemId));
     }
