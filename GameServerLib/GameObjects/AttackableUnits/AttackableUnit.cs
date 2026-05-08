@@ -1308,6 +1308,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             SetStatus(StatusFlags.None, true);
         }
 
+        // Re-aggregates StatusEffectsToEnable/Disable across all buffs and commits
+        // the result to the unit's Status word. Mirrors the client's BuffMgr::AddBuff
+        // semantics where flag changes are visible synchronously instead of waiting
+        // until the next UpdateBuffs tick (~33 ms). Called from AddBuff/RemoveBuff so
+        // CC like Stun/Silence applies in the same tick the buff is added.
+        private void RefreshBuffStatusEffects()
+        {
+            StatusFlags enable = StatusFlags.None;
+            StatusFlags disable = StatusFlags.None;
+            for (int i = 0; i < BuffList.Count; i++)
+            {
+                enable  |= BuffList[i].StatusEffectsToEnable;
+                disable |= BuffList[i].StatusEffectsToDisable;
+            }
+            _buffEffectsToEnable = enable;
+            _buffEffectsToDisable = disable & ~enable;
+            SetStatus(StatusFlags.None, true);
+        }
+
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>
@@ -2213,6 +2232,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         }
                     }
                 }
+                RefreshBuffStatusEffects();
                 return true;
             }
             return false;
@@ -2350,6 +2370,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 RemoveBuffSlot(b);
 
                 if (!b.IsHidden) _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
+                RefreshBuffStatusEffects();
                 return;
             }
 
@@ -2536,6 +2557,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
                 }
             }
+
+            RefreshBuffStatusEffects();
         }
 
         /// <summary>
