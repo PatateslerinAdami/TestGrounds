@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Numerics;
 using System.Activities.Presentation.View;
+using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -180,10 +182,25 @@ namespace LeagueSandbox.GameServer.Handlers
                 }
 
                 var nearest = GetNearestObjects(obj);
+                bool selfGhosted = obj is AttackableUnit selfUnit && selfUnit.Status.HasFlag(StatusFlags.Ghosted);
                 foreach (var obj2 in nearest)
                 {
                     // TODO: Implement interpolation (or hull tracing) to account for fast moving gameobjects that may go past other gameobjects within one tick, which bypasses collision.
-                    if (obj != obj2 && !obj2.IsToRemove() && obj.IsCollidingWith(obj2))
+                    if (obj == obj2 || obj2.IsToRemove()) continue;
+
+                    // Mirror the client's mIgnoreCollisions short-circuit (S1:9131): a unit with
+                    // StatusFlags.Ghosted ignores all unit-vs-unit collision in both directions.
+                    // Spell missile / sector / region collisions are filtered downstream in the
+                    // respective OnCollision overrides — only gate the AttackableUnit-vs-
+                    // AttackableUnit pair here so AOE / projectile hits still apply to ghosted
+                    // units.
+                    if (obj2 is AttackableUnit otherUnit
+                        && (selfGhosted || otherUnit.Status.HasFlag(StatusFlags.Ghosted)))
+                    {
+                        continue;
+                    }
+
+                    if (obj.IsCollidingWith(obj2))
                     {
                         obj.OnCollision(obj2);
                     }
