@@ -113,7 +113,7 @@ namespace Spells
             var ad = _katarina.Stats.AttackDamage.FlatBonus * mainSpell.SpellData.Coefficient2 / 10;
             var knifeDamage = 30 + 20 * (mainSpell.CastInfo.SpellLevel - 1) + ad + ap;
 
-            AddBuff("GrievousWounds", 3.0f, 1, spell, target, _katarina);
+            AddBuff("GrievousWound", 3.0f, 1, spell, target, _katarina);
             switch (_katarina.SkinID)
             {
                 case 9:

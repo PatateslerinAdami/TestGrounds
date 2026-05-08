@@ -11,7 +11,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class GrievousWounds : IBuffGameScript {
+internal class GrievousWound : IBuffGameScript {
     private const float HealMultiplier = 0.6f;
     private Particle _grievousWoundsoverHeadParticle;
 
