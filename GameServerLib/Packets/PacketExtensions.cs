@@ -42,6 +42,16 @@ namespace PacketDefinitions420
             return new CompressedWaypoint((short)cw.X, (short)cw.Y);
         }
 
+        // Wire-format compression scale used by the client when packing waypoints into S2C
+        // packets: world coordinates are centered on the map midpoint and divided by this scale,
+        // then truncated to int16. Verified at S4 NavigationHelper::CompressX/Z (offset 0x76fd50)
+        // — the client picks 1.0 or 2.0 based on a global (DAT_013c8da0 in the decomp), set by
+        // NavigationHelper::SetMinMaxPos depending on the loaded map. SR/HA/Map11 use 2.0 (the
+        // case we're hard-coding here). If a future map ever ships with scale 1.0, change this
+        // constant — without it the wire format diverges from what the client expects and
+        // movement deserializes to the wrong world coordinates.
+        private const float WireCompressionScale = 2f;
+
         /// <summary>
         /// Converts the given Vector2 back into a Vector2 with an origin at the bottom left corner of the map.
         /// </summary>
@@ -50,9 +60,8 @@ namespace PacketDefinitions420
         /// <returns>Vector2 with origin at the center of the map.</returns>
         public static Vector2 TranslateFromCenteredCoordinates(Vector2 vector, NavigationGrid grid)
         {
-            // For unk reason coordinates are translated to 0,0 as a map center, so we gotta get back the original
-            // mapSize contains the real center point coordinates, meaning width/2, height/2
-            return new Vector2(2 * vector.X + grid.MiddleOfMap.X, 2 * vector.Y + grid.MiddleOfMap.Y);
+            return new Vector2(WireCompressionScale * vector.X + grid.MiddleOfMap.X,
+                               WireCompressionScale * vector.Y + grid.MiddleOfMap.Y);
         }
 
         /// <summary>
@@ -63,9 +72,8 @@ namespace PacketDefinitions420
         /// <returns>Vector2 with origin at the center of the map.</returns>
         public static Vector2 TranslateToCenteredCoordinates(Vector2 vector, NavigationGrid grid)
         {
-            // For unk reason coordinates are translated to 0,0 as a map center, so we gotta get back the original
-            // mapSize contains the real center point coordinates, meaning width/2, height/2
-            return new Vector2((vector.X - grid.MiddleOfMap.X) / 2, (vector.Y - grid.MiddleOfMap.Y) / 2);
+            return new Vector2((vector.X - grid.MiddleOfMap.X) / WireCompressionScale,
+                               (vector.Y - grid.MiddleOfMap.Y) / WireCompressionScale);
         }
 
         /// <summary>

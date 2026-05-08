@@ -85,7 +85,12 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             int goodCellSessionId = br.ReadInt32();
             float refHintWeight = br.ReadSingle();
             short arrivalDirection = br.ReadInt16();
-            NavigationGridCellFlags flags = (NavigationGridCellFlags)br.ReadUInt16();
+            // Mask out 0x80 (OTHER_DIRECTION_END_TO_START): it's the client's runtime
+            // bidirectional-A* tag and not a valid persisted map flag, but Riot occasionally
+            // dumped scratch state into the file. Keeping it would let HasFlag(...) checks
+            // produce nonsense. We track the runtime equivalent on LastTouchByBackward.
+            NavigationGridCellFlags flags = (NavigationGridCellFlags)
+                (br.ReadUInt16() & ~(ushort)NavigationGridCellFlags.OTHER_DIRECTION_END_TO_START);
             short[] refHintNode = new short[] { br.ReadInt16(), br.ReadInt16() };
 
             return new NavigationGridCell()

@@ -892,6 +892,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     if (newWaypoints != null && newWaypoints.Count > 1)
                     {
                         SetWaypoints(newWaypoints);
+                        // Activate per-frame chase smoothing: between AI-tick repaths,
+                        // UpdateTracking drags the last waypoint toward a point idealRange in
+                        // front of the target — no new A* search per frame, just a smooth
+                        // arc onto the moving target instead of straight-line snapping.
+                        //
+                        // Orbit radius MUST match the inset used by GetAttackStandPosition above,
+                        // otherwise the orbit point sits exactly on the attack-range boundary
+                        // and the AA range check oscillates: in-range fires AA -> StopMovement
+                        // clears tracking -> target drifts a hair -> next tick sees out-of-range
+                        // -> repath/SetTracking pulls back onto boundary -> repeat. With the
+                        // same 0.95x inset, the orbit lands well inside range so AA fires stably.
+                        SetTracking(TargetUnit, idealRange * Handlers.PathingHandler.StandInsetMultiplier);
                     }
                 }
             }

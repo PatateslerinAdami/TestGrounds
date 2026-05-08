@@ -14,13 +14,38 @@ namespace LeagueSandbox.GameServer.Handlers
     /// </summary>
     public class PathingHandler
     {
+        // Polling interval — safety net for path invalidations not covered by the
+        // OnDynamicBlockerChanged event (e.g. PathfindingRadius changes from buffs).
+        // Can be aggressive because UpdatePaths early-exits on a clean ValidateLineOfSight,
+        // so a poll over an unblocked path is just N cheap CastCircle checks.
+        private const float PathUpdateIntervalMs = 500f;
+
         private MapScriptHandler _map;
         private readonly List<AttackableUnit> _pathfinders = new List<AttackableUnit>();
         private float pathUpdateTimer;
 
+        // Cells whose walkability changed since the last tick. Filled by the
+        // OnDynamicBlockerChanged event handler; on the next tick the loop only revalidates
+        // pathfinders whose path bounding box overlaps these cells (instead of every
+        // pathfinder), which keeps the cost proportional to the change rather than to the
+        // total pathfinder count.
+        private readonly HashSet<int> _dirtyCells = new HashSet<int>();
+
         public PathingHandler(MapScriptHandler map)
         {
             _map = map;
+            // Subscribe so dynamic blocker add/remove events drive immediate re-validation
+            // instead of waiting for the next 500ms poll. Anivia walls / Trundle pillars /
+            // turret respawns invalidate paths within one tick of their world change.
+            _map.NavigationGrid.OnDynamicBlockerChanged += OnBlockerCellsChanged;
+        }
+
+        private void OnBlockerCellsChanged(IReadOnlyList<int> changedCells)
+        {
+            for (int i = 0; i < changedCells.Count; i++)
+            {
+                _dirtyCells.Add(changedCells[i]);
+            }
         }
 
         /// <summary>
@@ -47,20 +72,112 @@ namespace LeagueSandbox.GameServer.Handlers
         /// </summary>
         public void Update(float diff)
         {
-            // TODO: Verify if this is the proper time between path updates.
-            if (pathUpdateTimer >= 3000.0f)
+            pathUpdateTimer += diff;
+            bool intervalElapsed = pathUpdateTimer >= PathUpdateIntervalMs;
+            bool hasDirty = _dirtyCells.Count > 0;
+
+            if (!intervalElapsed && !hasDirty)
             {
-                // we iterate over a copy of _pathfinders because the original gets modified
-                var objectsCopy = new List<AttackableUnit>(_pathfinders);
+                return;
+            }
+
+            // Defensive copy — UpdatePaths can mutate _pathfinders (e.g. via OnRemoved
+            // reactions that deregister a unit).
+            var objectsCopy = new List<AttackableUnit>(_pathfinders);
+
+            if (intervalElapsed)
+            {
+                // Poll tick: walk every pathfinder. Catches invalidations not surfaced by
+                // OnDynamicBlockerChanged (PathfindingRadius changes etc.). UpdatePaths
+                // early-exits cheaply when ValidateLineOfSight is clean, so this is fine.
                 foreach (var obj in objectsCopy)
                 {
                     UpdatePaths(obj);
                 }
-
                 pathUpdateTimer = 0;
+                _dirtyCells.Clear();
+            }
+            else
+            {
+                // Event tick: only revalidate pathfinders whose path bounding box overlaps
+                // the dirty area. The vast majority of paths are not crossing the affected
+                // cells and are skipped without even touching their waypoints.
+                ComputeDirtyCellsBoundingBox(out short cxMin, out short cyMin, out short cxMax, out short cyMax);
+                foreach (var obj in objectsCopy)
+                {
+                    if (PathBoundingBoxIntersectsDirtyArea(obj, cxMin, cyMin, cxMax, cyMax))
+                    {
+                        UpdatePaths(obj);
+                    }
+                }
+                _dirtyCells.Clear();
+            }
+        }
+
+        // Bounding box of all dirty cells in grid coordinates. Caller must ensure
+        // _dirtyCells.Count > 0 before calling.
+        private void ComputeDirtyCellsBoundingBox(out short cxMin, out short cyMin, out short cxMax, out short cyMax)
+        {
+            cxMin = short.MaxValue;
+            cyMin = short.MaxValue;
+            cxMax = short.MinValue;
+            cyMax = short.MinValue;
+
+            var cells = _map.NavigationGrid.Cells;
+            foreach (var id in _dirtyCells)
+            {
+                if ((uint)id >= (uint)cells.Length)
+                {
+                    continue;
+                }
+                var loc = cells[id].Locator;
+                if (loc.X < cxMin) cxMin = loc.X;
+                if (loc.X > cxMax) cxMax = loc.X;
+                if (loc.Y < cyMin) cyMin = loc.Y;
+                if (loc.Y > cyMax) cyMax = loc.Y;
+            }
+        }
+
+        // Conservative pre-filter: does the unit's remaining path bounding box overlap
+        // the dirty area (expanded by PathfindingRadius)? False positives are harmless
+        // (UpdatePaths just runs an extra cheap walkability pass and returns); false
+        // negatives would miss a needed re-route, so we err on the permissive side.
+        private bool PathBoundingBoxIntersectsDirtyArea(AttackableUnit obj, short cxMin, short cyMin, short cxMax, short cyMax)
+        {
+            if (obj.IsPathEnded())
+            {
+                return false;
             }
 
-            pathUpdateTimer += diff;
+            var nav = _map.NavigationGrid;
+            float radiusInCells = obj.PathfindingRadius / nav.CellSize;
+            int rExpand = (int)Math.Ceiling(radiusInCells);
+
+            short cxMinExp = (short)(cxMin - rExpand);
+            short cxMaxExp = (short)(cxMax + rExpand);
+            short cyMinExp = (short)(cyMin - rExpand);
+            short cyMaxExp = (short)(cyMax + rExpand);
+
+            // Build the path bounding box from current position + remaining waypoints,
+            // all in cell coordinates.
+            var posNav = nav.TranslateToNavGrid(obj.Position);
+            short pcxMin = (short)posNav.X, pcxMax = pcxMin;
+            short pcyMin = (short)posNav.Y, pcyMax = pcyMin;
+
+            var path = obj.Waypoints;
+            for (int i = obj.CurrentWaypointKey; i < path.Count; i++)
+            {
+                var wpNav = nav.TranslateToNavGrid(path[i]);
+                short wcx = (short)wpNav.X;
+                short wcy = (short)wpNav.Y;
+                if (wcx < pcxMin) pcxMin = wcx;
+                if (wcx > pcxMax) pcxMax = wcx;
+                if (wcy < pcyMin) pcyMin = wcy;
+                if (wcy > pcyMax) pcyMax = wcy;
+            }
+
+            return pcxMax >= cxMinExp && pcxMin <= cxMaxExp
+                && pcyMax >= cyMinExp && pcyMin <= cyMaxExp;
         }
 
         /// <summary>
@@ -69,14 +186,18 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <param name="obj">GameObject to check for incorrect paths.</param>
         public void UpdatePaths(AttackableUnit obj)
         {
-            var path = obj.Waypoints;
-            if (path.Count == 0)
+            // Bug fix: without this early return, the CurrentWaypoint access further down
+            // can crash with IndexOutOfRange once a unit has finished its path
+            // (CurrentWaypointKey >= Waypoints.Count). IsPathEnded() covers both the
+            // path.Count==0 case and the consumed-path case.
+            if (obj.IsPathEnded())
             {
                 return;
             }
 
+            var path = obj.Waypoints;
             var lastWaypoint = path[path.Count - 1];
-            if (obj.CurrentWaypoint.Equals(lastWaypoint) && lastWaypoint.Equals(obj.Position))
+            if (lastWaypoint.Equals(obj.Position))
             {
                 return;
             }
@@ -94,19 +215,27 @@ namespace LeagueSandbox.GameServer.Handlers
             var newPath = new NavigationPath(path.Count);
             newPath.AddWaypoint(obj.Position);
 
-            foreach (Vector2 waypoint in path)
+            // Bug fix: previously the foreach iterated over *all* waypoints, including ones
+            // the unit had already consumed. SetWaypoints resets CurrentWaypointKey to 1,
+            // which would have made the unit walk back to already-traversed waypoints.
+            // Now we only iterate from the current index forward, so the new path picks up
+            // exactly where the old one left off.
+            for (int i = obj.CurrentWaypointKey; i < path.Count; i++)
             {
-                if (IsWalkable(waypoint, obj.PathfindingRadius))
-                {
-                    newPath.AddWaypoint(waypoint);
-                }
-                else
+                if (!IsWalkable(path[i], obj.PathfindingRadius))
                 {
                     break;
                 }
+                newPath.AddWaypoint(path[i]);
             }
 
-            obj.SetWaypoints(newPath);
+            // If nothing walkable remains (the very next waypoint is blocked), don't apply
+            // the new path — that would just leave the unit standing still. OnCollision push
+            // handles the local dodging; the next UpdatePaths tick will retry.
+            if (newPath.Count > 1)
+            {
+                obj.SetWaypoints(newPath);
+            }
         }
 
         /// <summary>
@@ -216,9 +345,22 @@ namespace LeagueSandbox.GameServer.Handlers
                 return attackerPos;
             }
             Vector2 dir = toAttacker / MathF.Sqrt(distSq);
-            const float STAND_INSET = 0.95f;
-            return targetPos + dir * (effectiveRange * STAND_INSET);
+            return targetPos + dir * (effectiveRange * StandInsetMultiplier);
         }
+
+        /// <summary>
+        /// Fraction of effective range used for the chase stand-position (S4:4275). Lands the
+        /// attacker definitively *inside* attack range rather than on the boundary, so per-tick
+        /// range checks can fire reliably without racing target-movement out of range.
+        ///
+        /// Tracking (per-frame chase smoothing in <see cref="AttackableUnit.UpdateTracking"/>)
+        /// MUST use the same multiplier when overriding the path's last waypoint — otherwise
+        /// the orbit point would sit exactly on the range boundary and produce an attack/chase
+        /// jitter loop: AI tick sees in-range -> tries to AA -> StopMovement -> ClearTracking ->
+        /// target drifts a hair -> AI tick sees out-of-range -> repath -> tracking pulls back
+        /// onto the boundary -> repeat.
+        /// </summary>
+        public const float StandInsetMultiplier = 0.95f;
 
         /// <summary>
         /// Local-window reachability check (A2 — S1:9069 / S4:1694). Returns true if <paramref name="to"/>

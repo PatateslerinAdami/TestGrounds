@@ -129,6 +129,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Vector2 _stuckLastCheckPos = Vector2.Zero;
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
+
+        /// <summary>
+        /// Active tracking target. When non-null, UpdateTracking() drags the path's last
+        /// waypoint toward a position OrbitRadius units in front of the target every frame —
+        /// matches Movement_UpdateTracking from the 4.20 client and smooths chase movement
+        /// between the coarser AI-tick repaths.
+        /// </summary>
+        public AttackableUnit TrackingTarget { get; private set; }
+        public float OrbitRadius { get; private set; }
+        // Last orbit waypoint we actually pushed to the network. Without this throttle every
+        // sub-cell wiggle of the target would fire a WaypointGroup packet — at 60Hz that's
+        // up to 60 packets/sec per chasing unit. Resync only when the orbit point has moved
+        // by ~1 cell width, server-side path stays accurate either way.
+        private Vector2 _lastSentTrackingWaypoint;
+        private const float TrackingResyncDistanceSq = 25f * 25f; // 25 world units ≈ 1 cell
+
+        // Smoothed orbit direction. Instead of snapping each frame to the ideal direction
+        // (target -> self), the vector exp-lerps toward it — when the target moves
+        // tangentially the direction lags slightly, and the chaser carves a soft arc rather
+        // than constantly correcting onto a straight line. Mirrors the orbitDir smoothing
+        // from Movement_UpdateTracking in the 4.20 client.
+        private Vector2 _smoothedOrbitDir;
+        private bool    _orbitDirInitialized;
+        // Turn rate of the orbit vector in 1/seconds. 8.0 ≈ ~63% convergence per 0.125 s,
+        // ≈ ~95% per 0.375 s. Lower = wider arc / more sluggish; higher = tighter tracking
+        // with less arc. 8 lands close to the LoL champion feel.
+        private const float OrbitTurnRate = 8.0f;
+
         private bool _isInGrass = false;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
@@ -430,6 +458,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             if (CanMove())
             {
+                // Tracking: drag the last waypoint toward the chase target before Move() so
+                // the unit moves toward the up-to-date orbit point this tick instead of a
+                // stale one. Dashes (MovementParameters != null) are excluded — they have
+                // their own follow logic in DashMove and shouldn't be overridden via
+                // waypoint mutation.
+                if (MovementParameters == null)
+                {
+                    UpdateTracking(diff);
+                }
+
                 float remainingFrameTime = diff;
                 bool moved = false;
                 if (MovementParameters != null)
@@ -536,6 +574,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             base.Sync(userId, team, visible, forceSpawn);
             IconInfo.Sync(userId, visible, forceSpawn);
+        }
+
+        // PathingHandler lifecycle hookup. Without this registration _pathfinders stays
+        // empty forever and the UpdatePaths tick is a no-op. The CanMoveEver filter excludes
+        // static buildings (LaneTurret etc.) that by definition can never move — registering
+        // them would just burn cycles in the periodic re-validation tick for nothing.
+        public override void OnAdded()
+        {
+            base.OnAdded();
+            if (Status.HasFlag(StatusFlags.CanMoveEver))
+            {
+                _game.Map.PathingHandler.AddPathfinder(this);
+            }
+        }
+
+        public override void OnRemoved()
+        {
+            _game.Map.PathingHandler.RemovePathfinder(this);
+            base.OnRemoved();
         }
 
         protected override void OnSync(int userId, TeamId team)
@@ -1700,6 +1757,130 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
+        /// Enables continuous chase tracking: every frame the path's last waypoint is dragged
+        /// toward a position <paramref name="orbitRadius"/> world units in front of the target.
+        /// Caller is expected to have already set a path toward the target via SetWaypoints —
+        /// SetTracking only adds the per-frame smoothing between AI-tick repaths.
+        /// </summary>
+        public void SetTracking(AttackableUnit target, float orbitRadius)
+        {
+            TrackingTarget = target;
+            OrbitRadius = Math.Max(0f, orbitRadius);
+            _lastSentTrackingWaypoint = target?.Position ?? Vector2.Zero;
+            // First UpdateTracking call snaps to the ideal direction directly — without this,
+            // the chaser would visibly arc onto the line instead of pointing at the target
+            // immediately. The soft arc only kicks in once the target moves off that line.
+            _orbitDirInitialized = false;
+        }
+
+        public void ClearTracking()
+        {
+            TrackingTarget = null;
+            OrbitRadius = 0f;
+            _orbitDirInitialized = false;
+        }
+
+        /// <summary>
+        /// Per-frame update called from <see cref="Update"/> before <see cref="Move"/>. Drags
+        /// the last waypoint toward an orbit point <see cref="OrbitRadius"/> in front of the
+        /// target. Aborts when the target is gone or there's no active path; in either case
+        /// the next AI tick handles the rest. The orbit direction is smoothed via exponential
+        /// lerp so the chaser carves a gentle arc rather than chasing a line that wobbles
+        /// every frame.
+        /// </summary>
+        /// <param name="deltaMs">Frame delta in ms — drives the orbit-direction smoothing.</param>
+        private void UpdateTracking(float deltaMs)
+        {
+            if (TrackingTarget == null)
+            {
+                return;
+            }
+            if (TrackingTarget.IsDead || TrackingTarget.IsToRemove())
+            {
+                ClearTracking();
+                return;
+            }
+            if (Waypoints == null || Waypoints.Count <= 1 || IsPathEnded())
+            {
+                return;
+            }
+
+            Vector2 targetPos = TrackingTarget.Position;
+            Vector2 awayFromTarget = Position - targetPos;
+            float dist = awayFromTarget.Length();
+
+            // Ideal orbit direction: from target toward chaser.
+            Vector2 desiredDir;
+            if (dist < 0.001f)
+            {
+                // Chaser sitting on top of target -> direction undefined. Keep whatever we
+                // had, fall back to X-axis to avoid producing a NaN vector.
+                desiredDir = _orbitDirInitialized ? _smoothedOrbitDir : Vector2.UnitX;
+            }
+            else
+            {
+                desiredDir = awayFromTarget / dist;
+            }
+
+            // Tickrate-independent exp-lerp:
+            //   factor = 1 - exp(-rate · dt)
+            // First frame after SetTracking snaps directly to desiredDir so the unit doesn't
+            // visibly arc onto the line; the smoothed arc kicks in when the target later
+            // breaks tangentially.
+            if (!_orbitDirInitialized)
+            {
+                _smoothedOrbitDir = desiredDir;
+                _orbitDirInitialized = true;
+            }
+            else
+            {
+                float dt = deltaMs * 0.001f;
+                float factor = 1f - (float)Math.Exp(-OrbitTurnRate * dt);
+                _smoothedOrbitDir = Vector2.Lerp(_smoothedOrbitDir, desiredDir, factor);
+                if (_smoothedOrbitDir.LengthSquared() > 0.0001f)
+                {
+                    _smoothedOrbitDir = Vector2.Normalize(_smoothedOrbitDir);
+                }
+                else
+                {
+                    // Lerp result near zero (can happen when old and desired direction are
+                    // near-antiparallel) — fall back to the current desired direction.
+                    _smoothedOrbitDir = desiredDir;
+                }
+            }
+
+            Vector2 orbitPos;
+            if (OrbitRadius <= 0f)
+            {
+                orbitPos = targetPos;
+            }
+            else
+            {
+                orbitPos = targetPos + _smoothedOrbitDir * OrbitRadius;
+            }
+
+            // If the orbit point itself isn't walkable (target standing on a dynamic blocker
+            // etc.), leave the path as-is — the next AI tick will compute a clean repath.
+            // Avoids dragging the last waypoint into a wall.
+            if (!_game.Map.NavigationGrid.IsWalkable(orbitPos, PathfindingRadius))
+            {
+                return;
+            }
+
+            int lastIdx = Waypoints.Count - 1;
+            Waypoints.Replace(lastIdx, orbitPos);
+
+            // Throttle: only flag for network sync when the orbit point has moved more than
+            // ~1 cell since the last sent update. Server-side path is always current; client
+            // gets correction packets at a sane rate instead of 60 per second per chaser.
+            if (Vector2.DistanceSquared(_lastSentTrackingWaypoint, orbitPos) >= TrackingResyncDistanceSq)
+            {
+                _movementUpdated = true;
+                _lastSentTrackingWaypoint = orbitPos;
+            }
+        }
+
+        /// <summary>
         /// Resets this unit's waypoints.
         /// </summary>
         private void ResetWaypoints()
@@ -1708,6 +1889,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             CurrentWaypointKey = 1;
 
             PathHasTrueEnd = false;
+            // No path = nothing to drag; clear tracking. The chase initiator must call
+            // SetTracking again after the next SetWaypoints if it still wants tracking.
+            ClearTracking();
         }
 
         /// <summary>
@@ -1744,6 +1928,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             CurrentWaypointKey = 1;
 
             PathHasTrueEnd = false;
+            // Default: any new path drops existing tracking. Callers that want to keep
+            // tracking on the new path (the chase logic in ObjAIBase) call SetTracking
+            // explicitly right after SetWaypoints. Makes the tracking lifecycle explicit
+            // instead of implicitly persisting across unrelated move orders.
+            ClearTracking();
 
             if (!sameAsExisting)
             {

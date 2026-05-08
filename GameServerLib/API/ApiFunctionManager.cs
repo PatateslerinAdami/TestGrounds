@@ -2405,6 +2405,36 @@ namespace LeagueSandbox.GameServer.API
             return _game.Map.NavigationGrid.GetClosestTerrainExit(location, distanceThreshold);
         }
 
+        /// <summary>
+        /// Bakes a circular pathfinding blocker into the navigation grid (e.g. Anivia wall as a
+        /// chain of circles, Jarvan flag, Trundle pillar). Cells are reference-counted so
+        /// overlapping blockers coexist correctly.
+        ///
+        /// The returned cell-id list MUST be kept and passed to
+        /// <see cref="RemoveDynamicBlocker"/> when the blocker expires — otherwise the refcount
+        /// stays elevated and those cells stay blocked forever.
+        ///
+        /// Triggers an immediate re-route of any pathfinder whose path crosses the new blocker.
+        /// </summary>
+        /// <param name="worldCenter">Center in world XZ coordinates.</param>
+        /// <param name="worldRadius">Radius in world units.</param>
+        /// <returns>List of blocked cell IDs to feed back into RemoveDynamicBlocker later.</returns>
+        public static List<int> AddDynamicBlocker(Vector2 worldCenter, float worldRadius)
+        {
+            return _game.Map.NavigationGrid.AddDynamicBlocker(worldCenter, worldRadius);
+        }
+
+        /// <summary>
+        /// Releases the cells previously blocked by <see cref="AddDynamicBlocker"/>. The list
+        /// passed in must come from the matching Add call (refcount-tracked, not raw cells).
+        ///
+        /// Triggers an immediate re-route of any pathfinder previously routed around the blocker.
+        /// </summary>
+        public static void RemoveDynamicBlocker(List<int> blockedCellIds)
+        {
+            _game.Map.NavigationGrid.RemoveDynamicBlocker(blockedCellIds);
+        }
+
         public static void UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
         {
             _game.PacketNotifier.NotifyS2C_UnitSetLookAt(attacker, attacked, attackType);

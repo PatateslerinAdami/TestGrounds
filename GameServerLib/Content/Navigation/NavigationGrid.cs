@@ -152,7 +152,11 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     }
                     for (int i = 0; i < Cells.Length; i++)
                     {
-                        Cells[i].SetFlags((NavigationGridCellFlags)br.ReadUInt16());
+                        // Mask 0x80 (OTHER_DIRECTION_END_TO_START) See the comment in
+                        // NavigationGridCell.ReadVersion5 / NavigationGridCellFlags. Runtime
+                        // A*-only bit, must not appear in persisted map flags.
+                        Cells[i].SetFlags((NavigationGridCellFlags)
+                            (br.ReadUInt16() & ~(ushort)NavigationGridCellFlags.OTHER_DIRECTION_END_TO_START));
                     }
 
                     for (int i = 0; i < RegionTags.Length; i++)
@@ -327,6 +331,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         private readonly Dictionary<int, int> _dynamicBlockers = new Dictionary<int, int>();
 
         /// <summary>
+        /// Fires when a cell's walkability actually changed because of a dynamic blocker
+        /// add/remove. Reports only the *transitions* (0->1 on Add, 1->0 on Remove) the overlapping
+        /// blockers that just bump or drop a refcount above zero do not fire, since walkability
+        /// is unchanged. Consumers (PathingHandler) use this to invalidate the paths of units
+        /// whose route crosses the affected cells, without polling.
+        /// </summary>
+        public event Action<IReadOnlyList<int>> OnDynamicBlockerChanged;
+
+        /// <summary>
         /// Bakes a circular footprint into the navgrid. Returns the list of cell IDs that were
         /// newly blocked; pass it back to <see cref="RemoveDynamicBlocker"/> when the building dies.
         /// Multiple overlapping blockers ref-count correctly.
@@ -347,6 +360,11 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             short cy1 = (short)Math.Ceiling(maxCell.Y);
 
             float r2 = worldRadius * worldRadius;
+            // Only the cells whose walkability transitions from "free" to "blocked"
+            // (refcount 0 -> 1) get reported via the event. Overlapping blockers that
+            // just bump an existing refcount don't change walkability and shouldn't
+            // wake up pathfinders.
+            List<int> newlyBlocked = null;
             for (short cx = cx0; cx <= cx1; cx++)
             {
                 for (short cy = cy0; cy <= cy1; cy++)
@@ -359,10 +377,17 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     var centerWorld = TranslateFromNavGrid(cell.Locator);
                     if (Vector2.DistanceSquared(centerWorld, worldCenter) <= r2)
                     {
-                        IncrementBlocker(cell.ID);
+                        if (IncrementBlocker(cell.ID))
+                        {
+                            (newlyBlocked ??= new List<int>()).Add(cell.ID);
+                        }
                         blocked.Add(cell.ID);
                     }
                 }
+            }
+            if (newlyBlocked != null)
+            {
+                OnDynamicBlockerChanged?.Invoke(newlyBlocked);
             }
             return blocked;
         }
@@ -377,6 +402,9 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 return;
             }
+            // Only signal cells whose refcount actually drops to zero since pure decrements
+            // don't change walkability.
+            List<int> freed = null;
             foreach (var id in blockedCellIds)
             {
                 if (_dynamicBlockers.TryGetValue(id, out int count))
@@ -384,6 +412,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     if (count <= 1)
                     {
                         _dynamicBlockers.Remove(id);
+                        (freed ??= new List<int>()).Add(id);
                     }
                     else
                     {
@@ -391,18 +420,23 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     }
                 }
             }
+            if (freed != null)
+            {
+                OnDynamicBlockerChanged?.Invoke(freed);
+            }
         }
 
-        private void IncrementBlocker(int cellId)
+        // Returns true if this call newly blocked the cell (refcount transitioned 0 -> 1),
+        // false if the cell was already blocked and we just bumped the refcount.
+        private bool IncrementBlocker(int cellId)
         {
             if (_dynamicBlockers.TryGetValue(cellId, out int count))
             {
                 _dynamicBlockers[cellId] = count + 1;
+                return false;
             }
-            else
-            {
-                _dynamicBlockers[cellId] = 1;
-            }
+            _dynamicBlockers[cellId] = 1;
+            return true;
         }
 
         // Per search counter — each GetPath bumps this. Cells with stale SearchSession are
@@ -546,17 +580,26 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 return null;
             }
-            if(cellFrom.ID == cellTo.ID)
-            {
-                return new NavigationPath(new[] { from, to });
-            }
 
             // Straight-line LOS first. if the corridor is clear, skip A* entirely.
             // This matches the client's BuildNavigationPath which always does GridLineOfSightTest2
             // before falling through to the grid pathfinder.
+            //
+            // Subtlety: this LOS check covers the same-cell case too — when cellFrom == cellTo,
+            // a clean CastCircle returns the trivial [from, to] path. The previous unconditional
+            // same-cell shortcut produced an invalid path when the cell was blocked by a dynamic
+            // blocker overlapping both points (e.g. unit knocked into a turret footprint with
+            // its target inside the same cell), since neither endpoint had been validated.
             if (!CastCircle(from, to, distanceThreshold))
             {
                 return new NavigationPath(new[] { from, to });
+            }
+            // Same-cell + corridor blocked -> A* between identical start/goal cells would just
+            // return the start cell. Caller would have to deal with that; instead we surface
+            // it as "no path" so the path consumer can pick a recovery (snap, partial, etc.).
+            if (cellFrom.ID == cellTo.ID)
+            {
+                return null;
             }
 
             // === Bidirectional A* ===
@@ -1189,30 +1232,72 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         }
 
         /// <summary>
-        /// Remove waypoints (cells) that have LOS from one to the other from path.
+        /// String-pulling smoother: drops redundant intermediate cells, keeping only the
+        /// corner points where the path actually has to bend around obstacles.
+        ///
+        /// Unlike the previous linear forward-pass this uses binary search to find the
+        /// *furthest* directly reachable cell from each anchor — same idea as the client's
+        /// Movement_PathSmooth_FindNextWaypoint. On long straight corridors that's a big
+        /// win (O(K · log N) CastCircle calls instead of O(N)); on heavily-bending paths
+        /// it's slightly more work, but the binary search also catches non-monotonic LOS
+        /// shortcuts the linear pass would miss.
         /// </summary>
-        /// <param name="path"></param>
         private void SmoothPath(List<NavigationGridCell> path, float checkDistance = 0f)
         {
-            if(path.Count < 3)
+            if (path.Count < 3)
             {
                 return;
             }
-            int j = 0;
-            // The first point remains untouched.
-            for(int i = 2; i < path.Count; i++)
+
+            var smoothed = new List<NavigationGridCell>(path.Count);
+            smoothed.Add(path[0]);
+
+            int currentIdx = 0;
+            while (currentIdx < path.Count - 1)
             {
-                // If there is something between the last added point and the current one
-                if(CastCircle(path[j].GetCenter(), path[i].GetCenter(), checkDistance, false))
+                int furthest = FindFurthestReachable(path, currentIdx, checkDistance);
+                if (furthest <= currentIdx)
                 {
-                    // add previous.
-                    path[++j] = path[i - 1];
+                    // Defensive: even the immediate neighbour isn't reachable (shouldn't
+                    // happen on valid A* output). Step forward one cell so the loop
+                    // terminates regardless; in the worst case the path stays grainy.
+                    furthest = currentIdx + 1;
+                }
+                smoothed.Add(path[furthest]);
+                currentIdx = furthest;
+            }
+
+            path.Clear();
+            path.AddRange(smoothed);
+        }
+
+        // Binary search for the largest j > from such that the line path[from] -> path[j]
+        // leaves a corridor of width radius clear of terrain. Assumes monotonic LOS — i.e.
+        // if (from, mid) is blocked then (from, mid+1), (from, mid+2)... are all blocked.
+        // For dense A* cell lists from compact maps this assumption is robust.
+        private int FindFurthestReachable(List<NavigationGridCell> path, int from, float checkRadius)
+        {
+            Vector2 fromCenter = path[from].GetCenter();
+            int lo = from + 1;
+            int hi = path.Count - 1;
+            int result = lo;
+
+            while (lo <= hi)
+            {
+                int mid = lo + ((hi - lo) >> 1);
+                if (!CastCircle(fromCenter, path[mid].GetCenter(), checkRadius, false))
+                {
+                    // Clear -> try further.
+                    result = mid;
+                    lo = mid + 1;
+                }
+                else
+                {
+                    // Blocked -> try closer.
+                    hi = mid - 1;
                 }
             }
-            // Add last.
-            path[++j] = path[path.Count - 1];
-            j++; // Remove everything after.
-            path.RemoveRange(j, path.Count - j);
+            return result;
         }
 
         /// <summary>
@@ -1503,81 +1588,85 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         }
 
         /// <summary>
-        /// Gets the height of the ground at the given position. Used purely for packets.
+        /// Bilinear interpolation of the terrain height at an arbitrary world position over the
+        /// sampled-heights grid. Ported from the 4.20 client (NavGrid::GetHeightForPosition):
+        ///   result = (1-ty) * ((1-tx)*h00 + tx*h10) + ty * ((1-tx)*h01 + tx*h11)
+        /// where tx, ty are the fractional offsets within the sample cell.
         /// </summary>
         /// <param name="location">Vector2 position to check.</param>
-        /// <returns>Height (3D Y coordinate) at the given position.</returns>
+        /// <returns>Height (3D Y coordinate) at the given position. 0 when out of bounds.</returns>
         public float GetHeightAtLocation(Vector2 location)
         {
-            // Uses SampledHeights to get the height of a given location on the Navigation Grid
-            // This is the method the game uses to get height data
-
-            if (location.X >= MinGridPosition.X && location.Y >= MinGridPosition.Z &&
-                location.X <= MaxGridPosition.X && location.Y <= MaxGridPosition.Z)
+            if (location.X < MinGridPosition.X || location.Y < MinGridPosition.Z ||
+                location.X > MaxGridPosition.X || location.Y > MaxGridPosition.Z)
             {
-                float reguestedHeightX = (location.X - MinGridPosition.X) / SampledHeightsDistance.X;
-                float requestedHeightY = (location.Y - MinGridPosition.Z) / SampledHeightsDistance.Y;
-
-                int sampledHeight1IndexX = (int)reguestedHeightX;
-                int sampledHeight1IndexY = (int)requestedHeightY;
-                int sampledHeight2IndexX;
-                int sampledHeight2IndexY;
-
-                float v13;
-                float v15;
-
-                if (reguestedHeightX >= SampledHeightsCountX - 1)
-                {
-                    v13 = 1.0f;
-                    sampledHeight2IndexX = sampledHeight1IndexX--;
-                }
-                else
-                {
-                    v13 = 0.0f;
-                    sampledHeight2IndexX = sampledHeight1IndexX + 1;
-                }
-                if (requestedHeightY >= SampledHeightsCountY - 1)
-                {
-                    v15 = 1.0f;
-                    sampledHeight2IndexY = sampledHeight1IndexY--;
-                }
-                else
-                {
-                    v15 = 0.0f;
-                    sampledHeight2IndexY = sampledHeight1IndexY + 1;
-                }
-
-                uint sampledHeightsCount = SampledHeightsCountX * SampledHeightsCountY;
-                int v1 = (int)SampledHeightsCountX * sampledHeight1IndexY;
-                int x0y0 = v1 + sampledHeight1IndexX;
-
-                if (v1 + sampledHeight1IndexX < sampledHeightsCount)
-                {
-                    int v19 = sampledHeight2IndexX + v1;
-                    if (v19 < sampledHeightsCount)
-                    {
-                        int v20 = sampledHeight2IndexY * (int)SampledHeightsCountX;
-                        int v21 = v20 + sampledHeight1IndexX;
-
-                        if (v21 < sampledHeightsCount)
-                        {
-                            int v22 = sampledHeight2IndexX + v20;
-                            if (v22 < sampledHeightsCount)
-                            {
-                                float height = ((1.0f - v13) * SampledHeights[x0y0])
-                                          + (v13 * SampledHeights[v19])
-                                          + (((SampledHeights[v21] * (1.0f - v13))
-                                          + (SampledHeights[v22] * v13)) * v15);
-
-                                return (1.0f - v15) * height;
-                            }
-                        }
-                    }
-                }
-
+                return 0.0f;
             }
 
-            return 0.0f;
+            // Position inside the sample grid (in sample-index units).
+            float fx = (location.X - MinGridPosition.X) / SampledHeightsDistance.X;
+            float fy = (location.Y - MinGridPosition.Z) / SampledHeightsDistance.Y;
+
+            int countX = (int)SampledHeightsCountX;
+            int countY = (int)SampledHeightsCountY;
+
+            int x0 = (int)fx;
+            int y0 = (int)fy;
+            int x1, y1;
+            float tx, ty;
+
+            // Bug fix: tx/ty are the fractional offsets (fx - x0, fy - y0). The previous
+            // code hardcoded them to 0.0f, which suppressed the X interpolation entirely
+            // and made the height jump in steps of one full sample cell.
+            if (x0 < countX - 1)
+            {
+                x1 = x0 + 1;
+                tx = fx - x0;
+            }
+            else
+            {
+                // Right edge: sample 1 is the second-to-last column, sample 2 the last;
+                // tx=1 so the result lands exactly on the last sample (no extrapolation).
+                x1 = x0;
+                x0 = x0 - 1;
+                tx = 1.0f;
+            }
+
+            if (y0 < countY - 1)
+            {
+                y1 = y0 + 1;
+                ty = fy - y0;
+            }
+            else
+            {
+                y1 = y0;
+                y0 = y0 - 1;
+                ty = 1.0f;
+            }
+
+            int total = countX * countY;
+            int idx00 = y0 * countX + x0;
+            int idx10 = y0 * countX + x1;
+            int idx01 = y1 * countX + x0;
+            int idx11 = y1 * countX + x1;
+            if (idx00 < 0 || idx11 >= total)
+            {
+                // Defensive bounds check — should never trigger after the in-bounds tests
+                // above, but kept as a safety net for malformed sample data.
+                return 0.0f;
+            }
+
+            float h00 = SampledHeights[idx00];
+            float h10 = SampledHeights[idx10];
+            float h01 = SampledHeights[idx01];
+            float h11 = SampledHeights[idx11];
+
+            // Bug fix: previous formula was (1-v15)*(top + v15*bottom), which expands to
+            // (1-v15)*top + (1-v15)*v15*bottom — a triangle wave in v15 instead of a
+            // linear interpolation. Correct bilinear is (1-ty)*top + ty*bottom.
+            float top    = (1.0f - tx) * h00 + tx * h10;
+            float bottom = (1.0f - tx) * h01 + tx * h11;
+            return (1.0f - ty) * top + ty * bottom;
         }
 
         /// <summary>

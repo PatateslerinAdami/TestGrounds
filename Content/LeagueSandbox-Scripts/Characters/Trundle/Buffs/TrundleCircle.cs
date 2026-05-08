@@ -28,6 +28,11 @@ public class TrundleCircle : IBuffGameScript {
     private Spell          _spell;
     private Particle       _p1, _p2;
     private float          _timerSeconds;
+    // Cells blocked in the navgrid for the pillar's footprint. Tracked so we can release
+    // exactly the cells we acquired in OnDeactivate (the navgrid refcount tracks individual
+    // cells, not raw blocker instances). Without this, the pillar would only stop units via
+    // minion body-block — pathfinding wouldn't see it and bots would route through it.
+    private List<int>      _blockedCells;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
@@ -80,6 +85,11 @@ public class TrundleCircle : IBuffGameScript {
 
         _p1 = AddParticleTarget(_trundle, unit, "Trundle_E_green",            unit, buff.Duration, enemyParticle: "Trundle_E_red");
         _p2 = AddParticleTarget(_trundle, unit, "Trundle_Base_E_PlagueBlock", unit, buff.Duration);
+
+        // Register the pillar as a static pathing obstacle. Fires OnDynamicBlockerChanged
+        // immediately, so any pathfinder whose route crosses the pillar gets re-routed
+        // within one tick instead of running into the body-block push.
+        _blockedCells = AddDynamicBlocker(_pillar.Position, _pillar.PathfindingRadius);
     }
 
     public void OnUpdate(float diff) {
@@ -134,6 +144,14 @@ public class TrundleCircle : IBuffGameScript {
         foreach (var slowed in _unitsInSlowRange.ToList().OfType<AttackableUnit>().Where(slowed => slowed.HasBuff("TrundleCircleSlow")))
             RemoveBuff(slowed, "TrundleCircleSlow");
         _unitsInSlowRange.Clear();
+
+        // Release the navgrid block symmetric to AddDynamicBlocker in OnActivate. Fires the
+        // event again so any pathfinder that was routed around the pillar can take direct
+        // paths through that area on the next tick.
+        if (_blockedCells != null) {
+            RemoveDynamicBlocker(_blockedCells);
+            _blockedCells = null;
+        }
 
         AddBuff("PillarExpirationTimer", 0.25f, 1, _spell, unit, _trundle);
         RemoveParticle(_p1);
