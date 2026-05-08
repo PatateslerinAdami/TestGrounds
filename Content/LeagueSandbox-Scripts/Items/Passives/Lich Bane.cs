@@ -1,6 +1,8 @@
+using System.Linq;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
+using ItemPassives;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -15,77 +17,85 @@ namespace ItemPassives
     public class ItemID_3100 : IItemScript
     {
         public StatsModifier StatsModifier { get; } = new StatsModifier();
-        private ObjAIBase _owner;
+        private ObjAIBase _owner = null!;
         private const int ItemId = 3100;
+        private const float LichBaneScaling = 0.75f;
+        private float _lastTooltipApDamage = -1.0f;
+        private float _lastTooltipBaseAdDamage = -1.0f;
 
         public void OnActivate(ObjAIBase owner)
         {
             _owner = owner;
             SpellbladeManager.Register(owner, ItemId);
 
-            for (short i = 0; i <= 3; i++)
-            {
-                if (_owner.Spells.TryGetValue(i, out Spell spell) && spell != null)
-                {
-                    ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellCast);
-                }
-            }
+            Enumerable.Range(0, 4)
+                .Where(slot => _owner.Spells.ContainsKey((short)slot))
+                .Select(slot => _owner.Spells[(short)slot])
+                .ToList()
+                .ForEach(spell => ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellCast));
+
+            ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate, false);
+            UpdateTooltipVars();
         }
 
         public void OnDeactivate(ObjAIBase owner)
         {
             SpellbladeManager.Unregister(owner, ItemId);
             ApiEventManager.RemoveAllListenersForOwner(this);
-            _owner = null;
+            _owner = null!;
         }
 
         private void OnSpellCast(Spell spell)
         {
-            if (_owner == null || spell == null)
-            {
-                return;
-            }
-
-            if (!spell.Script.ScriptMetadata.TriggersSpellCasts)
-            {
-                return;
-            }
-
-            if (!SpellbladeManager.IsActive(_owner, ItemId))
-            {
-                return;
-            }
-
-            if (SpellbladeManager.HasAnySpellbladeProc(_owner))
-            {
-                return;
-            }
-
-            var itemSpell = GetLichBaneSpell();
-
-            if (itemSpell == null || itemSpell.CurrentCooldown > 0f)
-            {
-                return;
-            }
-
-            AddBuff("LichBane", 10.0f, 1, spell, _owner, _owner);
+            SpellbladeManager.TryArmSpellblade(_owner, spell);
         }
 
-        private Spell GetLichBaneSpell()
+        private void OnStatsUpdate(AttackableUnit unit, float diff)
         {
-            for (byte i = 0; i < 7; i++)
+            UpdateTooltipVars();
+        }
+
+        private void UpdateTooltipVars()
+        {
+            if (_owner == null)
             {
-                var item = _owner.Inventory.GetItem(i);
-                if (item != null && item.ItemData.ItemId == 3100)
-                {
-                    short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                    if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                    {
-                        return s;
-                    }
-                }
+                return;
             }
-            return null;
+
+            var itemSlot = GetLichBaneInventorySlot();
+            if (itemSlot < 0)
+            {
+                return;
+            }
+
+            var spellSlot = (short)(itemSlot + (byte)SpellSlotType.InventorySlots);
+            if (!_owner.Spells.ContainsKey(spellSlot))
+            {
+                return;
+            }
+
+            var apDamage = _owner.Stats.AbilityPower.Total * LichBaneScaling;
+            var baseAdDamage = _owner.Stats.AttackDamage.BaseValue * LichBaneScaling;
+
+            if (_lastTooltipApDamage != apDamage)
+            {
+                _lastTooltipApDamage = apDamage;
+                SetSpellToolTipVar(_owner, 0, apDamage, SpellbookType.SPELLBOOK_CHAMPION, (byte)itemSlot, SpellSlotType.InventorySlots);
+            }
+
+            if (_lastTooltipBaseAdDamage != baseAdDamage)
+            {
+                _lastTooltipBaseAdDamage = baseAdDamage;
+                SetSpellToolTipVar(_owner, 1, baseAdDamage, SpellbookType.SPELLBOOK_CHAMPION, (byte)itemSlot, SpellSlotType.InventorySlots);
+            }
+        }
+
+        private int GetLichBaneInventorySlot()
+        {
+            return Enumerable.Range(0, 7)
+                .Where(slot => _owner.Inventory.GetItem((byte)slot)?.ItemData.ItemId == ItemId)
+                .DefaultIfEmpty(-1)
+                .First();
         }
     }
 }
@@ -102,8 +112,8 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; } = new StatsModifier();
 
-        private ObjAIBase _owner;
-        private Buff _buff;
+        private ObjAIBase _owner = null!;
+        private Buff _buff = null!;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
@@ -125,36 +135,26 @@ namespace Buffs
         {
             if (damageData.IsAutoAttack && damageData.Target != null && !damageData.Target.IsDead)
             {
-                float BonusBaseADValue = _owner.Stats.AttackDamage.BaseValue * 0.75f;
-                float BonusAPRatioDamage = _owner.Stats.AbilityPower.Total * 0.75f;
-                float BonusDamage = BonusBaseADValue + BonusAPRatioDamage;
+                var sourceItemId = _buff.Variables.GetInt("sourceItemId", 3100);
+                var bonusDamage = _buff.Variables.GetFloat("damageAmount", 0.0f);
+
+                if (bonusDamage <= 0.0f)
+                {
+                    float BonusBaseADValue = _owner.Stats.AttackDamage.BaseValue * 0.75f;
+                    float BonusAPRatioDamage = _owner.Stats.AbilityPower.Total * 0.75f;
+                    bonusDamage = BonusBaseADValue + BonusAPRatioDamage;
+                }
 
                 RemoveBuff(_buff);
-                damageData.Target.TakeDamage(_owner, BonusDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                damageData.Target.TakeDamage(_owner, bonusDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                AddBuff("SheenDelay", 1.5f, 1, _buff.OriginSpell, _owner, _owner);
 
-                Spell LichBaneItemSpell = GetLichBaneSpell();
+                var LichBaneItemSpell = SpellbladeManager.GetItemSpell(_owner, sourceItemId);
                 if (LichBaneItemSpell != null)
                 {
                     LichBaneItemSpell.SetCooldown(1.5f, true);
                 }
             }
-        }
-
-        private Spell GetLichBaneSpell()
-        {
-            for (byte i = 0; i < 7; i++)
-            {
-                var item = _owner.Inventory.GetItem(i);
-                if (item != null && item.ItemData.ItemId == 3100)
-                {
-                    short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                    if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                    {
-                        return s;
-                    }
-                }
-            }
-            return null;
         }
     }
 }

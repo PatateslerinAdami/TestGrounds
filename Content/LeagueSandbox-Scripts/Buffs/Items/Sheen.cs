@@ -1,6 +1,7 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
+using ItemPassives;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -23,8 +24,8 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; } = new StatsModifier();
 
-        private ObjAIBase _owner;
-        private Buff _buff;
+        private ObjAIBase _owner = null!;
+        private Buff _buff = null!;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
@@ -54,7 +55,7 @@ namespace Buffs
 
             if (sourceItemId == 3057)
             {
-                var itemSpell = GetItemSpell(3057);
+                var itemSpell = SpellbladeManager.GetItemSpell(_owner, 3057);
                 itemSpell?.SetCooldown(1.5f, true);
 
                 RemoveBuff(_buff);
@@ -65,12 +66,13 @@ namespace Buffs
                 }
 
                 damageData.Target.TakeDamage(_owner, damageAmount, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                AddBuff("SheenDelay", 1.5f, 1, _buff.OriginSpell, _owner, _owner);
                 return;
             }
 
             if (sourceItemId == 3078)
             {
-                var itemSpell = GetItemSpell(3078);
+                var itemSpell = SpellbladeManager.GetItemSpell(_owner, 3078);
                 itemSpell?.SetCooldown(1.5f, true);
 
                 RemoveBuff(_buff);
@@ -81,28 +83,11 @@ namespace Buffs
                 }
 
                 damageData.Target.TakeDamage(_owner, damageAmount, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                AddBuff("SheenDelay", 1.5f, 1, _buff.OriginSpell, _owner, _owner);
                 return;
             }
 
             RemoveBuff(_buff);
-        }
-
-        private Spell GetItemSpell(int itemId)
-        {
-            for (byte i = 0; i < 7; i++)
-            {
-                var item = _owner.Inventory.GetItem(i);
-                if (item != null && item.ItemData.ItemId == itemId)
-                {
-                    short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                    if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                    {
-                        return s;
-                    }
-                }
-            }
-
-            return null;
         }
     }
 }
