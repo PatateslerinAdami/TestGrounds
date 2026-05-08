@@ -22,6 +22,7 @@ namespace Buffs;
         private PeriodicTicker _periodicTicker;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            BuffType = BuffType.AURA,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
