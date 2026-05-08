@@ -12,12 +12,13 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            // TODO
+            TriggersSpellCasts = true,
+            IsDamagingSpell = false
         };
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            AddBuff("SummonerBarrier", 3.0f, 1, spell, target, owner);
+            AddBuff("SummonerBarrier", 2.0f, 1, spell, target, owner);
         }
     }
 }
