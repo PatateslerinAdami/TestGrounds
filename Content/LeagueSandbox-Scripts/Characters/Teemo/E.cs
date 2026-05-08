@@ -38,7 +38,7 @@ public class ToxicShot : ISpellScript
 
     private void OnLevelUpSpell(Spell spell)
     {
-        AddBuff("ToxicAttack", 250000f, 1, _spell, _teemo, _teemo, infiniteduration: true);
+        AddBuff("ToxicShot", 250000f, 1, _spell, _teemo, _teemo, infiniteduration: true);
     }
 }
 

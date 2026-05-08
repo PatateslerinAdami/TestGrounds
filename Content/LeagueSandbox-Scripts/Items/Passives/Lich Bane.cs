@@ -16,10 +16,12 @@ namespace ItemPassives
     {
         public StatsModifier StatsModifier { get; } = new StatsModifier();
         private ObjAIBase _owner;
+        private const int ItemId = 3100;
 
         public void OnActivate(ObjAIBase owner)
         {
             _owner = owner;
+            SpellbladeManager.Register(owner, ItemId);
 
             for (short i = 0; i <= 3; i++)
             {
@@ -32,17 +34,41 @@ namespace ItemPassives
 
         public void OnDeactivate(ObjAIBase owner)
         {
+            SpellbladeManager.Unregister(owner, ItemId);
             ApiEventManager.RemoveAllListenersForOwner(this);
+            _owner = null;
         }
 
         private void OnSpellCast(Spell spell)
         {
-            Spell LichBaneItemSpell = GetLichBaneSpell();
-
-            if (LichBaneItemSpell != null && LichBaneItemSpell.CurrentCooldown <= 0f && !_owner.HasBuff("LichBane"))
+            if (_owner == null || spell == null)
             {
-                AddBuff("LichBane", 10.0f, 1, spell, _owner, _owner);
+                return;
             }
+
+            if (!spell.Script.ScriptMetadata.TriggersSpellCasts)
+            {
+                return;
+            }
+
+            if (!SpellbladeManager.IsActive(_owner, ItemId))
+            {
+                return;
+            }
+
+            if (SpellbladeManager.HasAnySpellbladeProc(_owner))
+            {
+                return;
+            }
+
+            var itemSpell = GetLichBaneSpell();
+
+            if (itemSpell == null || itemSpell.CurrentCooldown > 0f)
+            {
+                return;
+            }
+
+            AddBuff("LichBane", 10.0f, 1, spell, _owner, _owner);
         }
 
         private Spell GetLichBaneSpell()
@@ -119,7 +145,7 @@ namespace Buffs
             for (byte i = 0; i < 7; i++)
             {
                 var item = _owner.Inventory.GetItem(i);
-                if (item != null && item.ItemData.ItemId == 3057)
+                if (item != null && item.ItemData.ItemId == 3100)
                 {
                     short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
                     if (_owner.Spells.TryGetValue(spellSlot, out Spell s))

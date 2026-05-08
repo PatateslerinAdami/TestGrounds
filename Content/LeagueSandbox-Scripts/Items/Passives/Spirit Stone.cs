@@ -33,11 +33,11 @@ public class ItemID_1080 : IItemScript {
         
         const float duration  = 180f;
         int         wardCount = 0;
-        if (_owner.HasBuff("YellowTrinketTracker")) {
-            var buff = _owner.GetBuffWithName("YellowTrinketTracker").BuffScript as YellowTrinketTracker;
+        if (_owner.HasBuff("SharedWardBuff")) {
+            var buff = _owner.GetBuffWithName("SharedWardBuff").BuffScript as SharedWardBuff;
             wardCount = buff.GetWardCount();
         } else {
-            var buff = AddBuff("YellowTrinketTracker", 25000f, 1, _owner.AutoAttackSpell, _owner, _owner, true).BuffScript as YellowTrinketTracker;
+            var buff = AddBuff("SharedWardBuff", 25000f, 1, _owner.AutoAttackSpell, _owner, _owner, true).BuffScript as SharedWardBuff;
             wardCount = buff.GetWardCount();
         }
         

@@ -8,12 +8,4 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace CharScripts;
 //Blue Fountain Turret (Laser)
-public class CharScriptOrderTurretShrine : ICharScript {
-    private ObjAIBase _turret;
-
-    public StatsModifier StatsModifier { get; } = new();
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _turret = owner;
-    }
-}
+public class CharScriptOrderTurretShrine : ICharScript { }

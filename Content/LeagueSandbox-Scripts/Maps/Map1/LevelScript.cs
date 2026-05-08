@@ -182,13 +182,45 @@ namespace MapScripts.Map1
                     }
                     list.Add((idx, new Vector2(np.CentralPoint.X, np.CentralPoint.Z)));
                 }
+
+                // The __NAV_<lane>NN points only cover the lane corridor between the two
+                // outermost and mid turret area; they stop short of the inhibitor and have
+                // nothing past it. We pull the two HQ (nexus) positions from the scene HQ_T1/T2
+                // objects so blue minions push to the Chaos Nexus and purple minions (with the
+                // path reversed in SetUpLaneMinion) push to the Order Nexus.
+                Vector2? orderNexusPos = null;
+                Vector2? chaosNexusPos = null;
+                if (mapObjects.TryGetValue(GameObjectTypes.ObjAnimated_HQ, out var hqObjs))
+                {
+                    foreach (var hq in hqObjs)
+                    {
+                        var pos = new Vector2(hq.CentralPoint.X, hq.CentralPoint.Z);
+                        if (hq.GetTeamID() == TeamId.TEAM_BLUE)
+                        {
+                            orderNexusPos = pos;
+                        }
+                        else if (hq.GetTeamID() == TeamId.TEAM_PURPLE)
+                        {
+                            chaosNexusPos = pos;
+                        }
+                    }
+                }
+
                 foreach (var kv in byLane)
                 {
                     kv.Value.Sort((a, b) => a.idx.CompareTo(b.idx));
-                    var path = new List<Vector2>(kv.Value.Count);
+                    var path = new List<Vector2>(kv.Value.Count + 2);
+                    if (orderNexusPos.HasValue)
+                    {
+                        path.Add(orderNexusPos.Value);
+                    }
                     foreach (var t in kv.Value)
                     {
                         path.Add(t.pos);
+                    }
+                    if (chaosNexusPos.HasValue)
+                    {
+                        path.Add(chaosNexusPos.Value);
                     }
                     MinionPaths[kv.Key] = path;
                 }

@@ -94,9 +94,9 @@ namespace MapScripts.Map1
         static Dictionary<TurretType, int[]> TurretItems { get; set; } = new Dictionary<TurretType, int[]>
         {
             { TurretType.OUTER_TURRET, new[] { 1500, 1501, 1502, 1503 } },
-            { TurretType.INNER_TURRET, new[] { 1500, 1501, 1502, 1503, 1504 } },
-            { TurretType.INHIBITOR_TURRET, new[] { 1501, 1502, 1503, 1505 } },
-            { TurretType.NEXUS_TURRET, new[] { 1501, 1502, 1503, 1505 } }
+            { TurretType.INNER_TURRET, new[] { 1500, 1501, 1502, 1503 } },
+            { TurretType.INHIBITOR_TURRET, new[] { 1501, 1502, 1503 } },
+            { TurretType.NEXUS_TURRET, new[] { 1501, 1502, 1503 } }
         };
 
         static StatsModifier TurretStatsModifier = new StatsModifier();

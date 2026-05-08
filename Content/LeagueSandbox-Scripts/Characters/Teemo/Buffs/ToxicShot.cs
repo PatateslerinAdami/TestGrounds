@@ -16,17 +16,11 @@ namespace Buffs;
 public class ToxicShot : IBuffGameScript
 {
     private ObjAIBase _teemo;
-    private AttackableUnit _unit;
-    private Particle _toxicShotTargetParticle;
-    private Particle _globalPoisonParticle;
-    private Buff _buff;
-    private PeriodicTicker _periodicTicker;
-    private float _damage;
-
+    private Spell _spell;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
-        BuffType = BuffType.POISON,
+        BuffType = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1
     };
@@ -36,32 +30,27 @@ public class ToxicShot : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _teemo = ownerSpell.CastInfo.Owner;
-        _unit = unit;
-        _buff = buff;
-        _toxicShotTargetParticle = AddParticleTarget(_teemo, unit, "Toxicshot_tar", unit, 4f,
-            size: unit.CharData.GameplayCollisionRadius * 0.025f);
-        _globalPoisonParticle = AddParticleTarget(_teemo, unit, "Global_Poison", unit, 4f, bone: "head");
-        ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
+        _spell = ownerSpell;
+        SealSpellSlot(_teemo, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
+        ownerSpell.SetSpellToggle(true);
+        _teemo.SetAutoAttackSpell("ToxicShotAttack", false);
+        ApiEventManager.OnHitUnit.AddListener(this, _teemo, TargetExecute);
     }
 
-    public void OnUpdate(float diff)
+    private void TargetExecute(DamageData data)
     {
-        var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false);
-        if (ticks != 1) return;
-        _damage = 6f + 6 * (_teemo.GetSpell("ToxicShot").CastInfo.SpellLevel - 1) +
-                  _teemo.Stats.AbilityPower.Total * 0.3f;
-        _unit.TakeDamage(_teemo, _damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PERIODIC,
-            false);
-    }
-
-    private void OnDeath(DeathData data)
-    {
-        _buff.DeactivateBuff();
+        if (!IsValidTarget(_teemo, data.Target,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
+        var ap = _teemo.Stats.AbilityPower.Total * 0.3f;
+        var dmg = 10f + 10f * (_spell.CastInfo.SpellLevel - 1) + ap;
+        data.Target.TakeDamage(data.Attacker, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
+            DamageResultType.RESULT_NORMAL);
+        AddBuff("ToxicShotParticle", 4f, 1, _spell, data.Target, _teemo);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        RemoveParticle(_globalPoisonParticle);
-        RemoveParticle(_toxicShotTargetParticle);
+        _teemo.ResetAutoAttackSpell();
     }
 }
