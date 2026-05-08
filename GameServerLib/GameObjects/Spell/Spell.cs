@@ -1178,7 +1178,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     CurrentCooldown = GetCooldown();
                     SetPassiveCooldownStats(CurrentCooldown);
 
-                    if (CastInfo.SpellSlot < 4)
+                    // Champion ability slots (Q/W/E/R = 0..3) derive their cooldown client-side from CastSpellAns.
+                    // S4 replay shows zero CHAR_SetCooldown packets for these slots across a full match;
+                    // sending it caused a visible double-cooldown flicker on instant-cast targeted spells (Katarina E).
+                    // Manual cooldown changes (CDR procs, refunds, item resets) still flow through SetCooldown(...) below.
+                    if (CastInfo.SpellSlot >= 4)
                     {
                         _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, CurrentCooldown, GetCooldown());
                     }
@@ -1288,7 +1292,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CurrentCooldown = GetCooldown();
             SetPassiveCooldownStats(CurrentCooldown);
 
-            if (CastInfo.SpellSlot < 4)
+            // See FinishCasting: ability slots 0..3 are client-driven from CastSpellAns; only summoner+item slots need this.
+            if (CastInfo.SpellSlot >= 4)
             {
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, CurrentCooldown, GetCooldown());
             }
