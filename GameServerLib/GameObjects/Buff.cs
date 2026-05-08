@@ -229,7 +229,9 @@ namespace LeagueSandbox.GameServer.GameObjects
             TimeElapsed = Duration;
         }
 
-        public override bool IncrementStackCount()
+        public override bool IncrementStackCount() => IncrementStackCount(true);
+
+        public bool IncrementStackCount(bool sendPacket)
         {
             if (BuffAddType == BuffAddType.STACKS_AND_RENEWS ||
                 BuffAddType == BuffAddType.RENEW_EXISTING ||
@@ -240,14 +242,16 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             var result = base.IncrementStackCount();
 
-            if (result)
+            if (result && sendPacket)
             {
                 _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
             }
             return result;
         }
 
-        public override bool DecrementStackCount()
+        public override bool DecrementStackCount() => DecrementStackCount(true);
+
+        public bool DecrementStackCount(bool sendPacket)
         {
             var result = base.DecrementStackCount();
 
@@ -255,9 +259,9 @@ namespace LeagueSandbox.GameServer.GameObjects
             {
                 if (StackCount <= 0)
                 {
-                    DeactivateBuff(); 
+                    DeactivateBuff();
                 }
-                else
+                else if (sendPacket)
                 {
                     _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
                 }

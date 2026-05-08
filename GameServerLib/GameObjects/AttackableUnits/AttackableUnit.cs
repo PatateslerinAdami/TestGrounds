@@ -199,7 +199,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Stats.AttackSpeedMultiplier.BaseValue = 1.0f;
 
             _buffsLock = new object();
-            BuffSlots = new Buff[256];
+            // S4 BuffManager allocates 64 buckets (BuffManager.cpp:29, 0x200 bytes / 8-byte stride);
+            // GetMaximumRemainingTimeForBuffTypes iterates exactly 0x40. Replay max observed slot = 39.
+            BuffSlots = new Buff[64];
             ParentBuffs = new Dictionary<string, Buff>();
             BuffList = new List<Buff>();
             IconInfo = new IconInfo(_game, this);
@@ -1905,11 +1907,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                         BuffList.Add(continuingBuff);
 
-                        parentBuff.IncrementStackCount();
+                        // Silent state mutations; one final BuffUpdateCount packet covers the whole logical operation.
+                        parentBuff.IncrementStackCount(false);
                         buffsWithName.Add(continuingBuff);
                         for (var i = 0; i < buffsWithName.Count; i++)
                         {
-                            buffsWithName[i].SetStacks(parentBuff.StackCount);
+                            buffsWithName[i].SetStacks(parentBuff.StackCount, false);
                         }
 
                         if (!b.IsHidden)
@@ -1959,11 +1962,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     {
                         BuffList.Add(b);
 
-                        parentBuff.IncrementStackCount();
+                        // Silent state mutations; one final BuffUpdateCount packet covers the whole logical operation.
+                        parentBuff.IncrementStackCount(false);
                         var buffsWithName = GetBuffsWithName(b.Name);
                         for (var i = 0; i < buffsWithName.Count; i++)
                         {
-                            buffsWithName[i].SetStacks(parentBuff.StackCount);
+                            buffsWithName[i].SetStacks(parentBuff.StackCount, false);
                         }
 
                         if (!b.IsHidden)
@@ -2002,11 +2006,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         b.SetSlot(parentSlot);
 
                         BuffList.Add(b);
-                        parentBuff.IncrementStackCount();
+                        // Silent state mutations; one final BuffUpdateCount packet covers the whole logical operation.
+                        parentBuff.IncrementStackCount(false);
                         existingBuffs.Add(b);
                         for (var i = 0; i < existingBuffs.Count; i++)
                         {
-                            existingBuffs[i].SetStacks(parentBuff.StackCount);
+                            existingBuffs[i].SetStacks(parentBuff.StackCount, false);
                         }
 
                         b.ActivateBuff();
@@ -2078,7 +2083,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <returns>Slot of the given buff or an empty slot.</returns>
         private byte GetBuffSlot(Buff buffToLookFor = null)
         {
-            for (byte i = 1; i < BuffSlots.Length; i++) // Find the first open slot or the slot corresponding to buff
+            // Slot 0 is a valid Riot-side buff slot (replay shows 1746 BuffAdd2/Remove2/UpdateCount packets at slot 0
+            // for the same Katarina match). Start at 0 to match Riot's allocation convention.
+            for (byte i = 0; i < BuffSlots.Length; i++) // Find the first open slot or the slot corresponding to buff
             {
                 if (BuffSlots[i] == buffToLookFor)
                 {
@@ -2175,11 +2182,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         parentBuff.DeactivateBuff();
                     }
 
-                    parentBuff.DecrementStackCount();
+                    // Silent state mutations; final BuffUpdateCount below covers the whole logical operation.
+                    parentBuff.DecrementStackCount(false);
                     RemoveBuff(b.Name, false);
 
                     var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
 
                     // Next oldest buff takes the parent slot.
                     BuffSlots[parentSlot] = tempBuffs[0];
@@ -2197,8 +2205,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                     BuffList.Remove(b);
 
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    parentBuff.DecrementStackCount(false);
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
                 }
 
                 if (!b.IsHidden)
@@ -2224,11 +2232,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         parentBuff.DeactivateBuff();
                     }
 
-                    parentBuff.DecrementStackCount();
+                    // Silent state mutations; final BuffUpdateCount below covers the whole logical operation.
+                    parentBuff.DecrementStackCount(false);
                     RemoveBuff(b.Name, false);
 
                     var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
 
                     // Next oldest buff takes the parent slot.
                     BuffSlots[parentSlot] = tempBuffs[0];
@@ -2243,8 +2252,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                     BuffList.Remove(b);
 
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    parentBuff.DecrementStackCount(false);
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
                 }
 
                 // Keep visual timer from the newest active instance.
@@ -2280,11 +2289,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         parentBuff.DeactivateBuff();
                     }
 
-                    parentBuff.DecrementStackCount();
+                    // Silent state mutations; final BuffUpdateCount below covers the whole logical operation.
+                    parentBuff.DecrementStackCount(false);
                     RemoveBuff(b.Name, false);
 
                     var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
 
                     // Next oldest buff takes the parent slot.
                     BuffSlots[parentSlot] = tempBuffs[0];
@@ -2299,8 +2309,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                     BuffList.Remove(b);
 
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    parentBuff.DecrementStackCount(false);
+                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
                 }
 
                 // Used in packets to maintain the visual buff icon's timer, as removing a stack from the icon can reset the timer.

@@ -353,6 +353,48 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Whether the specified unit has any buff of the given BuffType.
+        /// Mirrors Lua API <c>HasBuffOfType</c>.
+        /// </summary>
+        public static bool HasBuffOfType(AttackableUnit unit, BuffType type)
+        {
+            return unit.HasBuffType(type);
+        }
+
+        /// <summary>
+        /// Returns the parent buff's stack count for the given name, or 0 if no such buff is active.
+        /// Mirrors Lua API <c>SpellBuffCount</c>.
+        /// </summary>
+        public static int GetBuffStackCount(AttackableUnit unit, string buffName)
+        {
+            return unit.GetBuffWithName(buffName)?.StackCount ?? 0;
+        }
+
+        /// <summary>
+        /// Adds a buff only if no buff with the same name is currently active on the target — does not refresh
+        /// or re-stack an existing one. Mirrors Lua API <c>SpellBuffAddNoRenew</c>.
+        /// </summary>
+        /// <returns>The new buff if it was added, otherwise null.</returns>
+        public static Buff AddBuffNoRenew(
+            string buffName,
+            float duration,
+            byte stacks,
+            Spell originSpell,
+            AttackableUnit onto,
+            ObjAIBase from,
+            bool infiniteDuration = false,
+            IEventSource parent = null,
+            BuffVariables buffVariables = null
+        )
+        {
+            if (onto.HasBuff(buffName))
+            {
+                return null;
+            }
+            return AddBuff(buffName, duration, stacks, originSpell, onto, from, infiniteDuration, parent, buffVariables);
+        }
+
+        /// <summary>
         /// Sets the stacks of the specified buff instance to the given number of stacks.
         /// </summary>
         /// <param name="b">Buff instance.</param>
@@ -427,6 +469,15 @@ namespace LeagueSandbox.GameServer.API
         public static void RemoveBuff(AttackableUnit target, string buff)
         {
             target.RemoveBuffsWithName(buff);
+        }
+
+        /// <summary>
+        /// Removes every buff on the target whose BuffType matches. Mirrors Lua API <c>SpellBuffRemoveType</c>
+        /// (e.g. <c>SpellBuffRemoveType(me, BUFF_Taunt)</c> in Hero.lua to break taunt-charm).
+        /// </summary>
+        public static void RemoveBuffsOfType(AttackableUnit target, BuffType type)
+        {
+            target.RemoveBuffsByType(type);
         }
         
         /// <summary>

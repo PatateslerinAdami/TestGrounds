@@ -217,10 +217,20 @@ namespace PacketDefinitions420
                 buffCountList = new List<KeyValuePair<byte, int>>();
                 var tempBuffs = a.GetParentBuffs();
 
+                // Vision-acquire buff resync: each non-hidden buff is re-broadcast as a BuffAdd2 sub-packet
+                // so the new viewer learns name/type/duration/caster. The BuffCount field below carries the
+                // counter value (S4 BuffManagerClient::Deserialize writes to BuffInstance offset 0x74,
+                // BuffManagerClient.cpp:185-188). Replay shows ~5.85% of BuffAdd2 packets carry runningTime>0,
+                // matching the resync pattern. Hidden buffs stay server-side.
+                packets ??= new List<GamePacket>();
                 for (var i = 0; i < tempBuffs.Count; i++)
                 {
                     var buff = tempBuffs.ElementAt(i).Value;
                     buffCountList.Add(new KeyValuePair<byte, int>(buff.Slot, buff.StackCount));
+                    if (!buff.IsHidden)
+                    {
+                        packets.Add(BuildBuffAdd2(buff));
+                    }
                 }
 
                 // TODO: if (a.IsDashing), requires SpeedParams, add it to AttackableUnit so it can be accessed outside of initialization
@@ -1988,6 +1998,17 @@ namespace PacketDefinitions420
         /// <param name="b">Buff being added.</param>
         public void NotifyNPC_BuffAdd2(Buff b)
         {
+            _packetHandlerManager.BroadcastPacket(BuildBuffAdd2(b).GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Builds an NPC_BuffAdd2 packet for the given buff. Used both for live add (TimeElapsed=0,
+        /// dur=full) and vision-acquire resync (TimeElapsed>0, dur=remaining).
+        /// Riot S4 convention: Duration = remaining time, RunningTime = elapsed time;
+        /// Duration + RunningTime = original total duration.
+        /// </summary>
+        NPC_BuffAdd2 BuildBuffAdd2(Buff b)
+        {
             var addPacket = new NPC_BuffAdd2
             {
                 SenderNetID = b.TargetUnit.NetId,
@@ -1996,15 +2017,18 @@ namespace PacketDefinitions420
                 Count = (byte)b.StackCount,
                 IsHidden = b.IsHidden,
                 BuffNameHash = HashString(b.Name),
-                PackageHash = b.TargetUnit.GetObjHash(),
+                // S4 client uses packageHash to look up the buff *script* via PackageManager::GetPackageFromHash
+                // (BuffManager_pimpl.cpp:790-793). Replay confirms it's the CASTER's package, not the target's:
+                // Kat (1073741860, pkg=1223268252) buffing other units always sends pkg=1223268252.
+                PackageHash = (b.SourceUnit ?? b.TargetUnit).GetObjHash(),
                 RunningTime = b.TimeElapsed,
-                Duration = b.Duration,
+                Duration = Math.Max(0f, b.Duration - b.TimeElapsed),
             };
             if (b.SourceUnit != null)
             {
                 addPacket.CasterNetID = b.SourceUnit.NetId;
             }
-            _packetHandlerManager.BroadcastPacket(addPacket.GetBytes(), Channel.CHL_S2C);
+            return addPacket;
         }
 
         /// <summary>

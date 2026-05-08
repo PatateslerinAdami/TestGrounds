@@ -24,7 +24,7 @@ public class KatarinaE : ISpellScript {
     Vector2                _coords;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts   = false,
+        TriggersSpellCasts   = true,
         IsDamagingSpell      = true,
         CastingBreaksStealth = false,
         NotSingleTargetSpell    = false,
@@ -35,12 +35,16 @@ public class KatarinaE : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) { _katarina = owner; }
 
+    // Capture state only — no packet-emitting calls here.
+    // All effects must run in OnSpellCast so they land AFTER NPC_CastSpellAns,
+    // matching real S4 wire ordering and avoiding a double-cooldown UI artifact.
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
-        //blink 
-        _coords = CalcVector(180.0F, _katarina.Position, _target.Position);
-        //1st part
         _previousPos = _katarina.Position;
+        _coords = CalcVector(180.0F, _katarina.Position, _target.Position);
+    }
+
+    public void OnSpellCast(Spell spell) {
         FaceDirection(_target.Position, _katarina, true);
         PlayAnimation(_katarina, "Spell3", 0.3f, flags: AnimationFlags.Override);
 
@@ -93,16 +97,12 @@ public class KatarinaE : ISpellScript {
         }
 
         //buff dmg reduction
-        AddBuff("KatarinaEReduction", 1.5f, 0, spell, _katarina, _katarina);
+        AddBuff("KatarinaEReduction", 1.5f, 1, spell, _katarina, _katarina);
         if (IsValidTarget(_katarina, _target,
                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                           SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) {
             _katarina.SetTargetUnit(_target);
         }
-    }
-
-    public void OnSpellCast(Spell spell) {
-        //if (_target.IsDead && _target is Champion && _target.Team != _katarina.Team) spell.SetCooldown(0f);
     }
 
     public void OnSpellPostCast(Spell spell) { }
