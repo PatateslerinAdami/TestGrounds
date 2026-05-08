@@ -79,6 +79,7 @@ namespace LeagueSandbox.GameServer
             SetGameFeatures(FeatureFlags.EnableManaCosts,   ReadBool("MANACOSTS_ENABLED",     false));
             SetGameFeatures(FeatureFlags.EnableLaneMinions, ReadBool("MINION_SPAWNS_ENABLED", false));
             SetGameFeatures(FeatureFlags.EnableDeathTimer,  ReadBool("DEATH_TIMER_ENABLED",   true));
+            SetGameFeatures(FeatureFlags.EnableEmpoweredSumsForTesting, ReadBool("EMPOWERED_SUMS_ENABLED", false));
 
             // Read if chat commands are enabled
             ChatCheatsEnabled = ReadBool("CHEATS_ENABLED", true);
