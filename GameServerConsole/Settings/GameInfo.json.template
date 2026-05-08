@@ -77,6 +77,7 @@
         "CHEATS_ENABLED": true,
         "MINION_SPAWNS_ENABLED": false,
         "DEATH_TIMER_ENABLED": true,
+        "EMPOWERED_SUMS_ENABLED": false, // To make flash unlimited range and heal give unlimited movement speed
         "CONTENT_PATH": "../../../../../Content",
         "IS_DAMAGE_TEXT_GLOBAL": false
     },
