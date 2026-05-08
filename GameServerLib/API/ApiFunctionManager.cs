@@ -2446,5 +2446,10 @@ namespace LeagueSandbox.GameServer.API
         {
             return !IsInFront(self, target);
         }
+
+        public static bool AreEmpoweredSumsEnabled()
+        {
+            return _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableEmpoweredSumsForTesting);
+        }
     }
 }

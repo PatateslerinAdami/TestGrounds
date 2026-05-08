@@ -25,12 +25,17 @@ namespace Spells
 
             var current = owner.Position;
             var dist = Vector2.Distance(current, start);
+            var cursor = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
 
             FaceDirection(start, owner, true);
 
-            if (dist > spell.SpellData.CastRangeDisplayOverride)
+            if (dist > spell.SpellData.CastRangeDisplayOverride && !AreEmpoweredSumsEnabled())
             {
                 start = GetPointFromUnit(owner, spell.SpellData.CastRangeDisplayOverride);
+            }
+            else if (AreEmpoweredSumsEnabled())
+            {
+                start = cursor;
             }
 
             StopChanneling(owner, ChannelingStopCondition.Cancel, ChannelingStopSource.Move);
