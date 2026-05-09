@@ -81,6 +81,19 @@ namespace LeagueSandbox.GameServer.Content
 
         public int GetInt(string section, string name, int defaultValue = 0)
         {
+            // Parse directly as int because going through GetFloat would round-trip the value through
+            // float32 (24-bit) and silently corrupt large values. This bug happened for
+            // KatarinaE with Flags=201452548 (=0x0C01EC04, 28 bits used) it became 201452544 (=0x0C01EC00)
+            // after the float round-trip, dropping bit 2 (InstantCast). Without InstantCast set,
+            // E was running through STATE_CASTING with the full 250ms windup instead of completing
+            // FinishCasting same-tick causing visible position desync after a silent teleport
+            // (Basic_Attack_Pos didn't fire until cast windup ended).
+            // Falls back through GetFloat for non-integer string representations like "1.0".
+            var obj = GetObject(section, name);
+            if (long.TryParse(obj, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
+            {
+                return (int)longValue;
+            }
             return (int)GetFloat(section, name, defaultValue);
         }
 
