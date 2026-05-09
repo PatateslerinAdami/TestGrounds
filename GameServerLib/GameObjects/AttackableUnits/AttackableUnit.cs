@@ -1993,6 +1993,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (!sameAsExisting)
             {
                 _movementUpdated = true;
+
+                // Explicit facing hint on significant path-tangent change. Without this, the
+                // client computes facing from the new path tangent at its locally-predicted
+                // render position; with network latency the server-auth tangent may differ
+                // from the client-predicted one, producing the right-left-right facing
+                // oscillation seen on rapid path changes. S2C_FaceDirection (0x50) hits
+                // Direction::DoFaceDirection's lerp branch (4.20 client obj_AI_Base.cpp:6555
+                // with doLerp=true), giving the client an authoritative target facing it
+                // interpolates to over turnTime seconds via Direction::mTargetFacing.
+                var seg = newWaypoints[1] - Position;
+                float segLenSq = seg.LengthSquared();
+                if (segLenSq > 1f)
+                {
+                    var newDir = seg / MathF.Sqrt(segLenSq);
+                    var currentDir = new Vector2(Direction.X, Direction.Z);
+                    float currentLenSq = currentDir.LengthSquared();
+                    // Fire on >15° change OR when current facing is undefined (cold start).
+                    // Smaller deltas leave the client to drive facing from path tangent —
+                    // avoids spamming S2C_FaceDirection on routine path recomputes.
+                    bool significantChange = currentLenSq < 0.01f
+                        || Vector2.Dot(currentDir * (1f / MathF.Sqrt(currentLenSq)), newDir) < 0.9659f;
+                    if (significantChange)
+                    {
+                        _game.PacketNotifier.NotifyFaceDirection(
+                            this, new Vector3(newDir.X, 0, newDir.Y),
+                            isInstant: false, turnTime: 0.15f);
+                    }
+                }
             }
 
             return true;
