@@ -160,7 +160,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // clicking. Stop / Hold / PetHard* are not throttle, they need to register
         // immediately. AttackTerrain* also pass through, identical reasoning to AttackTo.
         public float LastMoveOrderTimeMs { get; set; }
-        public const float MoveOrderThrottleMs = 75f;
+        public const float MoveOrderThrottleMs = 100f;
         /// <summary>
         /// Spell this unit will cast when in range of its target.
         /// Overrides auto attack spell casting.
