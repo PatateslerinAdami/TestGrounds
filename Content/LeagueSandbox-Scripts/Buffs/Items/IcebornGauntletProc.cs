@@ -2,6 +2,7 @@ using System;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
+using ItemPassives;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -28,8 +29,8 @@ public class IcebornGauntletProc : IBuffGameScript
 
     public StatsModifier StatsModifier { get; } = new();
 
-    private ObjAIBase _owner;
-    private Buff _buff;
+    private ObjAIBase _owner = null!;
+    private Buff _buff = null!;
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
@@ -67,12 +68,14 @@ public class IcebornGauntletProc : IBuffGameScript
             return;
         }
 
-        if (damageData.Target == null || damageData.Target.IsDead)
+        if (damageData.Target == null)
         {
             return;
         }
 
         var target = damageData.Target;
+        var dealDamage = _buff.Variables.GetBool("dealDamage", true);
+        var damageAmount = _buff.Variables.GetFloat("damageAmount", 0.0f);
         var damageMultiplier = _buff.Variables.GetFloat("damageMultiplier", 1.25f);
         var zoneDuration = _buff.Variables.GetFloat("zoneDuration", 2.0f);
         var slowPercent = Math.Abs(_buff.Variables.GetFloat("slowPercent", 0.30f));
@@ -87,18 +90,25 @@ public class IcebornGauntletProc : IBuffGameScript
 
         RemoveBuff(_buff);
 
-        var bonusDamage = _owner.Stats.AttackDamage.BaseValue * damageMultiplier;
+        if (dealDamage && !target.IsDead)
+        {
+            if (damageAmount <= 0.0f)
+            {
+                damageAmount = _owner.Stats.AttackDamage.BaseValue * damageMultiplier;
+            }
 
-        target.TakeDamage(
-            _owner,
-            bonusDamage,
-            DamageType.DAMAGE_TYPE_PHYSICAL,
-            DamageSource.DAMAGE_SOURCE_PROC,
-            false
-        );
+            target.TakeDamage(
+                _owner,
+                damageAmount,
+                DamageType.DAMAGE_TYPE_PHYSICAL,
+                DamageSource.DAMAGE_SOURCE_PROC,
+                false
+            );
+        }
 
-        var itemSpell = GetIcebornSpell();
+        var itemSpell = SpellbladeManager.GetItemSpell(_owner, 3025);
         itemSpell?.SetCooldown(itemCooldown, true);
+        AddBuff("SheenDelay", itemCooldown, 1, _buff.OriginSpell, _owner, _owner);
 
         var variables = new BuffVariables();
         variables.Set("centerX", target.Position.X);
@@ -122,22 +132,5 @@ public class IcebornGauntletProc : IBuffGameScript
     private bool IsMeleeOwner()
     {
         return _owner.IsMelee;
-    }
-
-    private Spell GetIcebornSpell()
-    {
-        for (byte i = 0; i < 7; i++)
-        {
-            var item = _owner.Inventory.GetItem(i);
-            if (item != null && item.ItemData.ItemId == 3025)
-            {
-                short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                {
-                    return s;
-                }
-            }
-        }
-        return null;
     }
 }
