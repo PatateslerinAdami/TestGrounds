@@ -150,17 +150,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // stay off; their target acquisition runs through dedicated AI scripts (Minion.lua,
         // LaneMinionAI, etc.), not this idle-scan path.
         public bool AutoAcquireTargetEnabled { get; set; } = false;
-
-        // Mirrors the 4.20 client's command-issue throttle (m_lastCommandSentTime in the
-        // CommandQueue). Rapid MoveTo / AttackTo / AttackMove / Use inputs that arrive
-        // faster than MoveOrderThrottleMs apart are dropped server-side. Without this,
-        // each click produces a fresh WaypointGroup broadcast → client receives many
-        // path-tangent changes per second → model facing oscillates faster than the
-        // turn animation can settle, giving the "jitter" the player sees while spam-
-        // clicking. Stop / Hold / PetHard* are not throttle, they need to register
-        // immediately. AttackTerrain* also pass through, identical reasoning to AttackTo.
-        public float LastMoveOrderTimeMs { get; set; }
-        public const float MoveOrderThrottleMs = 100f;
         /// <summary>
         /// Spell this unit will cast when in range of its target.
         /// Overrides auto attack spell casting.

@@ -1,13 +1,11 @@
 ﻿using GameServerCore.Packets.PacketDefinitions.Requests;
 using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
-using System;
 using System.Numerics;
 using System.Collections.Generic;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -56,59 +54,6 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             return false;
                         }
-
-                        // Same-destination + same-direction dedup. Mirrors the kind of input
-                        // deduplication that the 4.20 client does in its CommandQueue before a
-                        // MoveTo is even sent. Two filters combined:
-                        //   (a) New click destination within ~2 cells of current path goal —
-                        //       i.e. user is hammering the same spot. Drop, unit is already on
-                        //       its way there.
-                        //   (b) New click direction (from current Position toward new dest) is
-                        //       within ~5° of current path direction — i.e. small cursor drift
-                        //       that wouldn't visibly change the path. Drop to avoid the
-                        //       recompute → fresh CurrentWaypoint → UpdateFacing snap chain
-                        //       that produces the right-left-right facing oscillation.
-                        // Pure unit-target follow (u != null) is covered downstream by the
-                        // SetTargetUnit early-out so we exit only the ground-click case here.
-                        if (u == null && champion.Waypoints.Count > 1 && req.Waypoints.Count > 0)
-                        {
-                            var currentDest = champion.Waypoints[champion.Waypoints.Count - 1];
-                            var newDest = TranslateFromCenteredCoordinates(req.Waypoints[req.Waypoints.Count - 1]);
-
-                            const float SameDestEpsilonSq = 250f * 250f;
-                            if (Vector2.DistanceSquared(currentDest, newDest) < SameDestEpsilonSq)
-                            {
-                                return true;
-                            }
-
-                            var toCurrent = currentDest - champion.Position;
-                            var toNew = newDest - champion.Position;
-                            float currentLenSq = toCurrent.LengthSquared();
-                            float newLenSq = toNew.LengthSquared();
-                            if (currentLenSq > 1f && newLenSq > 1f)
-                            {
-                                var currentDir = toCurrent / MathF.Sqrt(currentLenSq);
-                                var newDir = toNew / MathF.Sqrt(newLenSq);
-                                // cos(5°) ≈ 0.9962 — directions within 5° are visually
-                                // indistinguishable from "same direction".
-                                if (Vector2.Dot(currentDir, newDir) > 0.9962f)
-                                {
-                                    return true;
-                                }
-                            }
-                        }
-
-                        // Mirror of the 4.20 client's command-issue throttle. We drop rapid
-                        // MoveTo/AttackTo/AttackMove inputs that arrive within the throttle
-                        // window. Without this, spam-clicking generates a WaypointGroup per
-                        // tick and the client model's facing oscillates faster than the turn
-                        // animation can settle. Stop/Hold/Pet* are intentionally outside this
-                        // gate so they register immediately.
-                        if (_game.GameTime - champion.LastMoveOrderTimeMs < ObjAIBase.MoveOrderThrottleMs)
-                        {
-                            return true;
-                        }
-                        champion.LastMoveOrderTimeMs = _game.GameTime;
 
 
                         if (u != null)
