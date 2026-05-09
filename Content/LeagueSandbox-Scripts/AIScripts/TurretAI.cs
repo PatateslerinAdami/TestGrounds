@@ -60,6 +60,14 @@ namespace AIScripts
                     continue;
                 }
 
+                // Turrets do not target wards (Sightstone/Trinket/Vision/Yellow). Mirrors
+                // 4.20 client behavior — wards are placed inside enemy turret range routinely
+                // for vision and aren't supposed to draw aggro.
+                if (u is Minion minion && minion.IsWard)
+                {
+                    continue;
+                }
+
                 // Note: this method means that if there are two champions within turret range,
                 // The player to have been added to the game first will always be targeted before the others
                 if (baseTurret.TargetUnit == null)
