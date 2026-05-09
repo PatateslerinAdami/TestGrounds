@@ -21,6 +21,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             {
                 Game.ObjectManager.RefreshUnitVision(obj);
             }
+            ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.INFO, "Fog of War disabled!");
         }
     }
 }
