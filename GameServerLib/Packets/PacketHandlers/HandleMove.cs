@@ -56,6 +56,25 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                             return false;
                         }
 
+                        // Same-destination dedup: if the player clicks the spot the unit is
+                        // already heading to, drop the packet. Without this, the path is
+                        // recomputed from the unit's current (advancing) position, producing
+                        // slightly different intermediate waypoints each time. CurrentWaypoint
+                        // shifts on every recompute → UpdateFacing snaps Direction to a fresh
+                        // tangent → visible facing jitter even though the player is just
+                        // hammering the same point. Pure unit-target follow (u != null with
+                        // matching TargetNetID) is also covered by the SetTargetUnit early-out.
+                        if (u == null && champion.Waypoints.Count > 1 && req.Waypoints.Count > 0)
+                        {
+                            var currentDest = champion.Waypoints[champion.Waypoints.Count - 1];
+                            var newDest = TranslateFromCenteredCoordinates(req.Waypoints[req.Waypoints.Count - 1]);
+                            const float SameDestEpsilonSq = 100f * 100f;
+                            if (Vector2.DistanceSquared(currentDest, newDest) < SameDestEpsilonSq)
+                            {
+                                return true;
+                            }
+                        }
+
                         // Mirror of the 4.20 client's command-issue throttle. We drop rapid
                         // MoveTo/AttackTo/AttackMove inputs that arrive within the throttle
                         // window. Without this, spam-clicking generates a WaypointGroup per
