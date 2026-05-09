@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Linq;
 using Buffs;
@@ -15,7 +16,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 namespace ItemPassives;
 
 public class ItemID_3078 : IItemScript {
-    private ObjAIBase     _owner;
+    private ObjAIBase     _owner = null!;
     private const int ItemId = 3078;
     
     public         StatsModifier StatsModifier { get; } = new();
@@ -24,28 +25,18 @@ public class ItemID_3078 : IItemScript {
         _owner = owner;
         SpellbladeManager.Register(owner, ItemId);
         
-        for (byte i = 0; i < 4; i++) {
-            if (_owner.Spells.TryGetValue(i, out Spell spell)) {
-                ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellsCast);
-            }
-        }
+        Enumerable.Range(0, 4)
+            .Where(slot => _owner.Spells.ContainsKey((short)slot))
+            .Select(slot => _owner.Spells[(short)slot])
+            .ToList()
+            .ForEach(spell => ApiEventManager.OnSpellCast.AddListener(this, spell, OnSpellsCast));
         
         ApiEventManager.OnHitUnit.AddListener(this, _owner, OnHit);
         ApiEventManager.OnKill.AddListener(this, _owner, OnKill);
     }
 
     private void OnSpellsCast(Spell spell) {
-        if (_owner == null || spell == null || !spell.Script.ScriptMetadata.TriggersSpellCasts || _owner.HasBuff("SheenDelay")) return;
-        if (!SpellbladeManager.IsActive(_owner, ItemId)) return;
-        if (SpellbladeManager.HasAnySpellbladeProc(_owner)) return;
-
-        var itemSpell = GetTrinitySpell();
-        if (itemSpell == null || itemSpell.CurrentCooldown > 0f) return;
-
-        var variables = new BuffVariables();
-        variables.Set("sourceItemId", ItemId);
-        variables.Set("damageAmount", _owner.Stats.AttackDamage.BaseValue * 2f);
-        AddBuff("Sheen", 10f, 1, spell, _owner, _owner, buffVariables: variables);
+        SpellbladeManager.TryArmSpellblade(_owner, spell);
     }
 
     private void OnHit(DamageData data) {
@@ -60,24 +51,6 @@ public class ItemID_3078 : IItemScript {
     public void OnDeactivate(ObjAIBase owner) { 
         SpellbladeManager.Unregister(owner, ItemId);
         ApiEventManager.RemoveAllListenersForOwner(this);
-        _owner = null;
-    }
-
-    private Spell GetTrinitySpell()
-    {
-        for (byte i = 0; i < 7; i++)
-        {
-            var item = _owner.Inventory.GetItem(i);
-            if (item != null && item.ItemData.ItemId == ItemId)
-            {
-                short spellSlot = (short)(i + (byte)SpellSlotType.InventorySlots);
-                if (_owner.Spells.TryGetValue(spellSlot, out Spell s))
-                {
-                    return s;
-                }
-            }
-        }
-
-        return null;
+        _owner = null!;
     }
 }
