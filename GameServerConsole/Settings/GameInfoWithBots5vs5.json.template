@@ -672,6 +672,7 @@
         "MINION_SPAWNS_ENABLED": true,
         "DEATH_TIMER_ENABLED": true,
         "EMPOWERED_SUMS_ENABLED": false, // To make flash unlimited range and heal give unlimited movement speed
+        "TOURNAMENT_MODE_ENABLED": false, // If enabled, sets refresh rate to 60 hz instead of 30 hz. More computationally expensive.
         "CONTENT_PATH": "../../../../../Content",
         "IS_DAMAGE_TEXT_GLOBAL": false
     },

@@ -38,7 +38,10 @@ namespace LeagueSandbox.GameServer
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
-        protected const double REFRESH_RATE = 1000.0 / 30.0; // GameLoop called either 30 times (normal mode) or 60 times (tournament mode) a second.
+        protected double RefreshRate =>
+            Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode)
+                ? 1000.0 / 60.0
+                : 1000.0 / 30.0; // GameLoop called either 30 times (normal mode) or 60 times (tournament mode) a second.
         private HandleStartGame _gameStartHandler;
 
         // Server
@@ -320,7 +323,7 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public void GameLoop()
         {
-            double refreshRate = REFRESH_RATE;
+            double refreshRate = RefreshRate;
             double timeout = 0;
 
             Stopwatch lastMapDurationWatch = new Stopwatch();
@@ -372,7 +375,7 @@ namespace LeagueSandbox.GameServer
 
                 if (!IsPaused)
                 {
-                    refreshRate = REFRESH_RATE;
+                    refreshRate = RefreshRate;
                     wasNotPaused = true;
 
                     if(!IsRunning && timeToForcedStart > 0)
