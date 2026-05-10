@@ -14,6 +14,7 @@ namespace GameServerCore.Enums
         EnableManaCosts = 1 << 2,
         EnableLaneMinions = 1 << 3,
         EnableDeathTimer = 1 << 4,
-        EnableEmpoweredSumsForTesting = 1 << 5
+        EnableEmpoweredSumsForTesting = 1 << 5,
+        EnableTournamentMode = 1 << 6
     }
 }
