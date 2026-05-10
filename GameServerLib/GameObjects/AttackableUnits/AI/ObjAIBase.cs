@@ -1716,6 +1716,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         /// <summary>
         /// Sets this AI's current target unit. This relates to both auto attacks as well as general spell targeting.
+        ///
+        /// <para>When switching between two non-null targets, the AA pipeline state
+        /// (<c>IsAttacking</c>, <c>HasMadeInitialAttack</c>, <c>AutoAttackSpell.State</c>,
+        /// <c>_autoAttackCurrentCooldown</c>) is silently reset because windup state from the old
+        /// target is stale relative to the new one. Without this, <c>UpdateTarget</c>'s
+        /// <c>else if (IsAttacking)</c> branch (line 2005) keeps continuing the OLD windup against
+        /// the new target — observable as Trundle/Jax/KatarinaE getting "stuck" not damaging after
+        /// a target switch. The reset is silent (no <c>NPC_InstantStop_Attack</c>) so existing wire
+        /// patterns are preserved; callers needing a wire-side handoff use
+        /// <see cref="RetargetAttackToWithHandoff"/>.</para>
         /// </summary>
         /// <param name="target">Unit to target.</param>
         public void SetTargetUnit(AttackableUnit target, bool networked = false)
@@ -1725,12 +1735,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return;
             }
             bool wasTargetingChampion = TargetUnit is Champion;
+            bool isSwitchBetweenTargets = target != null && TargetUnit != null;
             if (target == null && TargetUnit != null)
             {
                 ApiEventManager.OnTargetLost.Publish(this, TargetUnit);
             }
 
             TargetUnit = target;
+
+            if (isSwitchBetweenTargets)
+            {
+                CancelAutoAttack(reset: true, fullCancel: true, silent: true);
+            }
 
             if (networked)
             {
