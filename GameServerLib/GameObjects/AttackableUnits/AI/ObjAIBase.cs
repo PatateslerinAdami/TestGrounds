@@ -1312,6 +1312,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = false;
             AutoAttackSpell = GetNewAutoAttack();
             PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            // Fully clear `IsAttacking` + `HasMadeInitialAttack` so the next UpdateTarget tick
+            // re-acquires through the normal acquisition path with the restored base AA spell.
+            // Without this, a stale `IsAttacking=true` from the empowered AA windup makes
+            // UpdateTarget skip to the `else if (IsAttacking)` branch with a mismatched spell
+            // state — observable as Trundle/Jax getting "stuck" not attacking after their
+            // empowered AA + the target dies.
+            CancelAutoAttack(reset: true, fullCancel: true, silent: true);
         }
 
         /// <summary>
@@ -1337,7 +1344,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // Full cancel + reset: fresh AutoAttackSpell instance needs fresh IsAttacking/
+                // HasMadeInitialAttack state too, otherwise UpdateTarget keeps the OLD windup's
+                // attack-state alive and the new spell's windup never starts cleanly. Silent
+                // because empowered-AA buffs (Trundle Q, Jax W) don't broadcast ISA on their
+                // swap-in moment in Riot's wire pattern.
+                CancelAutoAttack(reset: true, fullCancel: true, silent: true);
             }
         }
 
@@ -1364,7 +1376,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = true;
             if (isReset)
             {
-                CancelAutoAttack(true);
+                // Full cancel + reset: see Spell-instance overload above for rationale.
+                CancelAutoAttack(reset: true, fullCancel: true, silent: true);
             }
 
             return AutoAttackSpell;
