@@ -23,6 +23,7 @@ using GameServerCore.Packets.PacketDefinitions;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Quests;
+using System.Threading;
 
 namespace LeagueSandbox.GameServer
 {
@@ -327,16 +328,27 @@ namespace LeagueSandbox.GameServer
             double timeout = 0;
 
             Stopwatch lastMapDurationWatch = new Stopwatch();
-            
+
             bool wasNotPaused = true;
             bool firstCycle = true;
-            
+
             float timeToForcedStart = Config.ForcedStart;
+
+            // Kick off the dedicated I/O thread. From this point onwards, all
+            // ENet polling and outbound sends happen on that thread; the game
+            // thread interacts with the network only via the bridge queues.
+            _packetServer.StartNetThread();
 
             while (!SetToExit)
             {
                 double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
                 lastMapDurationWatch.Restart();
+
+                // Drain everything the net thread has produced since the last
+                // tick. Done at the very top so the rest of the tick sees a
+                // consistent view of the world (including any packet handlers
+                // that mutate game state).
+                DrainInboundEvents();
                 
                 float deltaTime = (float)lastSleepDuration;
                 if(firstCycle)
@@ -397,8 +409,41 @@ namespace LeagueSandbox.GameServer
                 double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
                 double oversleep = lastSleepDuration - timeout;
                 timeout = Math.Max(0, refreshRate - lastUpdateDuration - oversleep);
-                
-                _packetServer.NetLoop((uint)timeout);
+
+                if (timeout > 0)
+                {
+                    Thread.Sleep((int)timeout);
+                }
+            }
+
+            _packetServer.StopNetThread();
+        }
+
+        // Drains all events the net thread has queued for the game thread:
+        // converted request packets and disconnect notifications. Runs once
+        // at the top of every tick so handler-induced state changes are
+        // visible to Update(diff) immediately afterwards.
+        private void DrainInboundEvents()
+        {
+            var bridge = _packetServer.Bridge;
+            while (bridge.Inbound.TryDequeue(out var ev))
+            {
+                switch (ev)
+                {
+                    case InboundRequest r:
+                        try
+                        {
+                            _packetServer.PacketHandlerManager.DispatchInboundRequest(r.ClientId, r.Request);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error($"Inbound request dispatch failed for client {r.ClientId}: {e}");
+                        }
+                        break;
+                    case InboundDisconnect d:
+                        _packetServer.PacketHandlerManager.ProcessDisconnectOnGameThread(d.ClientId);
+                        break;
+                }
             }
         }
 

@@ -1,4 +1,4 @@
-﻿using LENet;
+using LENet;
 using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
 using GameServerCore.Packets.PacketDefinitions;
@@ -17,7 +17,12 @@ namespace PacketDefinitions420
 {
     /// <summary>
     /// Class containing all functions related to sending and receiving packets.
-    /// TODO: refactor this class (may be able to replace it with LeaguePackets' implementation), get rid of IGame, use generic API requests+responses also for disconnect and unpause
+    /// After the network-thread split, all "send" methods on this class merely
+    /// enqueue an <see cref="OutboundCommand"/> onto <see cref="NetworkBridge.Outbound"/>;
+    /// the actual encryption + ENet send is performed by the network thread via
+    /// <see cref="NetworkSender"/>. Handshake replies are the one exception: the
+    /// handshake itself runs on the network thread, so it can still call the
+    /// sender directly for guaranteed in-order delivery.
     /// </summary>
     public class PacketHandlerManager
     {
@@ -25,22 +30,24 @@ namespace PacketDefinitions420
         private readonly Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor> _gameConvertorTable;
         private readonly Dictionary<LoadScreenPacketID, RequestConvertor> _loadScreenConvertorTable;
         private readonly Dictionary<GamePacketID, RequestConvertor> _fallbackConvertorTable;
-        // should be one-to-one, no two users for the same Peer
-        private readonly Peer[] _peers;
+
+        // Net-thread-owned state lives behind _sender. PacketHandlerManager
+        // never touches _peers[] or _blowfishes[] directly anymore — except in
+        // handshake which already runs on the network thread.
+        internal readonly NetworkSender _sender;
+        internal readonly NetworkBridge _bridge;
+
         private readonly PlayerManager _playerManager;
-        private readonly BlowFish[] _blowfishes;
-        private readonly Host _server;
         private readonly Game _game;
 
         private readonly NetworkHandler<ICoreRequest> _netReq;
         private readonly NetworkHandler<ICoreRequest> _netResp;
 
-        public PacketHandlerManager(BlowFish[] blowfishes, Host server, Game game, NetworkHandler<ICoreRequest> netReq, NetworkHandler<ICoreRequest> netResp)
+        internal PacketHandlerManager(NetworkSender sender, NetworkBridge bridge, Game game, NetworkHandler<ICoreRequest> netReq, NetworkHandler<ICoreRequest> netResp)
         {
-            _blowfishes = blowfishes;
-            _server = server;
+            _sender = sender;
+            _bridge = bridge;
             _game = game;
-            _peers = new Peer[blowfishes.Length];
             _playerManager = _game.PlayerManager;
             _netReq = netReq;
             _netResp = netResp;
@@ -114,7 +121,7 @@ namespace PacketDefinitions420
                 GamePacketID.SendSelectedObjID,
                 GamePacketID.C2S_CharSelected,
 
-                // The next two are required to reconnect 
+                // The next two are required to reconnect
                 GamePacketID.SynchVersionC2S,
                 GamePacketID.C2S_Ping_Load_Info,
 
@@ -155,22 +162,17 @@ namespace PacketDefinitions420
             Console.WriteLine("--------");
         }
 
+        // -------- Public send API (game-thread side) --------
+        // These return bool only for compatibility with existing callers; after
+        // the threading split, "true" merely means "successfully enqueued".
+        // The actual transmit happens later on the net thread.
+
         public bool SendPacket(int userId, byte[] source, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
-            // Sometimes we try to send packets to a user that doesn't exist (like in broadcast when not all players are connected).
-            if (0 <= userId && userId < _peers.Length && _peers[userId] != null)
+            if (0 <= userId && userId < _sender.Peers.Length)
             {
-                byte[] temp;
-                if (source.Length >= 8)
-                {
-                    // _peers.Length == _blowfishes.Length
-                    temp = _blowfishes[userId].Encrypt(source);
-                }
-                else
-                {
-                    temp = source;
-                }
-                return _peers[userId].Send((byte)channelNo, new LENet.Packet(temp, flag)) == 0;
+                _bridge.EnqueueOutbound(new OutboundUnicast(userId, source, channelNo, flag));
+                return true;
             }
             return false;
         }
@@ -179,27 +181,20 @@ namespace PacketDefinitions420
         {
             if (data.Length >= 8)
             {
-                // send packet to all peers and save failed ones
-                int failedPeers = 0;
-                for(int i = 0; i < _peers.Length; i++)
+                // Fan out to one OutboundUnicast per configured slot. The net
+                // thread skips entries whose peer slot is null (disconnected).
+                // We iterate the player config (stable post-init) rather than
+                // _peers[] because _peers is net-thread-owned.
+                foreach (var ci in _playerManager.GetPlayers(false))
                 {
-                    if(_peers[i] != null && _peers[i].Send((byte)channelNo, new LENet.Packet(_blowfishes[i].Encrypt(data), flag)) < 0)
-                    {
-                        failedPeers++;
-                    }
+                    _bridge.Outbound.Enqueue(new OutboundUnicast(ci.ClientId, data, channelNo, flag));
                 }
-
-                if (failedPeers > 0)
-                {
-                    Debug.WriteLine($"Broadcasting packet failed for {failedPeers} peers.");
-                    return false;
-                }
+                _bridge.OutboundSignal.Set();
                 return true;
             }
             else
             {
-                var packet = new LENet.Packet(data, flag);
-                _server.Broadcast((byte)channelNo, packet);
+                _bridge.EnqueueOutbound(new OutboundBroadcastRaw(data, channelNo, flag));
                 return true;
             }
         }
@@ -249,7 +244,33 @@ namespace PacketDefinitions420
             return peerInfo?.Team ?? TeamId.TEAM_NEUTRAL;
         }
 
-        public bool HandlePacket(Peer peer, byte[] data, Channel channelId)
+        // -------- Net-thread receive path --------
+        // HandleNetworkPacket is the entry point invoked by the network
+        // thread's HostService loop. It does Blowfish decrypt + RequestConvertor
+        // dispatch, then enqueues an InboundRequest for the game thread to
+        // process at the start of its next tick. The handshake is the
+        // exception: it stays synchronous because its replies must be sent on
+        // the net thread (and we already are) before any subsequent packet
+        // from this client is processed.
+        public bool HandleNetworkPacket(Peer peer, Packet packet, Channel channelId)
+        {
+            var data = packet.Data;
+
+            if (channelId == Channel.CHL_HANDSHAKE)
+            {
+                return HandleHandshake(peer, data);
+            }
+
+            if (data.Length >= 8)
+            {
+                int clientId = ((int)peer.UserData) - 1;
+                data = _sender.Blowfishes[clientId].Decrypt(data);
+            }
+
+            return ConvertAndEnqueue(peer, data, channelId);
+        }
+
+        private bool ConvertAndEnqueue(Peer peer, byte[] data, Channel channelId)
         {
             var reader = new BinaryReader(new MemoryStream(data));
             RequestConvertor convertor;
@@ -257,13 +278,11 @@ namespace PacketDefinitions420
             if (channelId == Channel.CHL_COMMUNICATION || channelId == Channel.CHL_LOADING_SCREEN)
             {
                 var loadScreenPacketId = (LoadScreenPacketID)reader.ReadByte();
-                //Console.WriteLine($"-> {loadScreenPacketId}");
                 convertor = GetConvertor(loadScreenPacketId);
             }
             else
             {
                 var gamePacketId = (GamePacketID)reader.ReadByte();
-                //Console.WriteLine($"-> {gamePacketId}");
                 convertor = GetConvertor(gamePacketId, channelId);
             }
 
@@ -272,77 +291,92 @@ namespace PacketDefinitions420
             if (convertor != null)
             {
                 int clientId = ((int)peer.UserData) - 1;
-                dynamic req = convertor(data);
-                _netReq.OnMessage(clientId, req);
+                ICoreRequest req = convertor(data);
+                _bridge.Inbound.Enqueue(new InboundRequest(clientId, req));
                 return true;
             }
 
-            #if DEBUG
+#if DEBUG
             PrintPacket(data, "Error: ");
-            #endif
+#endif
 
             return false;
         }
 
-        public bool HandleDisconnect(Peer peer)
+        // Called from the game thread when an InboundRequest is dequeued at
+        // the top of the game tick. Dispatches to the registered handlers.
+        internal bool DispatchInboundRequest(int clientId, ICoreRequest req)
         {
-            if(peer == null)
+            return _netReq.OnMessage(clientId, (dynamic)req);
+        }
+
+        // -------- Disconnect handling --------
+        // Two entry points:
+        //   1. NotifyDisconnectFromNet: called by the net thread's HostService
+        //      loop when an EventType.DISCONNECT arrives. Nulls the peer slot
+        //      (we own _peers[] here) and queues an InboundDisconnect for the
+        //      game thread to process.
+        //   2. ProcessDisconnectOnGameThread: called by the game thread, both
+        //      when it dequeues an InboundDisconnect AND when HandleExit fires
+        //      from the request stream. In the latter case the ENet peer is
+        //      still alive, so we enqueue an OutboundClearPeer to release the
+        //      slot once the net thread processes it.
+        public bool NotifyDisconnectFromNet(Peer peer)
+        {
+            if (peer == null)
             {
                 return true;
             }
 
             int clientId = ((int)peer.UserData) - 1;
-            if(clientId < 0)
+            if (clientId < 0)
             {
                 // Didn't receive an ID by initiating a handshake.
                 return true;
             }
-            return HandleDisconnect(clientId);
+
+            _sender.ClearPeer(clientId);
+            _bridge.Inbound.Enqueue(new InboundDisconnect(clientId));
+            return true;
         }
 
         public bool HandleDisconnect(int clientId)
         {
+            // Public alias preserved for HandleExit. Same body as
+            // ProcessDisconnectOnGameThread, plus a ClearPeer enqueue because
+            // when this is called from the request stream the net thread has
+            // not seen an ENet DISCONNECT yet.
+            bool result = ProcessDisconnectOnGameThread(clientId);
+            _bridge.EnqueueOutbound(new OutboundClearPeer(clientId));
+            return result;
+        }
+
+        internal bool ProcessDisconnectOnGameThread(int clientId)
+        {
             var peerInfo = _game.PlayerManager.GetPeerInfo(clientId);
-            if (peerInfo.IsDisconnected)
+            if (peerInfo == null || peerInfo.IsDisconnected)
             {
-                Debug.WriteLine($"Prevented double disconnect of {peerInfo.PlayerId}");
+                Debug.WriteLine($"Prevented double disconnect of {peerInfo?.PlayerId}");
                 return true;
             }
 
             Debug.WriteLine($"Player {peerInfo.PlayerId} disconnected!");
-            
+
             var annoucement = new OnLeave { OtherNetID = peerInfo.Champion.NetId };
             _game.PacketNotifier.NotifyS2C_OnEventWorld(annoucement, peerInfo.Champion);
             peerInfo.IsDisconnected = true;
             peerInfo.IsStartedClient = false;
             peerInfo.ReconnectStartReady = false;
             peerInfo.ReconnectSpawnReady = false;
-            _peers[clientId] = null;
 
             return _game.CheckIfAllPlayersLeft() || peerInfo.Champion.OnDisconnect();
         }
 
-        public bool HandlePacket(Peer peer, Packet packet, Channel channelId)
-        {
-            var data = packet.Data;
-
-            // if channel id is HANDSHAKE we should initialize blowfish key and return
-            if(channelId == Channel.CHL_HANDSHAKE)
-            {
-                return HandleHandshake(peer, data);
-            }
-
-            // every packet that is not blowfish go here
-            if (data.Length >= 8)
-            {
-                // An unhandled exception of type 'System.NullReferenceException' occurred
-                int clientId = ((int)peer.UserData) - 1;
-                data = _blowfishes[clientId].Decrypt(data);
-            }
-
-            return HandlePacket(peer, data, channelId);
-        }
-
+        // -------- Handshake (net-thread, synchronous) --------
+        // Runs on the net thread. peer.UserData and _peers[] are net-thread
+        // owned, so we can read+write them directly. Replies are sent through
+        // the sender directly (not via the bridge) so they land in-order
+        // ahead of any queued packet for this client.
         private bool HandleHandshake(Peer peer, byte[] data)
         {
             var request = PacketReader.ReadKeyCheckRequest(data);
@@ -354,14 +388,14 @@ namespace PacketDefinitions420
                 return false;
             }
 
-            if(_peers[peerInfo.ClientId] != null && !peerInfo.IsDisconnected)
+            if (_sender.Peers[peerInfo.ClientId] != null && !peerInfo.IsDisconnected)
             {
                 Debug.WriteLine($"Player {request.PlayerID} is already connected. Request from {peer.Address.IPEndPoint.Address.ToString()}.");
                 return false;
             }
 
-            long playerID = _blowfishes[peerInfo.ClientId].Decrypt(request.CheckSum);
-            if(request.PlayerID != playerID)
+            long playerID = _sender.Blowfishes[peerInfo.ClientId].Decrypt(request.CheckSum);
+            if (request.PlayerID != playerID)
             {
                 Debug.WriteLine($"Blowfish key is wrong!");
                 return false;
@@ -369,10 +403,10 @@ namespace PacketDefinitions420
 
             peerInfo.IsStartedClient = true;
 
-            Debug.WriteLine("Connected client No " + peerInfo.ClientId);      
+            Debug.WriteLine("Connected client No " + peerInfo.ClientId);
 
             peer.UserData = (int)peerInfo.ClientId + 1;
-            _peers[peerInfo.ClientId] = peer;
+            _sender.Peers[peerInfo.ClientId] = peer;
 
             bool result = true;
             // inform players about their player numbers
@@ -386,10 +420,12 @@ namespace PacketDefinitions420
                     Action = 0,
                     CheckSum = request.CheckSum
                 };
-                result = result && SendPacket(peerInfo.ClientId, response.GetBytes(), Channel.CHL_HANDSHAKE);
+                // Direct send: we are on the net thread already and want the
+                // handshake reply to leave before any queued packet for this
+                // client is processed.
+                result = _sender.SendUnicast(peerInfo.ClientId, response.GetBytes(), Channel.CHL_HANDSHAKE, PacketFlags.RELIABLE) && result;
             }
 
-            // only if all packets were sent successfully return true
             return result;
         }
     }
