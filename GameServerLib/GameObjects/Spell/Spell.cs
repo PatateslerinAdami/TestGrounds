@@ -561,7 +561,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                     }
 
-                    if (Script.ScriptMetadata.AutoFaceDirection)
+                    if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                     {
                         var goingTo = end - CastInfo.Owner.Position;
 
@@ -591,7 +591,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
-                if (Script.ScriptMetadata.AutoFaceDirection)
+                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
                     ApiFunctionManager.FaceDirection(CastInfo.Targets[0].Unit.Position, CastInfo.Owner);
                 }
@@ -846,7 +846,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         }
                     }
 
-                    if (Script.ScriptMetadata.AutoFaceDirection)
+                    if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                     {
                         var goingTo = end - CastInfo.Owner.Position;
 
@@ -868,7 +868,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
-                if (Script.ScriptMetadata.AutoFaceDirection)
+                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
                     ApiFunctionManager.FaceDirection(CastInfo.Targets[0].Unit.Position, CastInfo.Owner);
                 }
