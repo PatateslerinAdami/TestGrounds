@@ -54,11 +54,15 @@ namespace AIScripts
         private BotState _currentState;
         private float _gameTime;
         private float _lastDamageTakenTime;
-        private bool isInCombat;
+        bool isInCombat;
         private bool isUnderTower;
         private bool MovingToLane;
         private Champion _followTarget;
         private const float CombatCooldownTime = 5.0f; // Time to consider out of combat (seconds)
+
+        // OnUpdate throttling for performance
+        private float _lastUpdateTime = 0f;
+        private const float OnUpdateInterval = 0.25f; // 250ms between updates
 
         // Personality seed for hive mind diversity
         private int _personalitySeed;
@@ -84,7 +88,7 @@ namespace AIScripts
         private bool _isAutoAttacking = false;
         private Vector2 _orbwalkDirection = Vector2.Zero;
         private float _lastOrbwalkTime = 0f;
-        private const float MinOrbwalkInterval = 0.3f; // Minimum time between direction changes
+        private const float MinOrbwalkInterval = 0.25f; // Match OnUpdateInterval for smooth movement
         private const float OrbwalkMoveSpeedMultiplier = 0.7f; // Move at 70% speed during orbwalking
 
         // Constants for decision making
@@ -373,6 +377,14 @@ namespace AIScripts
             }
 
             _gameTime += diff / 1000f; // Convert to seconds
+
+            // Throttle OnUpdate to run at 4Hz (250ms) for performance
+            // This prevents choppy behavior by running movement updates at consistent intervals
+            if (_gameTime - _lastUpdateTime < OnUpdateInterval)
+            {
+                return;
+            }
+            _lastUpdateTime = _gameTime;
 
             // Check if combat state has expired
             if (isInCombat && _gameTime - _lastDamageTakenTime > CombatCooldownTime)
@@ -2808,8 +2820,10 @@ namespace AIScripts
                     );
                 }
 
-                // Move in the chosen direction at reduced speed
-                Vector2 moveTarget = EzrealInstance.Position + (_orbwalkDirection * 100f);
+                // Move in the chosen direction at speed-based distance
+                // Faster bots will move further, maintaining smooth movement illusion
+                float moveDistance = CalculateOrbwalkMovementDistance();
+                Vector2 moveTarget = EzrealInstance.Position + (_orbwalkDirection * moveDistance);
                 Vector2 safeMoveTarget = FindNearestWalkable(moveTarget);
 
                 EzrealInstance.MoveOrder = OrderType.MoveTo;
@@ -2834,6 +2848,28 @@ namespace AIScripts
 
             // Ensure the offset position is walkable
             return FindNearestWalkable(offsetPosition);
+        }
+
+        /// <summary>
+        /// Calculates movement distance based on movement speed and update interval.
+        /// This ensures smooth movement when OnUpdate is throttled.
+        /// </summary>
+        /// <returns>Distance in units the bot should move this tick</returns>
+        private float CalculateMovementDistance()
+        {
+            // Distance = speed × time
+            // Base calculation: movement speed per second × update interval
+            return EzrealInstance.Stats.MoveSpeed.Total * OnUpdateInterval;
+        }
+
+        /// <summary>
+        /// Calculates orbwalk movement distance (reduced speed during orbwalking).
+        /// </summary>
+        /// <returns>Distance in units for orbwalk movement</returns>
+        private float CalculateOrbwalkMovementDistance()
+        {
+            // Orbwalk uses reduced speed (70%) to maintain kiting range
+            return CalculateMovementDistance() * OrbwalkMoveSpeedMultiplier;
         }
 
         #endregion
