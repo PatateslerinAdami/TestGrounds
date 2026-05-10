@@ -235,14 +235,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="unit">AI unit to teleport.</param>
         /// <param name="x">X coordinate.</param>
         /// <param name="y">Y coordinate.</param>
-        public static void TeleportTo(ObjAIBase unit, float x, float y)
+        public static void TeleportTo(ObjAIBase unit, float x, float y, bool silent = false)
         {
             if (unit.MovementParameters != null)
             {
                 CancelDash(unit);
             }
 
-            unit.TeleportTo(x, y);
+            unit.TeleportTo(x, y, silent: silent);
         }
 
         public static void FaceDirection(Vector2 location, GameObject target, bool isInstant = false,
@@ -1913,13 +1913,11 @@ namespace LeagueSandbox.GameServer.API
         /// </summary>
         /// <param name="obj">Object who's animations will be stopped.</param>
         /// <param name="animation">Internal name of the animation to stop playing. Set blank/null if stopAll is true.</param>
-        /// <param name="stopAll">Whether or not to stop all animations. Only works if animation is empty/null.</param>
-        /// <param name="fade">Whether or not the animation should fade before stopping.</param>
-        /// <param name="ignoreLock">Whether or not locked animations should still be stopped.</param>
-        public static void StopAnimation(GameObject obj, string animation, bool stopAll = false, bool fade = false,
-            bool ignoreLock = true)
+        /// <param name="animation">Internal name of the animation to stop. Empty string + <c>StopAll</c> stops every track.</param>
+        /// <param name="flags">Combination of <see cref="LeaguePackets.Game.Common.StopAnimationFlags"/>. Default <c>IgnoreLock</c> matches the prior bool-API default.</param>
+        public static void StopAnimation(GameObject obj, string animation, LeaguePackets.Game.Common.StopAnimationFlags flags = LeaguePackets.Game.Common.StopAnimationFlags.IgnoreLock)
         {
-            obj.StopAnimation(animation, stopAll, fade, ignoreLock);
+            obj.StopAnimation(animation, flags);
         }
 
         public static void SealSpellSlot(ObjAIBase target, SpellSlotType slotType, int slot,
@@ -2352,6 +2350,73 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Emits the full 4-packet Voracity wire-pattern verified empirically against a
+        /// Kat-perspective replay (22 events × 4 packets, 100% consistent shape):
+        ///
+        /// <para>Per Voracity event (kill OR assist):
+        /// <list type="bullet">
+        /// <item>3× <c>CHAR_SetCooldown(slot=0/1/2, isSummonerSpell=false, cd=0, max=-1)</c> —
+        ///       per-target to Katarina's own client (Q/W/E reset to 0; allies don't render her
+        ///       ability cooldowns so broadcast scope would be wasted).</item>
+        /// <item>1× <c>CHAR_SetCooldown(slot=3, cd=R_remaining, max=-1)</c> with
+        ///       <c>isSummonerSpell</c> scope-toggled by event type:
+        ///       <list type="bullet">
+        ///       <item>KILL → <c>isSummonerSpell=true</c>, BROADCAST to all teammates with vision
+        ///             (carries the Voracity icon-refresh visual + Kat's R cooldown).</item>
+        ///       <item>ASSIST → <c>isSummonerSpell=false</c>, per-target to Kat only (just R
+        ///             cooldown; no broadcast visual since allies got their own kill credit).</item>
+        ///       </list></item>
+        /// </list></para>
+        ///
+        /// <para>Q/W/E are RESET (cd=0), not "subtract 15s" — Riot's server effectively does
+        /// `LowerCooldown(15) → floor at 0`, but Q/W/E base CDs are all ≤ 15s in 4.x so the floor
+        /// always engages. Wire just sends 0. R uses the formula
+        /// <c>R_last_cast_cd − Δt − 15×takedowns</c>; can go negative (signed-float wire field).</para>
+        ///
+        /// <para>Decomp confirmed no Katarina-specific code in the client; the 4-packet fan-out
+        /// happens server-side. The S4 client just receives 4 standard SetCooldown packets and
+        /// applies them to its local SpellDataInst[slot] timers.</para>
+        /// </summary>
+        /// <param name="katarina">Champion that just procced Voracity.</param>
+        /// <param name="isOwnKill">true = Katarina's own kill (broadcast slot=3); false = assist (per-target slot=3).</param>
+        /// <param name="rRemainingCooldown">Katarina R's effective cooldown post-Voracity (in seconds, can be negative).</param>
+        public static void NotifyVoracityProc(ObjAIBase katarina, bool isOwnKill, float rRemainingCooldown)
+        {
+            if (katarina is not Champion champ) return;
+            int ownerUserId = champ.ClientId;
+
+            // Q/W/E per-target reset to 0
+            for (byte slot = 0; slot <= 2; slot++)
+            {
+                _game.PacketNotifier.NotifyCHAR_SetCooldownRaw(katarina,
+                    slotId: slot,
+                    cooldown: 0f,
+                    useAlternateSpellbook: false,
+                    maxCooldownForDisplay: -1f,
+                    userId: ownerUserId);
+            }
+
+            // R: broadcast on kill (Voracity sentinel), per-target on assist
+            if (isOwnKill)
+            {
+                _game.PacketNotifier.NotifyCHAR_SetCooldownRaw(katarina,
+                    slotId: 3,
+                    cooldown: rRemainingCooldown,
+                    useAlternateSpellbook: true,
+                    maxCooldownForDisplay: -1f);
+            }
+            else
+            {
+                _game.PacketNotifier.NotifyCHAR_SetCooldownRaw(katarina,
+                    slotId: 3,
+                    cooldown: rRemainingCooldown,
+                    useAlternateSpellbook: false,
+                    maxCooldownForDisplay: -1f,
+                    userId: ownerUserId);
+            }
+        }
+
+        /// <summary>
         /// Sets the unit stealthed/faded.
         /// </summary>
         public static Fade PushCharacterFade(
@@ -2408,6 +2473,17 @@ namespace LeagueSandbox.GameServer.API
         public static void NotifyWaypointGroup(AttackableUnit unit)
         {
             _game.PacketNotifier.NotifyWaypointGroup(unit);
+        }
+
+        /// <summary>
+        /// Sends a single-waypoint WaypointGroup with HasTeleportID=true on CHL_S2C — used
+        /// for blink-style spells (Katarina E) where the post-blink position must reach the
+        /// client same-tick to match Riot's wire timing. The unit's TeleportID is read after
+        /// this call returns, so increment it (e.g. via TeleportTo) before invoking.
+        /// </summary>
+        public static void NotifyTeleport(AttackableUnit unit, Vector2 position)
+        {
+            _game.PacketNotifier.NotifyTeleport(unit, position);
         }
 
         public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot,

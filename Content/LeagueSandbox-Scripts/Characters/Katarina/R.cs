@@ -3,6 +3,7 @@ using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
@@ -37,35 +38,24 @@ namespace Spells
     
     public class KatarinaRTriggerSound : ISpellScript
     {
-        private ObjAIBase _katarina;
-
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             NotSingleTargetSpell = true,
             TriggersSpellCasts = false,
         };
-
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _katarina = owner;
-        }
-
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-            AddBuff("KatarinaRSound", 2.5f, 1, spell, _katarina, _katarina);
-        }
     }
 
     public class KatarinaR : ISpellScript
     {
         private ObjAIBase _katarina;
         private Spell _spell;
+        private PeriodicTicker _periodicTicker;
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             NotSingleTargetSpell = true,
             TriggersSpellCasts = true,
-            ChannelDuration = 2.5f
+            ChannelDuration = 2.4f
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
@@ -76,10 +66,38 @@ namespace Spells
 
         public void OnSpellChannel(Spell spell)
         {
+            _periodicTicker.Reset();
             SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
+            AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
+
+            const AnimationFlags spell4Flags = AnimationFlags.UniqueOverride | AnimationFlags.Override | AnimationFlags.Unknown8;
+            switch (_katarina.SkinID)
+            {
+                default: PlayAnimation(_katarina, "Spell4", timeScale: 0f, speedScale: 1f, flags: spell4Flags); break;
+                case 7:  PlayAnimation(_katarina, "Spell4", timeScale: 0.2f, speedScale: 1f, flags: spell4Flags); break;
+            }
+        }
+        
+        public void OnSpellChannelUpdate(Spell spell, float diff)
+        {
+            var ticks = _periodicTicker.ConsumeTicks(diff, 250f, true, 1, 10);
+            if (ticks != 1) return;
+
+            var closestUnits = GetUnitsInRange(_katarina, _katarina.Position, 550, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes).ToArray();
+            var length = closestUnits.Length > 3 ? 3 : closestUnits.Length;
+            for (var i = 0; i < length; i++)
+            {
+                SpellCast(_katarina, 0, SpellSlotType.ExtraSlots, true, closestUnits[i], _katarina.Position);
+            }
         }
 
         public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
+        {
+            _katarina.RemoveBuffsWithName("KatarinaRSound");
+            AddParticleTarget(_katarina, _katarina, "Katarina_deathLotus_empty", _katarina, 1.0f);
+        }
+
+        public void OnSpellPostChannel(Spell spell)
         {
             _katarina.RemoveBuffsWithName("KatarinaRSound");
         }
@@ -109,8 +127,8 @@ namespace Spells
         private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
             var mainSpell = _katarina.GetSpell("KatarinaR");
-            var ap = _katarina.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient / 10;
-            var ad = _katarina.Stats.AttackDamage.FlatBonus * mainSpell.SpellData.Coefficient2 / 10;
+            var ap = _katarina.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient;
+            var ad = _katarina.Stats.AttackDamage.FlatBonus * mainSpell.SpellData.Coefficient2;
             var knifeDamage = 30 + 20 * (mainSpell.CastInfo.SpellLevel - 1) + ad + ap;
 
             AddBuff("GrievousWound", 3.0f, 1, spell, target, _katarina);

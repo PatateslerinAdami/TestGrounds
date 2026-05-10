@@ -6,6 +6,7 @@ using Buffs;
 using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -130,8 +131,8 @@ namespace Spells
         {
             if (parameters.MovementName != "AatroxQDash") return;
 
-            StopAnimation(_aatrox, "Spell1", fade: true);
-            StopAnimation(_aatrox, "Spell1_CLose", fade: true);
+            StopAnimation(_aatrox, "Spell1", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
+            StopAnimation(_aatrox, "Spell1_CLose", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
             
             var landParticle = _aatrox.SkinID switch {
                 1 => "Aatrox_Skin01_Q_Land",

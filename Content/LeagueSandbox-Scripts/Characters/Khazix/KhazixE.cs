@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -22,7 +23,7 @@ namespace Spells
         public void OnSpellEvolve(Spell spell)
         {
             _owner.SetSpell("KhazixELong", spell.CastInfo.SpellSlot, true, true);
-            StopAnimation(_owner, "Hide_Wings", fade: true);
+            StopAnimation(_owner, "Hide_Wings", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
             SetSpell(_owner, "KhazixEEvo", SpellSlotType.ExtraSlots, 4, true);
             _owner.GetSpell("KhazixEEvo").Cast(default, default, null);
         }

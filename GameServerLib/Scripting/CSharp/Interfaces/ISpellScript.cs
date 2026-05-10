@@ -47,7 +47,16 @@ namespace GameServerCore.Scripting.CSharp
         {
         }
 
-        void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
+        // Fires every server tick while channeling. Channel-entry call passes diff=0f (synchronous
+        // with OnSpellChannel). Scripts gate per-spell rate via PeriodicTicker.ConsumeTicks(diff, periodMs, ...).
+        void OnSpellChannelUpdate(Spell spell, float diff)
+        {
+        }
+
+        // Fires when the client sends C2S_SpellChargeUpdateReq during a channel e.g. player adjusting
+        // aim/charge target. NOT time-driven (use OnSpellChannelUpdate for that). `forceStop`=true
+        // signals button release; engine cancels the channel right after this hook returns.
+        void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
         }
         void OnSpellEvolve(Spell spell)

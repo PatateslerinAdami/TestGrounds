@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -86,7 +87,7 @@ namespace Buffs
                 AddParticleTarget(owner, owner, "yasuo_base_eq_cas", owner);
                 PlayAnimation(owner, "Spell1_Dash", timeScale: 0.8f);
                 
-                var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", fade: true); });
+                var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock); });
                 unit.RegisterTimer(timerAnm);
 
                 _targetZone = origSpell.CreateSpellSector(new SectorParameters

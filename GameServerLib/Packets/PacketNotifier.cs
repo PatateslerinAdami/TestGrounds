@@ -45,6 +45,13 @@ namespace PacketDefinitions420
         private readonly NavigationGrid _navGrid;
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
         private Dictionary<int, List<ReplicationData>> _heldReplicationData = new Dictionary<int, List<ReplicationData>>();
+        // Per-recipient batching for FX_Create_Group, flushed once per tick alongside
+        // NotifyWaypointGroup. Replay-verified: Riot bundles multiple particles spawned in
+        // the same tick into a single FX_Create_Group with multiple FXCreateGroupData
+        // entries (e.g. KatarinaQ hit sends daggered + bouncingBlades_tar in one packet,
+        // S1 effectmanagerhelper_client.cpp ProccessEffectPacket walks numbFXGroups).
+        private Dictionary<int, List<FXCreateGroupData>> _heldFXGroupsByUser = new();
+        private Dictionary<TeamId, List<FXCreateGroupData>> _heldFXGroupsByTeam = new();
 
         /// <summary>
         /// Instantiation which preps PacketNotifier for packet sending.
@@ -238,16 +245,13 @@ namespace PacketDefinitions420
 
             charStackDataList.Add(charStackData);
 
-            MovementData md;
-
-            if (o is AttackableUnit u && u.Waypoints.Count > 1)
-            {
-                md = PacketExtensions.CreateMovementDataWithSpeedIfPossible(u, _navGrid, useTeleportID: true);
-            }
-            else
-            {
-                md = PacketExtensions.CreateMovementDataStop(o);
-            }
+            // Replay shows Riot uses a 1-waypoint MovementDataNormal at the unit's current
+            // position for stationary units on vision-acquire — not MovementDataStop (Type=3),
+            // which the 4.x replay never carries. The Normal builder produces that shape
+            // automatically via GetCenteredWaypoints' [Position] seed.
+            MovementData md = o is AttackableUnit u
+                ? PacketExtensions.CreateMovementDataWithSpeedIfPossible(u, _navGrid, useTeleportID: true)
+                : PacketExtensions.CreateMovementDataStop(o);
 
             var enterVis = new OnEnterVisibilityClient
             {
@@ -555,6 +559,23 @@ namespace PacketDefinitions420
             switch (o)
             {
                 case SpellMissile missile:
+                    // Primary missiles (CastSpellAns/Basic_Attack_Pos already sent + ForceCreateMissile
+                    // at windup-end) don't need MissileReplication on initial spawn because the client
+                    // already has the cast info. Replay-verified for KatarinaQ initial missile (only
+                    // 2 packets ever touch its NetID: CastSpellAns + ForceCreateMissile).
+                    //
+                    // Mid-flight vision-acquire (TimeSinceCreation > 0) is a different case: the new
+                    // viewer was NOT in vision at cast time, so they never received CastSpellAns and
+                    // their client `Spellbook::GetSpellcastingObject` would return null in the
+                    // ForceSpawnMissile handler. They need the full MissileReplication packet to
+                    // learn about the missile.
+                    //
+                    // Sub/bounce missiles (HasClientCastInfo=false) always need MissileReplication
+                    // since they have no prior cast announcement at all.
+                    if (missile.HasClientCastInfo && missile.GetTimeSinceCreation() <= 0f)
+                    {
+                        return null;
+                    }
                     return ConstructMissileReplicationPacket(missile);
                 case LevelProp prop:
                     return ConstructSpawnLevelPropPacket(prop);
@@ -1152,6 +1173,40 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Exact-control overload that doesn't auto-derive the spellbook-flag from the slot. Use
+        /// for cooldown updates that need explicit control over spellbook routing and broadcast
+        /// scope for e.g. Katarina's Voracity packet pattern.
+        /// </summary>
+        /// <param name="useAlternateSpellbook">Sets the wire bit `IsSummonerSpell` (bit 0x02 of the
+        /// bitfield). Originally designed for D/F summoner spell broadcasts — see
+        /// <see cref="CHAR_SetCooldown.IsSummonerSpell"/> for the full dual-semantic doc. In
+        /// practice this is also a "broadcast-to-team" toggle: Riot's server broadcasts the packet
+        /// when this flag is true (which is why summoner-spell cooldowns broadcast naturally) and
+        /// sends per-target when false. <paramref name="userId"/> overrides this on our side for
+        /// the per-target case.</param>
+        public void NotifyCHAR_SetCooldownRaw(ObjAIBase u, byte slotId, float cooldown,
+            bool useAlternateSpellbook, float maxCooldownForDisplay, int userId = -1)
+        {
+            var cdPacket = new CHAR_SetCooldown
+            {
+                SenderNetID = u.NetId,
+                Slot = slotId,
+                PlayVOWhenCooldownReady = false,
+                IsSummonerSpell = useAlternateSpellbook,
+                Cooldown = cooldown,
+                MaxCooldownForDisplay = maxCooldownForDisplay
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(u, cdPacket.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, cdPacket.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
         /// Sends a packet to toggle a unit's PAR visual state.
         /// </summary>
         /// <param name="unit">Unit whose PAR state should be updated.</param>
@@ -1469,7 +1524,6 @@ namespace PacketDefinitions420
                 SenderNetID = p.CastInfo.Owner.NetId,
                 MissileNetID = p.NetId
             };
-
             _packetHandlerManager.BroadcastPacket(misPacket.GetBytes(), Channel.CHL_S2C);
         }
 
@@ -1567,18 +1621,42 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing that the specified particle has been destroyed.
+        /// Sends a packet to all players that have the specified particle spawned client-side,
+        /// detailing that it has been destroyed. Uses SpawnedForPlayers (not VisibleForPlayers) so
+        /// players currently in FoW still receive the kill otherwise the particle is orphaned
+        /// in their client memory until reconnect.
+        ///
+        /// Also drops any still-queued FX_Create_Group entries for this particle from the per-tick
+        /// bundle queues so that a same-tick spawn+kill doesn't end up sending Create AFTER Kill
+        /// (NotifyFXCreateGroupBatch flushes at end of tick; SetToRemove fires mid-tick).
         /// </summary>
         /// <param name="particle">Particle that is being destroyed.</param>
-        /// TODO: Change to only broadcast to players who have vision of the particle (maybe?).
         public void NotifyFXKill(Particle particle)
         {
+            DropPendingFXCreateForParticle(particle);
+
             var fxKill = new FX_Kill
             {
                 SenderNetID = particle.NetId,
                 NetID = particle.NetId
             };
-            _packetHandlerManager.BroadcastPacketVision(particle, fxKill.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacketSpawned(particle, fxKill.GetBytes(), Channel.CHL_S2C);
+        }
+
+        // Removes any pending FXCreateGroupData entries for the given particle from the per-tick
+        // bundle queues — covers the same-tick spawn-and-kill race where Create would otherwise
+        // arrive client-side AFTER the Kill broadcast.
+        private void DropPendingFXCreateForParticle(Particle particle)
+        {
+            uint netId = particle.NetId;
+            foreach (var kv in _heldFXGroupsByUser)
+            {
+                kv.Value.RemoveAll(g => g.FXCreateData.Any(fx => fx.NetAssignedNetID == netId));
+            }
+            foreach (var kv in _heldFXGroupsByTeam)
+            {
+                kv.Value.RemoveAll(g => g.FXCreateData.Any(fx => fx.NetAssignedNetID == netId));
+            }
         }
 
         /// <summary>
@@ -2437,6 +2515,12 @@ namespace PacketDefinitions420
         }
         /// <summary>
         /// Sends a packet to all players with vision of the specified AttackableUnit detailing that the attacker has abrubtly stopped their attack (can be a spell or auto attack, although internally AAs are also spells).
+        ///
+        /// Defaults match the replay-observed wire shape: 32,808 packets in one match, 100% have
+        /// every flag = false. Don't pass `destroyMissile=true` / `overrideVisibility=true` unless
+        /// you have specific evidence the client requires it because those settings cause the client to
+        /// discard adjacent position-sync packets and force-destroy in-flight missiles, neither of
+        /// which Riot does.
         /// </summary>
         /// <param name="attacker">AttackableUnit that stopped their auto attack.</param>
         /// <param name="isSummonerSpell">Whether or not the spell is a summoner spell.</param>
@@ -2444,12 +2528,11 @@ namespace PacketDefinitions420
         /// <param name="destroyMissile">Whether or not to destroy the missile which may have been created before stopping (client-side removal).</param>
         /// <param name="overrideVisibility">Whether or not stopping this auto attack overrides visibility checks.</param>
         /// <param name="forceClient">Whether or not this packet should be forcibly applied, regardless of if an auto attack is being performed client-side.</param>
-        /// <param name="missileNetID">NetId of the missile that may have been spawned by the spell.</param>
-        /// TODO: Find a better way to implement these parameters
+        /// <param name="missileNetID">NetId of the missile that may have been spawned by the spell. Replay shows 99.93% of InstantStop_Attack packets carry a real missile NetId; threading it through callers is a separate audit.</param>
         public void NotifyNPC_InstantStop_Attack(AttackableUnit attacker, bool isSummonerSpell,
             bool keepAnimating = false,
-            bool destroyMissile = true,
-            bool overrideVisibility = true,
+            bool destroyMissile = false,
+            bool overrideVisibility = false,
             bool forceClient = false,
             uint missileNetID = 0)
         {
@@ -3555,18 +3638,14 @@ namespace PacketDefinitions420
         /// Sends a packet to all players detailing that the specified object has stopped playing an animation.
         /// </summary>
         /// <param name="obj">GameObject that is playing the animation.</param>
-        /// <param name="animation">Internal name of the animation to stop.</param>
-        /// <param name="stopAll">Whether or not to stop all animations. Only works if animation is empty/null.</param>
-        /// <param name="fade">Whether or not the animation should fade before stopping.</param>
-        /// <param name="ignoreLock">Whether or not locked animations should still be stopped.</param>
-        public void NotifyS2C_StopAnimation(GameObject obj, string animation, bool stopAll = false, bool fade = false, bool ignoreLock = true)
+        /// <param name="animation">Internal name of the animation to stop. Empty string + <see cref="StopAnimationFlags.StopAll"/> stops every animation track.</param>
+        /// <param name="flags">Combination of <see cref="StopAnimationFlags"/>. Default is <see cref="StopAnimationFlags.IgnoreLock"/> so callers that omit it match the previous bool-API default (`ignoreLock=true`).</param>
+        public void NotifyS2C_StopAnimation(GameObject obj, string animation, StopAnimationFlags flags = StopAnimationFlags.IgnoreLock)
         {
             var animPacket = new S2C_StopAnimation
             {
                 SenderNetID = obj.NetId,
-                Fade = fade,
-                IgnoreLock = ignoreLock,
-                StopAll = stopAll,
+                Flags = flags,
                 AnimationName = animation
             };
 
@@ -4169,7 +4248,12 @@ namespace PacketDefinitions420
                 Movements = new List<MovementDataNormal> { md }
             };
 
-            _packetHandlerManager.BroadcastPacketVision(unit, wpGroup.GetBytes(), Channel.CHL_LOW_PRIORITY);
+            // CHL_S2C (high priority) so a blink position-sync arrives same-instant as the
+            // accompanying CastSpellAns / Basic_Attack_Pos. CHL_LOW_PRIORITY (the routine-
+            // movement channel) gets queued behind end-of-tick batches and feels visibly
+            // slower to the player. Empirical: KatarinaE ally cast was perceptibly slower
+            // than enemy cast (which uses CHL_S2C via Basic_Attack_Pos) until this swap.
+            _packetHandlerManager.BroadcastPacketVision(unit, wpGroup.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -4393,6 +4477,33 @@ namespace PacketDefinitions420
             }
             else //if(obj is IRegion || obj is ISpellMissile || obj is ILevelProp || obj is IParticle)
             {
+                // FX bundling: when a particle becomes visible and we have its FX_Create_Group
+                // spawn packet, queue the inner FXCreateGroupData onto the per-recipient batch
+                // instead of broadcasting it immediately. NotifyFXCreateGroupBatch flushes
+                // these as ONE FX_Create_Group per recipient at end-of-tick this is matching Riot's
+                // wire pattern where multiple same-tick particles share one packet.
+                if (obj is Particle && spawnPacket is FX_Create_Group fxgPacket
+                    && fxgPacket.FXCreateGroup.Count > 0)
+                {
+                    if (userId < 0)
+                    {
+                        if (!_heldFXGroupsByTeam.TryGetValue(team, out var teamList))
+                        {
+                            _heldFXGroupsByTeam[team] = teamList = new List<FXCreateGroupData>();
+                        }
+                        teamList.AddRange(fxgPacket.FXCreateGroup);
+                    }
+                    else
+                    {
+                        if (!_heldFXGroupsByUser.TryGetValue(userId, out var userList))
+                        {
+                            _heldFXGroupsByUser[userId] = userList = new List<FXCreateGroupData>();
+                        }
+                        userList.AddRange(fxgPacket.FXCreateGroup);
+                    }
+                    return;
+                }
+
                 var packet = spawnPacket;
                 if (packet == null)
                 {
@@ -4413,6 +4524,31 @@ namespace PacketDefinitions420
                 {
                     _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Flushes all FXCreateGroupData entries queued via the Particle visibility-spawn path
+        /// into one FX_Create_Group packet per recipient. Mirrors S1 client's
+        /// EffectManagerHelper_Client::ProccessEffectPacket which walks numbFXGroups in a single
+        /// packet and dispatches each group to CreatePackets/DisplayParticle. Called once per
+        /// tick by ObjectManager.Update after all visibility processing has completed.
+        /// </summary>
+        public void NotifyFXCreateGroupBatch()
+        {
+            foreach (var kv in _heldFXGroupsByUser)
+            {
+                if (kv.Value.Count == 0) continue;
+                var packet = new FX_Create_Group { FXCreateGroup = new List<FXCreateGroupData>(kv.Value) };
+                _packetHandlerManager.SendPacket(kv.Key, packet.GetBytes(), Channel.CHL_S2C);
+                kv.Value.Clear();
+            }
+            foreach (var kv in _heldFXGroupsByTeam)
+            {
+                if (kv.Value.Count == 0) continue;
+                var packet = new FX_Create_Group { FXCreateGroup = new List<FXCreateGroupData>(kv.Value) };
+                _packetHandlerManager.BroadcastPacketTeam(kv.Key, packet.GetBytes(), Channel.CHL_S2C);
+                kv.Value.Clear();
             }
         }
 
@@ -4570,41 +4706,6 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players with vision of the given unit detailing its waypoints.
-        /// </summary>
-        /// <param name="unit">Unit to send.</param>
-        public void NotifyWaypointList(AttackableUnit unit)
-        {
-            var wpList = new WaypointList
-            {
-                SenderNetID = unit.NetId,
-                SyncID = Environment.TickCount,
-                // Defensive copy because the game loop can mutate `unit.Waypoints` between packet
-                // construction and the serialization that happens inside GetBytes() -> without
-                // the snapshot the client receives an empty list and renders no path-line.
-                Waypoints = unit.Waypoints.ToList()
-            };
-
-            _packetHandlerManager.BroadcastPacketVision(unit, wpList.GetBytes(), Channel.CHL_S2C);
-        }
-
-        /// <summary>
-        /// Sends a packet to all players with vision of the given GameObject detailing its waypoints.
-        /// </summary>
-        /// <param name="obj">GameObject to send.</param>
-        public void NotifyWaypointList(GameObject obj, List<Vector2> waypoints)
-        {
-            var wpList = new WaypointList
-            {
-                SenderNetID = obj.NetId,
-                SyncID = Environment.TickCount,
-                Waypoints = waypoints
-            };
-
-            _packetHandlerManager.BroadcastPacketVision(obj, wpList.GetBytes(), Channel.CHL_S2C);
-        }
-
-        /// <summary>
         /// Sends a packet to all players that have vision of the specified unit.
         /// The packet details a list of waypoints with speed parameters which determine what kind of movement will be done to reach the waypoints, or optionally a GameObject.
         /// Functionally referred to as a dash in-game.
@@ -4655,7 +4756,9 @@ namespace PacketDefinitions420
                 SyncID = Environment.TickCount,
                 // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
                 WaypointSpeedParams = speeds,
-                // Defensive copy -> same reasoning as `NotifyWaypointList` above.
+                // Defensive copy: the game loop can mutate `u.Waypoints` between packet
+                // construction and the serialization that happens inside GetBytes(). Without
+                // the snapshot the client receives an empty list and renders no path-line.
                 Waypoints = u.Waypoints.ToList()
             };
 

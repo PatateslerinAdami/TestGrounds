@@ -47,7 +47,7 @@ namespace Spells
             p2 = AddParticle(_owner, _owner, "varusqchannel2", default, 4f, bone:"HEAD");//C_BUFFBONE_GLB_CENTER_LOC
         }
 
-        public void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
+        public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
             if (!forceStop)
             {

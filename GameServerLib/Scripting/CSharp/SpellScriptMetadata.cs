@@ -16,6 +16,21 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// Whether or not the caster should automatically face the end position of the spell.
         /// </summary>
         public bool AutoFaceDirection { get; set; } = true;
+        /// <summary>
+        /// When true, <see cref="LeagueSandbox.GameServer.GameObjects.SpellNS.Spell.Cast"/> skips
+        /// the default "10-unit forward stub" that overwrites <c>CastInfo.TargetPosition</c> right
+        /// before <c>NotifyNPC_CastSpellAns</c>. Lets the script write the actual landing position
+        /// into <c>spell.CastInfo.TargetPosition</c> from <c>OnSpellPreCast</c> so the wire packet
+        /// carries it instead of the stub.
+        ///
+        /// <para>Required for blink-style spells (e.g. KatarinaE) where Riot's wire shows
+        /// <c>CastSpellAns.targetPosition = landing</c> (the replay-empirical match). Note this is
+        /// purely a wire-shape concern; the actual post-blink position-sync runs through a separate
+        /// <c>WaypointGroup</c> with <c>HasTeleportID=true</c> packet (= server-side
+        /// <c>NotifyTeleport</c>, broadcast to all teammates with vision, see
+        /// <c>project_blink_spell_position_sync.md</c>). Both are needed for full fidelity.</para>
+        /// </summary>
+        public bool OverrideTargetPositionInScript { get; set; } = false;
         public float[] AutoTargetDamageByLevel { get; set; } = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         public float CastTime { get; set; } = 0.0f;
         public bool CastingBreaksStealth { get; set; } = false;

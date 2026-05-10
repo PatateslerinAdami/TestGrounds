@@ -154,6 +154,7 @@ namespace LeagueSandbox.GameServer
 
             _game.PacketNotifier.NotifyOnReplication();
             _game.PacketNotifier.NotifyWaypointGroup();
+            _game.PacketNotifier.NotifyFXCreateGroupBatch();
 
             _currentlyInUpdate = false;
         }

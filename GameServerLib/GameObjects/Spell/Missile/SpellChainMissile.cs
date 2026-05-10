@@ -177,6 +177,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
                 newMissile.SetChainState(ObjectsHit, HitCount);
                 newMissile.SetBounceStats(nextRadius);
+                // No CastSpellAns / Basic_Attack_Pos accompanies a bounce. The visibility
+                // path needs to send the full MissileReplication so the client learns about
+                // this previously-unannounced missile (replay-verified: KatarinaQMis hash
+                // 156298371 has 340 MissileReplications across the match, none with a
+                // matching CastSpellAns).
+                newMissile.HasClientCastInfo = false;
 
                 _game.ObjectManager.AddObject(newMissile);
 

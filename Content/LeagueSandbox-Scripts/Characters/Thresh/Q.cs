@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -92,7 +93,7 @@ namespace Spells
         {
             if (missile is SpellCircleMissile circleMissile && circleMissile.ObjectsHit.Count == 0)
             {
-                missile.CastInfo.Owner.StopAnimation("Spell1_IN", fade: true);
+                missile.CastInfo.Owner.StopAnimation("Spell1_IN", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
             }
         }
 
@@ -114,7 +115,7 @@ namespace Spells
             PlayAnimation(owner, "Spell1_GRAB", timeScale: 1f);
             owner.RegisterTimer(new GameScriptTimer(0.1f, () =>
             {
-                StopAnimation(owner, "Spell1_GRAB", fade: true);
+                StopAnimation(owner, "Spell1_GRAB", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
                 if (!target.IsDead && owner.GetSpell("ThreshQLeap") != null)
                 {
                     PlayAnimation(owner, "Spell1_PULL1_UpB", timeScale: 1.0f);
@@ -167,9 +168,9 @@ namespace Spells
             var reg = AddUnitPerceptionBubble(a, 1f, 16f, owner.Team, false, a, ignoresLoS: true, onlyShowTarget: true);
             //StopAnimation(owner, "Spell1_PULL1_UpB", false, false, true); 
             //StopAnimation(owner, "Spell1_PULL2_UpB", false, false, true); 
-            StopAnimation(owner, "Spell1_PULL1", false, false, true);
-            StopAnimation(owner, "Spell1_PULL2", false, false, true);
-            StopAnimation(owner, "Spell1_GRAB", false, false, true);
+            StopAnimation(owner, "Spell1_PULL1", StopAnimationFlags.IgnoreLock);
+            StopAnimation(owner, "Spell1_PULL2", StopAnimationFlags.IgnoreLock);
+            StopAnimation(owner, "Spell1_GRAB", StopAnimationFlags.IgnoreLock);
             if (hookedTarget != null && Vector2.Distance(owner.Position, hookedTarget.Position) <= 3000f)
             {
 

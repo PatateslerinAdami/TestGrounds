@@ -1,5 +1,6 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -97,7 +98,7 @@ namespace Spells
         {
             Fiora.SetDashingState(false);
             SetStatus(Fiora, StatusFlags.Ghosted, false);
-            StopAnimation(Fiora, "spell1", true, true, true);
+            StopAnimation(Fiora, "spell1", StopAnimationFlags.StopAll | StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
         }
     }
 }

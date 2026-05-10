@@ -180,6 +180,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 ApiEventManager.OnSpellChannel.AddListener(Script, this, Script.OnSpellChannel);
                 ApiEventManager.OnSpellChannelCancel.AddListener(Script, this, Script.OnSpellChannelCancel);
+                ApiEventManager.OnSpellChannelUpdate.AddListener(Script, this, Script.OnSpellChannelUpdate);
                 ApiEventManager.OnSpellPostChannel.AddListener(Script, this, Script.OnSpellPostChannel);
             }
 
@@ -420,19 +421,32 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             else
             {
                 CastInfo.DesignerCastTime = SpellData.GetCastTime();
-                CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
+                // For non-channel spells, DesignerTotalTime mirrors GetCastTimeTotal() = (1 +
+                // DelayTotalTimePercent) * 2.0 this is verified across Q/W/E/R replay CastSpellAns
+                // packets where every Katarina basic spell has total=1.0 and channel R has
+                // total=cast+channel=2.401. The client uses DesignerTotalTime as the input-
+                // lockout window: total=cast+0=0.25 lets the next spell click reach the server
+                // ~270ms after E starts, racing E's spell3 anim end at ~273ms; total=1.0 holds
+                // the lockout for the full second so subsequent casts are clean.
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? CastInfo.DesignerCastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             if (SpellData.OverrideCastTime > 0)
             {
                 CastInfo.DesignerCastTime = SpellData.OverrideCastTime;
-                CastInfo.DesignerTotalTime = SpellData.OverrideCastTime + trueChannel;
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? SpellData.OverrideCastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             if (Script.ScriptMetadata.CastTime > 0)
             {
                 CastInfo.DesignerCastTime = Script.ScriptMetadata.CastTime;
-                CastInfo.DesignerTotalTime = Script.ScriptMetadata.CastTime + trueChannel;
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? Script.ScriptMetadata.CastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             // Otherwise, use the normal auto attack setup
@@ -629,7 +643,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 Vector3 originalTarget = CastInfo.TargetPosition;
                 Vector3 originalTargetEnd = CastInfo.TargetPositionEnd;
 
-                if (!Script.ScriptMetadata.AutoFaceDirection)
+                if (!Script.ScriptMetadata.AutoFaceDirection && !Script.ScriptMetadata.OverrideTargetPositionInScript)
                 {
                     var owner = CastInfo.Owner;
                     var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
@@ -758,19 +772,32 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             else
             {
                 CastInfo.DesignerCastTime = SpellData.GetCastTime();
-                CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
+                // For non-channel spells, DesignerTotalTime mirrors GetCastTimeTotal() = (1 +
+                // DelayTotalTimePercent) * 2.0 this verified across Q/W/E/R replay CastSpellAns
+                // packets where every Katarina basic spell has total=1.0 and channel R has
+                // total=cast+channel=2.401. The client uses DesignerTotalTime as the input-
+                // lockout window: total=cast+0=0.25 lets the next spell click reach the server
+                // ~270ms after E starts, racing E's spell3 anim end at ~273ms; total=1.0 holds
+                // the lockout for the full second so subsequent casts are clean.
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? CastInfo.DesignerCastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             if (SpellData.OverrideCastTime > 0)
             {
                 CastInfo.DesignerCastTime = SpellData.OverrideCastTime;
-                CastInfo.DesignerTotalTime = SpellData.OverrideCastTime + trueChannel;
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? SpellData.OverrideCastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             if (Script.ScriptMetadata.CastTime > 0)
             {
                 CastInfo.DesignerCastTime = Script.ScriptMetadata.CastTime;
-                CastInfo.DesignerTotalTime = Script.ScriptMetadata.CastTime + trueChannel;
+                CastInfo.DesignerTotalTime = trueChannel > 0
+                    ? Script.ScriptMetadata.CastTime + trueChannel
+                    : SpellData.GetCastTimeTotal();
             }
 
             // Otherwise, use the normal auto attack setup
@@ -892,7 +919,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     Vector3 originalTarget = CastInfo.TargetPosition;
                     Vector3 originalTargetEnd = CastInfo.TargetPositionEnd;
 
-                    if (!Script.ScriptMetadata.AutoFaceDirection)
+                    if (!Script.ScriptMetadata.AutoFaceDirection && !Script.ScriptMetadata.OverrideTargetPositionInScript)
                     {
                         var owner = CastInfo.Owner;
                         var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
@@ -992,6 +1019,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             ApiEventManager.OnSpellChannel.Publish(this);
+
+            // Channel-entry tick: diff=0f marks "no time elapsed since channel start".
+            // Scripts using PeriodicTicker should pass fireImmediately=true if they want to
+            // act on this initial call; otherwise their accumulator stays at 0 until the first
+            // real Update() with non-zero diff arrives next server tick.
+            if (State == SpellState.STATE_CHANNELING)
+            {
+                ApiEventManager.OnSpellChannelUpdate.Publish(this, 0f);
+            }
         }
 
         public void ChannelCancelCheck()
@@ -1092,10 +1128,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             if (condition == ChannelingStopCondition.Cancel)
             {
-                // For some reason this is the packet used for manually cancelling channels.
-                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+                // S4 replay: NPC_InstantStop_Attack (0x34) is the wire signal for channel-cancel
+                // (verified on Recall: cancelled channel emits it, naturally completed channel does NOT).
+                // Skip on TimeCompleted so natural completion stays silent on the wire.
                 if (reason != ChannelingStopSource.TimeCompleted)
                 {
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
                     ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
                 }
 
@@ -1286,6 +1324,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 else
                 {
                     CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                    // Bewusst KEIN NotifyWaypointGroup hier — Replay (KatarinaR @ t=578760+)
+                    // zeigt nach Channel-Ende NUR StopAnimation + BuffRemove2 fuer den Caster,
+                    // keine WaypointGroup. Eine Path-Sync mit der Channel-Lock-Position als Start
+                    // wuerde den Client zurueckschnappen wenn er schon vom Click weiterprediziert hat.
                 }
             }
 
@@ -1421,13 +1463,35 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return null;
             }
 
+            // Sub-missiles (TriggersSpellCasts=false, e.g. KatarinaRMis dagger ticks,
+            // KatarinaQMis pre-bounce flow) need MissileReplication for client visibility this is
+            // replay-verified (KatarinaR id=66753: 0 CastSpellAns + 10 MissileReplication for
+            // the 10 RMis daggers). Default HasClientCastInfo=true would skip MissileReplication
+            // in ConstructSpawnPacket and the missile would never appear client-side. AA missiles
+            // keep default true (Basic_Attack_Pos serves as cast info).
+            //
+            // MUST be set before AddObject because the ObjectManager.AddObject calls SpawnObject() inline
+            // (ObjectManager.cs:254-256) which immediately runs visibility-spawn → ConstructSpawnPacket.
+            // Setting HasClientCastInfo after AddObject is too late; the spawn packet has already
+            // been chosen based on the default (true), causing sub-missiles to skip MissileReplication.
+            if (!Script.ScriptMetadata.TriggersSpellCasts && !CastInfo.IsAutoAttack)
+            {
+                p.HasClientCastInfo = false;
+            }
+
             _game.ObjectManager.AddObject(p);
 
             ApiEventManager.OnLaunchMissile.Publish(this, p);
 
-            //_game.PacketNotifier.NotifyMissileReplication(p);
-
-            // TODO: Verify when NotifyForceCreateMissile should be used instead.
+            // S4-verified (obj_AI_Base.cpp:21514 OnNetworkPacket<PKT_S2C_ForceCreateMissile_s>
+            // → SpellInstanceClient::ForceSpawnMissile → ExecuteCastFrame, SpellInstanceClient.cpp:471):
+            // the packet tells the client to spawn the missile immediately (bypassing natural
+            // windup-end trigger). Replay shows ForceCreateMissile fires at +225ms after Q's
+            // CastSpellAns (= cast-windup-end) and 34066/34626 packets across the match are
+            // for AA missiles (98%); both flows route through CreateSpellMissile so this single
+            // call site covers all cases. Bounce missiles in SpellChainMissile.BounceToNextTarget
+            // intentionally bypass this — replay confirms no per-bounce ForceCreateMissile.
+            _game.PacketNotifier.NotifyForceCreateMissile(p);
 
             return p;
         }
@@ -1624,9 +1688,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
-        public void LowerCooldown(float lowerValue)
+        public void LowerCooldown(float lowerValue, bool silent = false)
         {
-            SetCooldown(CurrentCooldown - lowerValue);
+            SetCooldown(CurrentCooldown - lowerValue, silent: silent);
         }
 
         public void ResetSpellCast()
@@ -1775,11 +1839,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// </summary>
         /// <param name="newCd">Cooldown to set.</param>
         /// <param name="ignoreCDR">Whether or not to ignore cooldown reduction.</param>
-        public void SetCooldown(float newCd, bool ignoreCDR = false)
+        /// <param name="silent">Skip the CHAR_SetCooldown wire-broadcast. Use for passive procs that
+        /// have their own dedicated trigger packet (e.g. Katarina Voracity, where slot=3
+        /// isSummonerSpell=true is the canonical wire-signal and per-slot CHAR_SetCooldown for QWER
+        /// is replay-empirical never sent). Server-side State/CurrentCooldown still update normally.</param>
+        public void SetCooldown(float newCd, bool ignoreCDR = false, bool silent = false)
         {
             if (newCd <= 0)
             {
-                _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, 0, 0);
+                if (!silent)
+                {
+                    _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, 0, 0);
+                }
                 SetPassiveCooldownStats(0);
                 // Changing the state of the spell to READY during casting prevents the spell from finishing casting, thus locking the player in the move order CastSpell.
                 if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
@@ -1795,8 +1866,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     newCd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
                 }
 
-                _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, newCd, GetCooldown());
-                State = SpellState.STATE_COOLDOWN;
+                if (!silent)
+                {
+                    _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, newCd, GetCooldown());
+                }
+                // Mirror the guard in the newCd<=0 branch above: don't clobber STATE_CASTING/CHANNELING
+                // mid-flight. Caller scenario this protects against: a passive (Katarina Voracity) calling
+                // LowerCooldown on the channeling spell during the channel. Without this guard, State
+                // flips to COOLDOWN, the next Update tick skips ChannelCancelCheck/StopChanneling, and the
+                // channel ends without any OnSpellChannelCancel/OnSpellPostChannel event being published.
+                // CurrentCooldown still updates so the post-channel cooldown reflects the reduction.
+                if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
+                {
+                    State = SpellState.STATE_COOLDOWN;
+                }
                 CurrentCooldown = newCd;
                 SetPassiveCooldownStats(newCd);
             }
@@ -1856,7 +1939,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.TargetPosition = position;
             CastInfo.TargetPositionEnd = position;
 
-            Script.OnSpellChannelUpdate(this, position, forceStop);
+            Script.OnSpellChargeUpdate(this, position, forceStop);
 
             if (forceStop)
             {
@@ -1995,9 +2078,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         CurrentChannelDuration -= diff / 1000.0f;
                         ChannelCancelCheck();
+                        if (State == SpellState.STATE_CHANNELING)
+                        {
+                            ApiEventManager.OnSpellChannelUpdate.Publish(this, diff);
+                        }
                         if (State == SpellState.STATE_CHANNELING && CurrentChannelDuration <= 0)
                         {
-                            StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.TimeCompleted);//FinishChanneling();
+                            StopChanneling(ChannelingStopCondition.Success, ChannelingStopSource.TimeCompleted);
                         }
                         break;
                     }

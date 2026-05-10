@@ -32,6 +32,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// Whether or not this projectile's visuals should not be networked to clients.
         /// </summary>
         public bool IsServerOnly { get; }
+        /// <summary>
+        /// True if the client already received cast info for this missile via CastSpellAns or
+        /// Basic_Attack_Pos. When true, the visibility-spawn flow skips the heavy
+        /// MissileReplication packet because the lightweight S2C_ForceCreateMissile (sent at
+        /// windup-end via Spell.CreateSpellMissile) is enough to trigger ExecuteCastFrame
+        /// client-side. Set to false for chain-bounce / sub-missiles that have no cast
+        /// announcement (BounceToNextTarget); those still need MissileReplication for the
+        /// client to know about them at all. Default true; only Bounce/sub paths flip it.
+        /// </summary>
+        public bool HasClientCastInfo { get; set; } = true;
 
         public override bool IsAffectedByFoW => true;
         public override bool SpawnShouldBeHidden => true;

@@ -605,7 +605,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Cancels any auto attacks this AI is performing and resets the time between the next auto attack if specified.
         /// </summary>
         /// <param name="reset">Whether or not to reset the delay between the next auto attack.</param>
-        public void CancelAutoAttack(bool reset, bool fullCancel = false)
+        /// <param name="fullCancel">Also resets <c>IsAttacking</c> + <c>HasMadeInitialAttack</c> so the
+        /// next Update tick treats the unit as fresh — required when handing off to a new target
+        /// (e.g. KatarinaE blink): without this, the lingering <c>IsAttacking=true</c> makes
+        /// `UpdateTarget` skip the new-target acquisition path and the post-blink AA never fires
+        /// damage through the normal pipeline.</param>
+        /// <param name="silent">Suppresses the <c>NPC_InstantStop_Attack</c> wire broadcast while
+        /// keeping the server-side state reset. Use when the caller wants to do its own scope/timing
+        /// for the ISA packet (e.g. blink-spells that gate ISA on whether an AA-windup was active).</param>
+        public void CancelAutoAttack(bool reset, bool fullCancel = false, bool silent = false)
         {
             AutoAttackSpell.SetSpellState(SpellState.STATE_READY);
             if (reset)
@@ -619,7 +627,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsAttacking = false;
                 HasMadeInitialAttack = false;
             }
-            if (reset || fullCancel) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+            if ((reset || fullCancel) && !silent) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
         }
 
         /// <summary>
@@ -1247,6 +1255,49 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             Spells[slot] = previous;
+        }
+
+        /// <summary>
+        /// Switches this AI's attack target to <paramref name="target"/> AND fully resets the
+        /// auto-attack pipeline so the next Update tick starts a fresh AA on the new target with
+        /// proper damage application. Sends the wire-side target-switch pair Riot uses
+        /// (<c>Basic_Attack_Pos</c> + <c>NPC_InstantStop_Attack</c>, replay-verified KatarinaE
+        /// id=18097 + id=18102, t=303818).
+        ///
+        /// <para><b>Why the pipeline reset matters</b>: a stale <c>IsAttacking=true</c> from a
+        /// pre-blink AA windup makes <c>UpdateTarget</c> skip the new-target acquisition path
+        /// (line 1963 — the <c>else if (IsAttacking)</c> branch continues the OLD windup), so the
+        /// post-blink AA fires through a degenerate code path and applies no damage. Calling
+        /// <see cref="CancelAutoAttack"/> with <c>reset+fullCancel</c> clears
+        /// <c>AutoAttackSpell.State</c>, <c>_autoAttackCurrentCooldown</c>, <c>IsAttacking</c>, and
+        /// <c>HasMadeInitialAttack</c> so the unit is treated as fresh.</para>
+        ///
+        /// <para><b>Wire pattern</b>: Riot does NOT send <c>AI_TargetS2C</c> for these switches
+        /// (0 occurrences in the reference Katarina replay). The target-switch on the wire IS the
+        /// BAP+ISA pair. We pass <c>networked: false</c> to <see cref="SetTargetUnit"/> to skip the
+        /// AI_TargetS2C broadcast and emit BAP/ISA manually.</para>
+        /// </summary>
+        /// <param name="target">Unit to retarget to. Must be non-null and a valid AA target.</param>
+        /// <param name="emitInstantStop">Whether to broadcast the <c>NPC_InstantStop_Attack</c> packet.
+        /// Replay-empirical (Kat-perspective, 79 E casts): Riot only fires this packet on ~27% of E
+        /// casts — apparently only when there's an active AA-windup to cancel. Pass
+        /// <c>this.IsAttacking</c> at the call site to match Riot's wire pattern. The server-side
+        /// pipeline reset still happens regardless — only the wire packet is gated.</param>
+        public void RetargetAttackToWithHandoff(AttackableUnit target, bool emitInstantStop = true)
+        {
+            if (target == null) return;
+
+            // Pipeline reset (always): mirrors a full AA-reset (e.g. Yi Q reset, Riven Q3 reset).
+            // `silent: !emitInstantStop` suppresses the ISA broadcast embedded in CancelAutoAttack
+            // when the caller has decided no in-flight AA exists to cancel client-side.
+            CancelAutoAttack(reset: true, fullCancel: true, silent: !emitInstantStop);
+
+            // Server-state retarget (no AI_TargetS2C broadcast — that's empirically not used for
+            // blink-target-switches; the BAP packet is the wire signal).
+            SetTargetUnit(target, networked: false);
+
+            var futureProjNetId = _game.NetworkIdManager.GetNewNetId();
+            _game.PacketNotifier.NotifyBasic_Attack_Pos(this, target, futureProjNetId, IsNextAutoCrit);
         }
 
         /// <summary>
@@ -1921,7 +1972,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     CancelAutoAttack(!HasAutoAttacked, true);
                 }
             }
-            else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
+            // Drop the target when it goes untargetable, EXCEPT for useable units (wards/plants/pets) —
+            // those have their own targetability rules and may still be valid targets despite a transient
+            // StatusFlags.Targetable=false. Inverted from the prior condition (`Targetable=false &&
+            // IsUseable=true` would never trigger for normal champions/minions, so a turret kept
+            // attacking a champion in an untargetable revive state, e.g. Aatrox passive).
+            else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && !TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
             {
                 // If the attack already connected (e.g. HasAutoAttacked), let the animation
                 // finish instead of cancelling it mid-animation.

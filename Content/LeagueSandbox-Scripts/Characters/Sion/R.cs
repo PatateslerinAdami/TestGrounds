@@ -74,7 +74,7 @@ namespace Spells
             _targetAngle = _currentAngle;
         }
 
-        public void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
+        public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
             Vector2 targetDir = Vector2.Normalize(new Vector2(position.X, position.Z) - _owner.Position);
             _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);

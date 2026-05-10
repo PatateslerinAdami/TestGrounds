@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using CharScripts;
@@ -17,6 +17,17 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
+// Replay-verified Q wire flow per cast (id=10953, t=260303):
+//   +0ms    CastSpellAns        slot=0  designerCast=0.25  total=1.0  targets=[click_target]
+//   +225ms  ForceCreateMissile  (at end of cast windup)
+//   Per hit (max 5 bounces, all client-side simulated):
+//     +X    BuffAdd2  KatarinaQMarkSpellShieldCheck (hash=28814379)  dur=0.25
+//             ↳ throwaway marker that consumes the target's spell shield (Banshee/Sivir E)
+//               during a 250ms trigger window, so the real QMark is shield-bypass.
+//     +X    FX_Create_Group  [katarina_daggered.troy + katarina_bouncingBlades_tar.troy,
+//                              both bind=enemy, no bone]
+//     +Y    BuffAdd2  KatarinaQMark (hash=84848667)  dur=4.25
+//   No per-bounce ForceCreateMissile, no S2C_ChainMissileSync. Bouncing handled in client.
 public class KatarinaQ : ISpellScript
 {
     Spell _qMis;
@@ -35,8 +46,6 @@ public class KatarinaQ : ISpellScript
         },
         TriggersSpellCasts = true,
         IsDamagingSpell = true,
-        CastTime = 0.25f,
-        AutoCooldownByLevel = [10, 9.5f, 9f, 8.5f, 8f]
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
@@ -54,44 +63,25 @@ public class KatarinaQ : ISpellScript
         switch (_katarina.SkinID)
         {
             case 9: AddParticleTarget(_katarina, target, "Katarina_Skin09_Q_tar", target); break;
-            case 7:
-                AddParticleTarget(_katarina, target, "katarina_XMas_bouncingBlades_tar", target);
-                ;
-                break;
-            case 6:
-                AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar_sand", target);
-                ;
-                break;
+            case 7: AddParticleTarget(_katarina, target, "katarina_XMas_bouncingBlades_tar", target); break;
+            case 6: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar_sand", target); break;
             default: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar", target); break;
         }
         target.TakeDamage(_katarina, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
             false);
 
-        //ConsumeDaggered(target);
+        // Spell-shield bypass marker — replay-verified buff name. Consumed by spell-shields
+        // (Banshee/Sivir E/Yasuo W) within its 0.25s window, after which the real QMark is
+        // applied. Our codebase has no shield-consume logic yet (see project_spell_shield_
+        // system_deferred memory), so this is currently wire-fidelity only.
+        AddBuff("KatarinaQMarkSpellShieldCheck", 0.25f, 1, spell, target, _katarina);
         AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
-
-        /*switch (_katarina.SkinId) {
-            case 9: AddParticleTarget(_katarina, target, "katarina_Skin09_Q_Cast", target); break;
-            default: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_cas", target); break;
-        }*/
     }
 
     private void OnStatsUpdate(AttackableUnit unit, float diff)
     {
         var bonusAp = _katarina.Stats.AbilityPower.Total * 0.45f;
         SetSpellToolTipVar(_katarina, 0, bonusAp, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
-    }
-
-    private void ConsumeDaggered(AttackableUnit target)
-    {
-        if (!target.HasBuff("KatarinaQMark")) return;
-
-        var markApRatio = _katarina.Stats.AbilityPower.Total * 0.2f;
-        var markDamage = 15 + 15 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1) + markApRatio;
-
-        target.TakeDamage(_katarina, markDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
-            false);
-        RemoveBuff(target, "KatarinaQMark");
     }
 }
 

@@ -59,6 +59,7 @@ using GameServerCore.Packets.Enums;
 [OnSpellCast] - start casting
 [OnSpellChannel] - start channeling
 [OnSpellChannelCancel] - abrupt stop channeling
+[OnSpellChannelUpdate] - every server tick during channel; diff=0f at channel entry. Scripts pace via PeriodicTicker.
 [OnSpellPostCast] - finish casting
 [OnSpellPostChannel] - finish channeling
 [OnSpellPreCast] - setup cast info before casting (always performed)
@@ -246,6 +247,9 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<Spell, ChannelingStopSource> OnSpellChannelCancel
             = new Dispatcher<Spell, ChannelingStopSource>();
+
+        public static Dispatcher<Spell, float> OnSpellChannelUpdate
+            = new Dispatcher<Spell, float>();
 
         public static Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector> OnSpellHit
             = new Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector>();

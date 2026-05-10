@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using GameServerCore.Enums;
 using GameServerLib.GameObjects;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.Packets;
 
@@ -52,6 +53,13 @@ namespace LeagueSandbox.GameServer.GameObjects
                 }
             }
         }
+
+        /// <summary>
+        /// Players that have received a spawn packet for this object i.e., the client has it in memory,
+        /// regardless of current FoW state. Use this (not VisibleForPlayers) for "destroy" packets like
+        /// FX_Kill where the client must clean up state even when the object is currently out of vision.
+        /// </summary>
+        public IEnumerable<int> SpawnedForPlayers => _spawnedForPlayers;
 
         /// <summary>
         /// Comparison variable for small distance movements.
@@ -473,15 +481,14 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
 
         /// <summary>
-        /// Forces this GameObject to stop playing the specified animation (or optionally all animations) with the given parameters.
+        /// Forces this GameObject to stop playing the specified animation (or optionally all
+        /// animations via <see cref="StopAnimationFlags.StopAll"/> + empty animation name).
         /// </summary>
-        /// <param name="animation">Internal name of the animation to stop playing. Set blank/null if stopAll is true.</param>
-        /// <param name="stopAll">Whether or not to stop all animations. Only works if animation is empty/null.</param>
-        /// <param name="fade">Whether or not the animation should fade before stopping.</param>
-        /// <param name="ignoreLock">Whether or not locked animations should still be stopped.</param>
-        public void StopAnimation(string animation, bool stopAll = false, bool fade = false, bool ignoreLock = true)
+        /// <param name="animation">Internal name of the animation to stop. Empty string + <c>StopAll</c> stops every track.</param>
+        /// <param name="flags">Combination of <see cref="StopAnimationFlags"/>. Default <see cref="StopAnimationFlags.IgnoreLock"/> matches the prior bool-API default (`ignoreLock=true`).</param>
+        public void StopAnimation(string animation, StopAnimationFlags flags = StopAnimationFlags.IgnoreLock)
         {
-            _game.PacketNotifier.NotifyS2C_StopAnimation(this, animation, stopAll, fade, ignoreLock);
+            _game.PacketNotifier.NotifyS2C_StopAnimation(this, animation, flags);
         }
 
         public float GetOpacity()

@@ -13,7 +13,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.HASTE,
+            BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
@@ -23,14 +23,14 @@ namespace Buffs
         Particle p;
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            StatsModifier.MoveSpeed.PercentBonus = StatsModifier.MoveSpeed.PercentBonus + (0.10f + 0.05f * ownerSpell.CastInfo.SpellLevel);
+            StatsModifier.MoveSpeed.PercentBonus += (0.10f + 0.05f * ownerSpell.CastInfo.SpellLevel);
             unit.AddStatModifier(StatsModifier);
             p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_haste.troy", unit, buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            RemoveParticle(p);
+            p.IsToRemove();
         }
     }
 }

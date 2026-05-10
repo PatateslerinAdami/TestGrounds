@@ -74,7 +74,7 @@ namespace Spells
             _lensbeamR = AddParticleTarget(_owner, _owner, "velkoz_base_r_lensbeam.troy", _owner, lifetime: 2.6f, bone: "R_Buffbone_Cstm_Tenticle", targetBone: "Buffbone_Cstm_EyeBallTarget");
         }
 
-        public void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
+        public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
             Vector2 targetDir = Vector2.Normalize(new Vector2(position.X, position.Z) - _owner.Position);
             _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);

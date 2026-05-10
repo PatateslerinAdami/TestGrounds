@@ -229,6 +229,20 @@ namespace PacketDefinitions420
             return true;
         }
 
+        // Sends to every player that has received a spawn packet for `o`, including players who
+        // currently can't see it because they're in FoW. Use for "destroy"-style packets (FX_Kill,
+        // OnDestroy, etc.) because without it, a player who lost vision before the destroy fires keeps
+        // the object orphaned on their client until reconnect.
+        public bool BroadcastPacketSpawned(GameObject o, byte[] data, Channel channelNo,
+            PacketFlags flag = PacketFlags.RELIABLE)
+        {
+            foreach (int pid in o.SpawnedForPlayers)
+            {
+                SendPacket(pid, data, channelNo, flag);
+            }
+            return true;
+        }
+
         public TeamId GetClientTeam(int userId)
         {
             var peerInfo = _playerManager.GetPeerInfo(userId);

@@ -1259,19 +1259,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="x">X coordinate to teleport to.</param>
         /// <param name="y">Y coordinate to teleport to.</param>
         /// <param name="repath">Whether or not to repath from the new position.</param>
-        public void TeleportTo(float x, float y, bool repath = false)
+        /// <param name="silent">If true, position changes silently e.g. no `_movementUpdated`
+        /// flag, no networked StopMovement. Use with `PacketNotifier.NotifyTeleport` for blink
+        /// spells that need an immediate same-tick position-sync without batching.</param>
+        public void TeleportTo(float x, float y, bool repath = false, bool silent = false)
         {
-            TeleportTo(new Vector2(x, y), repath);
+            TeleportTo(new Vector2(x, y), repath, silent);
         }
 
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>
-        public void TeleportTo(Vector2 position, bool repath = false)
+        public void TeleportTo(Vector2 position, bool repath = false, bool silent = false)
         {
             TeleportID++;
-            _movementUpdated = true;
-            _teleportedDuringThisFrame = true;
+            if (!silent)
+            {
+                _movementUpdated = true;
+                _teleportedDuringThisFrame = true;
+            }
 
             position = _game.Map.NavigationGrid.GetClosestTerrainExit(position, PathfindingRadius + 1.0f);
 
@@ -1282,7 +1288,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             else
             {
                 Position = position;
-                StopMovement();
+                StopMovement(networked: !silent);
             }
         }
 
@@ -1472,7 +1478,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // that the client would otherwise see a visible snap on the next SetWaypoints.
                 // Skip stopped units (Waypoints.Count == 1) -> GetCenteredWaypoints can't build a
                 // valid packet for them.
-                const float DriftResyncThreshold = 25f;
+                //
+                // Threshold sized to match Riot's observed cadence: replay shows walking minions
+                // resync every ~167u (≈ 0.5s at 325u/s movespeed). At the previous 25u threshold
+                // we were emitting ~6× more keepalive WaypointGroups than Riot for steady-state
+                // walking so a bandwidth waste with no visible benefit (client interpolates fine over
+                // the longer interval).
+                const float DriftResyncThreshold = 175f;
                 if (Waypoints.Count > 1
                     && _unreplicatedDrift.LengthSquared() > DriftResyncThreshold * DriftResyncThreshold)
                 {
@@ -1514,8 +1526,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             foreach (var other in nearby)
             {
                 if (other == this || other.IsToRemove()) continue;
-                if (!(other is AttackableUnit)) continue;
-                if (skipAllyLaneMinions && other is LaneMinion && other.Team == Team) continue;
+                if (!(other is AttackableUnit otherUnit)) continue;
+                // Dead champions don't SetToRemove (they sit at death position until respawn,
+                // ~30s) so without this filter they keep body-pushing live units. Ghosted units
+                // pass through everything client-side too this matches PathingHandler's predicate.
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
 
                 var diff = Position - other.Position;
                 float distSq = diff.LengthSquared();
@@ -1613,8 +1629,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             foreach (var other in nearby)
             {
                 if (other == this || other.IsToRemove()) continue;
-                if (!(other is AttackableUnit)) continue;
-                if (skipAllyLaneMinions && other is LaneMinion && other.Team == Team) continue;
+                if (!(other is AttackableUnit otherUnit)) continue;
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
 
                 var diff = Position - other.Position;
                 float combinedRadius = CollisionRadius + other.CollisionRadius;

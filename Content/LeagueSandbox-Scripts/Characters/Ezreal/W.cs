@@ -68,17 +68,17 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
             var owner = spell.CastInfo.Owner;
             var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
             var ap = owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient2;
-            var damage = 15 + spell.CastInfo.SpellLevel * 20 + ad + ap;
+            var damage = 70 + 45 * (spell.CastInfo.SpellLevel - 1) + ad + ap;
 
             var spellO = owner.GetSpell("EzrealEssenceFlux");
             if(target.Team != owner.Team)
             {
-                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
+                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
                 AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
             }
             else if(target.Team == owner.Team)

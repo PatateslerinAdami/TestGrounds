@@ -1,17 +1,11 @@
-﻿using System;
 using System.Numerics;
-using CharScripts;
 using GameMaths;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -21,36 +15,53 @@ public class KatarinaE : ISpellScript {
     private ObjAIBase      _katarina;
     private AttackableUnit _target;
     private Vector2        _previousPos;
-    Vector2                _coords;
+    private Vector2        _coords;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts   = true,
-        IsDamagingSpell      = true,
-        CastingBreaksStealth = false,
-        NotSingleTargetSpell    = false,
-        IsDeathRecapSource   = true,
-        AutoFaceDirection    = false,
-        CastTime             = 0f
+        TriggersSpellCasts             = true,
+        IsDamagingSpell                = true,
+        CastingBreaksStealth           = false,
+        NotSingleTargetSpell           = false,
+        IsDeathRecapSource             = true,
+        AutoFaceDirection              = false,
+        // Lets OnSpellPreCast write the landing pos into CastInfo.TargetPosition without
+        // Spell.Cast clobbering it with the default 10-unit-forward stub.
+        OverrideTargetPositionInScript = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) { _katarina = owner; }
-
-    // Capture state only — no packet-emitting calls here.
-    // All effects must run in OnSpellCast so they land AFTER NPC_CastSpellAns,
-    // matching real S4 wire ordering and avoiding a double-cooldown UI artifact.
+    
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
         _previousPos = _katarina.Position;
-        _coords = CalcVector(180.0F, _katarina.Position, _target.Position);
+      
+        const float visualBuffer = 50f;
+        var overshoot = _katarina.CollisionRadius + _target.CollisionRadius + visualBuffer;
+        _coords = CalcVector(overshoot, _katarina.Position, _target.Position);
+        // Replay-verified: CastSpellAns.targetPosition is the landing pos, not the click
+        // target's center. Sets up the wire packet that Spell.Cast will broadcast next.
+        var landing3D = new Vector3(_coords.X, _katarina.GetHeight(), _coords.Y);
+        spell.CastInfo.TargetPosition = landing3D;
+        spell.CastInfo.TargetPositionEnd = landing3D;
     }
 
     public void OnSpellCast(Spell spell) {
         FaceDirection(_target.Position, _katarina, true);
-        PlayAnimation(_katarina, "Spell3", 0.3f, flags: AnimationFlags.Override);
+        PlayAnimation(_katarina, "spell3", timeScale: 0f, speedScale: 1f,
+                      flags: AnimationFlags.Override | AnimationFlags.Unknown8);
 
-        TeleportTo(_katarina, _coords.X, _coords.Y);
+        // silent:true skips the batched _movementUpdated broadcast. NotifyTeleport always
+        // fires the S4 client's Basic_Attack_Pos handler (obj_AI_Base_PImpl_Int.cpp:3848)
+        // ONLY snaps the unit position when delta > 400u (= sqrt(160000)); short-range blinks
+        // (auto-attack range ~125u + 180u overshoot ≈ 280u total) stay under that threshold,
+        // so the client lerps from old to new position.
+        var canDoSilentHandoff = IsValidTarget(_katarina, _target,
+                                               SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                                               SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        TeleportTo(_katarina, _coords.X, _coords.Y, silent: true);
+        NotifyTeleport(_katarina, _coords);
         FaceDirection(_target.Position, _katarina, true);
-        //blink animation
+
         switch (_katarina.SkinID) {
             case 9: AddParticlePos(_katarina, "Katarina_Skin09_E_return", _previousPos, _previousPos); break;
             case 7:
@@ -61,10 +72,16 @@ public class KatarinaE : ISpellScript {
             default: AddParticlePos(_katarina, "katarina_shadowStep_return",      _previousPos, _previousPos); break;
         }
 
-        //DMG ratios Q Mark & E
-        if (IsValidTarget(_katarina, _target,
-                          SpellDataFlags.AffectEnemies| SpellDataFlags.AffectHeroes |
-                          SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) {
+        // Enemy-only: Basic_Attack_Pos carries the post-blink position to the client and
+        // InstantStop_Attack cancels any prior in-progress AA. Falls through to the
+        // NotifyTeleport path above if an ally killed the target between click and now also
+        // IsValidTarget rejects dead targets.
+        // Replay-empirical (Kat-perspective, 79 E casts): InstantStop_Attack only fires on
+        // ~27% apparently only when there's an active AA-windup to cancel. Gate the broadcast
+        // on `IsAttacking` so we match Riot's wire pattern instead of always emitting.
+        if (canDoSilentHandoff) {
+            _katarina.RetargetAttackToWithHandoff(_target, emitInstantStop: _katarina.IsAttacking);
+
             switch (_katarina.SkinID) {
                 case 9:
                     AddParticleTarget(_katarina, _target, "katarina_Skin09_shadowStep_tar", _target,
@@ -90,19 +107,12 @@ public class KatarinaE : ISpellScript {
                                false);
         }
 
-
         switch (_katarina.SkinID) {
             case 9:  AddParticleTarget(_katarina, _katarina, "Katarina_Skin09_E_cas",   _katarina); break;
             default: AddParticleTarget(_katarina, _katarina, "katarina_shadowStep_cas", _katarina); break;
         }
 
-        //buff dmg reduction
         AddBuff("KatarinaEReduction", 1.5f, 1, spell, _katarina, _katarina);
-        if (IsValidTarget(_katarina, _target,
-                          SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                          SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) {
-            _katarina.SetTargetUnit(_target);
-        }
     }
 
     public void OnSpellPostCast(Spell spell) { }

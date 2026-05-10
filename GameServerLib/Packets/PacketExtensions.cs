@@ -111,31 +111,14 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Creates the MovementDataNormal.
+        /// Creates a `MovementDataNormal` for the unit. Replay-verified shape: when the unit is
+        /// stationary (no waypoints, or `CurrentWaypointKey >= Waypoints.Count`), Riot still emits
+        /// a Normal with exactly one waypoint at the unit's current position — never `Type=Stop`
+        /// (=3), which the 4.x replay never carries in `movementData[]` entries. The 1-waypoint
+        /// fallback is produced naturally by `GetCenteredWaypoints` (its seed is `unit.Position`).
         /// </summary>
-        /// <param name="unit">AttackableUnit to create MovementData for.</param>
-        /// <param name="grid">NavigationGrid used for grabbing center of the map.</param>
-        /// <returns>MovementDataNormal if unit has enough waypoints (>= 1), otherwise MovementDataStop.</returns>
-        public static MovementData CreateMovementDataNormalIfPossible(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
-        {
-            // Prevent 0 waypoints packet error.
-            if (unit.Waypoints.Count < 1)
-            {
-                return CreateMovementDataStop(unit);
-            }
-            return CreateMovementDataNormal(unit, grid, useTeleportID);
-        }
-
-        /// <summary>
-        /// Creates the MovementDataNormal.
-        /// </summary>
-        /// <param name="unit">AttackableUnit to create MovementData for.</param>
-        /// <param name="grid">NavigationGrid used for grabbing center of the map.</param>
-        /// <returns>MovementDataNormal if unit has enough waypoints (>= 1), otherwise crashes.</returns>
         public static MovementDataNormal CreateMovementDataNormal(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
-            System.Diagnostics.Debug.Assert(unit.Waypoints.Count >= 1);
-
             return new MovementDataNormal
             {
                 SyncID = Environment.TickCount,
@@ -147,23 +130,13 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Creates the MovementDataNormal.
+        /// Creates a `MovementDataWithSpeed` if the unit has `MovementParameters` (i.e. is dashing),
+        /// otherwise a `MovementDataNormal`. Stationary units emit a 1-waypoint Normal at their
+        /// current position (replay-verified shape — `MovementDataStop`/Type=3 is unused in 4.x).
         /// </summary>
-        /// <param name="unit">AttackableUnit to create MovementData for.</param>
-        /// <param name="grid">NavigationGrid used for grabbing center of the map.</param>
-        /// <returns>
-        /// MovementDataWithSpeed if unit has MovementParameters (!= null),
-        /// else if unit has enough waypoints (>= 1) - MovementDataNormal,
-        /// otherwise MovementDataStop.
-        /// </returns>
         public static MovementData CreateMovementDataWithSpeedIfPossible(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
-            // Prevent 0 waypoints packet error.
-            if (unit.Waypoints.Count < 1)
-            {
-                return CreateMovementDataStop(unit);
-            }
-            else if(unit.MovementParameters == null)
+            if (unit.MovementParameters == null)
             {
                 return CreateMovementDataNormal(unit, grid, useTeleportID);
             }
