@@ -35,6 +35,6 @@ internal class GrievousWound : IBuffGameScript {
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         ApiEventManager.RemoveAllListenersForOwner(this);
-        _grievousWoundsoverHeadParticle.IsToRemove();
+        _grievousWoundsoverHeadParticle.SetToRemove();
     }
 }
