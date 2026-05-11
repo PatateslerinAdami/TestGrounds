@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+// ─── GameServer ↔ Match Coordinator Wire Protocol ──────────────────────────
+//
+// Generic control channel between a running GameServer process and whatever
+// match-coordinator system spawned it (lobby host, dedicated matchmaker,
+// in-process all-in-one launcher, scripted CI harness, etc).
+//
+// THE COORDINATOR IS PLUGGABLE. The GameServer only knows about this proto
+// schema and the CLI args described below. Any coordinator implementation
+// that speaks this wire protocol can drive a GameServer without further
+// modification on the game side. If a future coordinator supersedes the
+// current one, the only thing that needs updating is the new coordinator's
+// implementation — the GameServer doesn't care who's on the other end.
+//
+// ─── Spawn-time CLI contract ────────────────────────────────────────────────
+//
+// The coordinator passes its control endpoint to the spawned GameServer via
+// three additional CLI args:
+//
+//     --coord-host <host>       # TCP host to dial (typically 127.0.0.1)
+//     --coord-port <port>       # TCP port to dial
+//     --match-id <int>          # Coordinator-supplied identifier; the
+//                               # GameServer echoes it back on every message
+//                               # so a single coordinator can disambiguate
+//                               # connections from many concurrent matches.
+//
+// All three are optional. If --coord-host is absent the GameServer runs in
+// legacy/standalone mode and never opens the channel — existing tooling and
+// scripts that launch the GameServer directly continue to work unchanged.
+//
+// ─── Connection lifecycle ──────────────────────────────────────────────────
+//
+// 1. GameServer parses --config, loads the JSON, binds its UDP port for
+//    LoL clients. Until binding succeeds it does NOT contact the coordinator.
+//
+// 2. GameServer opens a TCP connection to (coord-host, coord-port).
+//
+// 3. GameServer's first message on the connection is `Ready{}` — this is the
+//    coordinator's signal that the GameServer is now accepting LoL client
+//    handshakes. A coordinator that routes player connections (e.g. via a
+//    relay) MUST wait for Ready before allowing any client to reach the
+//    GameServer's port. Without this gate, packets sent before the
+//    GameServer has bound are silently dropped, manifesting as connect-
+//    timeout popups on the LoL client.
+//
+// 4. The TCP connection stays open for the lifetime of the match. Either
+//    side may use it to send further messages (`MatchEnded`, `Heartbeat`,
+//    `Shutdown`, …) at any time.
+//
+// 5. When the match concludes the GameServer SHOULD send `MatchEnded{}`
+//    before exiting. If the GameServer process dies without sending
+//    `MatchEnded` (crash, SIGKILL, etc), the coordinator infers an abnormal
+//    end from the TCP socket closing — this gives coordinators a free
+//    crash-detection signal.
+//
+// ─── Wire framing ──────────────────────────────────────────────────────────
+//
+// Every message on the connection is framed as:
+//
+//     [4 bytes: big-endian uint32 body length] [body bytes…]
+//
+// where the body bytes are a serialized `GameServerToCoordinator` (going
+// from game to coordinator) or `CoordinatorToGameServer` (the other way).
+// Maximum body length is 1 MiB; coordinators that receive a length > 1 MiB
+// should treat the connection as corrupt and close it.
+
+package gameserver_control;
+
+// Explicit C# namespace so the GameServer-side `using GameserverControl;`
+// compiles whether or not the protoc default name-mangling stays the same
+// across versions. Other languages ignore this option.
+option csharp_namespace = "GameserverControl";
+
+// ─── GameServer → Coordinator ──────────────────────────────────────────────
+
+// First message after TCP connect. Sent EXACTLY once per connection,
+// immediately after the GameServer's UDP socket is bound.
+//
+// `match_id` echoes the --match-id CLI arg so the coordinator can correlate
+// this connection with the spawn it initiated. `actual_port` confirms the
+// UDP port the GameServer bound — useful when the coordinator passed
+// `--port 0` to ask the GameServer to pick its own port. `version` is a
+// free-form build identifier the coordinator may log.
+message Ready {
+    int32  match_id    = 1;
+    int32  actual_port = 2;
+    string version     = 3;
+}
+
+// Sent when the match concludes. The GameServer is free to exit immediately
+// after sending this (no ack is expected).
+message MatchEnded {
+    int32  match_id = 1;
+
+    // High-level reason category. Numeric values are stable across versions;
+    // coordinators receiving an unknown value (because a newer GameServer
+    // added a reason an older coordinator hasn't seen) should treat it as
+    // REASON_UNSPECIFIED rather than rejecting the message.
+    enum Reason {
+        REASON_UNSPECIFIED       = 0;
+        ALL_PLAYERS_DISCONNECTED = 1;
+        TEAM_SURRENDER           = 2;
+        NEXUS_DESTROYED          = 3;
+        TIME_LIMIT_REACHED       = 4;
+        SHUTDOWN_REQUESTED       = 5;  // sent in response to a Shutdown command
+        INTERNAL_ERROR           = 6;  // game-side error that forced a stop
+    }
+    Reason reason            = 2;
+
+    // Wall-clock seconds from when the GameServer first bound to when this
+    // MatchEnded was sent. Coordinators can use this directly for telemetry
+    // without having to track per-match start times themselves.
+    int32  duration_seconds  = 3;
+
+    // Free-form human-readable detail string. Often empty.
+    string detail            = 4;
+
+    // Winning team, when applicable:
+    //   0 = unspecified / draw / no winner (all disconnects, internal error, …)
+    //   1 = TEAM_BLUE   (a.k.a. ORDER, blue side)
+    //   2 = TEAM_PURPLE (a.k.a. CHAOS, purple side)
+    // Higher values reserved for future game modes (e.g. Dominion teams).
+    int32  winning_team      = 5;
+}
+
+// Optional periodic liveness signal. The GameServer MAY send this every N
+// seconds (recommended: every 10s) to give coordinators a positive
+// "still-alive" heartbeat in addition to the implicit TCP-keepalive
+// signal. Coordinators are free to ignore them entirely if they don't
+// need the extra telemetry.
+message Heartbeat {
+    int32 match_id          = 1;
+    int32 connected_players = 2;
+    int32 elapsed_seconds   = 3;
+}
+
+message GameServerToCoordinator {
+    oneof payload {
+        Ready      ready       = 1;
+        MatchEnded match_ended = 2;
+        Heartbeat  heartbeat   = 3;
+    }
+}
+
+// ─── Coordinator → GameServer ──────────────────────────────────────────────
+
+// Force the GameServer to shut down (admin-kick, lobby cancel, server
+// rotation, etc). The GameServer SHOULD respond with
+// `MatchEnded { reason = SHUTDOWN_REQUESTED }` and then exit cleanly.
+// Coordinators that don't need this functionality can simply never send
+// it; the GameServer will continue to run normally.
+message Shutdown {
+    string reason = 1;
+}
+
+message CoordinatorToGameServer {
+    oneof payload {
+        Shutdown shutdown = 1;
+    }
+}

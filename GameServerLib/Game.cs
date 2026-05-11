@@ -314,10 +314,42 @@ namespace LeagueSandbox.GameServer
             {
                 _logger.Info("All players have left the server. It's lonely here :(");
                 SetToExit = true;
+                // Notify whatever match-coordinator is watching (if any). The
+                // event is no-op when no subscriber is wired (legacy/standalone
+                // launches). See LeagueSandbox.GameServer.Networking for the
+                // wire-up; coordinators implement the gameserver_control.proto
+                // schema to receive this as a MatchEnded message.
+                MatchEnded?.Invoke(MatchEndCause.AllPlayersDisconnected, /*winningTeam*/ 0);
                 return true;
             }
             return false;
         }
+
+        /// <summary>
+        /// Reasons the match might have concluded. Mirrors the categories
+        /// in <c>Networking/Protobuf/gameserver_control.proto</c>'s
+        /// MatchEnded.Reason enum, but kept as a plain C# enum here so
+        /// non-coordinator code (logs, future replay metadata, etc) can
+        /// reuse it without taking a hard dependency on the protobuf type.
+        /// </summary>
+        public enum MatchEndCause
+        {
+            Unspecified            = 0,
+            AllPlayersDisconnected = 1,
+            TeamSurrender          = 2,
+            NexusDestroyed         = 3,
+            TimeLimitReached       = 4,
+            ShutdownRequested      = 5,
+            InternalError          = 6,
+        }
+
+        /// <summary>
+        /// Fired exactly once when the match ends, regardless of cause.
+        /// The second argument is the winning team (0 = none/draw, 1 = blue,
+        /// 2 = purple). Subscribers (e.g. the coordinator client wired up
+        /// in Server.cs) MUST tolerate being called from any thread.
+        /// </summary>
+        public event Action<MatchEndCause, int>? MatchEnded;
 
         /// <summary>
         /// Function which initiates ticking of the game's logic.
