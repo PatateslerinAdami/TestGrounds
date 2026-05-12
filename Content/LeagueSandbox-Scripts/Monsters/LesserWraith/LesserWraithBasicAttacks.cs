@@ -10,7 +10,7 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 
 namespace Spells;
 
-public class LesserWraithBasicAttacks : ISpellScript {
+public class LesserWraithBasicAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters {
