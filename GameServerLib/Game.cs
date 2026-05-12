@@ -23,6 +23,7 @@ using GameServerCore.Packets.PacketDefinitions;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Quests;
+using System.Threading;
 
 namespace LeagueSandbox.GameServer
 {
@@ -313,10 +314,42 @@ namespace LeagueSandbox.GameServer
             {
                 _logger.Info("All players have left the server. It's lonely here :(");
                 SetToExit = true;
+                // Notify whatever match-coordinator is watching (if any). The
+                // event is no-op when no subscriber is wired (legacy/standalone
+                // launches). See LeagueSandbox.GameServer.Networking for the
+                // wire-up; coordinators implement the gameserver_control.proto
+                // schema to receive this as a MatchEnded message.
+                MatchEnded?.Invoke(MatchEndCause.AllPlayersDisconnected, /*winningTeam*/ 0);
                 return true;
             }
             return false;
         }
+
+        /// <summary>
+        /// Reasons the match might have concluded. Mirrors the categories
+        /// in <c>Networking/Protobuf/gameserver_control.proto</c>'s
+        /// MatchEnded.Reason enum, but kept as a plain C# enum here so
+        /// non-coordinator code (logs, future replay metadata, etc) can
+        /// reuse it without taking a hard dependency on the protobuf type.
+        /// </summary>
+        public enum MatchEndCause
+        {
+            Unspecified            = 0,
+            AllPlayersDisconnected = 1,
+            TeamSurrender          = 2,
+            NexusDestroyed         = 3,
+            TimeLimitReached       = 4,
+            ShutdownRequested      = 5,
+            InternalError          = 6,
+        }
+
+        /// <summary>
+        /// Fired exactly once when the match ends, regardless of cause.
+        /// The second argument is the winning team (0 = none/draw, 1 = blue,
+        /// 2 = purple). Subscribers (e.g. the coordinator client wired up
+        /// in Server.cs) MUST tolerate being called from any thread.
+        /// </summary>
+        public event Action<MatchEndCause, int>? MatchEnded;
 
         /// <summary>
         /// Function which initiates ticking of the game's logic.
@@ -327,16 +360,27 @@ namespace LeagueSandbox.GameServer
             double timeout = 0;
 
             Stopwatch lastMapDurationWatch = new Stopwatch();
-            
+
             bool wasNotPaused = true;
             bool firstCycle = true;
-            
+
             float timeToForcedStart = Config.ForcedStart;
+
+            // Kick off the dedicated I/O thread. From this point onwards, all
+            // ENet polling and outbound sends happen on that thread; the game
+            // thread interacts with the network only via the bridge queues.
+            _packetServer.StartNetThread();
 
             while (!SetToExit)
             {
                 double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
                 lastMapDurationWatch.Restart();
+
+                // Drain everything the net thread has produced since the last
+                // tick. Done at the very top so the rest of the tick sees a
+                // consistent view of the world (including any packet handlers
+                // that mutate game state).
+                DrainInboundEvents();
                 
                 float deltaTime = (float)lastSleepDuration;
                 if(firstCycle)
@@ -397,8 +441,41 @@ namespace LeagueSandbox.GameServer
                 double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
                 double oversleep = lastSleepDuration - timeout;
                 timeout = Math.Max(0, refreshRate - lastUpdateDuration - oversleep);
-                
-                _packetServer.NetLoop((uint)timeout);
+
+                if (timeout > 0)
+                {
+                    Thread.Sleep((int)timeout);
+                }
+            }
+
+            _packetServer.StopNetThread();
+        }
+
+        // Drains all events the net thread has queued for the game thread:
+        // converted request packets and disconnect notifications. Runs once
+        // at the top of every tick so handler-induced state changes are
+        // visible to Update(diff) immediately afterwards.
+        private void DrainInboundEvents()
+        {
+            var bridge = _packetServer.Bridge;
+            while (bridge.Inbound.TryDequeue(out var ev))
+            {
+                switch (ev)
+                {
+                    case InboundRequest r:
+                        try
+                        {
+                            _packetServer.PacketHandlerManager.DispatchInboundRequest(r.ClientId, r.Request);
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.Error($"Inbound request dispatch failed for client {r.ClientId}: {e}");
+                        }
+                        break;
+                    case InboundDisconnect d:
+                        _packetServer.PacketHandlerManager.ProcessDisconnectOnGameThread(d.ClientId);
+                        break;
+                }
             }
         }
 

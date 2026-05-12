@@ -7,6 +7,7 @@ using CommandLine;
 using GameServerConsole.Properties;
 using LeagueSandbox.GameServer;
 using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Networking;
 using LeagueSandbox.GameServerConsole.Logic;
 using LeagueSandbox.GameServerConsole.Utility;
 using log4net;
@@ -33,9 +34,22 @@ internal abstract class Program {
             parsedArgs.GameInfoJson,
             Encoding.UTF8.GetString(Resources.GameInfo));
 
+        // The coordinator channel (gameserver_control.proto) is opt-in:
+        // the GameServer only contacts a coordinator when --coord-host is
+        // present. Direct/manual launches and CI runs that don't pass it
+        // continue to work exactly as before.
+        CoordinatorConfig coordConfig = null;
+        if (!string.IsNullOrWhiteSpace(parsedArgs.CoordHost) && parsedArgs.CoordPort > 0) {
+            coordConfig = new CoordinatorConfig(
+                parsedArgs.CoordHost,
+                parsedArgs.CoordPort,
+                parsedArgs.MatchId);
+        }
+
         var gameServerLauncher = new GameServerLauncher(
             parsedArgs.ServerPort,
-            parsedArgs.GameInfoJson);
+            parsedArgs.GameInfoJson,
+            coordConfig);
 
 #if DEBUG
         // When debugging, optionally the game client can be launched automatically given the path (placed in GameServerSettings.json) to the folder containing the League executable.
@@ -198,6 +212,25 @@ public class ArgsOptions {
 
     [Option("port", Default = (ushort) 5119)]
     public ushort ServerPort { get; set; }
+
+    // ── Optional coordinator channel (gameserver_control.proto) ──────────
+    // Set all three when launching from a coordinator (lobby system,
+    // dedicated matchmaker, embedded all-in-one launcher). Leave them at
+    // their defaults for direct/manual launches — the GameServer detects
+    // the empty CoordHost and skips opening the channel entirely.
+
+    [Option("coord-host", Default = "",
+            HelpText = "TCP host of the match coordinator's control endpoint. " +
+                       "Empty disables the coordinator channel (legacy/standalone mode).")]
+    public string CoordHost { get; set; }
+
+    [Option("coord-port", Default = 0,
+            HelpText = "TCP port of the match coordinator's control endpoint.")]
+    public int CoordPort { get; set; }
+
+    [Option("match-id", Default = 0,
+            HelpText = "Coordinator-supplied match identifier echoed in every control-channel message.")]
+    public int MatchId { get; set; }
 
     public static ArgsOptions Parse(string[] args) {
         ArgsOptions options = null;

@@ -14,6 +14,34 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OptimizedPriorityQueue" Version="5.1.0" />
     <PackageReference Include="RoyT.AStar" Version="3.0.2" />
+
+    <!--
+      Google.Protobuf provides the runtime types (Message, Parser, etc) used
+      by the generated C# from gameserver_control.proto.
+
+      Grpc.Tools provides the <Protobuf> MSBuild item below: it bundles
+      protoc binaries for win-x64/linux-x64/osx, runs them at build time, and
+      drops generated .cs into obj/Debug|Release/.../. PrivateAssets=all means
+      downstream projects that consume GameServerLib don't get a transitive
+      Grpc.Tools dependency — the generated types are exposed via the regular
+      Google.Protobuf reference instead.
+    -->
+    <PackageReference Include="Google.Protobuf" Version="3.27.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.65.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Coordinator-control wire protocol. GrpcServices="None" keeps Grpc.Tools
+      from generating gRPC service stubs we don't use — we only want the
+      protobuf message classes. The generated code lands in
+      obj/<config>/<tfm>/GameserverControl.cs and is auto-included in the
+      compile.
+    -->
+    <Protobuf Include="Networking\Protobuf\gameserver_control.proto" GrpcServices="None" />
   </ItemGroup>
 
   <ItemGroup>
