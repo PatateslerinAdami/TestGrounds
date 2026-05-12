@@ -1,7 +1,8 @@
-﻿using LENet;
+using LENet;
 using GameServerCore.Packets.Handlers;
 using GameServerCore.Packets.PacketDefinitions;
 using System;
+using System.Threading;
 using Channel = GameServerCore.Packets.Enums.Channel;
 using Version = LENet.Version;
 using LeagueSandbox.GameServer;
@@ -10,6 +11,9 @@ namespace PacketDefinitions420
 {
     /// <summary>
     /// Class responsible for the server's networking of the game.
+    /// Owns the dedicated I/O thread which polls ENet, decrypts and dispatches
+    /// inbound packets onto the game thread, and drains the outbound command
+    /// queue.
     /// </summary>
     public class PacketServer
     {
@@ -17,24 +21,19 @@ namespace PacketDefinitions420
         private readonly uint _serverHost = Address.Any;
         private Game _game;
         protected const int PEER_MTU = 996;
+        // Polling cadence used when the socket is idle. Short enough that newly
+        // enqueued outbound commands are flushed promptly even without the
+        // OutboundSignal pulse, long enough to avoid burning CPU when the
+        // server is genuinely quiet.
+        private const uint NET_POLL_TIMEOUT_MS = 5;
 
-        /// <summary>
-        /// Networking encryption method.
-        /// </summary>
-        public BlowFish Blowfish { get; private set; }
-        /// <summary>
-        /// Interface of all functions related to sending and receiving packets.
-        /// </summary>
+        private NetworkSender _sender;
+        public NetworkBridge Bridge { get; private set; }
+
         public PacketHandlerManager PacketHandlerManager { get; private set; }
 
-        /// <summary>
-        /// Creates and sets up the host for the server as well as the packet handler manager.
-        /// </summary>
-        /// <param name="port">Port the server will be hosted on.</param>
-        /// <param name="blowfishKeys">Unique blowfish keys the server will use for encryption for each player.</param>
-        /// <param name="game">Game instance.</param>
-        /// <param name="netReq">Network request handler instance.</param>
-        /// <param name="netResp">Network response handler instance.</param>
+        private Thread _netThread;
+
         public void InitServer(ushort port, string[] blowfishKeys, Game game, NetworkHandler<ICoreRequest> netReq, NetworkHandler<ICoreRequest> netResp)
         {
             _game = game;
@@ -51,40 +50,106 @@ namespace PacketDefinitions420
                 blowfishes[i] = new BlowFish(key);
             }
 
-            PacketHandlerManager = new PacketHandlerManager(blowfishes, _server, game, netReq, netResp);
+            var peers = new Peer[blowfishKeys.Length];
+            _sender = new NetworkSender(peers, blowfishes, _server);
+            Bridge = new NetworkBridge();
+
+            PacketHandlerManager = new PacketHandlerManager(_sender, Bridge, game, netReq, netResp);
         }
 
-        /// <summary>
-        /// The core networking loop which fires for connections, received packets, and disconnects.
-        /// </summary>
-        public void NetLoop(uint timeout = 0)
+        // Spawns the dedicated I/O thread. The game thread continues into
+        // Game.GameLoop() while this thread runs HostService + outbound drain
+        // until Bridge.Stop is set.
+        public void StartNetThread()
         {
-            var enetEvent = new Event();
-            while (_server.HostService(enetEvent, timeout) > 0)
+            _netThread = new Thread(NetThreadMain)
             {
-                switch (enetEvent.Type)
+                Name = "ENet I/O",
+                IsBackground = true
+            };
+            _netThread.Start();
+        }
+
+        public void StopNetThread()
+        {
+            if (Bridge != null)
+            {
+                Bridge.Stop = true;
+                Bridge.OutboundSignal.Set();
+            }
+            _netThread?.Join();
+        }
+
+        private void NetThreadMain()
+        {
+            var ev = new Event();
+            while (!Bridge.Stop)
+            {
+                // Drain everything pending on the outbound queue first. This
+                // is the hot path: most ticks the game thread enqueues several
+                // commands and we want them out the door before we go to
+                // sleep on HostService.
+                while (Bridge.Outbound.TryDequeue(out var cmd))
                 {
-                    case EventType.CONNECT:
-                        {
-                            // Set some defaults
-                            enetEvent.Peer.MTU = PEER_MTU;
-                            enetEvent.Data = 0;
-                        }
-                        break;
-                    case EventType.RECEIVE:
-                        {
-                            var channel = (Channel)enetEvent.ChannelID;
-                            PacketHandlerManager.HandlePacket(enetEvent.Peer, enetEvent.Packet, channel);
-                            // Clean up the packet now that we're done using it.
-                            //enetEvent.Packet.Dispose();
-                        }
-                        break;
-                    case EventType.DISCONNECT:
-                        {
-                            PacketHandlerManager.HandleDisconnect(enetEvent.Peer);
-                        }
-                        break;
+                    try
+                    {
+                        _sender.Execute(cmd);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.Error.WriteLine($"[NetThread] Outbound execute failed: {e}");
+                    }
                 }
+
+                int rc = _server.HostService(ev, NET_POLL_TIMEOUT_MS);
+                if (rc < 0)
+                {
+                    // ENet error. Pause briefly to avoid a busy loop on a
+                    // persistent socket failure.
+                    Thread.Sleep(1);
+                    continue;
+                }
+
+                // Drain all events that arrived during the poll without
+                // blocking again.
+                do
+                {
+                    DispatchEnetEvent(ev);
+                }
+                while (_server.HostService(ev, 0) > 0);
+
+                // If both queues were empty and HostService returned 0, sit on
+                // the wait handle so we don't spin. The game thread sets this
+                // any time it enqueues an outbound command.
+                if (Bridge.Outbound.IsEmpty)
+                {
+                    Bridge.OutboundSignal.WaitOne((int)NET_POLL_TIMEOUT_MS);
+                }
+            }
+        }
+
+        private void DispatchEnetEvent(Event enetEvent)
+        {
+            switch (enetEvent.Type)
+            {
+                case EventType.CONNECT:
+                    {
+                        // Set some defaults
+                        enetEvent.Peer.MTU = PEER_MTU;
+                        enetEvent.Data = 0;
+                    }
+                    break;
+                case EventType.RECEIVE:
+                    {
+                        var channel = (Channel)enetEvent.ChannelID;
+                        PacketHandlerManager.HandleNetworkPacket(enetEvent.Peer, enetEvent.Packet, channel);
+                    }
+                    break;
+                case EventType.DISCONNECT:
+                    {
+                        PacketHandlerManager.NotifyDisconnectFromNet(enetEvent.Peer);
+                    }
+                    break;
             }
         }
     }
