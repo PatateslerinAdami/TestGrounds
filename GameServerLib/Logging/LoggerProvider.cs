@@ -50,10 +50,32 @@ namespace LeagueSandbox.GameServer.Logging
                     else
                     {
                         var layout = new log4net.Layout.PatternLayout("%-4timestamp [%thread] %-5level %logger - %message%newline");
-                        var appender = new log4net.Appender.ConsoleAppender
+                        var appender = new log4net.Appender.ManagedColoredConsoleAppender
                         {
                             Layout = layout
                         };
+
+                        appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
+                        {
+                            Level     = log4net.Core.Level.Fatal,
+                            ForeColor = ConsoleColor.Red
+                        });
+                        appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
+                        {
+                            Level     = log4net.Core.Level.Error,
+                            ForeColor = ConsoleColor.Red
+                        });
+                        appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
+                        {
+                            Level     = log4net.Core.Level.Warn,
+                            ForeColor = ConsoleColor.Yellow
+                        });
+                        appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
+                        {
+                            Level     = log4net.Core.Level.Info,
+                            ForeColor = ConsoleColor.Blue
+                        });
+
                         layout.ActivateOptions();
                         appender.ActivateOptions();
 

@@ -23,6 +23,8 @@ internal abstract class Program {
     private static readonly ILog Logger = LoggerProvider.GetLogger();
 
     private static void Main(string[] args) {
+        Banner.Print();
+
         AppDomain.CurrentDomain.UnhandledException +=
             (sender, args) => Logger.Fatal(null, (Exception) args.ExceptionObject);
 

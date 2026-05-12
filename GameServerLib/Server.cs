@@ -18,7 +18,7 @@ namespace LeagueSandbox.GameServer
     internal class Server : IDisposable
     {
         private string[] _blowfishKeys;
-        private string _serverVersion = "0.2.0";
+        private string _serverVersion = "1.0.0";
         private static ILog _logger = LoggerProvider.GetLogger();
         private Game _game;
         private Config _config;
@@ -63,7 +63,7 @@ namespace LeagueSandbox.GameServer
             Console.Title = build;
 
             _logger.Debug(build);
-            _logger.Debug($"Yorick {_serverVersion}");
+            _logger.Debug($"Bloodwell {_serverVersion}");
             _logger.Info($"Game started on port: {_serverPort}");
 
             packetServer.InitServer(_serverPort, _blowfishKeys, _game, _game.RequestHandler, _game.ResponseHandler);
