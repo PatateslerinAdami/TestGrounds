@@ -7,7 +7,6 @@ using CommandLine;
 using GameServerConsole.Properties;
 using LeagueSandbox.GameServer;
 using LeagueSandbox.GameServer.Logging;
-using LeagueSandbox.GameServer.Networking;
 using LeagueSandbox.GameServerConsole.Logic;
 using LeagueSandbox.GameServerConsole.Utility;
 using log4net;
@@ -36,22 +35,14 @@ internal abstract class Program {
             parsedArgs.GameInfoJson,
             Encoding.UTF8.GetString(Resources.GameInfo));
 
-        // The coordinator channel (gameserver_control.proto) is opt-in:
-        // the GameServer only contacts a coordinator when --coord-host is
-        // present. Direct/manual launches and CI runs that don't pass it
-        // continue to work exactly as before.
-        CoordinatorConfig coordConfig = null;
-        if (!string.IsNullOrWhiteSpace(parsedArgs.CoordHost) && parsedArgs.CoordPort > 0) {
-            coordConfig = new CoordinatorConfig(
-                parsedArgs.CoordHost,
-                parsedArgs.CoordPort,
-                parsedArgs.MatchId);
-        }
-
+        // The coordinator channel (gameserver_control.proto) is opt-in and
+        // its configuration now lives in the top-level `coordinatorChannel`
+        // object of GameInfo.json. Config.LoadConfig parses it; Server.cs
+        // wires the CoordinatorClient if the object is present. Nothing on
+        // the CLI side needs to know about the channel.
         var gameServerLauncher = new GameServerLauncher(
             parsedArgs.ServerPort,
-            parsedArgs.GameInfoJson,
-            coordConfig);
+            parsedArgs.GameInfoJson);
 
 #if DEBUG
         // When debugging, optionally the game client can be launched automatically given the path (placed in GameServerSettings.json) to the folder containing the League executable.
@@ -215,28 +206,17 @@ public class ArgsOptions {
     [Option("port", Default = (ushort) 5119)]
     public ushort ServerPort { get; set; }
 
-    // ── Optional coordinator channel (gameserver_control.proto) ──────────
-    // Set all three when launching from a coordinator (lobby system,
-    // dedicated matchmaker, embedded all-in-one launcher). Leave them at
-    // their defaults for direct/manual launches — the GameServer detects
-    // the empty CoordHost and skips opening the channel entirely.
-
-    [Option("coord-host", Default = "",
-            HelpText = "TCP host of the match coordinator's control endpoint. " +
-                       "Empty disables the coordinator channel (legacy/standalone mode).")]
-    public string CoordHost { get; set; }
-
-    [Option("coord-port", Default = 0,
-            HelpText = "TCP port of the match coordinator's control endpoint.")]
-    public int CoordPort { get; set; }
-
-    [Option("match-id", Default = 0,
-            HelpText = "Coordinator-supplied match identifier echoed in every control-channel message.")]
-    public int MatchId { get; set; }
-
     public static ArgsOptions Parse(string[] args) {
         ArgsOptions options = null;
-        Parser.Default.ParseArguments<ArgsOptions>(args).WithParsed(argOptions => options = argOptions);
+
+        // IgnoreUnknownArguments: don't error on legacy --coord-host /
+        // --coord-port / --match-id flags that older or external callers
+        // may still pass. Those parameters moved into the
+        // `coordinatorChannel` JSON object of GameInfo.json — see
+        // GameServerLib/Networking/README.md. Silently accepting (and
+        // discarding) them keeps unrelated tooling working.
+        var parser = new Parser(settings => settings.IgnoreUnknownArguments = true);
+        parser.ParseArguments<ArgsOptions>(args).WithParsed(argOptions => options = argOptions);
         return options;
     }
 }

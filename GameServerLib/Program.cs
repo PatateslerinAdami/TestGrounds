@@ -1,5 +1,4 @@
 using LeagueSandbox.GameServer.Logging;
-using LeagueSandbox.GameServer.Networking;
 using log4net;
 using LeagueSandbox.GameServer.Inventory;
 using System;
@@ -36,13 +35,13 @@ namespace LeagueSandbox.GameServer
         /// <param name="serverPort">Launch argument representing the port the server will be hosted on.</param>
         /// <param name="configJson">Launch argument representing the configuration file that houses all information about the game such as players, champions, map, etc.</param>
         /// <param name="blowfishKey">Singular blowfish key which the GameServer will run on. *NOTE*: Will be depricated once per-peer blowfish keys are implemented.</param>
-        public GameServerLauncher(ushort serverPort, string configJson, CoordinatorConfig coordConfig = null)
+        public GameServerLauncher(ushort serverPort, string configJson)
         {
             ConfigJson = configJson;
             ServerPort = serverPort;
             game = new Game();
 
-            _server = new Server(game, serverPort, configJson, coordConfig);
+            _server = new Server(game, serverPort, configJson);
 
 #if !DEBUG
             try

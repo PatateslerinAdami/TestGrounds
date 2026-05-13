@@ -24,10 +24,10 @@ namespace LeagueSandbox.GameServer
         private Config _config;
         private ushort _serverPort { get; }
 
-        // Coordinator wire-up. Both null when the GameServer is launched in
-        // legacy/standalone mode (no --coord-host CLI arg). See
-        // Networking/Protobuf/gameserver_control.proto for the protocol.
-        private readonly CoordinatorConfig _coordConfig;
+        // Coordinator client. Null when the GameServer is launched in
+        // legacy/standalone mode (the JSON config omits the
+        // `coordinatorChannel` object — see Config.LoadConfig). The wire
+        // protocol is defined in Networking/Protobuf/gameserver_control.proto.
         private CoordinatorClient _coordClient;
 
         // Wall-clock anchor for MatchEnded.duration_seconds. Stamped when
@@ -38,12 +38,11 @@ namespace LeagueSandbox.GameServer
         /// <summary>
         /// Initialize base variables for future usage.
         /// </summary>
-        public Server(Game game, ushort port, string configJson, CoordinatorConfig coordConfig = null)
+        public Server(Game game, ushort port, string configJson)
         {
             _game = game;
             _serverPort = port;
             _config = Config.LoadFromJson(game, configJson);
-            _coordConfig = coordConfig;
 
             _blowfishKeys = new string[_config.Players.Count];
             for(int i = 0; i < _config.Players.Count; i++)
@@ -74,15 +73,22 @@ namespace LeagueSandbox.GameServer
             // bound and accepting client handshakes — closing the proxy/client
             // dead-window race that motivated this whole channel.
             //
+            // The coordinator endpoint is supplied via the top-level
+            // `coordinatorChannel` object in GameInfo.json (parsed into
+            // `_config.CoordinatorChannel` in Config.LoadConfig). When the
+            // realm runs in legacy mode it omits the object entirely; the
+            // GameServer then runs as before with no outbound TCP attempt.
+            //
             // A coordinator-side failure (refused connect, timeout, etc) is
             // logged but never aborts the server: a misconfigured coordinator
             // must not break otherwise-working matches.
-            if (_coordConfig != null && _coordConfig.IsValid)
+            var coordConfig = _config.CoordinatorChannel;
+            if (coordConfig != null && coordConfig.IsValid)
             {
                 _coordClient = new CoordinatorClient(
-                    _coordConfig.Host,
-                    _coordConfig.Port,
-                    _coordConfig.MatchId,
+                    coordConfig.Host,
+                    coordConfig.Port,
+                    coordConfig.MatchId,
                     _serverVersion);
 
                 _coordClient.ShutdownRequested += OnCoordinatorShutdownRequested;

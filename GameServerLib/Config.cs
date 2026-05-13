@@ -10,6 +10,7 @@ using LeagueSandbox.GameServer;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
+using LeagueSandbox.GameServer.Networking;
 using log4net;
 using Newtonsoft.Json.Linq;
 
@@ -34,6 +35,16 @@ namespace LeagueSandbox.GameServer
         public bool IsDamageTextGlobal { get; private set; }
 
         public float ForcedStart { get; private set; }
+
+        /// <summary>
+        /// Optional coordinator-channel parameters parsed from the top-level
+        /// <c>coordinatorChannel</c> JSON object. Null when the coordinator
+        /// omitted the field (legacy / standalone launches) — the GameServer
+        /// treats null as "no coordinator", same behaviour as pre-channel
+        /// builds. See <c>Networking/Protobuf/gameserver_control.proto</c>
+        /// for the wire protocol.
+        /// </summary>
+        public CoordinatorConfig CoordinatorChannel { get; private set; }
 
         private Config()
         {
@@ -112,6 +123,25 @@ namespace LeagueSandbox.GameServer
             }
 
             ForcedStart = (float)(data.SelectToken("forcedStart") ?? 0) * 1000;
+
+            // ── Coordinator channel ────────────────────────────────────
+            // The coordinator may add unknown sibling keys here in future
+            // versions (auth tokens, heartbeat intervals, etc); per the
+            // forward-compat contract we silently ignore them and pull only
+            // the three fields we know about. Newtonsoft.Json's default
+            // behaviour is permissive on unknown JSON keys, so no extra
+            // configuration is needed.
+            var coordToken = data.SelectToken("coordinatorChannel");
+            if (coordToken != null && coordToken.Type == JTokenType.Object)
+            {
+                var host = (string)coordToken.SelectToken("host");
+                var port = (int?)coordToken.SelectToken("port") ?? 0;
+                var matchId = (int?)coordToken.SelectToken("matchId") ?? 0;
+                if (!string.IsNullOrWhiteSpace(host) && port > 0)
+                {
+                    CoordinatorChannel = new CoordinatorConfig(host, port, matchId);
+                }
+            }
         }
 
         public void LoadContent(Game game)

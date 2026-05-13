@@ -13,33 +13,58 @@ If you're replacing an existing match-coordinator with a new one, copy the
 your language, and implement the protocol below. The GameServer side does
 not need to change.
 
-## Spawn-time CLI contract
+## Spawn-time contract
 
-The coordinator passes its control endpoint to the GameServer via three
-additional CLI args on the existing `GameServerConsole` invocation:
-
-| Arg            | Type   | Notes                                                    |
-|----------------|--------|----------------------------------------------------------|
-| `--coord-host` | string | TCP host to dial (typically `127.0.0.1` for in-process). |
-| `--coord-port` | int    | TCP port the coordinator is listening on.                |
-| `--match-id`   | int    | Coordinator-supplied match identifier.                   |
-
-All three are optional. **If `--coord-host` is empty the GameServer runs in
-legacy/standalone mode** and never opens the channel. Existing tooling and
-direct/manual launches continue to work without modification.
-
-Example (from a coordinator that has just picked free port `45123` for
-this match's UDP traffic and is listening on TCP `127.0.0.1:5500` for
-the control channel):
+The coordinator launches the GameServer with the same two CLI args it
+always has — port + config — and nothing else. The coordinator endpoint
+is now embedded in the GameInfo JSON the coordinator writes anyway:
 
 ```
 GameServerConsole \
     --port 45123 \
-    --config /tmp/lol-match-42.json \
-    --coord-host 127.0.0.1 \
-    --coord-port 5500 \
-    --match-id 42
+    --config /tmp/lol-match-42.json
 ```
+
+The coordinator-control endpoint is described by a top-level
+`coordinatorChannel` object inside GameInfo.json. Three fields, all
+required when the object is present:
+
+```json
+{
+  "players":  [ ... ],
+  "game":     { ... },
+  "gameInfo": { ... },
+  "forcedStart": 60,
+
+  "coordinatorChannel": {
+    "host":    "127.0.0.1",
+    "port":    55566,
+    "matchId": 42
+  }
+}
+```
+
+| JSON key   | Type    | Notes                                                                      |
+|------------|---------|----------------------------------------------------------------------------|
+| `host`     | string  | TCP host to dial (typically `127.0.0.1` for in-process).                   |
+| `port`     | int     | TCP port the coordinator is listening on (1–65535). Often OS-assigned, so re-read it from JSON every launch. |
+| `matchId`  | int     | Coordinator-supplied match identifier, echoed in every control-channel message. |
+
+If `coordinatorChannel` is absent (or has an unparseable / out-of-range
+field), **the GameServer runs in legacy/standalone mode** and never opens
+the channel. Existing tooling and direct/manual launches continue to work
+without modification.
+
+> **Forward-compat:** the coordinator may add additional optional keys
+> inside `coordinatorChannel` in future versions (heartbeat interval,
+> auth token, etc.). The GameServer's JSON parser silently ignores
+> unknown keys (Newtonsoft.Json default), so new fields don't break old
+> GameServers and vice versa.
+
+> **Legacy `--coord-host` / `--coord-port` / `--match-id` CLI flags**
+> have been removed. The CLI parser is configured with
+> `IgnoreUnknownArguments = true` so older callers that still pass them
+> won't error — the args are silently discarded.
 
 ## Wire framing
 
@@ -58,9 +83,11 @@ anything larger is treated as wire corruption.
 ```
 GameServer                             Coordinator
 ─────────                              ───────────
- spawn (with --coord-* args)
+ spawn (with coordinatorChannel
+        embedded in GameInfo.json)
    │
-   ├── parse JSON, bind UDP port
+   ├── parse JSON, bind UDP port,
+   │   read coordinatorChannel.{host,port,matchId}
    │
    ├── TCP connect ─────────────────►  accept (per-match)
    │
