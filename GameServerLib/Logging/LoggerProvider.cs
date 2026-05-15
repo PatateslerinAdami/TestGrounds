@@ -63,7 +63,7 @@ namespace LeagueSandbox.GameServer.Logging
                         appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
                         {
                             Level     = log4net.Core.Level.Error,
-                            ForeColor = ConsoleColor.Red
+                            ForeColor = ConsoleColor.DarkRed
                         });
                         appender.AddMapping(new log4net.Appender.ManagedColoredConsoleAppender.LevelColors
                         {
