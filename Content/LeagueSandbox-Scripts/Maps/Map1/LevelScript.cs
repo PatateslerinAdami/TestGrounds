@@ -9,6 +9,7 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 using static LeagueSandbox.GameServer.API.ApiGameEvents;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace MapScripts.Map1
 {
@@ -398,8 +399,48 @@ namespace MapScripts.Map1
                     .Find(t => t.Type == TurretType.OUTER_TURRET);
                 Vector2? outerTurretPos = outerTurret != null ? (Vector2?)outerTurret.Position : null;
 
+                // Per S4 NavPointManager::GetNextNavLocIter -> minions hold at the next alive
+                // enemy turret in their lane. Build the parallel (turret, waypointIdx) list
+                // sorted by appearance order so LaneMinion can cap its advance accordingly.
+                var enemyTurretsAhead = new List<BaseTurret>();
+                var enemyTurretIndices = new List<int>();
+                if (LevelScriptObjects.TurretList.TryGetValue(opposed_team, out var enemyTurretsByLane)
+                    && enemyTurretsByLane.TryGetValue(lane, out var enemyLaneTurrets))
+                {
+                    var pairs = new List<(BaseTurret turret, int wpIdx)>();
+                    foreach (var turret in enemyLaneTurrets)
+                    {
+                        // FOUNTAIN_TURRET sits at the team's spawn fountain so its never a frontier
+                        // a pushing wave should regroup against. Skip it.
+                        if (turret.Type == TurretType.FOUNTAIN_TURRET) continue;
+
+                        int closestIdx = -1;
+                        float closestDistSq = float.MaxValue;
+                        for (int i = 0; i < waypoint.Count; i++)
+                        {
+                            float d = Vector2.DistanceSquared(waypoint[i], turret.Position);
+                            if (d < closestDistSq)
+                            {
+                                closestDistSq = d;
+                                closestIdx = i;
+                            }
+                        }
+                        if (closestIdx >= 0)
+                        {
+                            pairs.Add((turret, closestIdx));
+                        }
+                    }
+                    pairs.Sort((a, b) => a.wpIdx.CompareTo(b.wpIdx));
+                    foreach (var p in pairs)
+                    {
+                        enemyTurretsAhead.Add(p.turret);
+                        enemyTurretIndices.Add(p.wpIdx);
+                    }
+                }
+
                 CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
-                    isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount);
+                    isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount,
+                    enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices);
             }
 
             if (_minionNumber < 8)

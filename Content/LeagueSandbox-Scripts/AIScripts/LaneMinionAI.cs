@@ -483,9 +483,18 @@ namespace AIScripts
             }
             
             //Quote: Check if near a target waypoint, if so change the target waypoint to the next in the line.
+            //
+            // Cap advance at the next-alive-enemy-turret waypoint per S4 NavPointManager
+            // semantics (mirror NavPointManager.cpp:1259-1503): minions hold at the regroup
+            // waypoint until the blocking turret dies. `GetMaxAllowedWaypointIndex` returns
+            // the cap with the highest index the minion is allowed to walk to right now. We
+            // permit advancing UP TO and INCLUDING that index so the minion can attack the
+            // turret in range. Once the turret dies, the cap moves up and the minion advances.
+            int maxAllowedIdx = LaneMinion.GetMaxAllowedWaypointIndex();
+            int loopCap = Math.Min(LaneMinion.PathingWaypoints.Count, maxAllowedIdx + 1);
             bool notYetOutOfRange = true;
             while(
-                (notYetOutOfRange = currentWaypointIndex < LaneMinion.PathingWaypoints.Count)
+                (notYetOutOfRange = currentWaypointIndex < loopCap)
                 && WaypointReached()
             ) {
                 currentWaypointIndex++;
