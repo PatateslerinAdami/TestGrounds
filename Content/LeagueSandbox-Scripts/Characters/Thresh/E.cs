@@ -36,7 +36,7 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _owner = owner;
-            _toLookAt = AddMinion(_owner, "testcuberender10vision", "testcuberender10vision", owner.Position, owner.Team, ignoreCollision: true, targetable: false, useSpells: false);
+            _toLookAt = AddMinion(_owner, "TestCubeRender10Vision", "ThreshELookAt", owner.Position, owner.Team, ignoreCollision: true, targetable: false, useSpells: false);
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

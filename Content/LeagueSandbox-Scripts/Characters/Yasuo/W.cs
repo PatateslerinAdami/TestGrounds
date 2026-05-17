@@ -29,7 +29,10 @@ namespace Spells
         {
             ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell, true);
             _owner = owner;
-            _toLookAt = AddMinion(_owner, "testcuberender10vision", "testcuberender10vision", owner.Position, owner.Team, ignoreCollision: true, targetable: false, useSpells: false);
+            // Model name must match the case-sensitive asset lookup ("TestCubeRender10Vision"),
+            // otherwise AddMinion returns null, _toLookAt stays null, OnActivate NREs silently
+            // via the try/catch in Spell.cs, and OnSpellPreCast then NREs on the null deref.
+            _toLookAt = AddMinion(_owner, "TestCubeRender10Vision", "YasuoWLookAt", owner.Position, owner.Team, ignoreCollision: true, targetable: false, useSpells: false);
         }
 
         private void OnLevelUpSpell(Spell spell)
