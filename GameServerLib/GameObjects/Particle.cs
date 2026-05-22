@@ -49,6 +49,33 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <summary>
         /// Position this object is spawned at.
         /// </summary>
+        /// <summary>
+        /// When non-zero, overrides the wire's TargetNetID field at packet-build time
+        /// regardless of whether <see cref="TargetObject"/> is set. Used to decouple the
+        /// "target entity reference" from the "target position" — e.g. Xerath Q beam,
+        /// where Riot's wire has TargetNetID pointing to a Chiu minion at a third
+        /// location, but TargetPositionXZ at the caster's ground position.
+        /// </summary>
+        public uint TargetNetIDOverride { get; set; }
+
+        /// <summary>
+        /// When set (non-null), overrides the wire's <c>OwnerPositionX/Y/Z</c> fields at
+        /// packet-build time. Default behavior writes <c>Owner = Caster.Position</c>
+        /// when <see cref="Caster"/> is set — fine for most particles. Some replay-verified
+        /// FX (Vel'Koz R's <c>beam_end</c>) write Owner = the bound entity's position
+        /// instead, so the script supplies the override value here at spawn time.
+        /// </summary>
+        public Vector3? OwnerPositionOverride { get; set; }
+
+        /// <summary>
+        /// When set (non-null), overrides the wire's <c>KeywordNetID</c> field at
+        /// packet-build time. Default behavior writes <c>KeywordNetID = Caster.NetId</c>
+        /// when <see cref="Caster"/> is set. Some replay-verified FX (Vel'Koz R's
+        /// <c>beam_end</c>) write KeywordNetID = 0 even with a caster present.
+        /// Use <c>0</c> to force the wire field to 0 explicitly.
+        /// </summary>
+        public uint? KeywordNetIDOverride { get; set; }
+
         public Vector2 StartPosition { get; private set; }
 
         /// <summary>

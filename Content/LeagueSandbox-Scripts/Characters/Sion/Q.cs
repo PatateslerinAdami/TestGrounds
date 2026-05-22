@@ -19,12 +19,13 @@ namespace Spells
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             IsDamagingSpell = true,
-            TriggersSpellCasts = true,
-            ChannelDuration = 1.97f,
+            TriggersSpellCasts = false,
+            ChargeDuration = 1f,
+            ChargeMaxHoldDuration = 2f,
             AutoFaceDirection = false
         };
 
-        ObjAIBase _owner;
+        private ObjAIBase _sion;
         Particle p1, p2, p3, p4, p5;
 
         bool channeling = false;
@@ -35,13 +36,13 @@ namespace Spells
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            _owner = owner;
+            _sion = owner;
             ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell, true);
         }
 
         private void OnLevelUpSpell(Spell spell)
         {
-            SetSpell(_owner, "SionQSoundAfterHalf", SpellSlotType.ExtraSlots, 7);
+            SetSpell(_sion, "SionQSoundAfterHalf", SpellSlotType.ExtraSlots, 7);
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -52,47 +53,44 @@ namespace Spells
             FaceDirection(end, owner, true);
         }
 
-        public void OnSpellChannel(Spell spell)
+        public void OnSpellChargeStart(Spell spell)
         {
-            b = AddBuff("SionQ", 2f, 1, spell, _owner, _owner);
-            _owner.SetStatus(StatusFlags.CanMove, false);
+            b = AddBuff("SionQ", 2f, 1, spell, _sion, _sion);
+            _sion.SetStatus(StatusFlags.CanMove, false);
             channeling = true;
             passedOneSecond = false;
             currentCharge = 0f;
 
-            AddParticlePos(_owner, "Sion_Base_Q_Cas.troy", _owner.Position, GetPointFromUnit(_owner, 1000f),
-                lifetime: 1, direction: _owner.Direction);
-            p1 = AddParticleTarget(_owner, _owner, "sion_base_q_cas1_weapon.troy", _owner, lifetime: 5,
+            AddParticlePos(_sion, "Sion_Base_Q_Cas.troy", _sion.Position, GetPointFromUnit(_sion, 1000f),
+                lifetime: 1, direction: _sion.Direction);
+            p1 = AddParticleTarget(_sion, _sion, "sion_base_q_cas1_weapon.troy", _sion, lifetime: 5,
                 bone: "Buffbone_Glb_Weapon_1");
-            p2 = AddParticlePos(_owner, "Sion_Base_Q_Indicator2.troy", _owner.Position, default, lifetime: 1,
-                direction: _owner.Direction);
+            p2 = AddParticlePos(_sion, "Sion_Base_Q_Indicator2.troy", _sion.Position, default, lifetime: 1,
+                direction: _sion.Direction);
         }
 
-        public void OnUpdate(float diff)
+        public void OnSpellChargeTick(Spell spell,float diff)
         {
-            if (channeling)
-            {
                 currentCharge += diff / 1000f;
 
                 if (currentCharge >= 1.0f && !passedOneSecond)
                 {
                     passedOneSecond = true;
-                    p3 = AddParticlePos(_owner, "Sion_Base_Q_Indicator_Red2.troy", _owner.Position, default,
-                        lifetime: 1, direction: _owner.Direction);
-                    p4 = AddParticleTarget(_owner, _owner, "sion_base_q_cas2_weapon.troy", _owner, lifetime: 5,
+                    p3 = AddParticlePos(_sion, "Sion_Base_Q_Indicator_Red2.troy", _sion.Position, default,
+                        lifetime: 1, direction: _sion.Direction);
+                    p4 = AddParticleTarget(_sion, _sion, "sion_base_q_cas2_weapon.troy", _sion, lifetime: 5,
                         bone: "Buffbone_Glb_Weapon_1");
-                    p5 = AddParticlePos(_owner, "sion_base_q_cas3.troy", _owner.Position,
-                        GetPointFromUnit(_owner, 1000f), lifetime: 1, direction: _owner.Direction, size: 1.7f);
+                    p5 = AddParticlePos(_sion, "sion_base_q_cas3.troy", _sion.Position,
+                        GetPointFromUnit(_sion, 1000f), lifetime: 1, direction: _sion.Direction, size: 1.7f);
                 }
-            }
         }
 
-        public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
+        public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
         {
             LetGo(spell, reason);
         }
 
-        public void OnSpellPostChannel(Spell spell)
+        public void OnSpellChargeFire(Spell spell)
         {
             LetGo(spell, ChannelingStopSource.TimeCompleted);
         }
@@ -101,6 +99,13 @@ namespace Spells
         {
             if (!channeling) return;
             channeling = false;
+
+            // Clear the client's charge HUD bar. Varus Q / Xerath Q get this via
+            // SpellCastCharge (which wraps FireCharge internally), but Sion Q applies
+            // damage directly in-script with no sub-spell, so we call FireCharge ourselves.
+            // Without it the client's charge state never exits and the HUD stays charged
+            // forever (including on re-cast).
+            spell.FireCharge(_sion.Position);
 
             p1?.SetToRemove();
             p2?.SetToRemove();
@@ -114,12 +119,12 @@ namespace Spells
                 b.DeactivateBuff();
             }
 
-            ClearOverrideAnimation(_owner, "Attack1", this);
+            ClearOverrideAnimation(_sion, "Attack1", this);
 
             if (reason != ChannelingStopSource.PlayerCommand && reason != ChannelingStopSource.TimeCompleted)
             {
                 spell.SetCooldown(2.0f, true);
-                _owner.SetStatus(StatusFlags.CanMove, true);
+                _sion.SetStatus(StatusFlags.CanMove, true);
                 return;
             }
 
@@ -128,26 +133,26 @@ namespace Spells
 
             if (currentCharge >= 1.0f)
             {
-                PlayAnimation(_owner, "Spell1_Hit2", timeScale: 0.3f);
-                AddParticlePos(_owner, "sion_base_q_hit3.troy", _owner.Position, GetPointFromUnit(_owner, currentRange),
-                    lifetime: 1, direction: _owner.Direction);
+                PlayAnimation(_sion, "Spell1_Hit2", timeScale: 0.3f);
+                AddParticlePos(_sion, "sion_base_q_hit3.troy", _sion.Position, GetPointFromUnit(_sion, currentRange),
+                    lifetime: 1, direction: _sion.Direction);
                 //SpellCast(_owner, 7, SpellSlotType.ExtraSlots, _owner.Position, _owner.Position, false, Vector2.Zero);
                 //Couldnt find a way to add the axe hitting ground sound.
             }
             else
             {
-                PlayAnimation(_owner, "Spell1_Hit1", timeScale: 0.3f);
-                CreateCustomMissile(_owner, "SionQHitParticleMissile2", _owner.Position,
-                    GetPointFromUnit(_owner, currentRange - 200f), new MissileParameters { Type = MissileType.Arc });
+                PlayAnimation(_sion, "Spell1_Hit1", timeScale: 0.3f);
+                CreateCustomMissile(_sion, "SionQHitParticleMissile2", _sion.Position,
+                    GetPointFromUnit(_sion, currentRange - 200f), new MissileParameters { Type = MissileType.Arc });
             }
 
-            Vector2 dir = Vector2.Normalize(new Vector2(_owner.Direction.X, _owner.Direction.Z));
+            Vector2 dir = Vector2.Normalize(new Vector2(_sion.Direction.X, _sion.Direction.Z));
             if (dir == Vector2.Zero) dir = new Vector2(1, 0);
 
-            foreach (var unit in EnumerateValidUnitsInRange(_owner, _owner.Position, currentRange + 200f, true,
+            foreach (var unit in EnumerateValidUnitsInRange(_sion, _sion.Position, currentRange + 200f, true,
                          SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectNeutral))
             {
-                Vector2 toUnit = unit.Position - _owner.Position;
+                Vector2 toUnit = unit.Position - _sion.Position;
                 float projection = Vector2.Dot(toUnit, dir);
 
                 if (projection >= -50f && projection <= currentRange + unit.CollisionRadius)
@@ -157,8 +162,8 @@ namespace Spells
 
                     if (perpDistance <= halfWidth + unit.CollisionRadius)
                     {
-                        float dmg = GetDamage(_owner, unit, chargeRatio, spell.CastInfo.SpellLevel);
-                        unit.TakeDamage(_owner, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+                        float dmg = GetDamage(_sion, unit, chargeRatio, spell.CastInfo.SpellLevel);
+                        unit.TakeDamage(_sion, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                             false);
                         //AddParticlePos(_owner, "Sion_Base_Q3_tar.troy", _owner.Position, GetPointFromUnit(_owner, currentRange), lifetime: 1, direction: _owner.Direction);
                         if (currentCharge >= 1.0f)
@@ -170,17 +175,17 @@ namespace Spells
                             var vars = new BuffVariables();
                             vars.Set("KnockupTime", knockupDuration);
 
-                            AddBuff("SionQKnockup", stunDuration, 1, spell, unit, _owner, false, null, vars);
+                            AddBuff("SionQKnockup", stunDuration, 1, spell, unit, _sion, false, null, vars);
                         }
                         else
                         {
-                            AddBuff("SionQSlow", 0.25f, 1, spell, unit, _owner);
+                            AddBuff("SionQSlow", 0.25f, 1, spell, unit, _sion);
                         }
                     }
                 }
             }
 
-            _owner.RegisterTimer(new GameScriptTimer(0.25f, () => { _owner.SetStatus(StatusFlags.CanMove, true); }));
+            _sion.RegisterTimer(new GameScriptTimer(0.25f, () => { _sion.SetStatus(StatusFlags.CanMove, true); }));
         }
 
         private float GetDamage(ObjAIBase caster, AttackableUnit target, float chargeRatio, int spellLevel)

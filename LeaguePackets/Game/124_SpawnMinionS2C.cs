@@ -24,6 +24,11 @@ namespace LeaguePackets.Game
         public bool IsLaneMinion { get; set; }
         public bool IsBot { get; set; }
         public bool IsTargetable { get; set; }
+        // Mystery bits 0x20 / 0x40 — set in Riot's TestCubeRender10Vision spawn packets,
+        // not consumed by S1 handler (and not located in S4 decomp). Exposed for testing
+        // whether they're the missing minimap-hide mechanism.
+        public bool UnknownBit5 { get; set; }
+        public bool UnknownBit6 { get; set; }
 
         public uint IsTargetableToTeamSpellFlags { get; set; }
         public float VisibilitySize { get; set; }
@@ -49,6 +54,8 @@ namespace LeaguePackets.Game
             this.IsLaneMinion = (bitfield & 0x04) != 0;
             this.IsBot = (bitfield & 0x08) != 0;
             this.IsTargetable = (bitfield & 0x10) != 0;
+            this.UnknownBit5 = (bitfield & 0x20) != 0;
+            this.UnknownBit6 = (bitfield & 0x40) != 0;
 
             this.IsTargetableToTeamSpellFlags = reader.ReadUInt32();
             this.VisibilitySize = reader.ReadFloat();
@@ -78,6 +85,10 @@ namespace LeaguePackets.Game
                 bitfield |= 0x08;
             if (IsTargetable)
                 bitfield |= 0x10;
+            if (UnknownBit5)
+                bitfield |= 0x20;
+            if (UnknownBit6)
+                bitfield |= 0x40;
             writer.WriteByte(bitfield);
 
             writer.WriteUInt32(IsTargetableToTeamSpellFlags);

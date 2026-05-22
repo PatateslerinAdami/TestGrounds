@@ -55,6 +55,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         internal readonly List<AssistMarker> EnemyAssistMarkers = new List<AssistMarker>();
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
+        /// <summary>
+        /// Game-time (ms) at which the post-attack movement-issue lockout expires. Set by
+        /// `Spell.FinishCasting` for AA when <see cref="CharData.PostAttackMoveDelay"/> &gt; 0.
+        /// While `_game.GameTime &lt; _postAttackMoveLockEndsMs`, <see cref="CanIssueMoveOrders"/>
+        /// returns false → server rejects move-orders. Mirrors Riot's per-character anti-kite
+        /// stat. Most champions have PostAttackMoveDelay = 0 → no lockout, no behavior change.
+        /// </summary>
+        private float _postAttackMoveLockEndsMs;
         private bool _skipNextAutoAttack;
         private Spell _castingSpell;
         private Spell _lastAutoAttack;
@@ -439,12 +447,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 && _castingSpell == null
                 && (ChannelSpell == null || (ChannelSpell != null && !ChannelSpell.SpellData.CantCancelWhileChanneling));
         }
+        /// <summary>
+        /// Engages the post-attack move-issue lockout for <paramref name="delaySec"/> seconds.
+        /// While active, <see cref="CanIssueMoveOrders"/> returns false. Negative or zero
+        /// values clear the lockout immediately. Called from <c>Spell.FinishCasting</c> when
+        /// an AA fires, using <see cref="CharData.PostAttackMoveDelay"/>.
+        /// </summary>
+        public void EngagePostAttackMoveLock(float delaySec)
+        {
+            if (delaySec <= 0f)
+            {
+                _postAttackMoveLockEndsMs = 0f;
+                return;
+            }
+            _postAttackMoveLockEndsMs = _game.GameTime + delaySec * 1000f;
+        }
+
         public bool CanIssueMoveOrders()
         {
             if (IsDead)
                 return false;
 
             if (IgnoreMoveOrders)
+                return false;
+
+            // PostAttackMoveDelay lockout — server rejects move-issue while the AA-fire
+            // post-window is still active. Most champions have PostAttackMoveDelay = 0 →
+            // _postAttackMoveLockEndsMs stays at 0 → never blocks.
+            if (_postAttackMoveLockEndsMs > _game.GameTime)
                 return false;
 
             if (!Status.HasFlag(StatusFlags.CanMoveEver))

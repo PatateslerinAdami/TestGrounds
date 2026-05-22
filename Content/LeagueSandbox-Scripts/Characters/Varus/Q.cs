@@ -1,4 +1,4 @@
-﻿using GameServerCore.Enums;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
@@ -7,150 +7,148 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
-using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System;
 using System.Numerics;
 using static GameServerCore.Content.HashFunctions;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Spells
+namespace Spells;
+
+public class VarusQ : ISpellScript
 {
-    public class VarusQ : ISpellScript
+    private ObjAIBase _varus;
+    private Buff      _soundBuff;
+    private Particle  _p1, _p2;
+    public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        TriggersSpellCasts    = true,
+        IsDamagingSpell       = true,
+        AutoFaceDirection     = false,
+        // ChargeDuration = 1.5s — bar-fill / wire visual time. Matches VarusQ.json
+        // SpellTargeter1/2.RangeGrowthDuration = 1.5 (client charge-bar grow time).
+        // Range grows over CastRangeGrowthDuration = 1.3s and stays max thereafter.
+        ChargeDuration        = 1.5f,
+        // ChargeMaxHoldDuration = 4s — total hold time before auto-expire. Per VarusQ spell
+        // description: "After 4 seconds, piercing arrow fails but refunds half its mana cost."
+        // After bar-fill at 1.5s player has 2.5s extra to fire-or-let-expire.
+        ChargeMaxHoldDuration = 4f,
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        _varus = owner;
+    }
+
+    public void OnSpellChargeStart(Spell spell)
+    {
+        _soundBuff = AddBuff("VarusQ", 5f, 1, spell, _varus, _varus);
+        
+        _p1 = AddParticleTarget(_varus, _varus, "varusqchannel.troy", _varus, spell.GetMaxHoldDuration(), 1, "Weapon", "R_PARENTING_HAND_LOC");
+        _p2 = AddParticle(_varus, _varus, "varusqchannel2", default, spell.GetMaxHoldDuration(), bone: "HEAD");
+    }
+
+    public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
+    {
+        if (!forceStop)
         {
-            TriggersSpellCasts = true,
-            IsDamagingSpell = true,
-            ChannelDuration = 4f,
-            AutoFaceDirection = false
-        };
-
-        private ObjAIBase _owner;
-        private Spell _spell;
-        Buff soundBuff;
-        Particle p1, p2, p3;
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _owner = owner;
-            _spell = spell;
-        }
-        public void OnSpellChannel(Spell spell)
-        {
-            soundBuff = AddBuff("VarusQ", 4.0f, 1, spell, _owner, _owner);
-            var timerAnm = new GameScriptTimer(0.2f, () =>
-            {
-                // idk either couldnt find the right bone to attach to, or something wrong with the system
-                if(_owner.ChannelSpell != null && _owner.ChannelSpell.SpellName == "VarusQ") p1 = AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, "Weapon", "R_PARENTING_HAND_LOC"); // AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, "BUFFBONE_GLB_CHANNEL_LOC", "R_finger_b");
-            });
-            _owner.RegisterTimer(timerAnm);
-            p2 = AddParticle(_owner, _owner, "varusqchannel2", default, 4f, bone:"HEAD");//C_BUFFBONE_GLB_CENTER_LOC
-        }
-
-        public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
-        {
-            if (!forceStop)
-            {
-                FaceDirection(new Vector2(position.X, position.Z), _owner, false);
-            }
-        }
-
-        public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
-        {
-            LetGo();
-            if (reason == ChannelingStopSource.PlayerCommand)
-            {
-
-                float maxChannelTime = ScriptMetadata.ChannelDuration;
-                float timeChanneled = maxChannelTime - spell.CurrentChannelDuration;
-
-                float minRange = 895;
-                float maxRange = 1595;
-                float growthDuration = 1.5f;
-
-                float currentRange = minRange;
-                if (timeChanneled > 0)
-                {
-                    float progress = Math.Min(1.0f, timeChanneled / growthDuration);
-                    currentRange = minRange + ((maxRange - minRange) * progress);
-                }
-                Vector2 ownerPos = _owner.Position;
-                Vector2 mousePos = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
-
-                Vector2 direction = Vector2.Normalize(mousePos - ownerPos);
-                if (float.IsNaN(direction.X) || float.IsNaN(direction.Y))
-                {
-                    direction = new Vector2(1, 0);
-                }
-                Vector2 castPos = ownerPos + (direction * currentRange);
-
-                CreateCustomMissile(_owner, "VarusQMissile", ownerPos, castPos, new MissileParameters { Type = MissileType.Circle });
-                PlayAnimation(_owner, "Spell1_Fire");
-                if(_owner.IsPathEnded()) FaceDirection(castPos, _owner, true);
-                //SpellCast(_owner, 0, SpellSlotType.ExtraSlots, castPos, castPos, false, Vector2.Zero);
-                //_owner.GetSpell("VarusQMissile").Cast(ownerPos, castPos);
-            }
-            else
-            {
-                ManaRefund();
-            }
-        }
-
-        public void OnSpellPostChannel(Spell spell)
-        {
-            ManaRefund();
-            AddParticle(_owner, _owner, "varusqexpire", default);
-            LetGo();
-        }
-        private void LetGo()
-        {
-            p1?.SetToRemove();
-            p2?.SetToRemove();
-            if(_owner.HasBuff(soundBuff)) _owner.RemoveBuff(soundBuff);
-        }
-        private void ManaRefund()
-        {
-            
+            FaceDirection(new Vector2(position.X, position.Z), _varus, false);
         }
     }
 
-    public class VarusQMissile : ISpellScript
+    public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            MissileParameters = new MissileParameters
-            {
-                Type = MissileType.Circle
-            },
-            IsDamagingSpell = true
-        };
-        ObjAIBase _owner;
-        IEventSource source;
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
-            _owner = owner;
-            source = new AbilityInfo(HashString("VarusQ"), HashString("VarusQ"));
-        }
+        LetGo();
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        if (reason == ChannelingStopSource.TimeCompleted)
         {
-            if (spell.SpellData.IsValidTarget(_owner, target))
-            {
-
-                target.TakeDamage(_owner, 100f, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, source);
-                switch (target)
-                {
-                    case Minion minion:
-                        AddParticleTarget(_owner, target, "VarusQHitMinion_amber.troy", target);
-                        AddParticleTarget(_owner, target, "VarusQHitMinion.troy", target);
-                        break;
-                    default:
-                        AddParticleTarget(_owner, target, "VarusQHit_amber.troy", target);
-                        AddParticleTarget(_owner, target, "VarusQHit.troy", target);
-                        break;
-                }
-            }
+            // Charge held past ChargeMaxHoldDuration (= 4s) without firing → expire with 50%
+            // mana refund per VarusQ.json spell description: "After 4 seconds, piercing arrow
+            // fails but refunds half its mana cost."
+            float manaCost = spell.SpellData.ManaCost[spell.CastInfo.SpellLevel];
+            _varus.Stats.CurrentMana += manaCost * 0.5f;
         }
+        // Real interrupts (Stunned/Silenced/Charmed/Feared/Suppressed/Taunted/Die/Casting/Move):
+        // no mana refund (or different policy per design — currently nothing extra happens).
+    }
+
+    public void OnSpellChargeFire(Spell spell)
+    {
+        // Engine-driven: GetCurrentChargeRange() interpolates SpellData.CastRange[level] →
+        // CastRangeGrowthMax[level] over CastRangeGrowthDuration[level] using elapsed charge time.
+        float currentRange = spell.GetCurrentChargeRange();
+
+        Vector2 ownerPos = _varus.Position;
+        Vector2 mousePos = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
+
+        Vector2 direction = Vector2.Normalize(mousePos - ownerPos);
+        if (float.IsNaN(direction.X) || float.IsNaN(direction.Y))
+        {
+            direction = new Vector2(1, 0);
+        }
+        Vector2 castPos = ownerPos + (direction * currentRange);
+
+        
+        FaceDirection(castPos, _varus, true);
+        
+        // Engine fires the wire-side fire trigger (re-emit NPC_CastSpellAns with Unknown1=true +
+        // spawn client-visible MissileReplication missile via VarusQMissile sub-spell).
+        // Slot-based variant (consistent with SpellCast API): VarusQMissile is at ExtraSpell1
+        // in Varus.json → slot 0 of SpellSlotType.ExtraSlots.
+        // MissileParameters omitted — defaults to VarusQMissile.ScriptMetadata.MissileParameters
+        // (Type = MissileType.Circle, defined down in the VarusQMissile class below).
+        // Missile-style (default fireWithoutCasting=true). VarusQMissile at ExtraSpell1 → slot 0.
+        SpellCastCharge(spell, 0, SpellSlotType.ExtraSlots, ownerPos, castPos);
+
+        AddParticle(_varus, _varus, "varusqexpire", default);
+        
+        LetGo();
+    }
+
+    private void LetGo()
+    {
+        _p1.SetToRemove();
+        _p2.SetToRemove();
+        _varus.RemoveBuff(_soundBuff);
+    }
+}
+
+public class VarusQMissile : ISpellScript
+{
+    private ObjAIBase     _varus;
+    private IEventSource  _source;
+    public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata
+    {
+        MissileParameters = new MissileParameters
+        {
+            Type = MissileType.Circle
+        },
+        IsDamagingSpell = true
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+        _varus = owner;
+        _source = new AbilityInfo(HashString("VarusQMissile"), HashString("VarusQ"));
+    }
+
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    {
+        if (!spell.SpellData.IsValidTarget(_varus, target)) return;
+
+        switch (target)
+        {
+            case Minion:
+                AddParticleTarget(_varus, target, "VarusQHitMinion_amber.troy", target);
+                AddParticleTarget(_varus, target, "VarusQHitMinion.troy", target);
+                break;
+            default:
+                AddParticleTarget(_varus, target, "VarusQHit_amber.troy", target);
+                AddParticleTarget(_varus, target, "VarusQHit.troy", target);
+                break;
+        }
+        
+        target.TakeDamage(_varus, 100f, DamageType.DAMAGE_TYPE_PHYSICAL,
+            DamageSource.DAMAGE_SOURCE_ATTACK, false, _source);
     }
 }

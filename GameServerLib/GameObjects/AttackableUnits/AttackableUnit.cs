@@ -102,21 +102,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Vector2 _unreplicatedDrift = Vector2.Zero;
 
         // Mirrors NSEAI.cfg [Collision] `CanActorsSlideIntoOccupiedGridSquares = 1` (patch 4.20).
-        // S4 Actor_Common.cpp:1265+ has 12 call sites gating the per-step movement-collision
-        // hard-stop on this flag; loaded from CFG at S4:8042-8044, default false in code but
-        // CFG sets it true in patch 4.20.
+        // Real S4 symbol: `s_CanActorsSlideIntoOccupiedGridSquares` (Actor_Common.cpp:1265+, 12
+        // call sites). Loaded from CFG at S4:8042-8044, default false in code but CFG sets true.
         //
-        // 2026-05-04 attempt set this to true → stuck regression at multiple positions around
-        // the nexus → reverted under hypothesis "needs Phase-1 inner-loop terrain check first".
-        // 2026-05-05: that regression may have been amplified or fully caused by the unrelated
-        // StopMovement double-Notify race-condition (commit 24bba97) which was fixed afterward.
-        // RE-TEST: with StopMovement now batched cleanly, this flag may work without the
-        // Phase-1 inner-loop port. If regression returns, full Phase-1 port (S1 actor_client.cpp
-        // :2241-2259) is genuinely needed. Either way, this flag changes ONLY whether body-push
-        // applied lands the unit in NOT_PASSABLE; the unit slides into the cell instead of being
-        // hard-stopped at the boundary. Subsequent ticks' OnCollision-isTerrain extracts via
-        // `SetPosition(exit, repath:true)` basically the same recovery flow as before.
-        private const bool ENABLE_ACTORS_SLIDE_INTO_OCCUPIED = true;
+        // S1 two-tier semantics (actor_client.cpp:2241-2259):
+        //   ALWAYS  refund body-push if candidate cell is NOT_PASSABLE
+        //   IF flag false  ADDITIONALLY refund if candidate cell occupied by another actor
+        // Our `IsWalkable(candidate, 0f)` covers terrain (NOT_PASSABLE incl. dynamic blockers).
+        // We do not track per-cell actor occupancy, so the flag here only governs the terrain
+        // half of the gate.
+        //
+        // History: const=true since commit 06affed8 (2026-05-05). 2026-05-10 retest: setting
+        // back to false to verify S1-faithful terrain-check works now that the StopMovement
+        // race + HandleMove count==1 fallback + OnCollision repath:true + Map1 building radii
+        // are all in. Watch for Vayne-stuck-at-nexus / minion-clipping-turret-edge regressions.
+        // If regression returns, S1's full recovery (mIgnoreCollisions escalation after 15
+        // stuck-ticks) is the missing piece, not the slide flag itself.
+        private const bool CanActorsSlideIntoOccupiedGridSquares = false;
 
         // Stuck recovery state, mirrors client `Actor_Common::m_StuckTimer` + `m_RepathedCount`
         // (S1 actor_client.cpp:5040-5078). Detects "actor wants to move but isn't making
@@ -127,6 +129,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private float _stuckTimerMs = 0f;
         private int _stuckRepathCount = 0;
         private Vector2 _stuckLastCheckPos = Vector2.Zero;
+
+        // Per-tick stuck-frame counter for temp-ghost mode. Mirrors S4 mGettingOutOfCollisionGhosted
+        // (Actor_Common.cpp:4466-4473) / S1 actor_client.cpp:5044, 942. Increments each tick when
+        // UpdateStuckRecovery detects "stuck" (< 25% expected progress), resets on progress.
+        // When counter exceeds STUCK_GHOST_THRESHOLD (15 in slow-mode A* per S4:4468 = 0xf),
+        // IsTemporarilyGhosted becomes true: neighbors don't push against this unit and pathing
+        // ignores it as a blocker, breaking stuck-pair deadlocks where two units' body-pushes
+        // refund each other into deadlock.
+        //
+        // Distinct from the player-facing StatusFlags.Ghosted (Singed E, etc) by design:
+        // server-driven recovery flag, not a buff. Filter sites combine both.
+        private int _stuckGhostFrames = 0;
+        private const int STUCK_GHOST_THRESHOLD = 15;
+
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
         private bool _isInGrass = false;
@@ -134,6 +150,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
         public StatusFlags Status { get; private set; }
+
+        /// <summary>
+        /// Server-side temp-ghost flag triggered after STUCK_GHOST_THRESHOLD consecutive
+        /// stuck ticks. Filters this unit out of body-push and actor-blocking-predicate
+        /// calculations until progress resumes. Mirrors S4 mIgnoreCollisions
+        /// (Actor_Common.cpp:4466-4473). Distinct from <see cref="StatusFlags.Ghosted"/>
+        /// (player-facing buff) by design — both are honored at filter sites.
+        /// </summary>
+        public bool IsTemporarilyGhosted => _stuckGhostFrames > STUCK_GHOST_THRESHOLD;
         private StatusFlags _statusBeforeApplyingBuffEfects = 0;
         private StatusFlags _buffEffectsToEnable = 0;
         private StatusFlags _buffEffectsToDisable = 0;
@@ -293,10 +318,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         ///
         /// On trigger: snap position to nearest walkable cell (handles dynamic blocker overlap),
         /// then re-issue path to the existing goal. Each repath escalates the next trigger threshold by
-        /// <c>TimeBetweenRepathsInMS</c>, capped at 15 (= S1:5034). The ghost fallback layer
-        /// (S1:5044 <c>++mGettingOutOfCollisionGhosted</c> → temporary <c>mIgnoreCollisions</c>
-        /// after 15 45 stuck ticks) is intentionally not ported it would conflict with the
-        /// player facing <c>StatusFlags.Ghosted</c>
+        /// <c>TimeBetweenRepathsInMS</c>, capped at 15 (= S1:5034).
+        ///
+        /// Also drives the temp-ghost-mode counter (<see cref="_stuckGhostFrames"/>) per S4
+        /// Actor_Common.cpp:4466-4473 / S1:5044: increments on every stuck tick, resets on
+        /// progress. Once past STUCK_GHOST_THRESHOLD, <see cref="IsTemporarilyGhosted"/>
+        /// is true and neighbors stop body-pushing against this unit.
         /// </summary>
         private void UpdateStuckRecovery(float diff)
         {
@@ -310,6 +337,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 _stuckTimerMs = 0f;
                 _stuckRepathCount = 0;
+                _stuckGhostFrames = 0;
                 _stuckLastCheckPos = Position;
                 return;
             }
@@ -329,16 +357,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 _stuckTimerMs = 0f;
                 _stuckRepathCount = 0;
+                _stuckGhostFrames = 0;
                 return;
             }
             if (expectedDist > 0.001f && actualDist >= expectedDist * MIN_SPEED_RATIO)
             {
                 _stuckTimerMs = 0f;
                 _stuckRepathCount = 0;
+                _stuckGhostFrames = 0;
                 return;
             }
 
             _stuckTimerMs += diff;
+            // Per-tick stuck-frame increment. Counter is bound on the high end so
+            // long-stuck units don't overflow; once IsTemporarilyGhosted fires it
+            // stays on until the unit makes progress (which resets via the early-exits above).
+            if (_stuckGhostFrames <= STUCK_GHOST_THRESHOLD * 2)
+            {
+                _stuckGhostFrames++;
+            }
 
             // S1 NSEAI.cfg defaults: StuckDelayInMS=200, TimeBetweenRepathsInMS=250, max-cap=15
             // (S1:5034). Threshold escalates so a unit stuck and repath loop doesn't spam.
@@ -1411,14 +1448,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // (bodyblocking) Separation also occurs without an active waypoint walk
             // otherwise, units that reach their waypoint within an overlap get stuck.
             // Dashes completely bypass separation so as not to disrupt dash trajectories.
+            // Temp-ghost mode (mIgnoreCollisions) bypasses Phase 2 entirely: a unit that's
+            // been stuck > STUCK_GHOST_THRESHOLD ticks "passes through" body-push for one
+            // tick at a time, breaking stuck-pair deadlocks. Resets on progress via
+            // UpdateStuckRecovery's early-exits.
             bool pushed = false;
-            if (MovementParameters == null)
+            if (MovementParameters == null && !IsTemporarilyGhosted)
             {
                 var nearby = _game.Map.CollisionHandler.GetNearestObjects(this);
 
                 Vector2 originalDelta = Position - originalPos;
 
-                Vector2 rawPush = ComputeSeparationPush(nearby, originalDelta);
+                Vector2 separationPush = ComputeSeparationPush(nearby, originalDelta);
+                // Soft repulsion against close-but-not-overlapping actors in the forward arc.
+                // Mirrors S1's AvoidanceAry branch (actor_client.cpp:2333-2520, populated at
+                // :1090-1112). Sums into the same push pipeline as separation so they share
+                // the magnitude clamp and exponential smoothing.
+                Vector2 avoidancePush = ComputeAvoidancePush(nearby, originalDelta);
+                Vector2 rawPush = separationPush + avoidancePush;
 
                 // Clamp the push against a per tick movement budget. Includes a walk-speed
                 // fallback so stationary units (e.g. auto-attacking) are also clamped instead
@@ -1441,7 +1488,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                 {
                     Vector2 candidate = Position + _smoothedSeparationPush;
-                    bool canApply = ENABLE_ACTORS_SLIDE_INTO_OCCUPIED
+                    bool canApply = CanActorsSlideIntoOccupiedGridSquares
                         || _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
                     if (canApply)
                     {
@@ -1461,7 +1508,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (stuckPush.LengthSquared() > 0.0001f)
                 {
                     Vector2 candidate = Position + stuckPush;
-                    bool canApply = ENABLE_ACTORS_SLIDE_INTO_OCCUPIED
+                    bool canApply = CanActorsSlideIntoOccupiedGridSquares
                         || _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
                     if (canApply)
                     {
@@ -1472,6 +1519,44 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // else: drop the stuck push too. UpdateStuckRecovery's escalating-repath
                     // watchdog still runs and will snap the unit out via TryUnstuckRepath if
                     // genuinely wedged.
+                }
+
+                // Combined-movement magnitude clamp. Mirrors S4 Actor_Common.cpp:5267-5282
+                // (verified) / S1 actor_client.cpp:2143-2168.
+                //
+                // Bounds the final |Position - originalPos|² to [0.625, 1.375]× the original
+                // walk |delta|², BUT only triggers when |combined² - original²| exceeds
+                // 0.75× original² — i.e. only on extreme deviations (combined < ~50% or
+                // > ~132% of original walk). Within that band the existing per-pair push
+                // pipeline runs unconstrained.
+                //
+                // Squared-magnitude clamp [0.625, 1.375] in linear terms is roughly
+                // [79%, 117%] of the original walk magnitude.
+                if (originalDelta.LengthSquared() > 0.0001f)
+                {
+                    Vector2 combined = Position - originalPos;
+                    float combinedSq = combined.LengthSquared();
+                    float originalSq = originalDelta.LengthSquared();
+
+                    if (combinedSq > 0.00001f
+                        && Math.Abs(combinedSq - originalSq) > originalSq * 0.75f)
+                    {
+                        float lowerSq = originalSq * 0.625f;
+                        float upperSq = originalSq * 1.375f;
+                        float targetSq = combinedSq;
+                        if (combinedSq > upperSq) targetSq = upperSq;
+                        else if (combinedSq < lowerSq) targetSq = lowerSq;
+
+                        if (targetSq != combinedSq)
+                        {
+                            float scale = (float)Math.Sqrt(targetSq / combinedSq);
+                            Vector2 scaled = combined * scale;
+                            Position = originalPos + scaled;
+                            // Re-anchor _unreplicatedDrift to the scaled push so the
+                            // next-tick resync threshold reflects what was actually applied.
+                            _unreplicatedDrift = scaled - (combined - _unreplicatedDrift);
+                        }
+                    }
                 }
 
                 // Force a movement data resync once the unreplicated drift gets large enough
@@ -1530,7 +1615,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // Dead champions don't SetToRemove (they sit at death position until respawn,
                 // ~30s) so without this filter they keep body-pushing live units. Ghosted units
                 // pass through everything client-side too this matches PathingHandler's predicate.
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
                 if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
 
                 var diff = Position - other.Position;
@@ -1630,7 +1715,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
                 if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
 
                 var diff = Position - other.Position;
@@ -1664,6 +1749,76 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             float deltaSec = deltaMs * 0.001f;
             return pushDir * (pushSpeedPerSec * deltaSec);
+        }
+
+        /// <summary>
+        /// Avoidance-layer (soft repulsion). Mirrors S1 actor_client.cpp:2333-2520
+        /// "AvoidanceAry" branch. Triggers when a nearby actor is in the
+        /// HardRadius..HardRadius+AvoidanceRadiusIncrease band (= close but not
+        /// overlapping) AND this unit is moving forward toward the group. Produces a
+        /// tangential sidestep at 0.4 x |movementDelta| (S1:2507).
+        ///
+        /// AvoidanceRadiusIncrease=70 is from NSEAI.cfg [Collision] for patch 4.20.
+        ///
+        /// Stationary units don't avoid (returns Zero on movementDelta below epsilon)
+        /// because S1 also gates the AvoidanceAry push on m_Movement non-zero
+        /// (actor_client.cpp:1100-1104).
+        /// </summary>
+        private Vector2 ComputeAvoidancePush(List<GameObject> nearby, Vector2 movementDelta)
+        {
+            float movementMagSq = movementDelta.LengthSquared();
+            if (movementMagSq < 0.0001f) return Vector2.Zero;
+
+            // NSEAI.cfg [Collision] AvoidanceRadiusIncrease = 70 (patch 4.20).
+            const float AvoidanceRadiusIncrease = 70f;
+            const float AvoidanceMagnitudeFactor = 0.4f; // S1:2507
+
+            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
+                                       && firstWaveSelf.IsFirstWave
+                                       && !firstWaveSelf.HasPassedFirstTurret;
+
+            int count = 0;
+            Vector2 groupCenter = Vector2.Zero;
+
+            foreach (var other in nearby)
+            {
+                if (other == this || other.IsToRemove()) continue;
+                if (!(other is AttackableUnit otherUnit)) continue;
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
+                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
+
+                var diff = other.Position - Position;
+                float distSq = diff.LengthSquared();
+                float hardRadius = CollisionRadius + other.CollisionRadius;
+                float softRadius = hardRadius + AvoidanceRadiusIncrease;
+
+                // Overlap is handled by ComputeSeparationPush; far units don't matter here.
+                if (distSq <= hardRadius * hardRadius) continue;
+                if (distSq >= softRadius * softRadius) continue;
+
+                groupCenter += other.Position;
+                count++;
+            }
+
+            if (count == 0) return Vector2.Zero;
+            groupCenter /= count;
+
+            Vector2 toGroup = groupCenter - Position;
+            float toGroupLenSq = toGroup.LengthSquared();
+            if (toGroupLenSq < 0.01f) return Vector2.Zero;
+
+            Vector2 toGroupDir = toGroup / (float)Math.Sqrt(toGroupLenSq);
+            Vector2 movementDir = movementDelta / (float)Math.Sqrt(movementMagSq);
+
+            // S1:2408: skip if group is behind the unit's movement direction.
+            if (Vector2.Dot(movementDir, toGroupDir) < 0f) return Vector2.Zero;
+
+            // Sidestep tangent — pick the side that follows the movement flow.
+            Vector2 tangent = new Vector2(-toGroupDir.Y, toGroupDir.X);
+            if (Vector2.Dot(tangent, movementDir) < 0f) tangent = -tangent;
+
+            float magnitude = (float)Math.Sqrt(movementMagSq) * AvoidanceMagnitudeFactor;
+            return tangent * magnitude;
         }
 
         /// <summary>

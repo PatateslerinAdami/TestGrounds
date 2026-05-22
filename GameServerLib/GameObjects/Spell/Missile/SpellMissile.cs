@@ -77,6 +77,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             IsServerOnly = serverOnly;
         }
 
+        // Override base GetPosition3D (which returns ground level) to include the spell's
+        // MissileTargetHeightAugment. Missile visuals fly at bow level (= ground + augment),
+        // not at terrain level. Mirrors Averdrian's SpellMissile.GetPosition3D.
+        public override Vector3 GetPosition3D()
+        {
+            float baseHeight = _game.Map.NavigationGrid.GetHeightAtLocation(Position);
+            float augment = SpellOrigin?.SpellData?.MissileTargetHeightAugment ?? 0f;
+            return new Vector3(Position.X, baseHeight + augment, Position.Y);
+        }
+
         public override void Update(float diff)
         {
             if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))

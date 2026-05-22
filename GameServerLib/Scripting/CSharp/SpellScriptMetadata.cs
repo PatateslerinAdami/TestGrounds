@@ -35,9 +35,41 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public float CastTime { get; set; } = 0.0f;
         public bool CastingBreaksStealth { get; set; } = false;
         /// <summary>
-        /// Determines how how long the spell should be channeled (overrides content based channel duration). Triggers on channel (and post) if value is above 0.
+        /// Determines how long the spell should be channeled (overrides content based channel
+        /// duration). Triggers OnSpellChannel events if value is above 0. Use for non-charge
+        /// channel spells (Kat R, Recall etc.). For charge-style spells (Varus Q) use
+        /// <see cref="ChargeDuration"/> instead — that activates the charge pipeline.
         /// </summary>
         public float ChannelDuration { get; set; } = 0.0f;
+
+        /// <summary>
+        /// Charge-spell bar-fill / wire-side duration override. When &gt; 0:
+        /// <list type="bullet">
+        ///   <item>Activates the charge pipeline (OnSpellChargeStart/Tick/Fire/Cancel events)
+        ///     instead of the channel pipeline, regardless of <c>SpellData.UseChargeChanneling</c>.</item>
+        ///   <item>Drives the wire packet's <c>CastInfo.DesignerTotalTime</c> — i.e. how long the
+        ///     client's charge bar takes to fill. Set this to the player-visible "charged at max"
+        ///     time (e.g. Varus Q: 1.5s — matches SpellTargeter*.RangeGrowthDuration in JSON).</item>
+        /// </list>
+        /// Server's auto-expire timer is separate — see <see cref="ChargeMaxHoldDuration"/> for
+        /// spells like Varus Q that allow holding past max-charge before auto-cancel.
+        /// </summary>
+        public float ChargeDuration { get; set; } = 0.0f;
+
+        /// <summary>
+        /// Max server-side hold duration for charge spells. When &gt; 0, the server keeps the
+        /// charge state alive until this time elapses; at that point <see cref="ChargeDuration"/>
+        /// has already passed (bar full, range maxed) but the player gets extra time to release.
+        /// At MaxHold timeout, the engine publishes <see cref="ApiEventManager.OnSpellChargeCancel"/>
+        /// with <c>ChannelingStopSource.TimeCompleted</c> — script decides policy
+        /// (refund mana / auto-fire / other).
+        ///
+        /// <para>Defaults to <c>0</c> which falls back to <see cref="ChargeDuration"/> — i.e. the
+        /// charge auto-completes at bar-fill. Most charge spells use this default. Varus Q sets
+        /// <c>ChargeMaxHoldDuration = 4f</c> (1.5s bar-fill + 2.5s held-max = 4s total before
+        /// auto-cancel-with-50%-refund per spell description).</para>
+        /// </summary>
+        public float ChargeMaxHoldDuration { get; set; } = 0.0f;
         public bool CooldownIsAffectedByCDR { get; set; } = true;
         public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
         public bool DoesntBreakShields { get; set; } = false;

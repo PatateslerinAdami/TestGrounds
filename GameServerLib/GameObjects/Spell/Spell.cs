@@ -176,12 +176,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 ApiEventManager.OnSpellPostCast.AddListener(Script, this, Script.OnSpellPostCast);
             }
 
-            if (Script.ScriptMetadata.ChannelDuration > 0)
+            if (GetEffectiveChannelDuration() > 0 || SpellData.UseChargeChanneling)
             {
-                ApiEventManager.OnSpellChannel.AddListener(Script, this, Script.OnSpellChannel);
-                ApiEventManager.OnSpellChannelCancel.AddListener(Script, this, Script.OnSpellChannelCancel);
-                ApiEventManager.OnSpellChannelUpdate.AddListener(Script, this, Script.OnSpellChannelUpdate);
-                ApiEventManager.OnSpellPostChannel.AddListener(Script, this, Script.OnSpellPostChannel);
+                if (IsChargeSpell)
+                {
+                    // Charge-style spells: route to dedicated charge events (Varus Q etc.)
+                    ApiEventManager.OnSpellChargeStart.AddListener(Script, this, Script.OnSpellChargeStart);
+                    ApiEventManager.OnSpellChargeTick.AddListener(Script, this, Script.OnSpellChargeTick);
+                    ApiEventManager.OnSpellChargeFire.AddListener(Script, this, Script.OnSpellChargeFire);
+                    ApiEventManager.OnSpellChargeCancel.AddListener(Script, this, Script.OnSpellChargeCancel);
+                }
+                else
+                {
+                    // Normal channel-style spells (Kat R, Recall etc.)
+                    ApiEventManager.OnSpellChannel.AddListener(Script, this, Script.OnSpellChannel);
+                    ApiEventManager.OnSpellChannelCancel.AddListener(Script, this, Script.OnSpellChannelCancel);
+                    ApiEventManager.OnSpellChannelUpdate.AddListener(Script, this, Script.OnSpellChannelUpdate);
+                    ApiEventManager.OnSpellPostChannel.AddListener(Script, this, Script.OnSpellPostChannel);
+                }
             }
 
             //Activate spell - Notes: Deactivate is never called as spell removal hasn't been added
@@ -404,11 +416,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // TODO: Unhardcode (extra windup?)
             CastInfo.StartCastTime = 0.0f;
 
-            var trueChannel = SpellData.ChannelDuration[CastInfo.SpellLevel];
-            if (Script.ScriptMetadata.ChannelDuration > 0)
-            {
-                trueChannel = Script.ScriptMetadata.ChannelDuration;
-            }
+            var trueChannel = GetEffectiveChannelDuration();
 
             // For things like Garen Q, Leona Q, and TF W (and probably more)
             if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
@@ -646,8 +654,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (!Script.ScriptMetadata.AutoFaceDirection && !Script.ScriptMetadata.OverrideTargetPositionInScript)
                 {
                     var owner = CastInfo.Owner;
-                    var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
-                    if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0);
+                    // Guard against Vector2.Normalize(Vector2.Zero) which returns (NaN, NaN)
+                    // instead of Vector2.Zero. A zero Direction (fresh-spawned unit that
+                    // has never moved/faced) would otherwise propagate NaN into the
+                    // fakePos broadcast and corrupt the client's CastInfo.
+                    var dirXZ = new Vector2(owner.Direction.X, owner.Direction.Z);
+                    var forwardVec = dirXZ == Vector2.Zero ? new Vector2(1, 0) : Vector2.Normalize(dirXZ);
 
                     var fakePos = owner.Position + (forwardVec * 10.0f);
                     var fakePos3D = new Vector3(fakePos.X, _game.Map.NavigationGrid.GetHeightAtLocation(fakePos), fakePos.Y);
@@ -700,7 +712,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             else
             {
                 FinishCasting();
-                if (SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                if (GetEffectiveChannelDuration() > 0)
                 {
                     Channel();
                 }
@@ -708,7 +720,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             return true;
         }
-        public bool Cast(CastInfo castInfo, bool cast)
+        public bool Cast(CastInfo castInfo, bool cast, bool isContinuation = false)
         {
             CastInfo = castInfo;
             CastInfo.IsAutoAttack = ShouldTreatAsAutoAttack();
@@ -755,11 +767,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.Cooldown = GetCooldown();
             CastInfo.StartCastTime = 0.0f; // TODO: Unhardcode
 
-            var trueChannel = SpellData.ChannelDuration[CastInfo.SpellLevel];
-            if (Script.ScriptMetadata.ChannelDuration > 0)
-            {
-                trueChannel = Script.ScriptMetadata.ChannelDuration;
-            }
+            var trueChannel = GetEffectiveChannelDuration();
 
             // For things like Garen Q, Leona Q, and TF W (and probably more)
             if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
@@ -834,7 +842,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CastInfo.Owner.SetCastSpell(this);
                 }
-                if (Script.ScriptMetadata.TriggersSpellCasts || SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                if (Script.ScriptMetadata.TriggersSpellCasts || GetEffectiveChannelDuration() > 0)
                 {
                     if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                     {
@@ -922,8 +930,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     if (!Script.ScriptMetadata.AutoFaceDirection && !Script.ScriptMetadata.OverrideTargetPositionInScript)
                     {
                         var owner = CastInfo.Owner;
-                        var forwardVec = Vector2.Normalize(new Vector2(owner.Direction.X, owner.Direction.Z));
-                        if (forwardVec == Vector2.Zero) forwardVec = new Vector2(1, 0);
+                        // Guard against Vector2.Normalize(Vector2.Zero) returning (NaN,NaN)
+                        // (see matching guard above at the cast-start fakePos site).
+                        var dirXZ = new Vector2(owner.Direction.X, owner.Direction.Z);
+                        var forwardVec = dirXZ == Vector2.Zero ? new Vector2(1, 0) : Vector2.Normalize(dirXZ);
 
                         var fakePos = owner.Position + (forwardVec * 500.0f);
                         var fakePos3D = new Vector3(fakePos.X, _game.Map.NavigationGrid.GetHeightAtLocation(fakePos), fakePos.Y);
@@ -931,7 +941,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         CastInfo.TargetPosition = fakePos3D;
                         CastInfo.TargetPositionEnd = fakePos3D;
                     }
-                    _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+                    _game.PacketNotifier.NotifyNPC_CastSpellAns(this, isContinuationFromExistingCast: isContinuation);
                     if (SpellData.CanMoveWhileChanneling && !CastInfo.Owner.IsPathEnded())
                     {
                         _game.PacketNotifier.NotifyWaypointGroup(CastInfo.Owner);
@@ -941,7 +951,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // Auto-attack overrides in non-basic slots still need a normal cast packet for animation.
                 if (CastInfo.IsAutoAttack && !IsBasicAttackSlotSpell())
                 {
-                    _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+                    _game.PacketNotifier.NotifyNPC_CastSpellAns(this, isContinuationFromExistingCast: isContinuation);
                 }
 
                 if (CastInfo.DesignerCastTime > 0)
@@ -976,7 +986,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 else
                 {
                     FinishCasting();
-                    if (SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                    if (GetEffectiveChannelDuration() > 0)
                     {
                         Channel();
                     }
@@ -1001,12 +1011,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public void Channel()
         {
             State = SpellState.STATE_CHANNELING;
-            CurrentChannelDuration = SpellData.ChannelDuration[CastInfo.SpellLevel];
-
-            if (Script.ScriptMetadata.ChannelDuration > 0)
-            {
-                CurrentChannelDuration = Script.ScriptMetadata.ChannelDuration;
-            }
+            // Server-side timer uses MAX HOLD duration (>= bar-fill duration). For charge spells
+            // like Varus Q this is 4s (= ChargeMaxHoldDuration), while the wire DesignerTotalTime
+            // stays at 1.5s (= ChargeDuration, drives client bar fill).
+            CurrentChannelDuration = GetMaxHoldDuration();
 
             if (CurrentChannelDuration > 0)
             {
@@ -1018,15 +1026,27 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.StopMovement();
             }
 
-            ApiEventManager.OnSpellChannel.Publish(this);
-
-            // Channel-entry tick: diff=0f marks "no time elapsed since channel start".
-            // Scripts using PeriodicTicker should pass fireImmediately=true if they want to
-            // act on this initial call; otherwise their accumulator stays at 0 until the first
-            // real Update() with non-zero diff arrives next server tick.
-            if (State == SpellState.STATE_CHANNELING)
+            // Route to charge or channel events. IsChargeSpell covers JSON UseChargeChanneling=1
+            // AND script-side ScriptMetadata.ChargeDuration > 0.
+            if (IsChargeSpell)
             {
-                ApiEventManager.OnSpellChannelUpdate.Publish(this, 0f);
+                ApiEventManager.OnSpellChargeStart.Publish(this);
+                if (State == SpellState.STATE_CHANNELING)
+                {
+                    ApiEventManager.OnSpellChargeTick.Publish(this, 0f);
+                }
+            }
+            else
+            {
+                ApiEventManager.OnSpellChannel.Publish(this);
+                // Channel-entry tick: diff=0f marks "no time elapsed since channel start".
+                // Scripts using PeriodicTicker should pass fireImmediately=true if they want to
+                // act on this initial call; otherwise their accumulator stays at 0 until the first
+                // real Update() with non-zero diff arrives next server tick.
+                if (State == SpellState.STATE_CHANNELING)
+                {
+                    ApiEventManager.OnSpellChannelUpdate.Publish(this, 0f);
+                }
             }
         }
 
@@ -1134,7 +1154,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (reason != ChannelingStopSource.TimeCompleted)
                 {
                     _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
-                    ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
+                    // Route to charge-specific cancel for charge spells.
+                    if (IsChargeSpell)
+                    {
+                        ApiEventManager.OnSpellChargeCancel.Publish(this, reason);
+                    }
+                    else
+                    {
+                        ApiEventManager.OnSpellChannelCancel.Publish(this, reason);
+                    }
                 }
 
                 if (CastInfo.Owner.ChannelSpell == this)
@@ -1189,6 +1217,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CastInfo.Owner.HasMadeInitialAttack = true;
                 }
+                // Note: `CharData.PostAttackMoveDelay` is loaded for forward-compat but NOT
+                // wired here — verified 2026-05-10 that S4 client doesn't consume this field
+                // (literal "PostAttack" doesn't appear in S4 decomp; CharacterData reader uses
+                // literal-string ReadCFG_S/I/B which would surface any consumed field). Wiring
+                // it would create server-only behavior the client doesn't model. See memory
+                // `project_chardata_chasing_postattack_loaded.md` for the verification trail.
+                // `ObjAIBase.EngagePostAttackMoveLock` exists as plumbing for future spells/
+                // buffs that may want a similar lockout, but is not auto-invoked here.
                 if (!CastInfo.Owner.IsMelee)
                 {
                     if (HasEmptyScript)
@@ -1209,7 +1245,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             else
             {
-                if (SpellData.ChannelDuration[CastInfo.SpellLevel] <= 0)
+                if (GetEffectiveChannelDuration() <= 0)
                 {
                     State = SpellState.STATE_COOLDOWN;
 
@@ -1272,7 +1308,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
                 else
                 {
-                    bool willChannel = SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0;
+                    bool willChannel = GetEffectiveChannelDuration() > 0;
 
                     if (!willChannel)
                     {
@@ -1313,7 +1349,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             bool shouldResumeWalking = !CastInfo.Owner.IsPathEnded();
 
-            ApiEventManager.OnSpellPostChannel.Publish(this);
+            // Route to charge-specific fire event for UseChargeChanneling spells.
+            // For charge-spells reaching FinishChanneling = the charge completed (either by
+            // PlayerCommand release routed through UpdateCharge → StopChanneling(Success,
+            // TimeCompleted), or by max charge time elapsing). Both fire the missile.
+            if (IsChargeSpell)
+            {
+                ApiEventManager.OnSpellChargeFire.Publish(this);
+            }
+            else
+            {
+                ApiEventManager.OnSpellPostChannel.Publish(this);
+            }
             if (CastInfo.Owner.MovementParameters == null)
             {
                 if (shouldResumeWalking)
@@ -1335,6 +1382,60 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             SetPassiveCooldownStats(CurrentCooldown);
 
             // See FinishCasting: ability slots 0..3 are client-driven from CastSpellAns; only summoner+item slots need this.
+            if (CastInfo.SpellSlot >= 4)
+            {
+                _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, CurrentCooldown, GetCooldown());
+            }
+        }
+
+        /// <summary>
+        /// Charge timeout — the player held past <see cref="GetMaxHoldDuration"/> without releasing
+        /// (or the bar filled with no MaxHoldDuration override). Publishes
+        /// <see cref="ApiEventManager.OnSpellChargeCancel"/> with
+        /// <c>ChannelingStopSource.TimeCompleted</c> so the script can decide expire policy
+        /// (refund mana, auto-fire, etc.). Sets cooldown like <see cref="FinishChanneling"/> —
+        /// the spell DID consume mana, even if the script refunds some of it via the event hook.
+        ///
+        /// <para>Charge-pipeline only — non-charge spells should use <see cref="FinishChanneling"/>
+        /// directly via <c>StopChanneling(Success, TimeCompleted)</c>.</para>
+        /// </summary>
+        public void ExpireCharge()
+        {
+            State = SpellState.STATE_COOLDOWN;
+
+            if (CastInfo.Owner.ChannelSpell == this)
+            {
+                CastInfo.Owner.SetChannelSpell(null);
+            }
+
+            bool shouldResumeWalking = !CastInfo.Owner.IsPathEnded();
+
+            // Wire-side cleanup signal: NPC_InstantStop_Attack tells the client to exit charge state
+            // (mSpellCasted=0, charge bar clears, spell becomes recastable). Without this the client's
+            // SpellInstanceClient stays at mChannelingFinished=0 + mChannelingFinishTime=FLT_MAX so
+            // IsChanneling() returns true forever and Spellbook refuses to re-cast Q. Same mechanism
+            // as StopChanneling(Cancel, non-TimeCompleted) uses for stun/silence/etc cancels.
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+
+            // Publish CANCEL (not Fire) — script chooses policy: mana refund, auto-fire, etc.
+            ApiEventManager.OnSpellChargeCancel.Publish(this, ChannelingStopSource.TimeCompleted);
+
+            if (CastInfo.Owner.MovementParameters == null)
+            {
+                if (shouldResumeWalking)
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
+                    ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
+                }
+                else
+                {
+                    CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
+                }
+            }
+
+            CurrentCooldown = GetCooldown();
+            SetPassiveCooldownStats(CurrentCooldown);
+
             if (CastInfo.SpellSlot >= 4)
             {
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, CurrentCooldown, GetCooldown());
@@ -1661,6 +1762,128 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             return castRange;
         }
 
+        // === Charge spell helpers (UseChargeChanneling=1) ===
+        // All read from SpellData JSON fields so scripts don't hardcode constants. Replay-verified
+        // for Varus Q: ChannelDuration[level]=1.25s, CastRange[level]=925, CastRangeGrowthDuration=1.3,
+        // CastRangeGrowthMax=1600.
+
+        /// <summary>
+        /// True if this spell uses the charge pipeline (UseChargeChanneling=1 in JSON OR script
+        /// set <see cref="SpellScriptMetadata.ChargeDuration"/> &gt; 0). Routing flag for which
+        /// events fire (OnSpellCharge* vs OnSpellChannel*).
+        /// </summary>
+        public bool IsChargeSpell => SpellData.UseChargeChanneling
+                                  || (Script != null && Script.ScriptMetadata.ChargeDuration > 0);
+
+        /// <summary>
+        /// Effective channel/charge duration in seconds, with priority:
+        /// 1. <see cref="SpellScriptMetadata.ChargeDuration"/> (script-side charge override)
+        /// 2. <see cref="SpellScriptMetadata.ChannelDuration"/> (legacy script-side channel override)
+        /// 3. <c>SpellData.ChannelDuration[level]</c> (JSON value)
+        /// Used to drive both server-side <c>CurrentChannelDuration</c> ticking and the wire-side
+        /// <c>DesignerTotalTime</c> sent in NPC_CastSpellAns.
+        /// </summary>
+        public float GetEffectiveChannelDuration()
+        {
+            if (Script != null && Script.ScriptMetadata.ChargeDuration > 0)
+            {
+                return Script.ScriptMetadata.ChargeDuration;
+            }
+            if (Script != null && Script.ScriptMetadata.ChannelDuration > 0)
+            {
+                return Script.ScriptMetadata.ChannelDuration;
+            }
+            int level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.ChannelDuration.Length - 1));
+            return SpellData.ChannelDuration[level];
+        }
+
+        /// <summary>
+        /// Maximum charge duration in seconds. Alias for <see cref="GetEffectiveChannelDuration"/>
+        /// from a charge-spell perspective — this is the bar-fill time (when range is fully grown,
+        /// charge UI is full). For server-side auto-expire timer use <see cref="GetMaxHoldDuration"/>.
+        /// </summary>
+        public float GetMaxChargeDuration() => GetEffectiveChannelDuration();
+
+        /// <summary>
+        /// Server-side max hold duration for charge spells. Returns <see cref="SpellScriptMetadata.ChargeMaxHoldDuration"/>
+        /// if explicitly set (&gt; 0) on a charge spell, otherwise falls back to <see cref="GetEffectiveChannelDuration"/>.
+        ///
+        /// <para>Used by <see cref="Channel"/> to initialize the server's <see cref="CurrentChannelDuration"/>
+        /// timer. May exceed the wire-side <c>DesignerTotalTime</c> (which uses <see cref="GetEffectiveChannelDuration"/>)
+        /// — e.g. Varus Q: wire = 1.5s (bar fill), server hold = 4s (player can wait 2.5s past max
+        /// charge before auto-expire).</para>
+        /// </summary>
+        public float GetMaxHoldDuration()
+        {
+            if (IsChargeSpell && Script != null && Script.ScriptMetadata.ChargeMaxHoldDuration > 0)
+            {
+                return Script.ScriptMetadata.ChargeMaxHoldDuration;
+            }
+            return GetEffectiveChannelDuration();
+        }
+
+        /// <summary>
+        /// Elapsed charge time in seconds since charge-start. Computed as
+        /// <c>MaxHoldDuration − CurrentChannelDuration</c> because the server's
+        /// <see cref="CurrentChannelDuration"/> is initialized to <see cref="GetMaxHoldDuration"/>
+        /// in <see cref="Channel"/>.
+        ///
+        /// <para>Range can exceed <see cref="GetMaxChargeDuration"/> for spells with a longer
+        /// <c>ChargeMaxHoldDuration</c> than <c>ChargeDuration</c> (e.g. Varus Q: bar fills at
+        /// 1.5s, MaxHold is 4s — elapsed reaches up to 4s but <see cref="GetChargeProgress"/>
+        /// clamps to 1.0 after 1.5s and <see cref="GetCurrentChargeRange"/> caps at max range
+        /// after <c>CastRangeGrowthDuration</c>).</para>
+        /// </summary>
+        public float GetChargeElapsed()
+        {
+            float maxHold = GetMaxHoldDuration();
+            float elapsed = maxHold - CurrentChannelDuration;
+            if (elapsed < 0f) elapsed = 0f;
+            if (elapsed > maxHold) elapsed = maxHold;
+            return elapsed;
+        }
+
+        /// <summary>
+        /// Charge progress as 0..1, normalized by <see cref="GetMaxChargeDuration"/>. Useful for
+        /// FX intensity, sound pitch, range-growth interpolation.
+        /// </summary>
+        public float GetChargeProgress()
+        {
+            float max = GetMaxChargeDuration();
+            if (max <= 0f) return 0f;
+            return Math.Clamp(GetChargeElapsed() / max, 0f, 1f);
+        }
+
+        /// <summary>
+        /// Maximum range after full charge (= CastRangeGrowthMax[level], with fallback to base CastRange
+        /// if growth is not configured).
+        /// </summary>
+        public float GetMaxChargeRange()
+        {
+            int level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.CastRangeGrowthMax.Length - 1));
+            float growthMax = SpellData.CastRangeGrowthMax[level];
+            return growthMax > 0f ? growthMax : GetCurrentCastRange();
+        }
+
+        /// <summary>
+        /// Current charge range interpolated between <see cref="GetCurrentCastRange"/> (min, at 0%
+        /// charge) and <see cref="GetMaxChargeRange"/> (max, at 100% charge over CastRangeGrowthDuration).
+        /// </summary>
+        public float GetCurrentChargeRange()
+        {
+            float minRange = GetCurrentCastRange();
+            float maxRange = GetMaxChargeRange();
+            if (maxRange <= minRange) return minRange;
+
+            int level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.CastRangeGrowthDuration.Length - 1));
+            float growthDuration = SpellData.CastRangeGrowthDuration[level];
+            if (growthDuration <= 0f) return maxRange;
+
+            float elapsed = GetChargeElapsed();
+            float progress = Math.Clamp(elapsed / growthDuration, 0f, 1f);
+            return minRange + (maxRange - minRange) * progress;
+        }
+
         public string GetStringForSlot()
         {
             return CastInfo.SpellSlot switch
@@ -1943,7 +2166,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (forceStop)
             {
-                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
+                // For charge-channel spells (UseChargeChanneling=1, e.g. Varus Q) the client-driven
+                // button-release IS the fire trigger, semantically equivalent to the server's natural
+                // timeout: route through (Success, TimeCompleted) so FinishChanneling() runs,
+                // OnSpellPostChannel fires the missile, State→STATE_COOLDOWN, and NO
+                // NPC_InstantStop_Attack is broadcast — replay-verified on Varus Q across
+                // ecb101fa (Varus-POV) + ea71bf6f (enemy-POV), 129 events, zero ISA at fire.
+                // Non-charge channels (Katarina R, Recall etc.) keep the original PlayerCommand-cancel
+                // path because for them "release" actually means abort.
+                if (IsChargeSpell)
+                {
+                    StopChanneling(ChannelingStopCondition.Success, ChannelingStopSource.TimeCompleted);
+                }
+                else
+                {
+                    StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
+                }
             }
         }
         public SpellMissile CreateCustomMissile(Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)
@@ -2014,6 +2252,69 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             return p;
         }
+
+        /// <summary>
+        /// Like <see cref="CreateCustomMissile"/> but explicitly client-visible — sets
+        /// <c>HasClientCastInfo=false</c> so the spawn broadcast emits <c>MissileReplication</c>
+        /// instead of being suppressed by <c>ConstructSpawnPacket</c>'s primary-missile shortcut.
+        /// Use for sub-missiles that need their own visual replication: e.g. Varus Q's
+        /// VarusQMissile, where the parent VarusQ cast has <c>MissileEffect=""</c> in JSON so
+        /// the client can't render the missile from the parent CastSpellAns alone.
+        /// </summary>
+        public SpellMissile CreateReplicatedMissile(Vector2 start, Vector2 end, MissileParameters parameters,
+            bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true,
+            float? customHeightOffset = null, AttackableUnit target = null)
+        {
+            var p = CreateCustomMissile(start, end, parameters, isForceCastingOrChannel,
+                isOverrideCastPosition, customHeightOffset, target);
+            if (p != null)
+            {
+                // Explicit MissileReplication broadcast. (Setting p.HasClientCastInfo=false would
+                // be dead code — the auto-spawn-packet check in ConstructSpawnPacket already ran
+                // inside CreateCustomMissile→AddObject and decided no broadcast based on the
+                // default true. We bypass that with a manual NotifyMissileReplication.)
+                _game.PacketNotifier.NotifyMissileReplication(p);
+            }
+            return p;
+        }
+
+        /// <summary>
+        /// Re-broadcasts <c>NPC_CastSpellAns</c> for this spell with updated target positions,
+        /// reusing the original <c>SpellNetID</c> + <c>MissileNetID</c> from the initial cast.
+        /// Designed for charge-channel fire (e.g. Varus Q release): replay-verified pattern
+        /// (ecb101fa Varus-POV, 129 events) emits a second CastSpellAns at fire with same
+        /// NetIDs and updated <c>targetPos</c>/<c>launchPos</c>. This packet primes the client
+        /// to spawn the missile visual via the AlternateName chain (VarusQ → VarusQMissile.json)
+        /// and clears the charge bar.
+        /// </summary>
+        public void NotifyChargeFireCastSpellAns(Vector3 newTargetPos)
+        {
+            CastInfo.TargetPosition = newTargetPos;
+            CastInfo.TargetPositionEnd = newTargetPos;
+            CastInfo.SpellCastLaunchPosition = CastInfo.Owner.GetPosition3D();
+            // isContinuationFromExistingCast=true → bitfield bit 0 set in the wire packet.
+            // S4 client (obj_AI_Base_PImpl_Int.cpp:2987-3050) uses this flag to route through
+            // SpellbookRouter::ChooseSpellbook + match against currently-casting SpellInstanceClient
+            // by SpellNetID. Without it, the client treats the fire-CastSpellAns as a fresh cast and
+            // fails to connect it to the existing charge-state SpellInstanceClient → no missile spawn.
+            _game.PacketNotifier.NotifyNPC_CastSpellAns(this, isContinuationFromExistingCast: true);
+        }
+
+        /// <summary>
+        /// Script-friendly wrapper around <see cref="NotifyChargeFireCastSpellAns"/>. Call from a
+        /// charge spell's recast-fire handler (e.g. <see cref="ISpellScript.OnSpellChargeFire"/> or
+        /// equivalent custom fire path) to broadcast the parent channel-end CastSpellAns that
+        /// clears the client's charge HUD and signals "charge completed and triggered effects".
+        /// Takes the fire-time impact target in 2D world coords; height is filled from the caster.
+        /// <para>Only emit when the recast actually triggers effects (Sion Q/R, Varus Q, Xerath Q).
+        /// Do NOT call for cancel-only recasts (Vel'Koz R) — those rely on the channel-cancel
+        /// pipeline's <c>NPC_InstantStop_Attack</c> / silent-timeout behavior instead.</para>
+        /// </summary>
+        public void FireCharge(Vector2 targetPos)
+        {
+            NotifyChargeFireCastSpellAns(new Vector3(targetPos.X, CastInfo.Owner.GetHeight(), targetPos.Y));
+        }
+
         /// <summary>
         /// Called every diff milliseconds to update the spell
         /// </summary>
@@ -2049,7 +2350,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                             if (CurrentCastTime <= 0)
                             {
                                 FinishCasting();
-                                if (SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
+                                if (GetEffectiveChannelDuration() > 0)
                                 {
                                     Channel();
                                 }
@@ -2080,11 +2381,30 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         ChannelCancelCheck();
                         if (State == SpellState.STATE_CHANNELING)
                         {
-                            ApiEventManager.OnSpellChannelUpdate.Publish(this, diff);
+                            if (IsChargeSpell)
+                            {
+                                ApiEventManager.OnSpellChargeTick.Publish(this, diff);
+                            }
+                            else
+                            {
+                                ApiEventManager.OnSpellChannelUpdate.Publish(this, diff);
+                            }
                         }
                         if (State == SpellState.STATE_CHANNELING && CurrentChannelDuration <= 0)
                         {
-                            StopChanneling(ChannelingStopCondition.Success, ChannelingStopSource.TimeCompleted);
+                            if (IsChargeSpell)
+                            {
+                                // Charge expired without manual release — refund-or-fire policy
+                                // is in the script's OnSpellChargeCancel(TimeCompleted) handler.
+                                // Engine handles cooldown + state cleanup like a normal completion.
+                                ExpireCharge();
+                            }
+                            else
+                            {
+                                // Normal channel completed naturally — proceed to FinishChanneling
+                                // → OnSpellPostChannel.
+                                StopChanneling(ChannelingStopCondition.Success, ChannelingStopSource.TimeCompleted);
+                            }
                         }
                         break;
                     }

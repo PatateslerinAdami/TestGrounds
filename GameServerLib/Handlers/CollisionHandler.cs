@@ -45,8 +45,10 @@ namespace LeagueSandbox.GameServer.Handlers
             // BaseTurret and ObjBuilding are excluded their footprints are baked into the navgrid
             // (NavigationGrid.AddDynamicBlocker), so pathfinding routes around them and the
             // remaining unit vs unit checks don't need to carry them in the per-tick QuadTree.
+            // Marker is excluded — it's a pure NetID anchor (Vel'Koz R beam endpoint etc.)
+            // and must be able to sit inside walls / on un-walkable terrain without snap.
             return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is SpellMissile || obj is Region
-                     || obj is BaseTurret || obj is ObjBuilding) && obj.CollisionRadius >= 0;
+                     || obj is BaseTurret || obj is ObjBuilding || obj is Marker) && obj.CollisionRadius >= 0;
         }
 
         /// <summary>
@@ -58,7 +60,8 @@ namespace LeagueSandbox.GameServer.Handlers
         private bool IsCollisionAffected(GameObject obj)
         {
             // Collision affected GameObjects are non-turret AI units, AttackableUnits, missiles, and pure GameObjects.
-            return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is ObjBuilding || obj is BaseTurret);
+            // Marker excluded — purely a position anchor, never reacts to collisions.
+            return !(obj.IsToRemove() || obj is LevelProp || obj is Particle || obj is ObjBuilding || obj is BaseTurret || obj is Marker);
         }
 
         // Static targetable objects (turrets/buildings) are excluded from _quadDynamic but still need to be returned

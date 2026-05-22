@@ -269,6 +269,27 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell> OnSpellPostChannel
             = new Dispatcher<Spell>();
 
+        // CHARGE pipeline (UseChargeChanneling=1 spells like Varus Q). Parallel to OnSpellChannel/
+        // OnSpellChannelCancel/OnSpellChannelUpdate/OnSpellPostChannel but fires INSTEAD of those for
+        // charge-style spells. Engine routes via SpellData.UseChargeChanneling check.
+        // - OnSpellChargeStart: charge begins (analogous to OnSpellChannel)
+        // - OnSpellChargeTick: per-server-tick during charge (analogous to OnSpellChannelUpdate; diff in ms)
+        // - OnSpellChargeFire: release/timeout → missile fire (analogous to OnSpellPostChannel)
+        // - OnSpellChargeCancel: real interrupt (stun/silence/death/casting) (analogous to OnSpellChannelCancel)
+        // OnSpellChargeUpdate (client cursor update via C2S_SpellChargeUpdateReq) stays in ISpellScript
+        // directly because it's driven by an inbound packet, not by the channel lifecycle.
+        public static Dispatcher<Spell> OnSpellChargeStart
+            = new Dispatcher<Spell>();
+
+        public static Dispatcher<Spell, float> OnSpellChargeTick
+            = new Dispatcher<Spell, float>();
+
+        public static Dispatcher<Spell> OnSpellChargeFire
+            = new Dispatcher<Spell>();
+
+        public static Dispatcher<Spell, ChannelingStopSource> OnSpellChargeCancel
+            = new Dispatcher<Spell, ChannelingStopSource>();
+
         public static Dispatcher<SpellSector, AttackableUnit> OnSpellSectorHit
             = new Dispatcher<SpellSector, AttackableUnit>();
 
