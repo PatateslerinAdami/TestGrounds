@@ -15,8 +15,8 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 public class IreliaHitenStyle : IBuffGameScript {
-    private float     _heal;
     private ObjAIBase _irelia;
+    private Spell _mainSpell;
     private Particle  _passiveGlow, _passive;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
@@ -29,6 +29,7 @@ public class IreliaHitenStyle : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _irelia   = ownerSpell.CastInfo.Owner;
+        _mainSpell = ownerSpell;
         _passive = AddParticle(unit, unit, "irelia_hitenStlye_passive", unit.Position, bone: "BUFFBONE_GLB_WEAPON_1");
         _passiveGlow = AddParticle(unit,                          unit, "irelia_hitenStlye_passive_glow", unit.Position,
                                    bone: "BUFFBONE_GLB_WEAPON_1", lifetime: buff.Duration);
@@ -58,9 +59,8 @@ public class IreliaHitenStyle : IBuffGameScript {
     }
 
     private void OnHit(DamageData data) {
-        var wSpell = _irelia.GetSpell("IreliaHitenStyle").CastInfo.SpellLevel;
-        _heal = 3 + 3 * (wSpell - 1);
+        var heal = 3f + 3f * (_mainSpell.CastInfo.SpellLevel - 1);
 
-        _irelia.TakeHeal(_irelia, _heal, HealType.SelfHeal);
+        _irelia.TakeHeal(_irelia, heal, HealType.SelfHeal);
     }
 }
