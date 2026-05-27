@@ -131,7 +131,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
                 {
                     LoadScript();
-                    HasEmptyScript = Script.GetType() == typeof(SpellScriptEmpty);
+                    // BaseSpell (Content/.../Global/BaseSpell.cs) is a content-
+                    // side placeholder with no overrides; opt-in config skips its
+                    // per-tick OnUpdate on the ~30 rune/extra slots every unit has.
+                    HasEmptyScript = Script.GetType() == typeof(SpellScriptEmpty)
+                                     || (_game.Config.TreatBaseSpellAsEmpty
+                                         && Script.GetType().Name == "BaseSpell");
                 }
                 else
                 {
@@ -187,6 +192,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             //Activate spell - Notes: Deactivate is never called as spell removal hasn't been added
             try
             {
+                using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnActivate", "scripts");
                 Script.OnActivate(CastInfo.Owner, this);
             }
             catch(Exception e)
@@ -220,6 +226,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             _scriptPostActivated = true;
             try
             {
+                using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnPostActivate", "scripts");
                 Script.OnPostActivate(CastInfo.Owner, this);
             }
             catch (Exception e)
@@ -530,6 +537,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             try
             {
+                using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellPreCast", "scripts");
                 Script.OnSpellPreCast(CastInfo.Owner, this, unit, start, end);
             }
             catch(Exception e)
@@ -727,6 +735,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             try
             {
+                using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellPreCast", "scripts");
                 Script.OnSpellPreCast(CastInfo.Owner, this, castInfo.Targets[0].Unit, start, end);
             }
             catch(Exception e)
@@ -1361,6 +1370,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             try
             {
+                using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnDeactivate", "scripts");
                 Script.OnDeactivate(CastInfo.Owner, this);
             }
             catch(Exception e)
@@ -1939,7 +1949,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.TargetPosition = position;
             CastInfo.TargetPositionEnd = position;
 
-            Script.OnSpellChargeUpdate(this, position, forceStop);
+            using (Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellChargeUpdate", "scripts"))
+            {
+                Script.OnSpellChargeUpdate(this, position, forceStop);
+            }
 
             if (forceStop)
             {
@@ -2023,6 +2036,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 try
                 {
+                    using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnUpdate", "scripts");
                     Script.OnUpdate(diff);
                 }
                 catch(Exception e)

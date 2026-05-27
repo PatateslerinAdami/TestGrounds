@@ -334,6 +334,9 @@ namespace LeagueSandbox.GameServer.API
                 public Source Source;
                 public CBType Callback;
                 public bool SingleInstance;
+                // Cached "TypeName.MethodName" for the Profiler so we don't
+                // re-resolve MethodInfo via reflection on every Publish.
+                public string ProfileName;
 
                 public Listener(object owner, Source source, CBType callback, bool singleInstance = false)
                 {
@@ -341,6 +344,29 @@ namespace LeagueSandbox.GameServer.API
                     Source = source;
                     Callback = callback;
                     SingleInstance = singleInstance;
+                    // Build a profile name that tells the operator which
+                    // *concrete game thing* is running, not just which C# class.
+                    // Many spells share BaseSpell.OnUpdate via inheritance, so
+                    // "script:BaseSpell.OnUpdate" alone is useless — prefer the
+                    // data name from the source (SpellName / Buff Name) when we
+                    // can recognise it. Falls through to the delegate's
+                    // owner/declaring type for unknown source kinds.
+                    var del = (object)callback as Delegate;
+                    var methodName = del?.Method.Name ?? "<unknown>";
+                    string label = source switch
+                    {
+                        // For spells, include the owner unit so 30+ placeholder
+                        // "BaseSpell" slots per champion are distinguishable
+                        // (e.g. "spell:Ezreal/BaseSpell" vs "spell:LaneTurret/BaseSpell").
+                        Spell s => $"spell:{s.CastInfo?.Owner?.Model ?? "?"}/{s.SpellName}",
+                        Buff b => $"buff:{b.Name}",
+                        _ => del?.Target?.GetType().Name is string t
+                             ? $"script:{t}"
+                             : del?.Method.DeclaringType?.Name is string d
+                                 ? $"script:{d}"
+                                 : "script:<unknown>",
+                    };
+                    ProfileName = $"{label}.{methodName}";
                 }
             }
 
@@ -453,6 +479,7 @@ namespace LeagueSandbox.GameServer.API
 
                         try
                         {
+                            using var _scope = Profiler.Scope(listener.ProfileName, "scripts");
                             Call(listener.Callback);
                         }
                         catch (Exception e)
@@ -496,6 +523,7 @@ namespace LeagueSandbox.GameServer.API
 
                         try
                         {
+                            using var _scope = Profiler.Scope(listener.ProfileName, "scripts");
                             returnVal = returnVal && Call(listener.Callback);
                         }
                         catch (Exception e)

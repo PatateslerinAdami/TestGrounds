@@ -414,24 +414,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         public override void Update(float diff)
         {
-            UpdateTimers(diff);
-            UpdateBuffs(diff);
+            using (Profiler.Scope("AttackableUnit.Timers"))
+            {
+                UpdateTimers(diff);
+            }
+            using (Profiler.Scope("AttackableUnit.Buffs"))
+            {
+                UpdateBuffs(diff);
+            }
             UpdateRevealSpecificUnit(diff);
 
             // TODO: Rework stat management.
             _statUpdateTimer += diff;
             while (_statUpdateTimer >= 500)
             {
+                using var _statsScope = Profiler.Scope("AttackableUnit.StatsTick");
                 // update Stats (hpregen, manaregen) every 0.5 seconds
                 Stats.Update(this, _statUpdateTimer);
                 _statUpdateTimer -= 500;
                 API.ApiEventManager.OnUpdateStats.Publish(this, diff);
             }
 
-            Replication.Update();
+            using (Profiler.Scope("AttackableUnit.Replication"))
+            {
+                Replication.Update();
+            }
 
             if (CanMove())
             {
+                using var _moveScope = Profiler.Scope("AttackableUnit.Move");
                 float remainingFrameTime = diff;
                 bool moved = false;
                 if (MovementParameters != null)
