@@ -9,9 +9,9 @@
         "SpellData": {
             "AnimationName": "Channel",
             "CantCancelWhileWindingUp": 1,
-            "CastFrame": "0",
-            "CastRange": "500",
-            "CastType": "0",
+            "CastFrame": 0,
+            "CastRange": 500,
+            "CastType": 0,
             "Cooldown": 0,
             "Cooldown1": 0,
             "Cooldown2": 0,
@@ -29,9 +29,9 @@
             "ManaCost3": 0,
             "ManaCost4": 0,
             "ManaCost5": 0,
-            "OverrideCastTime": "0",
+            "OverrideCastTime": 0,
             "TargettingType": 1,
-            "UseAnimatorFramerate": "0"
+            "UseAnimatorFramerate": 0
         }
     }
 }

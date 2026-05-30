@@ -7,7 +7,7 @@
     },
     "Values": {
         "SpellData": {
-            "IsToggleSpell": "0"
+            "IsToggleSpell": 0
         }
     }
 }

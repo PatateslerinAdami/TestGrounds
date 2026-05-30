@@ -12,11 +12,9 @@
         },
         "SpellData": {
             "AlternateName": "SionPassiveZombie",
+            "DeathRecap": 1,
             "DisplayName": "game_character_passiveName_Sion",
             "Version": 1
-        },
-        "UNKNOWN_HASHES": {
-            "2592744643": "true"
         }
     }
 }

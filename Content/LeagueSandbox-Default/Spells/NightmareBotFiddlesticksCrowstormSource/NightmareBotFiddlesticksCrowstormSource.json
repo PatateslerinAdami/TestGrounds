@@ -8,7 +8,7 @@
     "Values": {
         "SpellData": {
             "AlternateName": "NightmareBotFiddlesticksCrowstormSource",
-            "CastType": "0",
+            "CastType": 0,
             "Description": "game_spell_description_NightmareBotFiddlesticksCrowstorm",
             "DisplayName": "game_spell_displayname_NightmareBotFiddlesticksCrowstorm",
             "Flags": 329748,

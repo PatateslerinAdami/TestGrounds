@@ -8,7 +8,7 @@
     "Values": {
         "SpellData": {
             "AlternateName": "NightmareBotSpiritViktorSource",
-            "CastType": "0",
+            "CastType": 0,
             "Description": "game_spell_description_NightmareBotSpiritViktor",
             "DisplayName": "game_spell_displayname_NightmareBotSpiritViktor",
             "Flags": 329748,

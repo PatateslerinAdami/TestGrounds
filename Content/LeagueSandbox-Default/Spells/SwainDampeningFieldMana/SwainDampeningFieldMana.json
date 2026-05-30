@@ -10,8 +10,8 @@
             "DynamicTooltip": "game_buff_tooltip_SwainDampeningFieldMana"
         },
         "SpellData": {
-            "FloatVarsDecimals1": "0",
-            "FloatVarsDecimals2": "0"
+            "FloatVarsDecimals1": 0,
+            "FloatVarsDecimals2": 0
         }
     }
 }

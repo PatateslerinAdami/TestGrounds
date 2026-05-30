@@ -8,7 +8,7 @@
     "Values": {
         "SpellData": {
             "AlternateName": "NightmareBotSpiritSwainSource",
-            "CastType": "0",
+            "CastType": 0,
             "Description": "game_spell_description_NightmareBotSpiritSwain",
             "DisplayName": "game_spell_displayname_NightmareBotSpiritSwain",
             "Flags": 329748,

@@ -10,8 +10,8 @@
             "AlternateName": "AzirQ",
             "AnimationName": "",
             "CantCancelWhileWindingUp": 1,
-            "CastFrame": "0",
-            "CastRange": "25000",
+            "CastFrame": 0,
+            "CastRange": 25000,
             "CastType": 3,
             "Cooldown": 0,
             "Cooldown1": 0,
@@ -29,7 +29,7 @@
             "InventoryIcon": "",
             "LineMissileEndsAtTargetPoint": 1,
             "LineMissileFollowsTerrainHeight": 1,
-            "LineWidth": "70.0000",
+            "LineWidth": 70.0,
             "LuaOnMissileUpdateDistanceInterval": 51,
             "ManaCost1": 0,
             "ManaCost2": 0,
@@ -37,10 +37,10 @@
             "ManaCost4": 0,
             "ManaCost5": 0,
             "MissileEffect": "Azir_base_R_Soldiers_Mis_White.troy",
-            "MissileSpeed": "1000",
-            "OverrideCastTime": "0",
+            "MissileSpeed": 1000,
+            "OverrideCastTime": 0,
             "TargettingType": 2,
-            "UseAnimatorFramerate": "0"
+            "UseAnimatorFramerate": 0
         }
     }
 }

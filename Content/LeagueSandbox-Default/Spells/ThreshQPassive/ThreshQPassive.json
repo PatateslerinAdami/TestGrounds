@@ -16,8 +16,8 @@
             "DisplayName": "game_spell_displayname_ThreshQPassive",
             "DynamicExtended": "game_spell_levelup_ThreshQPassive",
             "DynamicTooltip": "game_spell_tooltip_ThreshQPassive",
-            "FloatStaticsDecimals1": "0",
-            "FloatVarsDecimals1": "0",
+            "FloatStaticsDecimals1": 0,
+            "FloatVarsDecimals1": 0,
             "InventoryIcon": "Thresh_E0.dds",
             "Version": 1
         }
