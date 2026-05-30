@@ -96,11 +96,7 @@
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 20.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "friend",

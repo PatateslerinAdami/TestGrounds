@@ -108,11 +108,7 @@
             "MissileEffect": "Sivir_Base_Q_mis.troy",
             "MissileSpeed": 1350.0,
             "OverrideCastTime": 0.25,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "sivir_spiral_blade_cast_1.wav",

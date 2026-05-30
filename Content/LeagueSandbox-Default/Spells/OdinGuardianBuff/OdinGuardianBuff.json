@@ -89,11 +89,7 @@
             "MissileBoneName": "root",
             "MissileEffect": "FerosciousHowl_cas3.troy",
             "MissileSpeed": 828.5,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

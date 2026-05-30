@@ -97,11 +97,7 @@
             "MissileBoneName": "L_hand",
             "MissileEffect": "FiddleSticks_mis.troy",
             "MissileSpeed": 1750.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "none.wav",

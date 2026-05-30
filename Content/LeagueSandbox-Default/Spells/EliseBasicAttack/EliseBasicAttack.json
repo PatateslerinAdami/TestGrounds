@@ -98,11 +98,7 @@
             "MissileBoneName": "R_Buffbone_CSTM_Hand_Loc",
             "MissileEffect": "Elise_human_BasicAttack_mis.troy",
             "MissileSpeed": 1600.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",

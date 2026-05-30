@@ -100,11 +100,7 @@
             "MissileEffect": "Heimerdinger_Base_E_Mis_Ult.troy",
             "MissileGravity": 50.0,
             "MissileSpeed": 1200.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

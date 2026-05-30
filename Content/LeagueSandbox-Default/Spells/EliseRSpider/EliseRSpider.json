@@ -224,11 +224,7 @@
             "MissileSpeed": 943.7999877929688,
             "MissileTargetHeightAugment": 100.0,
             "OverrideCastTime": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",

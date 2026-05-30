@@ -100,11 +100,7 @@
             "MissileGravity": 70.0,
             "MissilePerceptionBubbleRadius": 500.0,
             "MissileSpeed": 1125.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

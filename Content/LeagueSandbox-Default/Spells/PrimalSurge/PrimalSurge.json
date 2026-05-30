@@ -100,11 +100,7 @@
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SecondaryInventoryIcon": "Nidalee_E2.dds",

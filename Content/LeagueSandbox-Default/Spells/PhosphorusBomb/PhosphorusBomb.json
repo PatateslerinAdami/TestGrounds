@@ -162,11 +162,7 @@
             "OverrideCastTime": 0,
             "OverrideForceSpellAnimation": 1,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "corki_phosphorous_bomb_tar.troy",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

@@ -86,11 +86,7 @@
             "MissileEffect": "DarkWind_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 1450.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "tristana_rapid_fire_cast.wav",

@@ -111,11 +111,7 @@
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "Annie_Incinerate_3.wav",

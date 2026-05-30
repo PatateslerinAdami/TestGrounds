@@ -222,11 +222,7 @@
             "OrientRadiusTextureFromPlayer": 1,
             "OrientRangeIndicatorToCursor": 1,
             "OverrideCastTime": 0.44999998807907104,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "Annie_Incinerate_3.wav",

@@ -85,11 +85,7 @@
             "MissileBoneName": "BUFFBONE_GLB_WEAPON_1",
             "MissileEffect": "SRU_BluebuffSub_BA1_Projectile.troy",
             "MissileSpeed": 750.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",

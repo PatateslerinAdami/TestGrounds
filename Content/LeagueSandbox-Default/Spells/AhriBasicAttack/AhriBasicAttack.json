@@ -101,11 +101,7 @@
             "MissileGravity": 0,
             "MissileSpeed": 1750.0,
             "MissileTargetHeightAugment": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

@@ -94,11 +94,7 @@
             "MissileBoneName": "weapon",
             "MissileEffect": "heimerdinger_turret_explosive_mis.troy",
             "MissileSpeed": 1600.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

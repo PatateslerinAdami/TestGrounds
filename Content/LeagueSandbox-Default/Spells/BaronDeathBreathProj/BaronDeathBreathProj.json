@@ -164,11 +164,7 @@
             "MissilePerceptionBubbleRevealsStealth": 0,
             "MissileSpeed": 1800.0,
             "MissileTargetHeightAugment": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "SpellRevealsChampion": 1,

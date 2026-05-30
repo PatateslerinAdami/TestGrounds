@@ -137,11 +137,7 @@
             "MissileSpeed": 2600.0,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                300.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "300.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

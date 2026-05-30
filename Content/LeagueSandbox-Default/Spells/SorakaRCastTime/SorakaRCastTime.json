@@ -100,11 +100,7 @@
             "MissileGravity": 0,
             "MissileSpeed": 2400.0,
             "OverrideCastTime": 0.25,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "Sound_CastName": "ability_bless.wav",
             "Sound_HitName": "none.wav",

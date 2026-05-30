@@ -101,11 +101,7 @@
             "MissileBoneName": "R_hand",
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileSpeed": 20.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PlatformEnabled": 1,
             "PointEffectName": "",
             "SelectionPreference": "foe",
