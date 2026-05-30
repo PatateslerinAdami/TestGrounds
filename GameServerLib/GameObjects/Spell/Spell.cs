@@ -56,6 +56,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// Time until channeling will finish for this spell.
         /// </summary>
         public float CurrentChannelDuration { get; protected set; }
+
+        /// <summary>
+        /// Accumulator (ms) for paced <see cref="OnSpellChargeTick"/> publishing when
+        /// <see cref="SpellData.ChargeUpdateInterval"/> &gt; 0. Riot's JSON sets this to
+        /// 0.1s on the steerable charge spells (Sion R, Vel'Koz R) — replay-verified
+        /// that MoveMarker / FaceDirection updates fire at ~100ms intervals during the
+        /// channel. Reset on charge start; spells with interval=0 fire every server tick
+        /// (unchanged from the original behavior).
+        /// </summary>
+        private float _chargeTickAccumulator;
         /// <summary>
         /// Time until the same spell can be cast again. Usually only applicable to auto attack spells.
         /// </summary>
@@ -1030,6 +1040,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // AND script-side ScriptMetadata.ChargeDuration > 0.
             if (IsChargeSpell)
             {
+                _chargeTickAccumulator = 0f;
                 ApiEventManager.OnSpellChargeStart.Publish(this);
                 if (State == SpellState.STATE_CHANNELING)
                 {
@@ -2383,7 +2394,25 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         {
                             if (IsChargeSpell)
                             {
-                                ApiEventManager.OnSpellChargeTick.Publish(this, diff);
+                                // Riot-canonical paced cadence: SpellData.ChargeUpdateInterval (seconds)
+                                // drives how often OnSpellChargeTick publishes. Replay-verified on Sion R
+                                // and Vel'Koz R (both ChargeUpdateInterval=0.1) — MoveMarker / FaceDirection
+                                // packets fire at ~100ms intervals during the channel. Spells without the
+                                // field (defaults to 0) publish every server tick, preserving prior behavior.
+                                float intervalMs = SpellData.ChargeUpdateInterval * 1000f;
+                                if (intervalMs <= 0f)
+                                {
+                                    ApiEventManager.OnSpellChargeTick.Publish(this, diff);
+                                }
+                                else
+                                {
+                                    _chargeTickAccumulator += diff;
+                                    if (_chargeTickAccumulator >= intervalMs)
+                                    {
+                                        ApiEventManager.OnSpellChargeTick.Publish(this, _chargeTickAccumulator);
+                                        _chargeTickAccumulator = 0f;
+                                    }
+                                }
                             }
                             else
                             {

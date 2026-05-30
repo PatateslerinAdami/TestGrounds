@@ -91,12 +91,16 @@ namespace Spells
             // and click target are at different terrain heights.
             _laserTarget = AddMarker(_end, team: _owner.Team);
 
-            // Replay-verified wake-up: Riot ALWAYS sends a self-noop S2C_MoveMarker
-            // (Position == Goal) immediately after SpawnMarkerS2C, BEFORE the
-            // FX_Create_Group bundle goes out. The three-packet sequence at +510997ms
-            // is: SpawnMarkerS2C → S2C_MoveMarker → FX_Create_Group. Without the
-            // intermediate MoveMarker, the .troy fails to bind particles to the marker.
-            _laserTarget.MoveTo(_laserTarget.Position);
+            // Replay-verified wake-up: Riot sends S2C_MoveMarker with a small but
+            // NON-ZERO delta immediately after SpawnMarkerS2C, before the FX bundle.
+            // Decomp confirms (obj_AI_Marker::Update line 102) that the client's per-
+            // frame Update only invokes DoFaceDirection when `dist > 0` — a self-noop
+            // MoveMarker leaves the marker's Direction at (0,0,0). With BindDirection
+            // flag on beam_end, the particle inherits that zero orientation and fails
+            // to render. The 5u offset is enough to trigger DoFaceDirection on the
+            // first frame, then ArriveAtGoalPos() snaps the marker forward (negligible
+            // visually) and the marker's Direction is now the cast direction.
+            _laserTarget.MoveTo(_laserTarget.Position + dir * 5f);
 
             // Wake-up MoveMarker and first damage tick fire on the first OnSpellChargeTick
             // (handled via _firstTickFired). Thematically: a laser is instant — no 250ms
