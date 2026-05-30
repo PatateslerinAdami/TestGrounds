@@ -24,13 +24,12 @@ public class VarusQ : ISpellScript
         TriggersSpellCasts    = true,
         IsDamagingSpell       = true,
         AutoFaceDirection     = false,
-        // ChargeDuration = 1.5s — bar-fill / wire visual time. Matches VarusQ.json
-        // SpellTargeter1/2.RangeGrowthDuration = 1.5 (client charge-bar grow time).
-        // Range grows over CastRangeGrowthDuration = 1.3s and stays max thereafter.
-        ChargeDuration        = 1.5f,
+        // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
+        // SpellTargeter1.RangeGrowthDuration = 1.5 (the visible bar-fill time, which Riot
+        // tunes separately from SpellData.ChannelDuration = 1.25 and CastRangeGrowthDuration = 1.3).
         // ChargeMaxHoldDuration = 4s — total hold time before auto-expire. Per VarusQ spell
         // description: "After 4 seconds, piercing arrow fails but refunds half its mana cost."
-        // After bar-fill at 1.5s player has 2.5s extra to fire-or-let-expire.
+        // After bar-fill at 1.5s player has 2.5s extra to fire-or-let-expire. No JSON equivalent.
         ChargeMaxHoldDuration = 4f,
     };
 

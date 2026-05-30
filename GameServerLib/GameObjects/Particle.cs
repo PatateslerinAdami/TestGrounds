@@ -50,24 +50,6 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Position this object is spawned at.
         /// </summary>
         /// <summary>
-        /// When non-zero, overrides the wire's TargetNetID field at packet-build time
-        /// regardless of whether <see cref="TargetObject"/> is set. Used to decouple the
-        /// "target entity reference" from the "target position" — e.g. Xerath Q beam,
-        /// where Riot's wire has TargetNetID pointing to a Chiu minion at a third
-        /// location, but TargetPositionXZ at the caster's ground position.
-        /// </summary>
-        public uint TargetNetIDOverride { get; set; }
-
-        /// <summary>
-        /// When set (non-null), overrides the wire's <c>OwnerPositionX/Y/Z</c> fields at
-        /// packet-build time. Default behavior writes <c>Owner = Caster.Position</c>
-        /// when <see cref="Caster"/> is set — fine for most particles. Some replay-verified
-        /// FX (Vel'Koz R's <c>beam_end</c>) write Owner = the bound entity's position
-        /// instead, so the script supplies the override value here at spawn time.
-        /// </summary>
-        public Vector3? OwnerPositionOverride { get; set; }
-
-        /// <summary>
         /// When set (non-null), overrides the wire's <c>KeywordNetID</c> field at
         /// packet-build time. Default behavior writes <c>KeywordNetID = Caster.NetId</c>
         /// when <see cref="Caster"/> is set. Some replay-verified FX (Vel'Koz R's
@@ -174,7 +156,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -198,6 +181,12 @@ namespace LeagueSandbox.GameServer.GameObjects
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
             OverrideTargetHeight = overrideTargetHeight;
+
+            // KeywordNetIDOverride MUST be set before AddObject below — the FX_Create_Group
+            // packet is built synchronously inside AddObject (via Sync → ConstructSpawnPacket)
+            // and cached into the per-recipient batch. Setting via property after
+            // construction has no effect on the cached packet.
+            KeywordNetIDOverride = keywordNetIDOverride;
 
             if (bindObj != null)
             {

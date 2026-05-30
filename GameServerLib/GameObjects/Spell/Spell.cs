@@ -1787,10 +1787,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                                   || (Script != null && Script.ScriptMetadata.ChargeDuration > 0);
 
         /// <summary>
+        /// "Channel-lock" charge-spell subcategory (Vel'Koz R, Sion R, SionRRun):
+        /// button release/recast is treated as INTERRUPT (→ <c>OnSpellChargeCancel</c>),
+        /// not as fire. Distinct from "tap-charge" spells like Varus Q where release =
+        /// commit/fire (→ <c>OnSpellChargeFire</c>). Identified by Riot's
+        /// <c>PreventChargingSecondCast = 1</c> JSON marker.
+        /// </summary>
+        public bool IsChannelLockCharge => IsChargeSpell && SpellData.PreventChargingSecondCast;
+
+        /// <summary>
         /// Effective channel/charge duration in seconds, with priority:
         /// 1. <see cref="SpellScriptMetadata.ChargeDuration"/> (script-side charge override)
         /// 2. <see cref="SpellScriptMetadata.ChannelDuration"/> (legacy script-side channel override)
-        /// 3. <c>SpellData.ChannelDuration[level]</c> (JSON value)
+        /// 3. JSON <c>SpellTargeter1.RangeGrowthDuration</c> for <c>UseChargeChanneling</c> spells —
+        ///    Riot routinely sets this differently from <c>ChannelDuration</c> (Varus Q:
+        ///    ChannelDuration=1.25 but SpellTargeter1.RangeGrowthDuration=1.5, the latter
+        ///    matches the visible bar-fill time which is how gameplay perceives "charge time")
+        /// 4. <c>SpellData.ChannelDuration[level]</c> (final fallback)
         /// Used to drive both server-side <c>CurrentChannelDuration</c> ticking and the wire-side
         /// <c>DesignerTotalTime</c> sent in NPC_CastSpellAns.
         /// </summary>
@@ -1803,6 +1816,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (Script != null && Script.ScriptMetadata.ChannelDuration > 0)
             {
                 return Script.ScriptMetadata.ChannelDuration;
+            }
+            if (SpellData.UseChargeChanneling && SpellData.SpellTargeters.Length > 0)
+            {
+                float targeterGrowth = SpellData.SpellTargeters[0].RangeGrowthDuration;
+                if (targeterGrowth > 0)
+                {
+                    return targeterGrowth;
+                }
             }
             int level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.ChannelDuration.Length - 1));
             return SpellData.ChannelDuration[level];
@@ -2170,6 +2191,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
+            // Server-side enforcement of SpellData.CancelChargeOnRecastTime (seconds).
+            // The S4 client gates this in HudSpellLogic::IsChargeSpellRecastable (won't
+            // even send NPC_CastSpellReq during the grace period), but defensive check
+            // protects against modified clients. Matches Riot's design intent:
+            //   VelkozR: 0.75s   SionR: 0.5s   (others: 0 default → no gate)
+            // Negative value would mean "always recastable" — we treat 0 as the disable.
+            if (forceStop && SpellData.CancelChargeOnRecastTime > 0f
+                && GetChargeElapsed() < SpellData.CancelChargeOnRecastTime)
+            {
+                return;
+            }
+
             CastInfo.TargetPosition = position;
             CastInfo.TargetPositionEnd = position;
 
@@ -2177,12 +2210,27 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (forceStop)
             {
+                // For channel-lock charge spells (PreventChargingSecondCast=1, e.g. Vel'Koz R, Sion R)
+                // a player-recast mid-channel needs NPC_InstantStop_Attack to clear the client's HUD
+                // charge-bar and break the channel animation lock. Replay-verified on Vel'Koz R
+                // (a6db3774 cast @1000030 → ISA @+1782ms during channel; natural completion @other
+                // casts → no ISA). The ISA fires BEFORE StopChanneling so it lands while State is
+                // still STATE_CHANNELING (consistent with the StopChanneling Cancel path semantics).
+                // Sion R's slam still triggers via OnSpellChargeFire after the routing below — the
+                // ISA just additionally clears HUD/anim lock that Fire-path alone doesn't address.
+                //
+                // For tap-charge (Varus Q): Riot replay confirms ZERO ISA on release-fire
+                // (ecb101fa + ea71bf6f, 129 events) — release IS the fire trigger and the channel
+                // ends naturally on the client. Don't broadcast ISA here.
+                if (IsChannelLockCharge)
+                {
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+                }
+
                 // For charge-channel spells (UseChargeChanneling=1, e.g. Varus Q) the client-driven
                 // button-release IS the fire trigger, semantically equivalent to the server's natural
                 // timeout: route through (Success, TimeCompleted) so FinishChanneling() runs,
-                // OnSpellPostChannel fires the missile, State→STATE_COOLDOWN, and NO
-                // NPC_InstantStop_Attack is broadcast — replay-verified on Varus Q across
-                // ecb101fa (Varus-POV) + ea71bf6f (enemy-POV), 129 events, zero ISA at fire.
+                // OnSpellPostChannel fires the missile, State→STATE_COOLDOWN.
                 // Non-charge channels (Katarina R, Recall etc.) keep the original PlayerCommand-cancel
                 // path because for them "release" actually means abort.
                 if (IsChargeSpell)

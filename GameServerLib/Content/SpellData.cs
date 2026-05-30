@@ -148,7 +148,32 @@ namespace LeagueSandbox.GameServer.Content
         public float MissileTargetHeightAugment { get; set; } = 100;
         public bool MissileUnblockable { get; set; }
         public bool NoWinddownIfCancelled { get; set; }
-        //NumSpellTargeters
+        /// <summary>
+        /// Number of <c>SpellTargeter{N}</c> JSON blocks (1..N). Drives the size of
+        /// <see cref="SpellTargeters"/>. 0 = no client-side cast indicators configured.
+        /// </summary>
+        public int NumSpellTargeters { get; set; }
+        /// <summary>
+        /// Parsed <c>SpellTargeter1</c>..<c>SpellTargeterN</c> JSON blocks (0-indexed here:
+        /// <c>SpellTargeters[0]</c> = SpellTargeter1). For charge spells, the range-growth
+        /// fields (<see cref="SpellTargeterData.RangeGrowthDuration"/>,
+        /// <see cref="SpellTargeterData.RangeGrowthMax"/>) describe client-bar visual
+        /// growth — distinct from <c>CastRangeGrowthDuration</c>/<c>CastRangeGrowthMax</c>
+        /// which describe actual cast-side range growth.
+        /// </summary>
+        public SpellTargeterData[] SpellTargeters { get; set; } = System.Array.Empty<SpellTargeterData>();
+        /// <summary>
+        /// Marker for the "channel-lock" charge-spell subcategory (Vel'Koz R, Sion R).
+        /// Distinct from the "tap-charge" subcategory (Varus Q, Xerath Q, Sion Q):
+        /// • Tap-charge: button release = fire (commit spell payload)
+        /// • Channel-lock: button release = interrupt (cancel channel, no payload)
+        /// <para>The 4.17 client itself doesn't read this field (no <c>ReadCFG_*</c> call,
+        /// no <c>kSpellParam</c> entry). Riot uses it semantically as a category marker
+        /// only — wire-side recast-blocking is implemented via <c>CancelChargeOnRecastTime</c>.
+        /// We parse it server-side to route <see cref="Spell.UpdateCharge"/> correctly
+        /// between the two subcategories.</para>
+        /// </summary>
+        public bool PreventChargingSecondCast { get; set; }
         //OrientRadiusTextureFromPlayer
         //OrientRangeIndicatorToCursor
         //OrientRangeIndicatorToFacing
@@ -479,15 +504,25 @@ namespace LeagueSandbox.GameServer.Content
             MissileMinTravelTime = file.GetFloat("SpellData", "MissileMinTravelTime", MissileMinTravelTime);
             MissilePerceptionBubbleRadius = file.GetFloat("SpellData", "MissilePerceptionBubbleRadius", MissilePerceptionBubbleRadius);
             MissilePerceptionBubbleRevealsStealth = file.GetBool("SpellData", "MissilePerceptionBubbleRevealsStealth", MissilePerceptionBubbleRevealsStealth);
-            //MissileSpeed = file.GetFloat("SpellData", "MissileSpeed", MissileSpeed);
             MissileTargetHeightAugment = file.GetFloat("SpellData", "MissileTargetHeightAugment", MissileTargetHeightAugment);
             MissileUnblockable = file.GetBool("SpellData", "MissileUnblockable", MissileUnblockable);
             NoWinddownIfCancelled = file.GetBool("SpellData", "NoWinddownIfCancelled", NoWinddownIfCancelled);
-            //NumSpellTargeters
+
+            NumSpellTargeters = file.GetInt("SpellData", "NumSpellTargeters", NumSpellTargeters);
+            if (NumSpellTargeters > 0)
+            {
+                SpellTargeters = new SpellTargeterData[NumSpellTargeters];
+                for (int i = 0; i < NumSpellTargeters; i++)
+                {
+                    SpellTargeters[i] = new SpellTargeterData();
+                    SpellTargeters[i].Load(file, $"SpellTargeter{i + 1}");
+                }
+            }
             //OrientRadiusTextureFromPlayer
             //OrientRangeIndicatorToCursor
             //OrientRangeIndicatorToFacing
             OverrideCastTime = file.GetFloat("SpellData", "OverrideCastTime", OverrideCastTime);
+            PreventChargingSecondCast = file.GetBool("SpellData", "PreventChargingSecondCast", PreventChargingSecondCast);
             //public Vector3 ParticleStartOffset { get; set; } = new Vector3(0, 0, 0);
             var particleStartOffset = file.GetFloatArray("SpellData", "ParticleStartOffset", new[] { ParticleStartOffset.X, ParticleStartOffset.Y, ParticleStartOffset.Z });
             ParticleStartOffset = new Vector3(particleStartOffset[0], particleStartOffset[1], particleStartOffset[2]);

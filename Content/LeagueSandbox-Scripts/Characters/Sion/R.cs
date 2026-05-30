@@ -19,7 +19,8 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            ChargeDuration = 8.0f,
+            // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
+            // SionR.json ChannelDuration = 8.0 (SpellTargeter blocks have no RangeGrowthDuration).
             TriggersSpellCasts = true,
             AutoFaceDirection = true
         };

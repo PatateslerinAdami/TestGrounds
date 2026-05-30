@@ -791,11 +791,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, keywordNetIDOverride);
         }
 
         /// <summary>
@@ -907,6 +908,19 @@ namespace LeagueSandbox.GameServer.API
         {
             var marker = new Marker(_game, position, visibilitySize, netNodeId: 0x40, team: team);
             _game.ObjectManager.AddObject(marker);
+            // Client's obj_AI_Marker::Create hardcodes the team to TEAM_NEUTRAL. To make
+            // FX particles bound to the marker render correctly, broadcast the actual team
+            // immediately after the spawn — Riot does this (a6db3774 replay, t=510997
+            // sequence: SpawnMarkerS2C → S2C_UnitChangeTeam → S2C_MoveMarker → FX_Create_Group).
+            if (team != TeamId.TEAM_NEUTRAL)
+            {
+                _game.PacketNotifier.NotifySetTeam((GameObject)marker);
+            }
+            // OnEnterVisibilityClient + OnEnterLocalVisibilityClient initialize the marker
+            // as a fully-formed obj_AI_Base on the client. Without these the marker is
+            // half-spawned and FX particles using BindNetID=marker fail to render.
+            // Replay-verified Riot pattern.
+            _game.PacketNotifier.NotifyMarkerVisibilityInit(marker);
             return marker;
         }
 

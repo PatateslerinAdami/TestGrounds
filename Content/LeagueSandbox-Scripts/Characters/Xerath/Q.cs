@@ -37,7 +37,11 @@ namespace Spells
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            ChargeDuration = 1.5f,
+            // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
+            // XerathArcanopulseChargeUp.json SpellTargeter1.RangeGrowthDuration = 1.5
+            // (also matches CastRangeGrowthDuration = 1.5). ChargeMaxHoldDuration = 3s is
+            // hardcoded — JSON ChannelDuration is 3.0 but that's the same as our hold cap,
+            // so we keep the explicit script value for clarity.
             ChargeMaxHoldDuration = 3f,
             TriggersSpellCasts = false,
             IsDamagingSpell = true,

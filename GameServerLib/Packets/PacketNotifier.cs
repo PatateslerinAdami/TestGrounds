@@ -296,22 +296,29 @@ namespace PacketDefinitions420
             {
                 targetNetID = particle.TargetObject.NetId;
             }
-            if (particle.TargetNetIDOverride != 0)
-            {
-                targetNetID = particle.TargetNetIDOverride;
-            }
 
             var position = particle.GetPosition3D();
 
+            // ownerPos semantic (S1 EffectManagerHelper_Client + S4 Ghidra Effect.cpp:1377):
+            // when targetObj exists AND is invisible to the recipient, the client calls
+            // targetObj.SetPosition(ownerPos). So ownerPos must be the world position of
+            // the bound/target entity, NOT the caster. Priority:
+            //   1. targetObj.Position — the entity whose position might need force-syncing
+            //   2. bindObj.Position — emitter parent's position when no target
+            //   3. caster.Position — fallback for un-attached FX
+            // Riot replay-faithful for Vel'Koz R _beam: opos = marker pos (targetObj).
             var ownerPos = position;
-            if (particle.Caster != null)
+            if (particle.TargetObject != null)
+            {
+                ownerPos = particle.TargetObject.GetPosition3D();
+            }
+            else if (particle.BindObject != null)
+            {
+                ownerPos = particle.BindObject.GetPosition3D();
+            }
+            else if (particle.Caster != null)
             {
                 ownerPos = particle.Caster.GetPosition3D();
-            }
-            // Opt-in script override (e.g. Vel'Koz R beam_end uses Owner = marker pos, not caster pos).
-            if (particle.OwnerPositionOverride.HasValue)
-            {
-                ownerPos = particle.OwnerPositionOverride.Value;
             }
 
             var fxPacket = new FX_Create_Group();
@@ -4038,6 +4045,55 @@ namespace PacketDefinitions420
                 TeamID = (uint)unit.Team // TODO: Verify if TeamID is actually supposed to be a uint
             };
             _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Generic GameObject overload — primarily for <see cref="Marker"/> which isn't an
+        /// AttackableUnit but still needs its team broadcast. Riot sends this packet right
+        /// after <c>SpawnMarkerS2C</c> because the client's <c>obj_AI_Marker::Create</c>
+        /// hard-codes the team to TEAM_NEUTRAL; without this fix-up, FX particles bound to
+        /// the marker fail to render because of a team-mismatch in the client's bind logic.
+        /// Verified via replay <c>a6db377480ec58191544ec468219dbf6.lrf</c> t=510997.
+        /// </summary>
+        public void NotifySetTeam(GameObject obj)
+        {
+            var p = new S2C_UnitChangeTeam
+            {
+                SenderNetID = obj.NetId,
+                UnitNetID = obj.NetId,
+                TeamID = (uint)obj.Team
+            };
+            _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
+        }
+
+
+        /// <summary>
+        /// Sends the visibility-initialization packets that <c>obj_AI_Marker</c> needs to
+        /// be a valid FX bind target on the client. Without these, particles bound to a
+        /// marker via <c>BindNetID</c> fail to render (the marker's AttackableUnit state
+        /// stays uninitialized so <c>AiBaseAttachment</c> can't query it correctly).
+        /// Replay-verified (a6db3774, t=511030): Riot sends OnEnterVisibilityClient with
+        /// LookAtPosition=(1,0,0) and OnEnterLocalVisibilityClient with MaxHealth=Health=1.0.
+        /// </summary>
+        public void NotifyMarkerVisibilityInit(Marker marker)
+        {
+            var enterVis = new OnEnterVisibilityClient
+            {
+                SenderNetID = marker.NetId,
+                LookAtNetID = 0,
+                LookAtType = 0,
+                LookAtPosition = new Vector3(1.0f, 0f, 0f),
+                IsHero = false,
+                MovementData = new MovementDataNone(),
+            };
+            var enterLocal = new OnEnterLocalVisibilityClient
+            {
+                SenderNetID = marker.NetId,
+                MaxHealth = 1.0f,
+                Health = 1.0f,
+            };
+            _packetHandlerManager.BroadcastPacket(enterVis.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacket(enterLocal.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
