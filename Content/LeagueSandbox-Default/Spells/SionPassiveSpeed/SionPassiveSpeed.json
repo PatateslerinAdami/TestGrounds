@@ -114,11 +114,7 @@
             "MissileBoneName": "R_hand",
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileSpeed": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "friend",
             "Sound_CastName": "sion_death_caress_cast.wav",

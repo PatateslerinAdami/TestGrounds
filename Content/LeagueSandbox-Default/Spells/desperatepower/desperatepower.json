@@ -93,11 +93,7 @@
             "MissileBoneName": "spine_b",
             "MissileEffect": "ManaLeach_mis.troy",
             "MissileSpeed": 1200.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

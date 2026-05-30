@@ -143,11 +143,7 @@
             "OverrideCastTime": 0.4839000105857849,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

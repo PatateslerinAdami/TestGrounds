@@ -165,11 +165,7 @@
             "OverrideCastTime": 0.24500000476837158,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "friend",

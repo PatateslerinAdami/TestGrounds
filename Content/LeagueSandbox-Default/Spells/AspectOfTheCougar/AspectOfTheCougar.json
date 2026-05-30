@@ -125,11 +125,7 @@
             "MissileEffect": "TeemoBasicAttack_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 943.7999877929688,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SecondaryInventoryIcon": "Nidalee_R2.dds",
             "SelectionPreference": "none",

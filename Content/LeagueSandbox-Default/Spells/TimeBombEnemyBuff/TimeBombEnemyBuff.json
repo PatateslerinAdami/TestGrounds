@@ -99,11 +99,7 @@
             "MissileEffect": "Disintegrate_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 1100.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "ability_disintegrate_cast.wav",

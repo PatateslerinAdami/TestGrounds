@@ -86,11 +86,7 @@
             "MissileBoneName": "R_Hand",
             "MissileEffect": "GlobalFireball_mis.troy",
             "MissileSpeed": 500.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",

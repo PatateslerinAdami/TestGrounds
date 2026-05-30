@@ -84,11 +84,7 @@
             "MissileBoneName": "Buffbone_Cstm_Attack",
             "MissileEffect": "SRU_RedbuffSub_BA1_Projectile.troy",
             "MissileSpeed": 750.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",
             "Sound_HitName": "none.wav",

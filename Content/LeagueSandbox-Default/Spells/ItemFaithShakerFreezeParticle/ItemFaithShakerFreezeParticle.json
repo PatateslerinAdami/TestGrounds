@@ -194,11 +194,7 @@
             "OverrideCastTime": 0,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "Sion_Cryptic_Gaze.wav",

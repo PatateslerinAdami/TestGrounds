@@ -194,11 +194,7 @@
             "OverrideCastTime": 0.25,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "friend",
             "Sound_CastName": "Annie_Incinerate_3.wav",

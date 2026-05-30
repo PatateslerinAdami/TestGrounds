@@ -97,11 +97,7 @@
             "MissileBoneName": "root",
             "MissileEffect": "Veigar_Base_BA_mis.troy",
             "MissileSpeed": 1100.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

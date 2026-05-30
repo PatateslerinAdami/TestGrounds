@@ -215,11 +215,7 @@
             "MissileSpeed": 0,
             "MissileTargetHeightAugment": 100.0,
             "OverrideCastTime": 0.3666999936103821,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

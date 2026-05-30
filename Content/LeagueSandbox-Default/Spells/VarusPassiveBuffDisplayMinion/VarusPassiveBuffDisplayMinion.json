@@ -98,11 +98,7 @@
             "MissileEffect": "deathFireGrasp_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 1600.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "foe",

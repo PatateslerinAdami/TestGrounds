@@ -97,11 +97,7 @@
             "MissileBoneName": "L_hand",
             "MissileEffect": "ChemicalManBasicAttack_mis.troy",
             "MissileSpeed": 700.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

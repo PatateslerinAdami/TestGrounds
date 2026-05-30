@@ -94,11 +94,7 @@
             "MissileBoneName": "R_hand",
             "MissileEffect": "AnnieBasicAttack_mis.troy",
             "MissileSpeed": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "Annie_Incinerate_3.wav",

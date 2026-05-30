@@ -95,11 +95,7 @@
             "MissileSpeed": 20.0,
             "NumSpellTargeters": 3,
             "OverrideCastTime": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "friend",

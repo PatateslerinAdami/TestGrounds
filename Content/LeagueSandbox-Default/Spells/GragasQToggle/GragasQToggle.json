@@ -102,11 +102,7 @@
             "MissileEffect": "cryo_FlashFrost_mis.troy",
             "MissileGravity": 0,
             "MissileSpeed": 800.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

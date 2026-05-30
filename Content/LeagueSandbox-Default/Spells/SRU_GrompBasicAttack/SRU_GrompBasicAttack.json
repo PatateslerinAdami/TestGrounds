@@ -87,11 +87,7 @@
             "MissileEffect": "SRU_Gromp_BA1_mis.troy",
             "MissileGravity": 15,
             "MissileSpeed": 1800,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "none.wav",

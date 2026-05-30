@@ -94,11 +94,7 @@
             "MissileBoneName": "weapon",
             "MissileEffect": "Heimerdinger_Base_Q_Standard_Mis.troy",
             "MissileSpeed": 1600.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

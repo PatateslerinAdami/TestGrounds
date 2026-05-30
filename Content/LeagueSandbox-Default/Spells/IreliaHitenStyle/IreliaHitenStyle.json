@@ -133,11 +133,7 @@
             "MissileSpeed": 347.79998779296875,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "none",
             "Sound_CastName": "tristana_draw_bead_on_2.wav",

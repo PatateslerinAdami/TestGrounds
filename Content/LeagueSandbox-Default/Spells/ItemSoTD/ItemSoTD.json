@@ -92,11 +92,7 @@
             "MissileBoneName": "",
             "MissileEffect": "",
             "MissileSpeed": 1200.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "",

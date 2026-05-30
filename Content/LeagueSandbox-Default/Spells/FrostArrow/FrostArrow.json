@@ -98,11 +98,7 @@
             "MissileBoneName": "R_hand",
             "MissileEffect": "Ashe_Base_Q_mis.troy",
             "MissileSpeed": 2000.0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "RangeIndicatorTextureName": "DefaultRangeIndicator.dds",
             "SelectionPreference": "none",

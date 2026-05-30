@@ -160,11 +160,7 @@
             "OverrideCastTime": 0.33329999446868896,
             "OverrideForceSpellAnimation": 0,
             "OverrideForceSpellCancel": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                200.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 200.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "SpellRevealsChampion": 0,

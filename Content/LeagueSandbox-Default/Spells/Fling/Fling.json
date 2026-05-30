@@ -215,11 +215,7 @@
             "MissileTargetHeightAugment": 100.0,
             "NumSpellTargeters": 2,
             "OverrideCastTime": 0.25,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "foe",
             "Sound_CastName": "Minotaur_Headbutt.wav",

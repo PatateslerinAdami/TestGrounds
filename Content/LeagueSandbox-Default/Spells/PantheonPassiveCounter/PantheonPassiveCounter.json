@@ -103,11 +103,7 @@
             "MissileEffect": "",
             "MissileGravity": 0,
             "MissileSpeed": 0,
-            "ParticleStartOffset": [
-                0.0,
-                0.0,
-                0.0
-            ],
+            "ParticleStartOffset": "0.0000 0.0000 0.0000",
             "PointEffectName": "",
             "SelectionPreference": "friend",
             "Sound_CastName": "",
