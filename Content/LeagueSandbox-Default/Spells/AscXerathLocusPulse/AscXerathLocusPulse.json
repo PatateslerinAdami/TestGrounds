@@ -8,8 +8,8 @@
     "Values": {
         "SpellData": {
             "CantCancelWhileWindingUp": 1,
-            "CastFrame": 0.01,
-            "CastRange": "25000",
+            "CastFrame": 0.009999999776482582,
+            "CastRange": 25000,
             "CastType": 1,
             "Cooldown": 0,
             "Cooldown1": 0,
@@ -32,11 +32,11 @@
             "ManaCost5": 0,
             "MissileBoneName": "C_BUFFBONE_GLB_CENTER_LOC",
             "MissileEffect": "Xerath_Base_R_mis.troy",
-            "MissileFixedTravelTime": 0.6,
-            "MissileGravity": "140.0000",
-            "MissileMinTravelTime": 0.6,
+            "MissileFixedTravelTime": 0.6000000000000001,
+            "MissileGravity": 140.0,
+            "MissileMinTravelTime": 0.6000000000000001,
             "MissileUnblockable": 1,
-            "OverrideCastTime": 0.01,
+            "OverrideCastTime": 0.009999999776482582,
             "TargettingType": 2,
             "UseAnimatorFramerate": 1
         }

@@ -11,7 +11,7 @@
             "CantCancelWhileWindingUp": 1,
             "CastFrame": 15,
             "CastRange": 625,
-            "CastType": "0",
+            "CastType": 0,
             "Cooldown": 0,
             "Cooldown1": 0,
             "Cooldown2": 0,

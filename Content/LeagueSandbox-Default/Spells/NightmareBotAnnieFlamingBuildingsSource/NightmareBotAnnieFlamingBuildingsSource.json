@@ -8,7 +8,7 @@
     "Values": {
         "SpellData": {
             "AlternateName": "NightmareBotAnnieFlamingBuildingsSource",
-            "CastType": "0",
+            "CastType": 0,
             "Description": "game_spell_description_NightmareBotAnnieFlamingBuildings",
             "DisplayName": "game_spell_displayname_NightmareBotAnnieFlamingBuildings",
             "Flags": 329748,

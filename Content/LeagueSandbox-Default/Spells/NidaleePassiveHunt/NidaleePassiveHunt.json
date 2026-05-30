@@ -10,14 +10,14 @@
             "DynamicTooltip": "game_buff_tooltip_NidaleePassiveHunt"
         },
         "SpellData": {
-            "CastRange": "5900.0000",
+            "CastRange": 5900.0,
             "Description": "game_spell_description_NidaleePassiveHunt",
             "DisplayName": "game_spell_displayname_NidaleePassiveHunt",
             "DynamicExtended": "game_spell_levelup_NidaleePassiveHunt",
             "DynamicTooltip": "game_spell_tooltip_NidaleePassiveHunt",
             "InventoryIcon": "Nidalee_Passive.dds",
             "MinimapIconDisplayFlag": 1,
-            "MinimapIconRotation": "0",
+            "MinimapIconRotation": 0,
             "UseMinimapTargeting": 1,
             "Version": 1
         }

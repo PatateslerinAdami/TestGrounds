@@ -16,9 +16,8 @@ namespace Buffs;
 
 internal class IreliaHitenStyleCharged : IBuffGameScript {
     private ObjAIBase _irelia;
+    private Spell _mainSpell;
     private Particle  _activeGlow, _activate;
-    private float     _dmg;
-    private float     _heal;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.DAMAGE,
@@ -30,7 +29,7 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _irelia = ownerSpell.CastInfo.Owner;
-
+        _mainSpell = ownerSpell;
         unit.SetAnimStates(new Dictionary<string, string> {
             { "attack1", "Attack1c" },
             { "attack2", "Attack2c" },
@@ -61,15 +60,11 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
     }
 
     private void OnHit(DamageData data) {
-        if (data.Attacker != _irelia || !data.IsAutoAttack || data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK)
-            return;
+        var dmg  = 15f + 15f * (_mainSpell.CastInfo.SpellLevel - 1);
+        var heal = (3f  + 3f  * (_mainSpell.CastInfo.SpellLevel - 1)) * 2f;
 
-        var wSpell = _irelia.GetSpell("IreliaHitenStyle").CastInfo.SpellLevel;
-        _dmg  = 15 + 15 * (wSpell - 1);
-        _heal = (3  + 3  * (wSpell - 1)) * 2;
-
-        _irelia.TakeHeal(_irelia, _heal, HealType.SelfHeal);
-        data.Target.TakeDamage(_irelia, _dmg, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_PROC,
+        _irelia.TakeHeal(_irelia, heal, HealType.SelfHeal);
+        data.Target.TakeDamage(_irelia, dmg, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_PROC,
                                DamageResultType.RESULT_NORMAL);
     }
 }

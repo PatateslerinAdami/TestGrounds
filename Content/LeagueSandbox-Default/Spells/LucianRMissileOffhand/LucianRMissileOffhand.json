@@ -8,10 +8,10 @@
     "Values": {
         "SpellData": {
             "AlternateName": "LucianR",
-            "AlwaysSnapFacing": "0",
+            "AlwaysSnapFacing": 0,
             "AnimationName": "",
-            "CastFrame": "0",
-            "CastRange": "1400.0000",
+            "CastFrame": 0,
+            "CastRange": 1400.0,
             "CastType": 3,
             "Cooldown": 0,
             "Cooldown1": 0,
@@ -26,8 +26,8 @@
             "DynamicTooltip": "game_spell_tooltip_LucianR",
             "Flags": 115716,
             "InventoryIcon": "Lucian_R.dds",
-            "LineMissileTargetHeightAugment": "-50",
-            "LineWidth": "110.0000",
+            "LineMissileTargetHeightAugment": -50,
+            "LineWidth": 110.0,
             "ManaCost1": 0,
             "ManaCost2": 0,
             "ManaCost3": 0,
@@ -35,11 +35,11 @@
             "ManaCost5": 0,
             "MissileBoneName": "L_Pinky2",
             "MissileEffect": "Lucian_R_mis.troy",
-            "MissileSpeed": "2800.0000",
-            "OverrideCastTime": "0",
-            "SpellRevealsChampion": "1.0000",
+            "MissileSpeed": 2800.0,
+            "OverrideCastTime": 0,
+            "SpellRevealsChampion": 1.0,
             "TargettingType": 7,
-            "UseAnimatorFramerate": "0",
+            "UseAnimatorFramerate": 0,
             "Version": 1
         }
     }

@@ -7,8 +7,8 @@
     },
     "Values": {
         "SpellData": {
-            "CastType": "0",
-            "Flags": "34820",
+            "CastType": 0,
+            "Flags": 34820,
             "TargettingType": 4,
             "TextFlags": "Instacast | AffectFriends | AffectMinions",
             "Version": 1

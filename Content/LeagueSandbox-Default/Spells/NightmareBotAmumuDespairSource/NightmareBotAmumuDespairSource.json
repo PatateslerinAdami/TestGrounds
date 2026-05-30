@@ -8,7 +8,7 @@
     "Values": {
         "SpellData": {
             "AlternateName": "NightmareBotAmumuDespairSource",
-            "CastType": "0",
+            "CastType": 0,
             "Description": "game_spell_description_NightmareBotAmumuDespair",
             "DisplayName": "game_spell_displayname_NightmareBotAmumuDespair",
             "Flags": 329748,

@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using GameServerLib.GameObjects.AttackableUnits;
@@ -14,9 +13,6 @@ using GameServerLib.GameObjects.AttackableUnits;
 namespace Spells;
 //Purple 3rd Lane Turret
 public class ChaosTurretWormBasicAttack : ISpellScript {
-
-    private ObjAIBase      _turret;
-
     public SpellScriptMetadata ScriptMetadata => new() {
         IsDamagingSpell    = true,
         TriggersSpellCasts = true,
@@ -24,12 +20,4 @@ public class ChaosTurretWormBasicAttack : ISpellScript {
             Type = MissileType.Target
         },
     };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _turret = owner;
-        ApiEventManager.OnHitUnit.AddListener(this, _turret, OnHit);
-    }
-
-    private void OnHit(DamageData data){
-    }
 }

@@ -9,7 +9,7 @@
         "SpellData": {
             "AnimationName": "",
             "CantCancelWhileWindingUp": 1,
-            "CastFrame": "0",
+            "CastFrame": 0,
             "CastRange": 625,
             "CastType": 1,
             "Cooldown": 0,
@@ -29,9 +29,9 @@
             "ManaCost3": 0,
             "ManaCost4": 0,
             "ManaCost5": 0,
-            "OverrideCastTime": "0",
+            "OverrideCastTime": 0,
             "TargettingType": 1,
-            "UseAnimatorFramerate": "0"
+            "UseAnimatorFramerate": 0
         }
     }
 }
