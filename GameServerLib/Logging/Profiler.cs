@@ -3,18 +3,22 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Threading;
+using Google.Protobuf;
+using Perfetto.Protos;
+// Alias to disambiguate from System.Diagnostics.Trace which is in scope
+// via System.Diagnostics.Stopwatch.
+using PerfettoTrace = Perfetto.Protos.Trace;
 
 namespace LeagueSandbox.GameServer.Logging
 {
     /// <summary>
-    /// CPU profiler that records named scopes into a Perfetto-compatible
-    /// Chrome Trace Event JSON file. Drag the resulting profile_*.json into
+    /// CPU profiler that records named scopes into a Perfetto-native protobuf
+    /// trace file. Drag the resulting profile_*.perfetto-trace into
     /// https://ui.perfetto.dev to view a flame chart of game-loop work.
     ///
     /// Disabled by default. When disabled, Scope() returns a default struct
-    /// whose Dispose() is a no-op — cost reduces to one boolean check per
+    /// whose Dispose() is a no-op; cost reduces to one boolean check per
     /// scope, with no allocation.
     ///
     /// Usage:
@@ -38,7 +42,7 @@ namespace LeagueSandbox.GameServer.Logging
         {
             public int ThreadId;
             public string ThreadName = "";
-            // Reasonable starting capacity — a 30 Hz game with ~100 scopes/tick
+            // Reasonable starting capacity. A 30 Hz game with ~100 scopes/tick
             // produces ~3000 events/sec, so this covers ~1.3 seconds before resizing.
             public List<TraceEvent> Events = new(4096);
         }
@@ -53,9 +57,9 @@ namespace LeagueSandbox.GameServer.Logging
 
         /// <summary>
         /// Initializes the profiler. Safe to call when <paramref name="enabled"/>
-        /// is false — does no I/O and leaves the profiler dormant. When enabled,
+        /// is false; does no I/O and leaves the profiler dormant. When enabled,
         /// creates <paramref name="logDir"/> if missing and reserves an output
-        /// path of the form profile_YYYY-MM-DD_HH-MM-SS.json.
+        /// path of the form profile_YYYY-MM-DD_HH-MM-SS.perfetto-trace.
         /// </summary>
         public static void Init(string logDir, bool enabled)
         {
@@ -68,7 +72,7 @@ namespace LeagueSandbox.GameServer.Logging
             Directory.CreateDirectory(logDir);
             _pid = Environment.ProcessId;
             var ts = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            _outputPath = Path.Combine(logDir, $"profile_{ts}.json");
+            _outputPath = Path.Combine(logDir, $"profile_{ts}.perfetto-trace");
             _startTimestamp = Stopwatch.GetTimestamp();
             Enabled = true;
         }
@@ -111,7 +115,7 @@ namespace LeagueSandbox.GameServer.Logging
             return buf;
         }
 
-        // Called from Scope.Dispose. Nested struct has access to private members.
+        // Called from ScopeHandle.Dispose. Nested struct has access to private members.
         private static void Record(string name, string category, long startMicros, long endMicros)
         {
             GetLocalBuffer().Events.Add(new TraceEvent
@@ -123,72 +127,82 @@ namespace LeagueSandbox.GameServer.Logging
             });
         }
 
+        // Build the Perfetto Trace message in memory, then serialize it to the
+        // output file in one shot. Each thread becomes a TrackDescriptor; each
+        // scope becomes a SLICE_BEGIN + SLICE_END pair on its thread's track.
+        // Perfetto requires a unique trusted_packet_sequence_id per producer;
+        // we use the thread id so the sequences never collide.
         private static void Flush()
         {
             if (_outputPath == null) return;
             try
             {
-                using var sw = new StreamWriter(_outputPath);
-                sw.Write("{\"traceEvents\":[");
-                bool first = true;
+                var trace = new PerfettoTrace();
+
                 foreach (var kvp in _buffers)
                 {
                     var buf = kvp.Value;
-                    if (!first) sw.Write(",");
-                    first = false;
-                    // Metadata event so Perfetto labels the thread row.
-                    sw.Write("{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":");
-                    sw.Write(_pid);
-                    sw.Write(",\"tid\":");
-                    sw.Write(buf.ThreadId);
-                    sw.Write(",\"args\":{\"name\":");
-                    WriteJsonString(sw, buf.ThreadName);
-                    sw.Write("}}");
+                    uint sequenceId = (uint)buf.ThreadId;
+                    ulong trackUuid = (ulong)(uint)buf.ThreadId;
+
+                    // Declare the thread track up front so Perfetto labels the row.
+                    trace.Packet.Add(new TracePacket
+                    {
+                        TrustedPacketSequenceId = sequenceId,
+                        TrackDescriptor = new TrackDescriptor
+                        {
+                            Uuid = trackUuid,
+                            Name = buf.ThreadName,
+                            Thread = new ThreadDescriptor
+                            {
+                                Pid = _pid,
+                                Tid = buf.ThreadId,
+                                ThreadName = buf.ThreadName,
+                            },
+                        },
+                    });
 
                     foreach (var ev in buf.Events)
                     {
-                        sw.Write(",{\"name\":");
-                        WriteJsonString(sw, ev.Name);
-                        sw.Write(",\"cat\":");
-                        WriteJsonString(sw, ev.Category);
-                        sw.Write(",\"ph\":\"X\",\"ts\":");
-                        sw.Write(ev.StartMicros);
-                        sw.Write(",\"dur\":");
-                        sw.Write(ev.DurMicros);
-                        sw.Write(",\"pid\":");
-                        sw.Write(_pid);
-                        sw.Write(",\"tid\":");
-                        sw.Write(buf.ThreadId);
-                        sw.Write("}");
+                        // TracePacket.timestamp defaults to nanoseconds; we store
+                        // microseconds, so multiply on the way out.
+                        ulong startNs = (ulong)(ev.StartMicros * 1000);
+                        ulong endNs   = (ulong)((ev.StartMicros + ev.DurMicros) * 1000);
+
+                        var beginEvent = new TrackEvent
+                        {
+                            Type = TrackEvent.Types.Type.SliceBegin,
+                            Name = ev.Name,
+                            TrackUuid = trackUuid,
+                        };
+                        beginEvent.Categories.Add(ev.Category);
+
+                        trace.Packet.Add(new TracePacket
+                        {
+                            Timestamp = startNs,
+                            TrustedPacketSequenceId = sequenceId,
+                            TrackEvent = beginEvent,
+                        });
+                        trace.Packet.Add(new TracePacket
+                        {
+                            Timestamp = endNs,
+                            TrustedPacketSequenceId = sequenceId,
+                            TrackEvent = new TrackEvent
+                            {
+                                Type = TrackEvent.Types.Type.SliceEnd,
+                                TrackUuid = trackUuid,
+                            },
+                        });
                     }
                 }
-                sw.Write("]}");
+
+                using var fs = File.Create(_outputPath);
+                trace.WriteTo(fs);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Profiler: failed to write trace to {_outputPath}: {ex.Message}");
             }
-        }
-
-        private static void WriteJsonString(StreamWriter sw, string s)
-        {
-            sw.Write('"');
-            foreach (var c in s)
-            {
-                switch (c)
-                {
-                    case '"': sw.Write("\\\""); break;
-                    case '\\': sw.Write("\\\\"); break;
-                    case '\n': sw.Write("\\n"); break;
-                    case '\r': sw.Write("\\r"); break;
-                    case '\t': sw.Write("\\t"); break;
-                    default:
-                        if (c < 0x20) sw.Write($"\\u{(int)c:x4}");
-                        else sw.Write(c);
-                        break;
-                }
-            }
-            sw.Write('"');
         }
 
         public readonly struct ScopeHandle : IDisposable

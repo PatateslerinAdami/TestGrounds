@@ -16,9 +16,9 @@ It is off by default. When on, it adds an `if (enabled)` branch per scope (effec
 
 2. Launch the server and play (or run bots) for as long as you want to profile. Tracing starts as soon as the game initializes, and every tick is recorded.
 
-3. Exit cleanly (let the game finish or use the normal shutdown path; do not kill -9). On shutdown, the profiler flushes a file named `logs/profile_<yyyy-MM-dd_HH-mm-ss>.json` relative to the binary's working directory.
+3. Exit cleanly (let the game finish or use the normal shutdown path; do not kill -9). On shutdown, the profiler flushes a file named `logs/profile_<yyyy-MM-dd_HH-mm-ss>.perfetto-trace` relative to the binary's working directory.
 
-4. Open [https://ui.perfetto.dev](https://ui.perfetto.dev), click "Open trace file", and pick the JSON. The trace renders as horizontal thread tracks with nested slices stacked vertically.
+4. Open [https://ui.perfetto.dev](https://ui.perfetto.dev), click "Open trace file", and pick the `.perfetto-trace`. The trace renders as horizontal thread tracks with nested slices stacked vertically.
 
 If the server crashes mid-game, the trace is lost; the profiler buffers everything in memory and only writes at shutdown. See "Limitations" at the bottom.
 
@@ -179,6 +179,48 @@ If your script only ever interacts with the engine through `ApiEventManager` lis
 
 For the technically curious: the listener machinery in [GameServerLib/API/ApiEventManager.cs](GameServerLib/API/ApiEventManager.cs) reflects on the callback delegate when you call `AddListener`, derives a friendly name (pattern-matching on the dispatcher's source: `Spell -> spell:Owner/Name`, `Buff -> buff:Name`, anything else -> `script:Class`), caches it on the listener, and wraps the call site with `Profiler.Scope` so there is no per-fire reflection cost.
 
+### Drilling inside a single script
+
+The auto-profiling tells you `script:EzrealBot.OnUpdate` is taking, say, 8 ms per tick. Useful, but it doesn't tell you which part of `OnUpdate` is slow. To see inside, add scopes around the logical phases of your method.
+
+Concrete example from [EzrealBot.cs](Content/LeagueSandbox-Scripts/AIScripts/Champion AI/EzrealBot.cs):
+
+```csharp
+using LeagueSandbox.GameServer.Logging;   // add this at the top of the file
+
+public void OnUpdate(float diff)
+{
+    if (EzrealInstance == null) return;
+    _gameTime += diff / 1000f;
+    if (_gameTime - _lastUpdateTime < OnUpdateInterval) return;
+    _lastUpdateTime = _gameTime;
+
+    using (Profiler.Scope("EzrealBot.LaneSelection", "scripts"))
+    {
+        if (!_hasSelectedLane && ShouldSelectLanes()) SelectLane();
+        if (_isRecallingForLane) HandleRecallForLane();
+    }
+
+    using (Profiler.Scope("EzrealBot.Movement", "scripts"))
+    {
+        // ... movement logic ...
+    }
+
+    using (Profiler.Scope("EzrealBot.Combat", "scripts"))
+    {
+        // ... combat logic ...
+    }
+}
+```
+
+In the trace, `script:EzrealBot.OnUpdate` now has those three child slices nested inside it. You can tell immediately whether the time is going to lane selection, movement, or combat; if movement is the worst offender, you go back and add more scopes inside it to subdivide further.
+
+A few practical notes:
+
+- Prefix the inner scope names with the script's class name (`EzrealBot.LaneSelection`, not bare `LaneSelection`). It keeps related slices easy to scan for and easy to filter in Perfetto's search.
+- Scripts are compiled at runtime by [CSharpScriptEngine](GameServerLib/Scripting/CSharp/CSharpScriptEngine.cs). If you have hot reload enabled (see `Game.EnableHotReload`), you can add scopes and save the file; the changes appear on the next captured trace without a server restart.
+- You can wrap as little as one expensive function call or as much as a whole block. The cost of adding one scope is microseconds when the profiler is on and zero when it's off, so err on the side of more scopes when you're actively investigating.
+
 ### When to add a scope (and when not to)
 
 Add one when:
@@ -207,7 +249,7 @@ All knobs live in `gameInfo` inside `GameInfo.json` (and the WithBots variant). 
 
 ### `PROFILER_ENABLED` (default: `false`)
 
-Master switch. When `false`, `Profiler.Init` does no I/O, no thread buffers exist, and every `Profiler.Scope` call short-circuits to a no-op struct. There is no measurable cost to leaving the calls in production code. When `true`, every `Profiler.Scope` records an event into a per-thread in-memory buffer; on shutdown the buffers are serialized to `logs/profile_<timestamp>.json`.
+Master switch. When `false`, `Profiler.Init` does no I/O, no thread buffers exist, and every `Profiler.Scope` call short-circuits to a no-op struct. There is no measurable cost to leaving the calls in production code. When `true`, every `Profiler.Scope` records an event into a per-thread in-memory buffer; on shutdown the buffers are serialized to `logs/profile_<timestamp>.perfetto-trace`.
 
 ### `BASESPELL_EMPTY` (default: `true`)
 
@@ -251,15 +293,16 @@ Thread names come from `Thread.CurrentThread.Name`, captured on first use of the
 
 ### On-disk format
 
-The output is the [Chrome Trace Event Format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview) (a JSON file with a top-level `traceEvents` array). Each scope produces a single "complete" event:
+The output is a binary [Perfetto trace](https://perfetto.dev/docs/reference/trace-packet-proto) (the protobuf format Perfetto's tooling treats as native). The schema lives in [GameServerLib/Logging/perfetto_trace.proto](GameServerLib/Logging/perfetto_trace.proto), a verbatim copy of the upstream `perfetto_trace.proto` (the fused single-file schema). Grpc.Tools compiles it at build time, emitting C# classes under the `Perfetto.Protos` namespace.
 
-```json
-{"name":"Game.Update","cat":"game","ph":"X","ts":1234567,"dur":520,"pid":1,"tid":42}
-```
+The profiler uses a small slice of the schema:
 
-`ph: "X"` is the "complete event" phase, which carries both start (`ts`) and duration (`dur`). Each thread also gets a `thread_name` metadata event (`ph: "M"`) so Perfetto labels the row.
+- One `TrackDescriptor` `TracePacket` per thread, wrapping a `ThreadDescriptor` with pid, tid, and thread name; this declares the track Perfetto draws as a row.
+- Per scope, two `TrackEvent` `TracePacket`s on that thread's track: one with `Type.SliceBegin` at the start timestamp (and the slice name + category), and one with `Type.SliceEnd` at the end timestamp. Perfetto pairs them by track, in order, to form a single nested slice.
 
-JSON was picked over Perfetto's native protobuf format because the writer is ~50 lines, no schema dependency, and trivially debuggable. For short profiling windows (a minute or two), file sizes stay in the low MB. If you ever need to leave the profiler on for full matches you may want to switch to the protobuf format; the `Profiler.Scope` API would not need to change, only the flush path.
+Timestamps are nanoseconds (Perfetto's default). Internally we record microseconds (cheap on the hot path) and multiply by 1000 on the way out.
+
+JSON was the earlier format because it was simpler to bootstrap (~50 lines of code, no schema dependency). The switch to protobuf was driven by file size; a 1 GB JSON trace is roughly a 100-200 MB `.perfetto-trace` for the same content, and Perfetto loads it faster too. The `Profiler.Scope` API is unchanged.
 
 ### Lifecycle
 
@@ -303,4 +346,4 @@ When you add a major new system, instrument its top-level tick entry point at mi
 - **No cross-thread causality.** Chrome JSON supports "flow" events for connecting work across threads, but the writer here doesn't emit them. Net thread -> game thread handoffs are visible by timestamp but not visually connected.
 - **No CPU sampling.** This is an instrumentation profiler, not a sampling profiler. Gaps inside instrumented parents are blind spots; you fix that by adding more scopes. For wall-clock micro-optimization at the assembly level, use `dotnet-trace` or `perf` instead.
 - **No thread CPU time.** Every duration is wall-clock. If a thread sleeps inside an instrumented scope, the scope shows the full elapsed time, not the CPU time. Mostly fine for game-loop work, but worth knowing when you see a multi-millisecond slice that "shouldn't be that slow".
-- **File size scales with time.** A 30 Hz match with hundreds of scopes per tick produces a JSON file growing at roughly 1 MB per minute. Multi-hour traces become unpleasant. Open a fresh trace per investigation rather than leaving the profiler on indefinitely.
+- **File size scales with time.** A 30 Hz match with hundreds of scopes per tick produces a `.perfetto-trace` growing at roughly 100-200 KB per minute (was ~1 MB per minute in the old JSON format). Multi-hour traces are still hefty; if you need them slimmer still, the next lever is enabling string interning via Perfetto's `InternedData`, which the writer in [Profiler.cs](GameServerLib/Logging/Profiler.cs) does not currently use.
