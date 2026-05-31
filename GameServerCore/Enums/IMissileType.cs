@@ -1,6 +1,6 @@
 ﻿namespace GameServerCore.Enums
 {
-    public enum MissileType : int
+    public enum MissileType
     {
         /// <summary>
         /// Unused. If a MissileGameScript is implemented which controls flight path, use this (possibly rename to "Custom").
