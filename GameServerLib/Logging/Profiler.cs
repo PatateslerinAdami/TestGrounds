@@ -6,9 +6,6 @@ using System.IO;
 using System.Threading;
 using Google.Protobuf;
 using Perfetto.Protos;
-// Alias to disambiguate from System.Diagnostics.Trace which is in scope
-// via System.Diagnostics.Stopwatch.
-using PerfettoTrace = Perfetto.Protos.Trace;
 
 namespace LeagueSandbox.GameServer.Logging
 {
@@ -44,15 +41,21 @@ namespace LeagueSandbox.GameServer.Logging
             public string ThreadName = "";
             // Reasonable starting capacity. A 30 Hz game with ~100 scopes/tick
             // produces ~3000 events/sec, so this covers ~1.3 seconds before resizing.
-            public List<TraceEvent> Events = new(4096);
+            // With BEGIN+END split, each scope is two entries.
+            public List<TraceEvent> Events = new(8192);
         }
 
+        // Each TraceEvent represents one BEGIN or END marker on the timeline.
+        // Name == null indicates an END event (Category is also unused for ENDs).
+        // Recording two entries per scope at execution time (BEGIN at Scope(),
+        // END at Dispose()) gives the buffer a natural execution-order layout,
+        // so Flush() can stream packets out in buffer order without sorting and
+        // Perfetto's BEGIN/END stack pairs nest correctly.
         private struct TraceEvent
         {
-            public string Name;
-            public string Category;
-            public long StartNanos;
-            public long DurNanos;
+            public string? Name;
+            public string? Category;
+            public long TimestampNanos;
         }
 
         /// <summary>
@@ -90,7 +93,15 @@ namespace LeagueSandbox.GameServer.Logging
         public static ScopeHandle Scope(string name, string category = "game")
         {
             if (!Enabled) return default;
-            return new ScopeHandle(name, category, NowNanos());
+            // Record BEGIN immediately at scope creation. ScopeHandle then only
+            // needs to remember whether to also record an END at Dispose time.
+            GetLocalBuffer().Events.Add(new TraceEvent
+            {
+                Name = name,
+                Category = category,
+                TimestampNanos = NowNanos(),
+            });
+            return new ScopeHandle(active: true);
         }
 
         // Nanosecond clock relative to Init(). Computed via double to avoid the
@@ -98,11 +109,6 @@ namespace LeagueSandbox.GameServer.Logging
         // running at 1 GHz (Linux) after only ~9 seconds of trace. Double has
         // ~15 digits of precision, so it stays accurate well past any plausible
         // profiling session.
-        //
-        // Internal precision matters: at microseconds, scopes that start within
-        // the same microsecond (e.g. Tick + DrainInboundEvents at the top of a
-        // tick) round to identical timestamps, which previously confused
-        // Perfetto's BEGIN/END stack pairing into inverted nesting.
         private static long NowNanos()
         {
             long delta = Stopwatch.GetTimestamp() - _startTimestamp;
@@ -126,37 +132,51 @@ namespace LeagueSandbox.GameServer.Logging
         }
 
         // Called from ScopeHandle.Dispose. Nested struct has access to private members.
-        private static void Record(string name, string category, long startNanos, long endNanos)
+        // Records an END marker. Name is left null to mark it as an END.
+        private static void RecordEnd()
         {
             GetLocalBuffer().Events.Add(new TraceEvent
             {
-                Name = name,
-                Category = category,
-                StartNanos = startNanos,
-                DurNanos = endNanos - startNanos,
+                Name = null,
+                Category = null,
+                TimestampNanos = NowNanos(),
             });
         }
 
-        // Build the Perfetto Trace message in memory, then serialize it to the
-        // output file in one shot. Each thread becomes a TrackDescriptor; each
-        // scope becomes a SLICE_BEGIN + SLICE_END pair on its thread's track.
-        // Perfetto requires a unique trusted_packet_sequence_id per producer;
-        // we use the thread id so the sequences never collide.
+        // Streams Perfetto TracePackets directly to the output file rather than
+        // building a single in-memory Trace message. Two reasons this matters:
         //
-        // Per-event packets must be emitted in true timeline order, not in
-        // recording order. Events are appended to the buffer at Dispose() time
-        // (i.e. in END timestamp order), which puts inner scopes before their
-        // parents in the buffer. Emitting in buffer order with co-incident
-        // BEGIN timestamps confuses Perfetto's stack pairing and produces
-        // inverted nesting. We fix this by materializing a merged timeline of
-        // (timestamp, kind) entries and sorting once at flush time with proper
-        // tie-breakers (see TimelineEntry.Compare below).
+        //   1. Google.Protobuf serializes message sizes as int32, so a single
+        //      Trace larger than ~2 GB serialized would throw at write time.
+        //      A long bot match with EzrealBot instrumentation easily exceeds
+        //      that. Streaming each packet keeps every serialized message tiny.
+        //
+        //   2. Memory pressure: building the full Trace and an auxiliary sort
+        //      timeline both held the entire event set in memory more than once.
+        //      Per-packet streaming keeps peak memory at roughly the buffer
+        //      itself.
+        //
+        // Wire format note: Trace is `repeated TracePacket packet = 1`. Protobuf's
+        // canonical encoding for a repeated field is `[tag][length][body]` per
+        // element, and concatenated encodings of a message are equivalent to a
+        // single encoding with the union of fields. Writing each packet as
+        // `WriteTag(1, LengthDelimited) + WriteMessage(packet)` therefore
+        // produces a stream byte-identical to what Trace.WriteTo would emit.
         private static void Flush()
         {
             if (_outputPath == null) return;
+
+            int totalEvents = 0;
+            foreach (var kvp in _buffers) totalEvents += kvp.Value.Events.Count;
+            // Loud start-of-flush log so it's obvious in console output whether
+            // we even got here. The dev's "no file appeared" case usually means
+            // an exception thrown before File.Create.
+            Console.WriteLine($"Profiler: flushing {totalEvents} events from {_buffers.Count} thread(s) to {_outputPath}");
+
             try
             {
-                var trace = new PerfettoTrace();
+                using var fs = File.Create(_outputPath);
+                using var cos = new CodedOutputStream(fs);
 
                 foreach (var kvp in _buffers)
                 {
@@ -164,8 +184,8 @@ namespace LeagueSandbox.GameServer.Logging
                     uint sequenceId = (uint)buf.ThreadId;
                     ulong trackUuid = (ulong)(uint)buf.ThreadId;
 
-                    // Declare the thread track up front so Perfetto labels the row.
-                    trace.Packet.Add(new TracePacket
+                    // Track descriptor first so Perfetto labels the row.
+                    WritePacket(cos, new TracePacket
                     {
                         TrustedPacketSequenceId = sequenceId,
                         TrackDescriptor = new TrackDescriptor
@@ -181,42 +201,33 @@ namespace LeagueSandbox.GameServer.Logging
                         },
                     });
 
-                    // Materialize the per-thread timeline: one BEGIN entry and
-                    // one END entry per scope, then sort into emission order.
-                    var timeline = new List<TimelineEntry>(buf.Events.Count * 2);
-                    for (int i = 0; i < buf.Events.Count; i++)
+                    // Events are in execution order (BEGIN appended at Scope()
+                    // time, END appended at Dispose() time), so streaming them
+                    // in buffer order is naturally correct for stack pairing.
+                    foreach (var ev in buf.Events)
                     {
-                        var ev = buf.Events[i];
-                        timeline.Add(new TimelineEntry(ev.StartNanos, isBegin: true, ev.DurNanos, i));
-                        timeline.Add(new TimelineEntry(ev.StartNanos + ev.DurNanos, isBegin: false, ev.DurNanos, i));
-                    }
-                    timeline.Sort(TimelineEntry.Compare);
-
-                    foreach (var entry in timeline)
-                    {
-                        var ev = buf.Events[entry.EventIndex];
-                        if (entry.IsBegin)
+                        if (ev.Name != null)
                         {
-                            var beginEvent = new TrackEvent
+                            var begin = new TrackEvent
                             {
                                 Type = TrackEvent.Types.Type.SliceBegin,
                                 Name = ev.Name,
                                 TrackUuid = trackUuid,
                             };
-                            beginEvent.Categories.Add(ev.Category);
+                            if (ev.Category != null) begin.Categories.Add(ev.Category);
 
-                            trace.Packet.Add(new TracePacket
+                            WritePacket(cos, new TracePacket
                             {
-                                Timestamp = (ulong)entry.TimestampNanos,
+                                Timestamp = (ulong)ev.TimestampNanos,
                                 TrustedPacketSequenceId = sequenceId,
-                                TrackEvent = beginEvent,
+                                TrackEvent = begin,
                             });
                         }
                         else
                         {
-                            trace.Packet.Add(new TracePacket
+                            WritePacket(cos, new TracePacket
                             {
-                                Timestamp = (ulong)entry.TimestampNanos,
+                                Timestamp = (ulong)ev.TimestampNanos,
                                 TrustedPacketSequenceId = sequenceId,
                                 TrackEvent = new TrackEvent
                                 {
@@ -228,73 +239,41 @@ namespace LeagueSandbox.GameServer.Logging
                     }
                 }
 
-                using var fs = File.Create(_outputPath);
-                trace.WriteTo(fs);
+                cos.Flush();
+                Console.WriteLine($"Profiler: trace written successfully to {_outputPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Profiler: failed to write trace to {_outputPath}: {ex.Message}");
+                // Be loud about this. The most common reason for a missing trace
+                // file is an exception thrown here, and a single Console.WriteLine
+                // is easy to miss in a busy server log.
+                Console.Error.WriteLine($"Profiler: FAILED to write trace to {_outputPath}");
+                Console.Error.WriteLine($"Profiler: exception was {ex}");
             }
         }
 
-        // Timeline entry used only inside Flush to produce a correctly-ordered
-        // BEGIN/END packet stream. Sorted with these tie-break rules so that
-        // even at identical nanosecond timestamps (extremely rare but possible)
-        // Perfetto's BEGIN/END stack pairs nest the right way:
-        //   1. timestamp ASC
-        //   2. at the same timestamp, ENDs come before BEGINs
-        //      (so a closing scope is popped before the next one opens)
-        //   3. at the same timestamp, multiple BEGINs sort by duration DESC
-        //      (outer = longer-lived scope opens first)
-        //   4. at the same timestamp, multiple ENDs sort by duration ASC
-        //      (inner = shorter-lived scope closes first)
-        private readonly struct TimelineEntry
+        private static void WritePacket(CodedOutputStream cos, TracePacket packet)
         {
-            public readonly long TimestampNanos;
-            public readonly bool IsBegin;
-            public readonly long DurNanos;
-            public readonly int EventIndex;
-
-            public TimelineEntry(long ts, bool isBegin, long dur, int idx)
-            {
-                TimestampNanos = ts;
-                IsBegin = isBegin;
-                DurNanos = dur;
-                EventIndex = idx;
-            }
-
-            public static int Compare(TimelineEntry a, TimelineEntry b)
-            {
-                int c = a.TimestampNanos.CompareTo(b.TimestampNanos);
-                if (c != 0) return c;
-                // ENDs before BEGINs at the same instant.
-                if (a.IsBegin != b.IsBegin) return a.IsBegin ? 1 : -1;
-                // Two BEGINs: outer (longer duration) first.
-                if (a.IsBegin) return b.DurNanos.CompareTo(a.DurNanos);
-                // Two ENDs: inner (shorter duration) first.
-                return a.DurNanos.CompareTo(b.DurNanos);
-            }
+            // Tag for Trace.packet (field number 1, length-delimited wire type).
+            cos.WriteTag(1, WireFormat.WireType.LengthDelimited);
+            cos.WriteMessage(packet);
         }
 
         public readonly struct ScopeHandle : IDisposable
         {
-            private readonly string _name;
-            private readonly string _category;
-            private readonly long _startNanos;
             private readonly bool _active;
 
-            internal ScopeHandle(string name, string category, long startNanos)
-            {
-                _name = name;
-                _category = category;
-                _startNanos = startNanos;
-                _active = true;
-            }
+            internal ScopeHandle(bool active) { _active = active; }
 
             public void Dispose()
             {
-                if (!_active || !Profiler.Enabled) return;
-                Profiler.Record(_name, _category, _startNanos, Profiler.NowNanos());
+                // _active being true means we recorded a BEGIN at Scope() time,
+                // so we owe an END here to keep the stack balanced. We do *not*
+                // re-check Profiler.Enabled: if the profiler was on at Scope()
+                // and got turned off mid-scope, dropping the END would leave a
+                // dangling BEGIN in the buffer and confuse Perfetto.
+                if (!_active) return;
+                Profiler.RecordEnd();
             }
         }
     }
