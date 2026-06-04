@@ -1789,6 +1789,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         }
 
         /// <summary>
+        /// Changes a property of this spell (icon index, name, range, targeting type and etc.) on the
+        /// owning player's client/HUD.
+        /// </summary>
+        public void ChangeSpellData(ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
+            TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0,
+            float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0,
+            List<uint> offsetTargets = null)
+        {
+            if (CastInfo.Owner is Champion champion)
+            {
+                _game.PacketNotifier.NotifyChangeSlotSpellData(champion.ClientId, champion,
+                    (byte)CastInfo.SpellSlot, changeType, isSummonerSpell, targetingType, newName,
+                    newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
+            }
+        }
+
+        /// <summary>
         /// Overrides the normal cast range for this spell. Set to 0 to revert.
         /// </summary>
         /// <param name="newCastRange">Cast range to set.</param>

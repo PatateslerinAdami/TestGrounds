@@ -2486,14 +2486,22 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyTeleport(unit, position);
         }
 
-        public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot,
-            GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
+        /// <summary>
+        /// Changes a property of the spell in the given slot (icon index, name, range, targeting type and etc.)
+        /// on the owning player's client/HUD. The user is resolved from the owner automatically.
+        /// </summary>
+        public static void ChangeSlotSpellData(ObjAIBase owner, byte slot,
+            ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
             TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0,
             float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0,
             List<uint> offsetTargets = null)
         {
-            _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell,
-                targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
+            if (owner is Champion champion)
+            {
+                _game.PacketNotifier.NotifyChangeSlotSpellData(champion.ClientId, owner, slot, changeType,
+                    isSummonerSpell, targetingType, newName, newRange, newMaxCastRange, newDisplayRange,
+                    newIconIndex, offsetTargets);
+            }
         }
 
         public static SpellMissile CreateCustomMissile(ObjAIBase caster, int slot, SpellSlotType slotType,
