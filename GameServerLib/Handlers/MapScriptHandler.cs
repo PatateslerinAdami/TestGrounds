@@ -95,15 +95,26 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <param name="diff">Number of milliseconds since this tick occurred.</param>
         public void Update(float diff)
         {
-            CollisionHandler.Update();
-            PathingHandler.Update(diff);
-            MapScript.Update(diff);
-
-            foreach (var surrender in Surrenders.Values)
+            using (Profiler.Scope("CollisionHandler.Update"))
             {
-                surrender.Update(diff);
+                CollisionHandler.Update();
+            }
+            using (Profiler.Scope("PathingHandler.Update"))
+            {
+                PathingHandler.Update(diff);
+            }
+            using (Profiler.Scope("MapScript.Update", "scripts"))
+            {
+                MapScript.Update(diff);
             }
 
+            using (Profiler.Scope("Surrenders.Update"))
+            {
+                foreach (var surrender in Surrenders.Values)
+                {
+                    surrender.Update(diff);
+                }
+            }
         }
 
         /// <summary>

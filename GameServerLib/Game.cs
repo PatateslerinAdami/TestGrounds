@@ -153,6 +153,15 @@ namespace LeagueSandbox.GameServer
             Config.LoadContent(this);
             _gameScriptTimers = new List<GameScriptTimer>();
 
+            // CPU profiler. No-op when disabled in GameInfo.json.
+            Profiler.Init(
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"),
+                Config.ProfilerEnabled);
+            if (Config.ProfilerEnabled)
+            {
+                _logger.Info("CPU profiler enabled — trace will be written to logs/profile_<timestamp>.json on shutdown.");
+            }
+
             ChatCommandManager.LoadCommands();
 
             Map = new MapScriptHandler(this);
@@ -371,8 +380,19 @@ namespace LeagueSandbox.GameServer
             // thread interacts with the network only via the bridge queues.
             _packetServer.StartNetThread();
 
+            // Name the thread so the profiler labels it usefully in Perfetto.
+            if (string.IsNullOrEmpty(Thread.CurrentThread.Name))
+            {
+                Thread.CurrentThread.Name = "GameLoop";
+            }
+
+            long tickNumber = 0;
             while (!SetToExit)
             {
+                // Numbered so Perfetto doesn't visually coalesce adjacent
+                // same-name slices into one giant bar.
+                using var _tickScope = Profiler.Scope($"Tick {tickNumber++}");
+
                 double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
                 lastMapDurationWatch.Restart();
 
@@ -380,7 +400,10 @@ namespace LeagueSandbox.GameServer
                 // tick. Done at the very top so the rest of the tick sees a
                 // consistent view of the world (including any packet handlers
                 // that mutate game state).
-                DrainInboundEvents();
+                using (Profiler.Scope("DrainInboundEvents", "network"))
+                {
+                    DrainInboundEvents();
+                }
                 
                 float deltaTime = (float)lastSleepDuration;
                 if(firstCycle)
@@ -434,7 +457,10 @@ namespace LeagueSandbox.GameServer
 
                     if (IsRunning)
                     {
-                        Update(deltaTime);
+                        using (Profiler.Scope("Game.Update"))
+                        {
+                            Update(deltaTime);
+                        }
                     }
                 }
 
@@ -449,6 +475,10 @@ namespace LeagueSandbox.GameServer
             }
 
             _packetServer.StopNetThread();
+
+            // Flush the CPU trace to disk. Safe to call even when the profiler
+            // was disabled.
+            Profiler.Shutdown();
         }
 
         // Drains all events the net thread has queued for the game thread:
@@ -502,14 +532,29 @@ namespace LeagueSandbox.GameServer
             // This section dictates the priority of updates.
             GameTime += diff;
             // Collision
-            Map.Update(diff);
+            using (Profiler.Scope("Map.Update"))
+            {
+                Map.Update(diff);
+            }
             // Objects
-            ObjectManager.Update(diff);
+            using (Profiler.Scope("ObjectManager.Update"))
+            {
+                ObjectManager.Update(diff);
+            }
             // Protection (TODO: Move this into ObjectManager).
-            ProtectionManager.Update(diff);
-            ChatCommandManager.GetCommands().ForEach(command => command.Update(diff));
-            _gameScriptTimers.ForEach(gsTimer => gsTimer.Update(diff));
-            _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
+            using (Profiler.Scope("ProtectionManager.Update"))
+            {
+                ProtectionManager.Update(diff);
+            }
+            using (Profiler.Scope("ChatCommands.Update"))
+            {
+                ChatCommandManager.GetCommands().ForEach(command => command.Update(diff));
+            }
+            using (Profiler.Scope("GameScriptTimers.Update", "scripts"))
+            {
+                _gameScriptTimers.ForEach(gsTimer => gsTimer.Update(diff));
+                _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
+            }
 
             // By default, synchronize the game time between server and clients every 10 seconds
             _nextSyncTime += diff;

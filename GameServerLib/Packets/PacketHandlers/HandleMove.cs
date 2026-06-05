@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.Logging;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -22,6 +23,12 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, MovementRequest req)
         {
+            // Per move-order (event-driven, on the network drain path). The pathing port added
+            // stuck-recovery retries and clamp fallbacks here, each potentially an extra A*.
+            // Scoped "pathing" so client-issued orders are distinguishable from per-tick A* in the
+            // trace — a burst of orders shouldn't be mistaken for a simulation hotspot.
+            using var _scope = Profiler.Scope("HandleMove", "pathing");
+
             var peerInfo = _playerManager.GetPeerInfo(userId);
             if (peerInfo == null || req == null)
             {

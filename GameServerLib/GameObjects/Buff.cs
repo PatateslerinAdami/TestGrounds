@@ -133,6 +133,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             try
             {
+                using var _scope = Profiler.Scope($"buff:{Name}.OnActivate", "scripts");
                 BuffScript.OnActivate(TargetUnit, this, OriginSpell);
             }
             catch (Exception e)
@@ -151,6 +152,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             try
             {
+                using var _scope = Profiler.Scope($"buff:{Name}.OnDeactivate", "scripts");
                 BuffScript.OnDeactivate(TargetUnit, this, OriginSpell);
             }
             catch (Exception e)
@@ -306,6 +308,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             try
             {
+                using var _scope = Profiler.Scope($"buff:{Name}.OnUpdate", "scripts");
                 BuffScript.OnUpdate(diff);
             }
             catch (Exception e)

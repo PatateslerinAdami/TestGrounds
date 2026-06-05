@@ -674,7 +674,9 @@
         "EMPOWERED_SUMS_ENABLED": false, // To make flash unlimited range and heal give unlimited movement speed
         "TOURNAMENT_MODE_ENABLED": false, // If enabled, sets refresh rate to 60 hz instead of 30 hz. More computationally expensive.
         "CONTENT_PATH": "../../../../../Content",
-        "IS_DAMAGE_TEXT_GLOBAL": false
+        "IS_DAMAGE_TEXT_GLOBAL": false,
+        "PROFILER_ENABLED": false, // Writes a Perfetto-compatible CPU trace to logs/profile_<timestamp>.json. View at https://ui.perfetto.dev
+        "BASESPELL_EMPTY": true // When true (default), treats the BaseSpell placeholder script as empty so its no-op OnUpdate isn't called per tick on every rune/extra spell slot. Tiny perf win, also de-clutters the profiler trace. Set to false only if you specifically want to investigate placeholder spells.
     },
     "forcedStart": 60
 }

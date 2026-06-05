@@ -6,6 +6,7 @@ using GameServerCore.Enums;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.Logging;
 
 namespace LeagueSandbox.GameServer.Handlers
 {
@@ -69,6 +70,12 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <param name="obj">GameObject to check for incorrect paths.</param>
         public void UpdatePaths(AttackableUnit obj)
         {
+            // Runs for every pathfinder in the 3s batch (see Update). The ValidateLineOfSight fast
+            // path usually returns without an A*, but a corridor blockage triggers an IsWalkable
+            // sweep + waypoint rebuild. Scoped to confirm the periodic batch isn't itself the
+            // "lag spike every few seconds" the dev observed.
+            using var _scope = Profiler.Scope("PathingHandler.UpdatePaths", "pathing");
+
             var path = obj.Waypoints;
             if (path.Count == 0)
             {
