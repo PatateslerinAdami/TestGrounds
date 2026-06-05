@@ -291,6 +291,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 try
                 {
+                    using var _scope = Profiler.Scope($"script:{AIScript.GetType().Name}.OnActivate", "scripts");
                     AIScript.OnActivate(this);
                 }
                 catch (Exception e)
@@ -307,6 +308,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 try
                 {
+                    using var _scope = Profiler.Scope($"script:{CharScript.GetType().Name}.OnActivate", "scripts");
                     CharScript.OnActivate(
                         this, Spells.GetValueOrDefault<short, Spell>(
                             (int)SpellSlotType.PassiveSpellSlot
@@ -349,6 +351,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _charScriptPostActivated = true;
             try
             {
+                using var _scope = Profiler.Scope($"script:{CharScript.GetType().Name}.OnPostActivate", "scripts");
                 CharScript.OnPostActivate(
                     this, Spells.GetValueOrDefault<short, Spell>(
                         (int)SpellSlotType.PassiveSpellSlot
@@ -1841,6 +1844,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             base.Update(diff);
             try
             {
+                using var _scope = Profiler.Scope($"script:{CharScript.GetType().Name}.OnUpdate", "scripts");
                 CharScript.OnUpdate(diff);
             }
             catch (Exception e)
@@ -1852,6 +1856,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 try
                 {
+                    using var _scope = Profiler.Scope($"script:{AIScript.GetType().Name}.OnUpdate", "scripts");
                     AIScript.OnUpdate(diff);
                 }
                 catch (Exception e)
@@ -1860,19 +1865,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
             }
 
-            // bit of a hack
-            foreach (var s in new List<Spell>(Spells.Values))
+            using (Profiler.Scope("ObjAI.SpellsUpdate"))
             {
-                s.Update(diff);
+                // bit of a hack
+                foreach (var s in new List<Spell>(Spells.Values))
+                {
+                    s.Update(diff);
+                }
             }
 
             if (Inventory != null)
             {
+                using var _invScope = Profiler.Scope("ObjAI.InventoryUpdate");
                 Inventory.OnUpdate(diff);
             }
 
-            UpdateAssistMarkers();
-            UpdateTarget();
+            using (Profiler.Scope("ObjAI.AssistMarkers"))
+            {
+                UpdateAssistMarkers();
+            }
+            using (Profiler.Scope("ObjAI.UpdateTarget"))
+            {
+                UpdateTarget();
+            }
 
             if (_autoAttackCurrentCooldown > 0)
             {
@@ -1955,6 +1970,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     {
                         try
                         {
+                            using var _scope = Profiler.Scope($"script:{u.AIScript.GetType().Name}.OnCallForHelp", "scripts");
                             u.AIScript.OnCallForHelp(attacker, this);
                         }
                         catch (Exception e)

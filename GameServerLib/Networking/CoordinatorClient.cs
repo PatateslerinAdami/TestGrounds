@@ -255,6 +255,7 @@ public sealed class CoordinatorClient : IDisposable
                 if (msg == null)
                     break; // EOF
 
+                using var _frameScope = Profiler.Scope($"CoordinatorFrame:{msg.PayloadCase}", "network");
                 switch (msg.PayloadCase)
                 {
                     case CoordinatorToGameServer.PayloadOneofCase.Shutdown:

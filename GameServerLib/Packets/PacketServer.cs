@@ -6,6 +6,7 @@ using System.Threading;
 using Channel = GameServerCore.Packets.Enums.Channel;
 using Version = LENet.Version;
 using LeagueSandbox.GameServer;
+using LeagueSandbox.GameServer.Logging;
 
 namespace PacketDefinitions420
 {
@@ -83,21 +84,28 @@ namespace PacketDefinitions420
         private void NetThreadMain()
         {
             var ev = new Event();
+            long iter = 0;
             while (!Bridge.Stop)
             {
+                long thisIter = iter++;
+
                 // Drain everything pending on the outbound queue first. This
                 // is the hot path: most ticks the game thread enqueues several
                 // commands and we want them out the door before we go to
                 // sleep on HostService.
-                while (Bridge.Outbound.TryDequeue(out var cmd))
+                if (!Bridge.Outbound.IsEmpty)
                 {
-                    try
+                    using var _drainScope = Profiler.Scope($"NetOutboundDrain {thisIter}", "network");
+                    while (Bridge.Outbound.TryDequeue(out var cmd))
                     {
-                        _sender.Execute(cmd);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.Error.WriteLine($"[NetThread] Outbound execute failed: {e}");
+                        try
+                        {
+                            _sender.Execute(cmd);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.Error.WriteLine($"[NetThread] Outbound execute failed: {e}");
+                        }
                     }
                 }
 
@@ -111,12 +119,17 @@ namespace PacketDefinitions420
                 }
 
                 // Drain all events that arrived during the poll without
-                // blocking again.
-                do
+                // blocking again. Only open a scope if HostService actually
+                // returned an event — otherwise we'd add empty spans.
+                if (rc > 0)
                 {
-                    DispatchEnetEvent(ev);
+                    using var _dispatchScope = Profiler.Scope($"NetDispatch {thisIter}", "network");
+                    do
+                    {
+                        DispatchEnetEvent(ev);
+                    }
+                    while (_server.HostService(ev, 0) > 0);
                 }
-                while (_server.HostService(ev, 0) > 0);
 
                 // If both queues were empty and HostService returned 0, sit on
                 // the wait handle so we don't spin. The game thread sets this

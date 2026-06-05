@@ -42,6 +42,16 @@
       compile.
     -->
     <Protobuf Include="Networking\Protobuf\gameserver_control.proto" GrpcServices="None" />
+    <!--
+      Perfetto trace format (https://perfetto.dev). Consumed by the in-process
+      CPU profiler (Logging/Profiler.cs) to emit .perfetto-trace files that the
+      Perfetto UI can read directly. The .proto is a verbatim copy of the
+      upstream fused schema at:
+      https://raw.githubusercontent.com/google/perfetto/main/protos/perfetto/trace/perfetto_trace.proto
+      It is large (~19k lines) but self-contained; we only use a small slice
+      of its surface (Trace / TracePacket / TrackEvent / TrackDescriptor).
+    -->
+    <Protobuf Include="Logging\perfetto_trace.proto" GrpcServices="None" />
   </ItemGroup>
 
   <ItemGroup>

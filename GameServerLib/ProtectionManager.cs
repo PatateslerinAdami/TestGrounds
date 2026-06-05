@@ -3,6 +3,7 @@ using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using LeagueSandbox.GameServer.Logging;
 
 namespace LeagueSandbox.GameServer
 {
@@ -66,6 +67,7 @@ namespace LeagueSandbox.GameServer
 
         public void Update(float diff)
         {
+            using var _scope = Profiler.Scope("Protection.Iterate");
             foreach (var element in _protectedElements)
             {
                 if (_dependOnAll.ContainsKey(element) || _dependOnSingle.ContainsKey(element))
