@@ -7,74 +7,71 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells
 {
     public class VelkozE : ISpellScript
     {
+        private ObjAIBase _velkoz;
+        private Vector2 _endPos;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
             IsDamagingSpell = true
         };
 
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _velkoz = owner;
+        }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            _endPos = end;
+        }
+
         public void OnSpellPostCast(Spell spell)
         {
-            var owner = spell.CastInfo.Owner;
-            var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-            var ownerPos = owner.Position;
-            var distance = Vector2.Distance(ownerPos, targetPos);
-            var range = spell.GetCurrentCastRange();
-
-            Vector2 finalPos;
-            if (distance > range)
-            {
-                var direction = Vector2.Normalize(targetPos - ownerPos);
-                finalPos = ownerPos + direction * range;
-            }
-            else
-            {
-                finalPos = targetPos;
-            }
-
-            CreateCustomMissile(owner, "VelkozEMissile", ownerPos, finalPos, new MissileParameters { Type = MissileType.Circle });
-
-            AddParticlePos(owner, "Velkoz_Base_E_AOE_green.troy", finalPos, finalPos, lifetime: 1.0f, teamOnly: owner.Team);
-            AddParticlePos(owner, "Velkoz_Base_E_AOE_red.troy", finalPos, finalPos, lifetime: 1.0f, teamOnly: CustomConvert.GetEnemyTeam(owner.Team), ignoreCasterVisibility: true);
+            
+            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, false, isVisible: false);
+            HideHealthBar(hiddenMinion);
+            SpellCast(_velkoz, 2, SpellSlotType.ExtraSlots, true, hiddenMinion, Vector2.Zero);
+            AddParticlePos(_velkoz, "Velkoz_Base_E_AOE_green.troy", _endPos, _endPos, lifetime: 0.8f, enemyParticle: "Velkoz_Base_E_AOE_red.troy");
         }
     }
 
     public class VelkozEMissile : ISpellScript
     {
+        private ObjAIBase _velkoz;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Target
             },
-            IsDamagingSpell = true
+            IsDamagingSpell = true,
         };
-
-        public SpellMissile ActiveMissile;
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile, false);
+            _velkoz = owner;
+            ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
         }
 
-        public void OnLaunchMissile(Spell spell, SpellMissile missile)
+        private void OnSpellHit(Spell spell, AttackableUnit target,SpellMissile missile, SpellSector sector)
         {
-            ActiveMissile = missile;
-            ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, false);
-        }
+            AddParticle(_velkoz, default, "velkoz_base_e_explo.troy", missile.Position);
+            var unitsInRange = GetUnitsInRange(_velkoz, missile.Position, 120f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions);
 
-        public void OnMissileEnd(SpellMissile missile)
-        {
-            var owner = missile.SpellOrigin.CastInfo.Owner;
-            AddParticle(owner, default, "velkoz_base_e_explo.troy", missile.Position);
-            owner.RegisterTimer(new GameScriptTimer(0.25f, () =>
+            foreach (var unit in unitsInRange)
             {
-            }));
+                AddBuff("VelkozEStun", 0.75f, 1, spell, unit, _velkoz);
+            }
+            target.Die(CreateDeathData(false, 0, target, target, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0));
         }
+        
     }
 }
