@@ -9,6 +9,7 @@ using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects;
 using System.Linq;
 using GameMaths;
+using LeagueSandbox.GameServer.Logging;
 
 namespace LeagueSandbox.GameServer.Content.Navigation
 {
@@ -529,6 +530,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// </returns>
         public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null)
         {
+            // Core A* funnel — every server path computation lands here. Tagged "pathing" so a
+            // Perfetto trace shows GetPath call-count and self-time per tick. If this dominates a
+            // tick, the cost is the bidirectional A* (and, when actorBlocked != null, the per-cell
+            // CollisionHandler.GetNearestObjects quad-tree query the predicate runs on each
+            // expanded neighbor). Self-time here vs. the caller scopes (OnCollision, StuckRecovery,
+            // HandleMove, PathingHandler.UpdatePaths) reveals which call site is flooding A*.
+            using var _pathScope = Profiler.Scope(
+                actorBlocked != null ? "NavGrid.GetPath(actor-aware)" : "NavGrid.GetPath", "pathing");
+
             bool isPartialPath = false;
 
             if(from == to)

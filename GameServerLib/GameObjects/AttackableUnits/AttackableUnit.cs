@@ -300,6 +300,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private void UpdateStuckRecovery(float diff)
         {
+            // New per-tick-per-unit work added by the pathing port. Cheap on the early-out path,
+            // but on trigger it calls TryUnstuckRepath -> full A*. Scoped separately from
+            // AttackableUnit.Move so the trace attributes its cost (and its A* fan-out) directly.
+            using var _scope = Profiler.Scope("AttackableUnit.StuckRecovery", "pathing");
             // Skip cases where stuck detection isn't meaningful.
             // NOTE: deliberately do NOT bail on IsPathEnded() if HandleMove's null fallback
             // produced degenerate `[currentPos, currentPos]` waypoints, the path appears "ended"
@@ -381,6 +385,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private bool TryUnstuckRepath()
         {
+            // Stuck-recovery action: GetClosestTerrainExit + a full actor-aware A*. Scoped so the
+            // trace shows how often stuck units force an unplanned repath.
+            using var _scope = Profiler.Scope("AttackableUnit.TryUnstuckRepath", "pathing");
             // Snap to nearest walkable cell. Use radius=0 (= cell walkable check, ignore
             // PathfindingRadius clearance) this is for stuck recovery we just need to escape the
             // blocking cell, even if the destination has tighter clearance than usual. This is
@@ -517,6 +524,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="isTerrain">Whether or not this AI collided with terrain.</param>
         public override void OnCollision(GameObject collider, bool isTerrain = false)
         {
+            // Fires per collision per tick. The pathing port changed the terrain branch to
+            // SetPosition(repath: true), so each terrain collision now runs a full SafePath A*
+            // (previously a cheap position snap). With crowds wedged against walls/buildings this
+            // can mean many A* searches per tick — the prime regression suspect. Scoped "pathing"
+            // so the trace surfaces collision-driven repath cost. (Returns before any real work for
+            // missiles/sectors/buildings, so those add only a near-zero slice.)
+            using var _scope = Profiler.Scope("AttackableUnit.OnCollision", "pathing");
+
             if (collider is SpellMissile || collider is SpellSector || collider is ObjBuilding || (collider is Region region && region.CollisionUnit == this))
             {
                 return;
