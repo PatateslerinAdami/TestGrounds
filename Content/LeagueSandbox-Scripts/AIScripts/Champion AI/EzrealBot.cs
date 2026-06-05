@@ -88,6 +88,14 @@ namespace AIScripts
         private bool _isAutoAttacking = false;
         private Vector2 _orbwalkDirection = Vector2.Zero;
         private float _lastOrbwalkTime = 0f;
+
+        // Pathing throttle state. MoveToPosition used to run a full A* every tick to a
+        // per-tick-jittered target (ApplyPersonalityOffset), which the profiler showed as the
+        // single biggest CPU sink (NavGrid.GetPath ~10ms/call, ~181s total, driven by Farm).
+        // We now skip the A* when the destination hasn't meaningfully moved and we pathed
+        // recently — see MoveToPosition.
+        private Vector2 _lastPathDestination = new Vector2(float.NaN, float.NaN);
+        private float _lastPathComputeTime = float.MinValue;
         private const float MinOrbwalkInterval = 0.25f; // Match OnUpdateInterval for smooth movement
         private const float OrbwalkMoveSpeedMultiplier = 0.7f; // Move at 70% speed during orbwalking
 
@@ -2343,14 +2351,35 @@ namespace AIScripts
                 offsetTarget = ApplyPersonalityOffset(targetPosition);
             }
 
-            // Use the pathfinding handler to get a terrain-aware path
+            // Pathing throttle: a full A* is expensive, and Farm/MoveToLane call this every tick to
+            // a target that only jitters sub-cell from ApplyPersonalityOffset. Recompute only when the
+            // destination has moved meaningfully, or as a periodic refresh to pick up new dynamic
+            // blockers (turrets/inhibitors). Otherwise keep the existing waypoints and bail — this is
+            // the change that takes the bot out of the per-tick GetPath hot path. Responsiveness to a
+            // genuinely moving target is preserved because real movement clears REPATH_DIST_THRESHOLD.
+            const float REPATH_DIST_THRESHOLD = 75f;   // ~sub-cell jitter is ignored
+            const float REPATH_REFRESH_INTERVAL = 0.25f; // s; periodic refresh ceiling (~4 Hz)
+            bool destMovedFar = float.IsNaN(_lastPathDestination.X)
+                || Vector2.DistanceSquared(offsetTarget, _lastPathDestination)
+                    > REPATH_DIST_THRESHOLD * REPATH_DIST_THRESHOLD;
+            bool refreshDue = (_gameTime - _lastPathComputeTime) >= REPATH_REFRESH_INTERVAL;
+            if (!destMovedFar && !refreshDue)
+            {
+                return;
+            }
+            _lastPathDestination = offsetTarget;
+            _lastPathComputeTime = _gameTime;
+
+            // Use the pathfinding handler to get a terrain-aware path. The bot is a champion, so it
+            // uses the fast mover (UsesFastPath == true) — this matches the client's champion path
+            // mode and caps the A* at 800 expansions instead of 10000, keeping the worst case cheap.
             List<Vector2> waypoints =
-                ApiFunctionManager.GetPath(botPosition, offsetTarget, EzrealInstance.PathfindingRadius);
+                ApiFunctionManager.GetPath(botPosition, offsetTarget, EzrealInstance.PathfindingRadius, EzrealInstance.UsesFastPath);
 
             // Fallback: if pathfinding returned nothing (unreachable target), try without radius
             if (waypoints == null || waypoints.Count == 0)
             {
-                waypoints = ApiFunctionManager.GetPath(botPosition, offsetTarget, 0);
+                waypoints = ApiFunctionManager.GetPath(botPosition, offsetTarget, 0, EzrealInstance.UsesFastPath);
             }
 
             // Final fallback: stay put rather than walk into a wall

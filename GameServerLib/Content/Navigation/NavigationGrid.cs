@@ -107,6 +107,24 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// </summary>
         public byte[] CellGrassGroups { get; private set; }
 
+        /// <summary>
+        /// Static walkable connectivity component ID per cell (0 = non-walkable / unassigned,
+        /// 1..N = component). Computed once at load via 8-connected floodfill over cells that are
+        /// statically walkable (NOT_PASSABLE/SEE_THROUGH clear), deliberately IGNORING dynamic
+        /// blockers (turret/inhibitor/nexus footprints). Two cells with the same non-zero component
+        /// are connected through static terrain; different non-zero components are provably
+        /// unreachable from each other.
+        ///
+        /// Used by <see cref="GetPath"/> as a fast "is this goal reachable at all?" filter. The
+        /// dynamic-blocker omission is intentional and conservative: blockers only ever SUBTRACT
+        /// walkable area, so "different static component" implies "always unreachable" (safe to
+        /// relocate the goal), while "same static component" only means "maybe reachable" — A*
+        /// (with its expansion cap as backstop) still resolves the dynamic-blocker / pathing-radius
+        /// cases. int (not byte like grass) because walkable terrain can fragment into many small
+        /// islands that would overflow a 255 cap.
+        /// </summary>
+        public int[] CellWalkComponents { get; private set; }
+
         public NavigationGrid(string fileLocation) : this(File.OpenRead(fileLocation)) { }
         public NavigationGrid(byte[] buffer) : this(new MemoryStream(buffer)) { }
         public NavigationGrid(Stream stream)
@@ -185,6 +203,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             }
 
             ComputeBrushGroups();
+            ComputeWalkComponents();
         }
 
         /// <summary>
@@ -250,6 +269,120 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 8-connected flood fill over statically-walkable cells, assigning each connected region a
+        /// component ID in <see cref="CellWalkComponents"/>. Same BFS shape as
+        /// <see cref="ComputeBrushGroups"/> but keyed on static passability (NOT_PASSABLE /
+        /// SEE_THROUGH clear) and using int IDs (no 255 cap). Dynamic blockers are intentionally
+        /// ignored — see <see cref="CellWalkComponents"/>.
+        /// </summary>
+        private void ComputeWalkComponents()
+        {
+            int width = (int)CellCountX;
+            int height = (int)CellCountY;
+            CellWalkComponents = new int[width * height];
+            int currentComponentID = 0;
+            var queue = new Queue<int>();
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int seedIdx = y * width + x;
+                    if (CellWalkComponents[seedIdx] != 0) continue;
+                    if (!IsStaticWalkable(Cells[seedIdx])) continue;
+
+                    currentComponentID++;
+                    queue.Enqueue(seedIdx);
+                    CellWalkComponents[seedIdx] = currentComponentID;
+                    while (queue.Count > 0)
+                    {
+                        int idx = queue.Dequeue();
+                        int cx = idx % width;
+                        int cy = idx / width;
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            int ny = cy + dy;
+                            if (ny < 0 || ny >= height) continue;
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dy == 0) continue;
+                                int nx = cx + dx;
+                                if (nx < 0 || nx >= width) continue;
+                                int nIdx = ny * width + nx;
+                                if (CellWalkComponents[nIdx] != 0) continue;
+                                if (!IsStaticWalkable(Cells[nIdx])) continue;
+                                CellWalkComponents[nIdx] = currentComponentID;
+                                queue.Enqueue(nIdx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Static (terrain-only) walkability for connectivity: NOT_PASSABLE and SEE_THROUGH clear,
+        /// matching the static half of <see cref="IsWalkable(NavigationGridCell)"/> but WITHOUT the
+        /// dynamic-blocker check (those are deliberately excluded from the load-time component map).
+        /// </summary>
+        private static bool IsStaticWalkable(NavigationGridCell cell)
+        {
+            return cell != null
+                && !cell.HasFlag(NavigationGridCellFlags.NOT_PASSABLE)
+                && !cell.HasFlag(NavigationGridCellFlags.SEE_THROUGH);
+        }
+
+        /// <summary>
+        /// Static walkable-component ID for a cell (0 if non-walkable / null). Index mirrors the
+        /// CellGrassGroups/CellWalkComponents layout: <c>Locator.Y * CellCountX + Locator.X</c>.
+        /// </summary>
+        private int WalkComponentAt(NavigationGridCell cell)
+        {
+            if (cell == null) return 0;
+            int idx = cell.Locator.Y * (int)CellCountX + cell.Locator.X;
+            if (idx < 0 || idx >= CellWalkComponents.Length) return 0;
+            return CellWalkComponents[idx];
+        }
+
+        /// <summary>
+        /// Ring-scans outward (Chebyshev) from <paramref name="around"/> for the nearest cell whose
+        /// static walk component equals <paramref name="component"/>, bounded to
+        /// <paramref name="maxRings"/>. Used by <see cref="GetPath"/> to relocate a provably-
+        /// unreachable goal onto the start's component so the subsequent A* is a cheap reachable
+        /// search instead of a full-component flood. Returns null if none found within the bound
+        /// (caller then falls back to the capped search).
+        /// </summary>
+        private NavigationGridCell GetClosestCellInComponent(NavigationGridCell around, int component, int maxRings)
+        {
+            short cx = around.Locator.X;
+            short cy = around.Locator.Y;
+            Vector2 origin = around.GetCenter();
+            for (int r = 1; r <= maxRings; r++)
+            {
+                NavigationGridCell best = null;
+                float bestDistSq = float.MaxValue;
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue; // ring perimeter only
+                        var cell = GetCell((short)(cx + dx), (short)(cy + dy));
+                        if (cell == null) continue;
+                        if (WalkComponentAt(cell) != component) continue;
+                        float dSq = Vector2.DistanceSquared(cell.GetCenter(), origin);
+                        if (dSq < bestDistSq)
+                        {
+                            bestDistSq = dSq;
+                            best = cell;
+                        }
+                    }
+                }
+                if (best != null) return best;
+            }
+            return null;
         }
 
         /// <summary>
@@ -410,6 +543,17 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         // treated as untouched, eliminating the need to allocate HashSet/Dictionary per search.
         private int _searchSession;
 
+        // Pooled search scratch, reused across GetPath calls and Clear()'d at the top of each
+        // search. Previously each call did `new PriorityQueue<>(1024)` x2 (~30KB of backing array
+        // thrown away per call) plus two scratch Lists — the dominant GC pressure on the logic
+        // thread, and the source of the teamfight tick-spikes. Clear() keeps capacity, so steady
+        // state is allocation-free. Safe because GetPath is single-threaded and non-reentrant —
+        // the same invariant the _searchSession cell-stamping above already depends on.
+        private readonly PriorityQueue<NavigationGridCell, float> _openF = new PriorityQueue<NavigationGridCell, float>(1024);
+        private readonly PriorityQueue<NavigationGridCell, float> _openB = new PriorityQueue<NavigationGridCell, float>(1024);
+        private readonly List<NavigationGridCell> _backwardHalf = new List<NavigationGridCell>(256);
+        private readonly List<NavigationGridCell> _pathCells = new List<NavigationGridCell>(256);
+
         // Manhattan distance, used as the A* heuristic to mirror the client's BuildNavGridPath
         // source is this: NavGrid.cpp::ComputeCellDistHeuristic. Inadmissible with 8-neighbor + 1.0/√2 step
         // costs, so paths can be slightly suboptimal in real distance but biases toward
@@ -556,6 +700,34 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 return null;
             }
+
+            // Reachability filter (Fix A): if the goal sits in a different static walkable component
+            // than the start, it is provably unreachable (dynamic blockers only ever subtract area).
+            // Rather than let A* flood the start's whole component to the expansion cap, relocate the
+            // goal to the nearest cell in the start's component and search to THAT — a reachable
+            // goal, so the bidirectional search meets in the middle in sub-millisecond instead of
+            // capping. The result is flagged partial (unit lands at the closest reachable cell, the
+            // same contract as a cap-out). For the overwhelmingly common reachable case the
+            // components match and this is a no-op, leaving the A* and its result byte-for-byte
+            // unchanged. If no same-component cell is found within the ring bound, fall through to
+            // the capped search (still correct, just not optimized).
+            bool relocated = false;
+            int compFrom = WalkComponentAt(cellFrom);
+            int compTo = WalkComponentAt(cellTo);
+            if (compFrom != 0 && compTo != 0 && compFrom != compTo)
+            {
+                const int RELOC_MAX_RINGS = 96;
+                var reloc = GetClosestCellInComponent(cellTo, compFrom, RELOC_MAX_RINGS);
+                if (reloc != null)
+                {
+                    cellTo = reloc;
+                    to = TranslateFromNavGrid(reloc.Locator);
+                    toNav = TranslateToNavGrid(to);
+                    isPartialPath = true;
+                    relocated = true;
+                }
+            }
+
             if(cellFrom.ID == cellTo.ID)
             {
                 return new NavigationPath(new[] { from, to });
@@ -566,6 +738,9 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // before falling through to the grid pathfinder.
             if (!CastCircle(from, to, distanceThreshold))
             {
+                // Diagnostic marker: straight-line corridor was clear, A* skipped entirely.
+                // Empty scope -> ~0-duration slice; read its Count in the Perfetto flat view.
+                if (Profiler.Enabled) { using (Profiler.Scope("GetPath.LOS", "pathing")) { } }
                 return new NavigationPath(new[] { from, to });
             }
 
@@ -578,8 +753,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // "untouched by current search", so we don't have to clear anything per call.
             int session = ++_searchSession;
 
-            var openF = new PriorityQueue<NavigationGridCell, float>(1024);
-            var openB = new PriorityQueue<NavigationGridCell, float>(1024);
+            var openF = _openF; openF.Clear();
+            var openB = _openB; openB.Clear();
 
             float startToGoal = ManhattanDistance(fromNav, toNav);
             openF.Enqueue(cellFrom, startToGoal);
@@ -676,7 +851,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // detected (mirrors client placement: TraverseToEnd is called inline at S1:10144 from
             // within the popped cell handling, not as post-loop reconstruction).
             // List order: closest-to-meeting first, ending at cellTo.
-            var backwardHalf = new List<NavigationGridCell>();
+            var backwardHalf = _backwardHalf; backwardHalf.Clear();
 
             // Per direction pop counters for the GetTopNode-style scheduler below. Mirrors the
             // client's `m_CountGets` field on each NavigationHeap (S1:8789-8791, S4:6405).
@@ -685,8 +860,30 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             const int POP_BALANCE_TOLERANCE = 50;
             const float COST_HYSTERESIS = 50f;
 
+            // Client A* expansion budget. The client hard-caps total node expansions and bails to a
+            // best-partial path when exceeded (League of Legends.exe FUN_008f0e00, the BuildNavGridPath
+            // inner search: `local_4c++; if ((int)param_12 <= local_4c) break;`). The cap `param_12`
+            // is supplied by the mover at FUN_006062b0 as one of two values, stored as denormal-encoded
+            // ints that Ghidra renders as floats: 0x320 (1.12104e-42 == 800) for the fast/default
+            // mover, 0x2710 (1.4013e-41 == 10000) for the slow-accurate mover. This is the bound our
+            // port was missing: without it, an unreachable/disconnected goal drains the unit's entire
+            // reachable region every call (~10ms floods seen in profiling). Normal in-lane paths finish
+            // in far fewer expansions, so the cap only clips the pathological cases. On cap-out the
+            // reconstruction below falls through to the partial path from bestCellF (case 3).
+            const int MAX_EXPANSIONS_FAST = 800;
+            const int MAX_EXPANSIONS_SLOW = 10000;
+            int maxExpansions = useFastPath ? MAX_EXPANSIONS_FAST : MAX_EXPANSIONS_SLOW;
+
             while (openF.Count > 0 && openB.Count > 0 && !goalReached && meetingCell == null)
             {
+                // Expansion-budget guard (client local_4c cap). Checked before expanding so the
+                // worst case is exactly maxExpansions pops, matching the client's placement.
+                if (popCountF + popCountB >= maxExpansions)
+                {
+                    isPartialPath = true;
+                    break;
+                }
+
                 // Scheduling this is a port of client GetTopNode (S1:8772-8833, S4:6366-6470). Both heaps
                 // active, so the `mPathFromBothDirections` guard is implicit. Three regimes:
                 //   * One side is 50+ pops ahead → pop the other (catch-up).
@@ -760,7 +957,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // forward closed; the closed in either direction skip in ExpandStep prevents backward
             // from cross direction AdjustCelling them post close, so their shared.SearchCameFrom
             // is never overwritten with a backward direction predecessor.
-            var pathCells = new List<NavigationGridCell>();
+            var pathCells = _pathCells; pathCells.Clear();
             if (meetingCell != null)
             {
                 pathCells.Add(meetingCell);
@@ -816,6 +1013,27 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             else
             {
                 returnPath.AddWaypoint(to);
+            }
+
+            // Diagnostic marker (empty scope -> ~0-duration slice; read Count in the Perfetto flat
+            // view). Buckets the A* by total expansions (popCountF+popCountB) so one trace tells us
+            // WHY GetPath is the hotspot: a fat "CAP" bucket means calls are flooding to the
+            // expansion ceiling (radius-blocked / unreachable goals -> the fix is radius-aware
+            // reachability), whereas weight in the low buckets means calls are legitimately large
+            // reachable searches (-> the fix is per-cell A* cost). "+reloc" flags Fix-A relocations,
+            // and "+goal" vs "+part" separates "reached the (relocated) goal" from "returned a
+            // partial". Compare CAP-bucket self-time against NavGrid.GetPath total to size it.
+            if (Profiler.Enabled)
+            {
+                int expansions = popCountF + popCountB;
+                string bucket =
+                    expansions >= maxExpansions ? "CAP" :
+                    expansions >= 400 ? "400-799" :
+                    expansions >= 100 ? "100-399" :
+                    expansions >= 20 ? "20-99" : "0-19";
+                bool foundPath = meetingCell != null || goalReached;
+                string label = $"GetPath.exp[{bucket}]{(foundPath ? "" : "·nopath")}{(relocated ? "·reloc" : "")}";
+                using (Profiler.Scope(label, "pathing")) { }
             }
 
             return returnPath;

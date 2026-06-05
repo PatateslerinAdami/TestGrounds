@@ -2220,9 +2220,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="to"></param>
         /// <param name="distanceThreshold"></param>
         /// <returns></returns>
-        public static List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0)
+        public static List<Vector2> GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false)
         {
-            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold)?.ToList();
+            return _game.Map.PathingHandler.GetPath(from, to, distanceThreshold, useFastPath)?.ToList();
         }
 
         /// <summary>
