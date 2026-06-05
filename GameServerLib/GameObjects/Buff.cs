@@ -202,7 +202,6 @@ namespace LeagueSandbox.GameServer.GameObjects
             if (TargetUnit is Champion champ)
             {
                 champ.AddToolTipChange(ToolTipData);
-                LoggerProvider.GetLogger().Info("should change tooltip");
             }
         }
 
