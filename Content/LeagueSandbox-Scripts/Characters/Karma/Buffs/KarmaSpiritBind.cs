@@ -46,7 +46,6 @@ namespace Buffs
         }
 
         public void OnUpdate(float diff) {
-            LogInfo("" + Vector2.Distance(_karma.Position, _unit.Position));
             if (Vector2.Distance(_karma.Position, _unit.Position) >= 825f || _unit.IsDead) {
                 _isTetherBroken = true;
                 _buff.DeactivateBuff();
