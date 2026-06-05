@@ -85,7 +85,11 @@ namespace LeagueSandbox.GameServer.Content
         //DrawSecondaryLineIndicator
         //DynamicExtended
         //string DynamicTooltip
-        //EffectXLevelYAmmount
+        public float[][] EffectLevelAmount { get; set; } =
+        {
+            new float[7], new float[7], new float[7], new float[7], new float[7], new float[7],
+            new float[7], new float[7], new float[7], new float[7], new float[7]
+        };
         public SpellDataFlags Flags { get; set; }
         //FloatStaticsDecimalsX
         //FloatVarsDecimalsX
