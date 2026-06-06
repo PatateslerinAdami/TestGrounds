@@ -12,7 +12,7 @@ namespace Buffs;
 
 internal class VelkozEStun : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.KNOCKUP,
+        BuffType    = BuffType.STUN,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1
     };

@@ -25,6 +25,4 @@ internal class AatroxQ : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
-
-    public void OnUpdate(float diff) { }
 }
