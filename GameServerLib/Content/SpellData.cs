@@ -423,7 +423,13 @@ namespace LeagueSandbox.GameServer.Content
             //DrawSecondaryLineIndicator
             //DynamicExtended
             //string DynamicTooltip
-            //EffectXLevelYAmmount
+            for (var effect = 1; effect <= 10; effect++)
+            {
+                for (var level = 0; level <= 6; level++)
+                {
+                    EffectLevelAmount[effect][level] = file.GetFloat("SpellData", $"Effect{effect}Level{level}Amount", 0);
+                }
+            }
             Flags = (SpellDataFlags)file.GetInt("SpellData", "Flags");
             //FloatStaticsDecimalsX
             //FloatVarsDecimalsX
