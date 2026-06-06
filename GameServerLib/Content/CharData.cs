@@ -36,7 +36,9 @@ namespace LeagueSandbox.GameServer.Content
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
-        public float BaseAttackProbability { get; private set; } = 0.5f;
+        // S4 default 1.0 (CharacterData.cpp:966) the slot 0 catches the whole roll unless
+        // the data explicitly lowers it (alternating champs use 0.5).
+        public float BaseAttackProbability { get; private set; } = 1.0f;
         public float BaseDamage { get; private set; } = 10.0f;
         public float BaseHp { get; private set; } = 100.0f;
         public float BaseMp { get; private set; } = 100.0f;
@@ -47,7 +49,9 @@ namespace LeagueSandbox.GameServer.Content
         public float CritAttackDelayCastOffsetPercent { get; private set; } = 0.0f;
         public float CritAttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
         public float CritAttackDelayOffsetPercent { get; private set; } = 0.0f;
-        public float CritAttackProbability { get; private set; } = 0.0f;
+        // S4 default 2.0 (CharacterData.cpp:1008 loads every non-base slot incl. crit
+        // with the 2.0 catch-all default). The crit walk's first slot always catches.
+        public float CritAttackProbability { get; private set; } = 2.0f;
         public float DamagePerLevel { get; private set; } = 10.0f;
         public bool DisableContinuousTargetFacing { get; private set; } = false;
         public bool EnemyCanUse { get; private set; } = false;
@@ -224,7 +228,16 @@ namespace LeagueSandbox.GameServer.Content
                     Name = attackName,
                     AttackCastTime = file.GetFloat("Data", $"ExtraAttack{i}_AttackCastTime", AttackCastTime),
                     AttackTotalTime = file.GetFloat("Data", $"ExtraAttack{i}_AttackTotalTime", AttackTotalTime),
-                    Probability = file.GetFloat("Data", $"ExtraAttack{i}_Probability", BaseAttackProbability)
+                    // S4 default 2.0 (CharacterData.cpp:1008): a slot without explicit
+                    // probability is a CATCH-ALL. It takes the whole remaining roll IF
+                    // the cumulative walk ever reaches it. Slots behind cumsum >= 1.0 are
+                    // unreachable; that is how Riot's data keeps conditional attacks
+                    // (form attacks, passive procs, fossils like SivirBasicAttack3/4)
+                    // out of the rotation while e.g. Lulu (base=0.5, Extra1 valueless)
+                    // legitimately alternates via the catch-all. Requires the cumulative
+                    // selection in ObjAIBase.GetNewAutoAttack because a normalized weighted
+                    // pick would roll the 2.0 slots.
+                    Probability = file.GetFloat("Data", $"ExtraAttack{i}_Probability", 2.0f)
                 };
                 BasicAttacks[i].GetAttackValues();
                 nameIndex++;
@@ -253,7 +266,8 @@ namespace LeagueSandbox.GameServer.Content
                     Name = attackName,
                     AttackCastTime = AttackCastTime,
                     AttackTotalTime = AttackTotalTime,
-                    Probability = CritAttackProbability
+                    // Per-slot like S4 (catch-all 2.0 default), not the champ-level value.
+                    Probability = file.GetFloat("Data", $"ExtraCritAttack{i}_Probability", 2.0f)
                 };
                 BasicAttacks[index].GetAttackValues();
             }
