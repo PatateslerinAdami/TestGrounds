@@ -36,8 +36,9 @@ internal class JinxQ : IBuffGameScript {
         _jinx  = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
         _buff  = buff;
-        ownerSpell.SetSpellToggle(true);
-
+        // Switch the Q HUD icon to Fishbones (IconIndex 0 = InventoryIcon / Jinx_Q1.dds;
+        _spell.ChangeSpellData(ChangeSlotSpellDataType.IconIndex, newIconIndex: 0);
+        
         // SetAutoAttackSpells with Crit and BasicAttack variants
         _jinx.SetAutoAttackSpellsWithCrit(true, CritAttackSpell, AttackSpell1, AttackSpell2);
         

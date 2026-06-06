@@ -1822,18 +1822,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public void SetOverrideCastRange(float newCastRange)
         {
             _overrrideCastRange = newCastRange;
-
-            if (CastInfo.Owner is Champion champion)
-            {
-                _game.PacketNotifier.NotifyChangeSlotSpellData
-                (
-                    _game.PlayerManager.GetClientInfoByChampion(champion).ClientId,
-                    champion,
-                    (byte)CastInfo.SpellSlot,
-                    ChangeSlotSpellDataType.Range,
-                    newRange: newCastRange
-                );
-            }
+            ChangeSpellData(ChangeSlotSpellDataType.Range, newRange: newCastRange);
         }
 
         private void SetPassiveCooldownStats(float newCd)
