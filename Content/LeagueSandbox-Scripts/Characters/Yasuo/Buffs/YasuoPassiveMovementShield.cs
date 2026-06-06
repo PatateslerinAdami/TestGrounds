@@ -9,14 +9,15 @@ using GameServerCore.Scripting.CSharp;
 
 namespace Buffs
 {
+    // Hidden carrier (replay: type AURA, IsHidden, permanent, added once, never updated).
+    // The visible flow meter lives on YasuoPassiveMSCharge, NOT here.
     internal class YasuoPassiveMovementShield : IBuffGameScript
     {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData 
-        { 
-            BuffType = BuffType.AURA, 
-            IsHidden = false, 
-            BuffAddType = BuffAddType.RENEW_EXISTING,
-            MaxStacks = 100 
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
+        {
+            BuffType = BuffType.AURA,
+            IsHidden = true,
+            BuffAddType = BuffAddType.RENEW_EXISTING
         };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
 
