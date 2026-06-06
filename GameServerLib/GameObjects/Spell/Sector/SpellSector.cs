@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
@@ -187,7 +188,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
 
             if (CastInfo.Owner is ObjAIBase ai && SpellOrigin.CastInfo.IsAutoAttack)
             {
-                ai.AutoAttackHit(unit);
+                ai.AutoAttackHit(unit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
             }
 
             ObjectsHit.Add(unit);
