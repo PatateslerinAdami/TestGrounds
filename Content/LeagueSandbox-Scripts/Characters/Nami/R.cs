@@ -73,7 +73,7 @@ public class NamiRMissile : ISpellScript {
             
             //slow
             var variables      = new BuffVariables();
-            variables.Set("slowAmount", 0.5f + 0.1f * (_nami.GetSpell("NamiR").CastInfo.SpellLevel - 1));
+            variables.Set("slowPercent", 0.5f + 0.1f * (_nami.GetSpell("NamiR").CastInfo.SpellLevel - 1));
             AddBuff("Slow", slowDuration, 1, spell, target, _nami, buffVariables:  variables);
             
             AddBuff("NamiRVision", 0.5f, 1, spell, target, _nami);
