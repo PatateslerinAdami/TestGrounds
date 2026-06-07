@@ -28,8 +28,8 @@ namespace Buffs
             var owner = ownerSpell.CastInfo.Owner;
             StatsModifier.MoveSpeed.PercentBonus = 27 / 100.0f;
             unit.AddStatModifier(StatsModifier);
-            _p1 = AddParticleTarget(owner, unit, "Global_SS_Ghost", unit);
-            _p2 = AddParticleTarget(owner, unit, "Global_SS_Ghost_cas", unit);
+            _p1 = AddParticleTarget(owner, unit, "Global_SS_Ghost", unit, lifetime: buff.Duration);
+            _p2 = AddParticleTarget(owner, unit, "Global_SS_Ghost_cas", unit, lifetime: buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
