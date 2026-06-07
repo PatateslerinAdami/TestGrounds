@@ -1,79 +1,87 @@
-﻿namespace GameServerCore.Enums
+namespace GameServerCore.Enums
 {
+    /// <summary>
+    /// Unit AI order types.
+    /// Verified against the S4 mac decomp: exact 1:1 match with `orders_e`
+    /// (AI/AIEnums.h, AI_* names, ORDERS_END_OF_LIST = 16 - the enum is complete).
+    /// Values 0-9 are also part of Riot's server Lua API (S1 luaspellscripthelper.cpp
+    /// exports AI_ORDER_NONE..AI_PETHARDRETURN as Lua globals), so keep values exact.
+    /// </summary>
     public enum OrderType : byte
     {
         /// <summary>
-        /// Unknown. Current usage assumes it is for the beginning of the game.
+        /// No order (Riot AI_ORDER_NONE). Initial state and the value orders reset to.
         /// </summary>
-        /// TODO: Verify
         OrderNone = 0x0,
         /// <summary>
-        /// Used when a unit is postponing further movements (can still target).
+        /// Hold position: postpone further movement, targeting still allowed (Riot AI_HOLD).
         /// </summary>
-        /// TODO: Verify
         Hold = 0x1,
         /// <summary>
-        /// Used when a unit has started moving to a location (non-object target).
+        /// Move to a location (Riot AI_MOVETO).
         /// </summary>
         MoveTo = 0x2,
         /// <summary>
-        /// Used when a unit has targeted and is moving towards, a unit.
+        /// Attack a targeted unit, moving toward it as needed (Riot AI_ATTACKTO).
         /// </summary>
         AttackTo = 0x3,
         /// <summary>
-        /// Unknown. Current usage assumes it is for when a spell uses auto attack cast delay.
+        /// Postponed spell cast (Riot AI_TEMP_CASTSPELL): set by obj_AI_Base::PostponeSpell
+        /// together with ORDER_STATUS_POSTPONED when a cast cannot execute immediately
+        /// (out of range / busy); the queued cast retries later and
+        /// ClearPostponedSpells resets the order to OrderNone.
         /// </summary>
-        /// TODO: Verify
         TempCastSpell = 0x4,
         /// <summary>
-        /// Used when a pet is forced to target and move towards a unit.
+        /// Player-issued pet command: attack this unit (Riot AI_PETHARDATTACK).
         /// </summary>
         PetHardAttack = 0x5,
         /// <summary>
-        /// Used when a pet is forced to move to a location.
+        /// Player-issued pet command: move to this location (Riot AI_PETHARDMOVE).
         /// </summary>
         PetHardMove = 0x6,
         /// <summary>
-        /// Used when a unit has started moving to a location and is actively searching its area for a target to attack.
+        /// Attack-move: move to a location, engaging targets found along the way
+        /// (Riot AI_ATTACKMOVE).
         /// </summary>
         AttackMove = 0x7,
         /// <summary>
-        /// Used when a unit has started a taunt. Normally stops movement.
+        /// Order forced on a unit while taunted (Riot AI_TAUNT).
         /// </summary>
         Taunt = 0x8,
         /// <summary>
-        /// Used when a unit is forced to return to a location. Perhaps related to Malzahar pets losing focus of a target, and thus moving back to their owner?
+        /// Player-issued pet command: return to owner (Riot AI_PETHARDRETURN; client
+        /// HudCursorTargetLogic issues it from the pet-control UI; uses the Move
+        /// confirmation voice-over like PetHardMove).
         /// </summary>
-        /// TODO: Verify
         PetHardReturn = 0x9,
         /// <summary>
-        /// Used when a unit performs a stop movement.
+        /// Stop movement (Riot AI_STOP).
         /// </summary>
         Stop = 0xA,
         /// <summary>
-        /// Used when a pet is forced to perform a stop movement.
+        /// Pet stop command (Riot AI_PETHARDSTOP).
         /// </summary>
-        /// TODO: Verify
         PetHardStop = 0xB,
         /// <summary>
-        /// Used when a unit tries to use an object. Perhaps related to Dominion capture points?
+        /// Use an object (Riot AI_USE). No caller found in the visible 4.17 client code
+        /// or S1 source - likely vestigial (Dominion capture points use other paths).
         /// </summary>
-        /// TODO: Verify
         Use = 0xC,
         /// <summary>
-        /// Unknown.
+        /// Continuously attack terrain/attackable map geometry (Riot
+        /// AI_ATTACKTERRAIN_SUSTAINED; client gates it on CharState.CanAttack and
+        /// plays the Attack confirmation VO like AttackTo).
         /// </summary>
-        /// TODO: Verify
         AttackTerrainSustained = 0xD,
         /// <summary>
-        /// Unknown.
+        /// Attack terrain once (Riot AI_ATTACKTERRAIN_ONCE; same client handling as
+        /// AttackTerrainSustained).
         /// </summary>
-        /// TODO: Verify
         AttackTerrainOnce = 0xE,
         /// <summary>
-        /// Used when a unit has begun casting a spell.
+        /// Cast a spell (Riot AI_CASTSPELL).
         /// </summary>
-        /// TODO: Verify
         CastSpell = 0xF,
     }
 }
