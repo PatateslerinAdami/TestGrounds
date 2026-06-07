@@ -23,7 +23,6 @@ public class ItemID_1503 : IItemScript
     public void OnActivate(ObjAIBase owner)
     {
         _turret = owner;
-        ApiEventManager.OnDeath.AddListener(this, _turret, OnDeath);
         AddUnitPerceptionBubble(_turret, 1000f, -1f, _turret.Team, true);
     }
 
