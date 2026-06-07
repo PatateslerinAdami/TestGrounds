@@ -22,6 +22,9 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
 
         public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
 
+        public string[] SpellFXOverrideSkins { get; set; } = { "", "" };
+        
+        public string[] SpellVOOverrideSkins { get; set; } = { "" };
         
 
     }

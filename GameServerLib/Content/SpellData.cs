@@ -129,7 +129,6 @@ namespace LeagueSandbox.GameServer.Content
         public float LuaOnMissileUpdateDistanceInterval { get; set; }
         public float Coefficient2 { get; set; }
         public float[] ManaCost { get; set; } = { 0, 0, 0, 0, 0, 0, 0 };
-        //Map_X_EffectYLevelZAmmount
         public int MaxAmmo { get; set; } = 1;
         //MaxGrowthRangeTextureName
         //MinimapIcon

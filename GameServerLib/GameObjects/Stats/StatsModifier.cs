@@ -32,5 +32,14 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public StatModifier Tenacity { get; } = new StatModifier();
         public float MultiplicativeSpeedBonus { get; set; }
         public float SlowResistPercent { get; set; }
+
+        /// <summary>
+        /// The buff this modifier belongs to, set automatically by Buff.ActivateBuff before
+        /// the buff script runs. Used by the slow registry in Stats to derive the named-effect
+        /// key (OriginSpell name, or the shared "item" bucket) the same named effect never
+        /// stacks with itself, different effects stack at 35% (pre-V5.13 rules).
+        /// Null for modifiers applied outside the buff pipeline; those count as their own effect.
+        /// </summary>
+        public Buff SourceBuff { get; set; }
     }
 }

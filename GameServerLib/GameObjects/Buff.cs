@@ -131,6 +131,14 @@ namespace LeagueSandbox.GameServer.GameObjects
         {
             Remove = false;
 
+            // Tag the script's StatsModifier with its owning buff BEFORE OnActivate runs
+            // (scripts call AddStatModifier inside OnActivate) — the slow registry in Stats
+            // derives the named-effect key from this.
+            if (BuffScript.StatsModifier != null)
+            {
+                BuffScript.StatsModifier.SourceBuff = this;
+            }
+
             try
             {
                 using var _scope = Profiler.Scope($"buff:{Name}.OnActivate", "scripts");
