@@ -266,6 +266,12 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         }
 
         /// <summary>
+        /// Whether any slow effect is currently registered (the run-animation watcher uses
+        /// presence rather than net speed: a slowed-but-booted unit still LOOKS slowed).
+        /// </summary>
+        public bool HasActiveSlows => _slows.Count > 0;
+
+        /// <summary>
         /// Derives the named-effect key for the slow registry from the modifier's owning buff:
         /// the originating spell name, or the shared "item" bucket for buffs without an origin
         /// spell (item passives like Rylai. Riot's ItemSlow.lua treats all item slows as one

@@ -1842,6 +1842,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (delayedSpellPackets.Count > 0) invisSent = true;
             base.Update(diff);
+            UpdateRunAnimationVariant();
             try
             {
                 using var _scope = Profiler.Scope($"script:{CharScript.GetType().Name}.OnUpdate", "scripts");

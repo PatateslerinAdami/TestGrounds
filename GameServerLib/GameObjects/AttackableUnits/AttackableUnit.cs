@@ -2654,7 +2654,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Given state pairs are expected to follow a specific structure:
         /// First string is the animation to override, second string is the animation to play in place of the first.
         /// <param name="animPairs">Dictionary of animations to set.</param>
-        public void SetAnimStates(Dictionary<string, string> animPairs, object source = null)
+        /// <param name="asBaseLayer">Insert at the BOTTOM of the override stack instead of
+        /// the top: any script/buff override (Aatrox R RUN_ULT, form swaps) keeps winning no
+        /// matter when it was added. Used by the speed-state run-animation watcher, whose
+        /// state can flip mid-buff (Ghost cast during an active ult must not replace the
+        /// ult's run animation).</param>
+        public void SetAnimStates(Dictionary<string, string> animPairs, object source = null, bool asBaseLayer = false)
         {
             if (animPairs == null || animPairs.Count == 0) return;
             if (source == null) source = this;
@@ -2676,7 +2681,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 list.RemoveAll(x => x.Source == source);
                 if (!string.IsNullOrEmpty(newValue))
                 {
-                    list.Add(new AnimOverrideInfo { OverrideValue = newValue, Source = source });
+                    var info = new AnimOverrideInfo { OverrideValue = newValue, Source = source };
+                    if (asBaseLayer)
+                    {
+                        list.Insert(0, info);
+                    }
+                    else
+                    {
+                        list.Add(info);
+                    }
                 }
 
                 string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";
