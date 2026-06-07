@@ -915,76 +915,87 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <returns>Random auto attack spell.</returns>
         public Spell GetNewAutoAttack()
         {
-            var candidates = new List<(Spell spell, float weight)>();
+            // S4-faithful pick (BipedHelpers::GetAnimationFromProbability,
+            // CharacterData.cpp:1890): ONE [0,1) roll, cumulative threshold walk in
+            // slot order — the first slot whose cumulative probability exceeds the
+            // roll wins. NO normalization, NO anti-repeat rerolls (every attack rolls
+            // independently). Slots behind a cumulative sum >= 1.0 are unreachable by
+            // design: that is what keeps conditional attacks (form/passive/fossil
+            // entries, loaded with the 2.0 catch-all default) out of the rotation,
+            // while a reachable catch-all (Lulu: base=0.5 + valueless Extra1) takes
+            // the whole remainder.
+            short firstSlot = IsNextAutoCrit
+                ? (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1
+                : (short)BasicAttackTypes.BASIC_ATTACK_TYPES_FIRST_SLOT;
+            short lastSlot = IsNextAutoCrit
+                ? (short)BasicAttackTypes.BASICATTACK_CRITICAL_LAST_SLOT
+                : (short)BasicAttackTypes.BASICATTACK_NORMAL_LAST_SLOT;
 
-            if (IsNextAutoCrit)
+            float roll = (float)_random.NextDouble();
+            float cumulative = 0.0f;
+
+            for (short slot = firstSlot; slot <= lastSlot; slot++)
             {
-                for (short slot = (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1; slot <= (short)BasicAttackTypes.BASICATTACK_CRITICAL_LAST_SLOT; slot++)
+                var idx = slot - 64;
+                if (idx < 0 || idx >= CharData.BasicAttacks.Count)
                 {
-                    var idx = slot - 64;
-                    if (idx < 0 || idx >= CharData.BasicAttacks.Count)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    var prob = CharData.BasicAttacks[idx].Probability;
-                    if (prob <= 0.0f)
-                    {
-                        continue;
-                    }
-
+                cumulative += CharData.BasicAttacks[idx].Probability;
+                if (cumulative > roll)
+                {
+                    // Riot returns the slot unconditionally (their spell registry has
+                    // an entry for every declared slot); we need a resolvable spell —
+                    // a dead slot falls through to the first-slot fallback, mirroring
+                    // the walk's own tail behavior.
                     if (Spells.TryGetValue(slot, out var spell) && spell != null)
                     {
-                        candidates.Add((spell, prob));
+                        _lastAutoAttack = spell;
+                        return spell;
                     }
-                }
-            }
-            else
-            {
-                for (short slot = (short)SpellSlotType.BasicAttackNormalSlots; slot <= (short)BasicAttackTypes.BASICATTACK_NORMAL_LAST_SLOT; slot++)
-                {
-                    var idx = slot - 64;
-                    if (idx < 0 || idx >= CharData.BasicAttacks.Count)
-                    {
-                        continue;
-                    }
-
-                    var prob = CharData.BasicAttacks[idx].Probability;
-                    if (prob <= 0.0f)
-                    {
-                        continue;
-                    }
-
-                    if (Spells.TryGetValue(slot, out var spell) && spell != null)
-                    {
-                        candidates.Add((spell, prob));
-                    }
+                    break;
                 }
             }
 
-            if (candidates.Count == 0)
-            {
-                var first = IsNextAutoCrit
-                    ? (short)BasicAttackTypes.BASICATTACK_CRITICAL_SLOT1
-                    : (short)BasicAttackTypes.BASIC_ATTACK_TYPES_FIRST_SLOT;
-
-                _lastAutoAttack = Spells[first];
-                return _lastAutoAttack;
-            }
-
-            const int maxRerolls = 3;
-            for (var attempt = 0; attempt <= maxRerolls; attempt++)
-            {
-                var chosen = WeightedPick(candidates);
-                if (chosen != _lastAutoAttack || candidates.Count == 1 || attempt == maxRerolls)
-                {
-                    _lastAutoAttack = chosen;
-                    return chosen;
-                }
-            }
-
-            _lastAutoAttack = candidates[0].spell;
+            _lastAutoAttack = Spells[firstSlot];
             return _lastAutoAttack;
+        }
+
+        // Per-unit karma streak state (only champions consult it, mirroring AIHero's
+        // mKarma member).
+        private readonly KarmaRandom _critKarma = new KarmaRandom();
+
+        /// <summary>
+        /// Rolls whether the upcoming auto attack crits — S4-faithful split
+        /// (AIHero::ComputeCriticalSuccess, AIHero.cpp:838): CHAMPIONS roll through the
+        /// karma PRD with independent per-target-class streams (0 = vs enemy heroes,
+        /// 2 = vs minions/monsters incl. pets/wards); anything else (structures, ally
+        /// heroes) returns false WITHOUT touching the counters. Non-hero units use the
+        /// plain uniform float roll (obj_AI_Base::ComputeCriticalSuccess base behavior;
+        /// moot in practice — their crit chance is 0), structures excluded for safety.
+        /// </summary>
+        private bool RollAutoAttackCrit(AttackableUnit target)
+        {
+            if (this is Champion)
+            {
+                if (target is Champion && target.Team != Team)
+                {
+                    return _critKarma.Roll(Stats.CriticalChance.Total, 0);
+                }
+                if (target is Minion)
+                {
+                    return _critKarma.Roll(Stats.CriticalChance.Total, 2);
+                }
+                return false;
+            }
+
+            if (target is ObjBuilding || target is BaseTurret)
+            {
+                return false;
+            }
+
+            return _random.NextDouble() < Stats.CriticalChance.Total;
         }
 
         private float GetAutoAttackProbabilityWeight(Spell spell)
