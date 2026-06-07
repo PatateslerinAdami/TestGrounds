@@ -2,6 +2,9 @@
 {
     /// <summary>
     /// Source types for damage. Used in determining when damage is applied, such as before mitigation.
+    /// Verified against the S4 mac decomp: exact 1:1 match with `DamageSource`
+    /// (AI/Damage/DamageEnums.h, values 0-11, DAMAGESOURCE_Numof = 12 - complete).
+    /// Values 0-10 are also Lua-exported by Riot (S1 luaspellscripthelper.cpp), keep exact.
     /// </summary>
     public enum DamageSource
     {
