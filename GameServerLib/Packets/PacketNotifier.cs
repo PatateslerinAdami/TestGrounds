@@ -4129,8 +4129,9 @@ namespace PacketDefinitions420
                     DurationID = 0,
                     Flags = 3
                 },
-                // Turret Range Indicators and others (taken from Map11 replay)
-                GameFeatures = 662166610
+                // Riot FeaturesConfig client bitfield captured from a real 4.20 game
+                // (= 662166610); named bits in RiotGameFeatures.Default420.
+                GameFeatures = (ulong)RiotGameFeatures.Default420
             };
 
             for (int i = 0; i < players.Count; i++)

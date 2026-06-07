@@ -5,7 +5,6 @@ namespace GameServerCore.Enums
     /// <summary>
     /// Enumerator detailing all game feature flags. Used for enabling/disabling core features and in networking.
     /// </summary>
-    /// TODO: Finish this.
     [Flags]
     public enum FeatureFlags : uint
     {
