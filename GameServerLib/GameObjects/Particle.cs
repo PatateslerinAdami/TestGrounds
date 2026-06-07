@@ -107,7 +107,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
-            FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
+            FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
@@ -146,7 +146,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
-            FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
+            FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
@@ -191,7 +191,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
-            FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
+            FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
             : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {

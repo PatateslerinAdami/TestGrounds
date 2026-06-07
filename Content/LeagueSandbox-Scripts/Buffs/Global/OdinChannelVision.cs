@@ -25,11 +25,11 @@ namespace Buffs
         Region r4;
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            r1 = AddUnitPerceptionBubble(unit, 400.0f, buff.Duration, TeamId.TEAM_BLUE, false, collisionArea: 35.0f, regionType: RegionType.Unknown2);
-            r2 = AddUnitPerceptionBubble(unit, 50.0f, buff.Duration, TeamId.TEAM_BLUE, true, collisionArea: 35.0f, regionType: RegionType.Unknown2);
+            r1 = AddUnitPerceptionBubble(unit, 400.0f, buff.Duration, TeamId.TEAM_BLUE, false, collisionArea: 35.0f, regionType: RegionType.Circle);
+            r2 = AddUnitPerceptionBubble(unit, 50.0f, buff.Duration, TeamId.TEAM_BLUE, true, collisionArea: 35.0f, regionType: RegionType.Circle);
 
-            r3 = AddUnitPerceptionBubble(unit, 400.0f, buff.Duration, TeamId.TEAM_PURPLE, false, collisionArea: 35.0f, regionType: RegionType.Unknown2);
-            r4 = AddUnitPerceptionBubble(unit, 50.0f, buff.Duration, TeamId.TEAM_PURPLE, true, collisionArea: 35.0f, regionType: RegionType.Unknown2);
+            r3 = AddUnitPerceptionBubble(unit, 400.0f, buff.Duration, TeamId.TEAM_PURPLE, false, collisionArea: 35.0f, regionType: RegionType.Circle);
+            r4 = AddUnitPerceptionBubble(unit, 50.0f, buff.Duration, TeamId.TEAM_PURPLE, true, collisionArea: 35.0f, regionType: RegionType.Circle);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

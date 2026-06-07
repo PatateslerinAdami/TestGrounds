@@ -738,7 +738,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
@@ -767,7 +767,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
@@ -796,7 +796,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle,
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
@@ -884,7 +884,7 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default,
+            RegionType regionType = RegionType.Circle,
             bool ignoresLoS = false
         )
         {
@@ -922,7 +922,7 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default,
+            RegionType regionType = RegionType.Circle,
             bool ignoresLoS = false,
             bool onlyShowTarget = true
         )

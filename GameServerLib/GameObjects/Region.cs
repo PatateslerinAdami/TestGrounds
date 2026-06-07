@@ -39,7 +39,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <param name="game">Game instance.</param>
         /// <param name="team">Team this region should be on.</param>
         /// <param name="pos">Position to spawn this region at.</param>
-        /// <param name="type">Type of region to spawn. Values unknown. Default recommended.</param>
+        /// <param name="type">Type of region to spawn. Riot 4.20 sends Circle (-2) for everything except the two fountain regions (-1) - see RegionType docs.</param>
         /// <param name="collisionUnit">Unit which will use the collision radius of this region.</param>
         /// <param name="visionTarget">Bind target for vision.</param>
         /// <param name="giveVision">Whether or not this region should have vision.</param>
@@ -57,7 +57,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             Game game,
             TeamId team,
             Vector2 pos,
-            RegionType type = RegionType.Default,
+            RegionType type = RegionType.Circle,
             GameObject collisionUnit = null,
             GameObject visionTarget = null,
             float visionRadius = 0,
