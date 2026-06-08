@@ -30,7 +30,6 @@ public class JaxLeapStrike : ISpellScript {
         _jax   = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, _jax, OnUpdateStats);
-        ApiEventManager.OnMoveSuccess.AddListener(this, owner, OnMoveEnd);
         //ApiEventManager.OnMoveFailure.AddListener(this, owner, OnMoveFailure);
     }
 
@@ -48,6 +47,8 @@ public class JaxLeapStrike : ISpellScript {
         } else { FaceDirection(GetPositionByOffset(0f, -150f), _jax, true); }
 
         PlayAnimation(_jax, "Spell2", timeScale);
+        ApiEventManager.OnMoveSuccess.AddListener(this, _jax, OnMoveEnd);
+        
     }
 
     public void OnSpellPostCast(Spell spell) {
