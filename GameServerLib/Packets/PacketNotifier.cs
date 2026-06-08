@@ -4873,6 +4873,22 @@ namespace PacketDefinitions420
         {
             _packetHandlerManager.BroadcastPacketTeam(team, gp.GetBytes(), Channel.CHL_S2C);
         }
+        
+        
+        /// <summary>
+        /// Catch-up CastSpellAns for ONE recipient who acquired vision of the caster while a
+        /// windup was already running. The original ANS is vision-scoped
+        /// (BroadcastPacketVision), so late viewers never saw it — Riot re-announces with
+        /// StartCastTime = elapsed and ExtraCastTime = −elapsed in the same tick as the
+        /// OnEnterVisibilityClient bundle (replay 630b7ceb: RocketGrab/KhazixW/DianaArc,
+        /// 3/3 alongside 0xBA+0xAE). The client fast-forwards the windup accordingly.
+        /// </summary>
+        public void NotifyNPC_CastSpellAnsCatchUp(Spell s, float elapsedSeconds, int userId)
+        {
+            var packet = ConstructCastSpellPacket(s, elapsedSeconds);
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+        
         public void NotifyCustomDashTest(AttackableUnit u, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
         {
             var md = PacketExtensions.CreateCustomMovementDataWithSpeed(u, _navGrid, targetPos, speed, gravity, parabolicStartPoint);
