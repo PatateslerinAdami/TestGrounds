@@ -15,7 +15,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class VayneTumble : IBuffGameScript {
+internal class VayneTumbleBonus : IBuffGameScript {
     private ObjAIBase              _vayne;
     private Spell          _spell;
     private Buff           _buff;

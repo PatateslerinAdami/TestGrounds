@@ -208,6 +208,11 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
 
         public static object RunFunctionOnObject(object obj, string method, params object[] args)
         {
+            // Profile reflection-dispatched script calls. Delegate-based call
+            // sites (GetStaticMethod / GetObjectMethod consumers) bypass this
+            // path — instrument those individually with Profiler.Scope at the
+            // call site if you want them in the trace.
+            using var _scope = Profiler.Scope($"script:{obj.GetType().Name}.{method}", "scripts");
             return obj.GetType().InvokeMember(
                 method,
                 BindingFlags.Default | BindingFlags.InvokeMethod,

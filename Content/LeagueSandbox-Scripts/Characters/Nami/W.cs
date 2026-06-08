@@ -86,7 +86,6 @@ public class NamiWAlly : ISpellScript {
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        LogInfo("MissileAlly");
     }
 
     public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {

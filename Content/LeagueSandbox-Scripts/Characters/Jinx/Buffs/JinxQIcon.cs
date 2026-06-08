@@ -29,7 +29,8 @@ internal class JinxQIcon : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _jinx  = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
-        ownerSpell.SetSpellToggle(false);
+        // Switch the Q HUD icon back to Pow-Pow (IconIndex 1 = InventoryIcon / Jinx_Q2.dds;
+        _spell.ChangeSpellData(ChangeSlotSpellDataType.IconIndex, newIconIndex: 1);
         
         // Return to Pow-Pow autos and base animation state set.
         _jinx.ResetAutoAttackSpell();

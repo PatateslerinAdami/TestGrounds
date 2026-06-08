@@ -30,7 +30,6 @@ public class AkaliShadowDance : ISpellScript {
         _akali = owner;
         ApiEventManager.OnKill.AddListener(this, owner, OnKill);
         ApiEventManager.OnAssist.AddListener(this, owner, OnAssist);
-        ApiEventManager.OnMoveEnd.AddListener(this, owner, OnMoveEnd);
         ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
         SyncShadowDanceBuffStacks();
         ApiEventManager.OnUpdateStats.AddListener(this, _akali, OnUpdateStats);
@@ -50,16 +49,21 @@ public class AkaliShadowDance : ISpellScript {
             _trueCoords *= 0.5f;
         }
         _trueCoords = CalcVector(distance, _akali.Position, _target.Position);
+        ApiEventManager.OnMoveEnd.AddListener(this, owner, OnMoveEnd, true);
         owner.DashToLocation(_trueCoords, 2000f, "Spell4", 0f, false, false);
     }
- 
+
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters) {
+        var target = _target;
+        if (target.IsDead) {
+            return;
+        }
         var ap     = _akali.Stats.AbilityPower.Total * 0.5f;
         var damage = 100 + 75 * (_spell.CastInfo.SpellLevel - 1) + ap;
-        AddParticleTarget(_akali, _target, "akali_shadowDance_tar", _target);
-        _target.TakeDamage(_akali, damage, DamageType.DAMAGE_TYPE_MAGICAL,
+        AddParticleTarget(_akali, target, "akali_shadowDance_tar", target);
+        target.TakeDamage(_akali, damage, DamageType.DAMAGE_TYPE_MAGICAL,
                            DamageSource.DAMAGE_SOURCE_SPELL, false);
-        _akali.SetTargetUnit(_target, true);
+        _akali.SetTargetUnit(target, true);
     }
 
     public void OnUpdate(float diff) {

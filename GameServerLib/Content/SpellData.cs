@@ -85,7 +85,11 @@ namespace LeagueSandbox.GameServer.Content
         //DrawSecondaryLineIndicator
         //DynamicExtended
         //string DynamicTooltip
-        //EffectXLevelYAmmount
+        public float[][] EffectLevelAmount { get; set; } =
+        {
+            new float[7], new float[7], new float[7], new float[7], new float[7], new float[7],
+            new float[7], new float[7], new float[7], new float[7], new float[7]
+        };
         public SpellDataFlags Flags { get; set; }
         //FloatStaticsDecimalsX
         //FloatVarsDecimalsX
@@ -125,7 +129,6 @@ namespace LeagueSandbox.GameServer.Content
         public float LuaOnMissileUpdateDistanceInterval { get; set; }
         public float Coefficient2 { get; set; }
         public float[] ManaCost { get; set; } = { 0, 0, 0, 0, 0, 0, 0 };
-        //Map_X_EffectYLevelZAmmount
         public int MaxAmmo { get; set; } = 1;
         //MaxGrowthRangeTextureName
         //MinimapIcon
@@ -419,7 +422,13 @@ namespace LeagueSandbox.GameServer.Content
             //DrawSecondaryLineIndicator
             //DynamicExtended
             //string DynamicTooltip
-            //EffectXLevelYAmmount
+            for (var effect = 1; effect <= 10; effect++)
+            {
+                for (var level = 0; level <= 6; level++)
+                {
+                    EffectLevelAmount[effect][level] = file.GetFloat("SpellData", $"Effect{effect}Level{level}Amount", 0);
+                }
+            }
             Flags = (SpellDataFlags)file.GetInt("SpellData", "Flags");
             //FloatStaticsDecimalsX
             //FloatVarsDecimalsX

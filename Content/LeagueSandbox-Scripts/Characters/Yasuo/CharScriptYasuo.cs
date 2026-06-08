@@ -16,9 +16,15 @@ namespace CharScripts
 
         public void OnActivate(ObjAIBase owner, Spell spell = null)
         {
-            _yasuo = owner;      
+            _yasuo = owner;
             AddBuff("YasuoCritMod", float.MaxValue, 1, spell, owner, owner, true);
-            AddBuff("YasuoPassive", float.MaxValue, 1, spell, owner, owner, true); 
+            // Replay-verified passive buff structure (343e3502): YasuoPassive and
+            // YasuoPassiveMovementShield are permanent hidden carriers (added once, never
+            // updated); YasuoPassiveMSCharge is the visible COUNTER buff that carries the
+            // flow meter via NPC_BuffUpdateNumCounter (0..100), driven from YasuoPassive.
+            AddBuff("YasuoPassiveMovementShield", float.MaxValue, 1, spell, owner, owner, true);
+            AddBuff("YasuoPassiveMSCharge", float.MaxValue, 1, spell, owner, owner, true);
+            AddBuff("YasuoPassive", float.MaxValue, 1, spell, owner, owner, true);
             AddBuff("YasuoRAvailableTest", float.MaxValue, 1, spell, owner, owner, true);
 
             ApiEventManager.OnLevelUp.AddListener(this, owner, OnLevelUp, false);

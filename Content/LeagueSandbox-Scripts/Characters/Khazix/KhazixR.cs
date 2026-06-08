@@ -42,8 +42,7 @@ namespace Spells
         {
             SetSpell(_owner, "KhazixREvo", SpellSlotType.ExtraSlots, 8, true);
             _owner.GetSpell("KhazixREvo").Cast( default, default, null);
-            var champ = _owner as Champion;
-            NotifyChangeSlotSpellData(champ.ClientId, _owner, 3, ChangeSlotSpellDataType.IconIndex, newIconIndex: 1);
+            ChangeSlotSpellData(_owner, 3, ChangeSlotSpellDataType.IconIndex, newIconIndex: 1);
             ApiEventManager.OnEnterGrass.AddListener(this, _owner, OnEnter);
         }
         public void OnEnter(AttackableUnit unit)

@@ -1,7 +1,10 @@
 ﻿namespace LeagueSandbox.GameServer.Content
 {
-    //Default value used here came from Map12, as Map1 doesn't include them (probably because it uses default values)
-    //TODO: Figure out Map1's default values
+    // Verified 2026-06-07 against the real 4.20 Map1 Constants.var (cfh_* section): Map1
+    // DOES include these - our stripped Content/.../Map1/Constants.json just dropped them,
+    // so the per-map loader falls back to these defaults. Map1 == Map12 for every field.
+    // (TurretRadius corrected to 0.0; the old 1.0 was a transcription error. Both Map1 and
+    // Map12 Constants.var say cfh_TurretRadius = 0.000.)
     public class CallForHelpVariables
     {
         /// <summary>
@@ -31,6 +34,6 @@
         /// <summary>
         /// Attack range buffer distance for turret responders to a Call For Help
         /// </summary>
-        public float TurretRadius { get; set; } = 1.0f;
+        public float TurretRadius { get; set; } = 0.0f;
     }
 }

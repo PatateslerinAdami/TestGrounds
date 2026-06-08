@@ -46,39 +46,7 @@ internal class Slow : IBuffGameScript
         {
             attackSpeedSlowAmount = -attackSpeedSlowAmount;
         }
-
-        // Same-source slow handling: keep the strongest slow.
-        var existingSlows = unit.GetBuffsWithName("Slow");
-        for (var i = 0; i < existingSlows.Count; i++)
-        {
-            var existing = existingSlows[i];
-            if (existing == buff)
-            {
-                continue;
-            }
-
-            if (_owner != null && existing.SourceUnit == _owner)
-            {
-                var existingMoveSlow = existing.Variables.GetFloat("slowPercent");
-                if (existingMoveSlow < 0.0f)
-                {
-                    existingMoveSlow = -existingMoveSlow;
-                }
-
-                if (movementSlowAmount <= existingMoveSlow)
-                {
-                    // Weaker or equal: refresh the existing buff and discard this one.
-                    existing.Refresh();
-                    buff.SetToExpired();
-                    return;
-                }
-
-                // Stronger slow: remove the existing one and apply the new one.
-                unit.RemoveBuff(existing);
-                break;
-            }
-        }
-
+        
         StatsModifier.MoveSpeed.PercentBonus -= movementSlowAmount;
         StatsModifier.AttackSpeed.PercentBonus -= attackSpeedSlowAmount;
         _unit.AddStatModifier(StatsModifier);

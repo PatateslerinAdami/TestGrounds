@@ -155,7 +155,7 @@ public class PantheonRFall : ISpellScript
                 false);
 
             var variables = new BuffVariables();
-            variables.Set("slowAmount", 0.3f);
+            variables.Set("slowPercent", 0.3f);
             AddBuff("Slow", 1f, 1, spell, unit, _pantheon, buffVariables: variables);
         }
     }

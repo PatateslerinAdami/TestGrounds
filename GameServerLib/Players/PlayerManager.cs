@@ -43,13 +43,13 @@ namespace LeagueSandbox.GameServer.Players
                 summonerSkills,
                 config.PlayerID
             );
-            
+
             info.ClientId = _players.Count;
             _userIdsPerTeam[teamId]++;
 
             // Check if this is a bot (PlayerId = -1)
             bool isBot = config.PlayerID <= -1;
-            
+
             if (isBot)
             {
                 // Set bot connection flags to prevent AFK protection
@@ -72,7 +72,8 @@ namespace LeagueSandbox.GameServer.Players
             if (isBot)
             {
                 // Set bot flag and status flags for proper movement and actions
-                c.IsBot = false;
+                c.IsBot = false; // Per kot: "the only purpose of [this line] is for bots to get their custom name to show up above their health bars,
+                                 // if it's set to true, their name will be '(Champion) Bot' no matter what you set their name to"
                 c.SetStatus(StatusFlags.CanMove, true);
                 c.SetStatus(StatusFlags.CanMoveEver, true);
                 c.SetStatus(StatusFlags.CanAttack, true);

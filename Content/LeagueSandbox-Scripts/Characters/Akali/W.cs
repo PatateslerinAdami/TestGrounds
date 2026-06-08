@@ -169,7 +169,7 @@ public class AkaliSmokeBomb : ISpellScript {
 
         foreach (var unit in unitsInShroud.Where(unit => !_slowTargets.Contains(unit))) {
             var variables = new BuffVariables();
-            variables.Set("slowAmount", 0.14f + 0.04f * (_spell.CastInfo.SpellLevel - 1));
+            variables.Set("slowPercent", 0.14f + 0.04f * (_spell.CastInfo.SpellLevel - 1));
             variables.Set("attackSpeedSlowAmount", 0f);
             AddBuff("AkaliWDebuff", GetRemainingDurationSeconds(), 1, _spell, unit, _akali,
                     buffVariables: variables);

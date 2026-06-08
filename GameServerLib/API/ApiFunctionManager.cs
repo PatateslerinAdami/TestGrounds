@@ -738,7 +738,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
@@ -767,7 +767,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position,
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
@@ -796,7 +796,7 @@ namespace LeagueSandbox.GameServer.API
         public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle,
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+            GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
@@ -884,7 +884,7 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default,
+            RegionType regionType = RegionType.Circle,
             bool ignoresLoS = false
         )
         {
@@ -922,7 +922,7 @@ namespace LeagueSandbox.GameServer.API
             bool revealStealthed = false,
             AttackableUnit revealSpecificUnitOnly = null,
             float collisionArea = 0f,
-            RegionType regionType = RegionType.Default,
+            RegionType regionType = RegionType.Circle,
             bool ignoresLoS = false,
             bool onlyShowTarget = true
         )
@@ -2486,14 +2486,22 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyTeleport(unit, position);
         }
 
-        public static void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot,
-            GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
+        /// <summary>
+        /// Changes a property of the spell in the given slot (icon index, name, range, targeting type and etc.)
+        /// on the owning player's client/HUD. The user is resolved from the owner automatically.
+        /// </summary>
+        public static void ChangeSlotSpellData(ObjAIBase owner, byte slot,
+            ChangeSlotSpellDataType changeType, bool isSummonerSpell = false,
             TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0,
             float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0,
             List<uint> offsetTargets = null)
         {
-            _game.PacketNotifier.NotifyChangeSlotSpellData(userId, owner, slot, changeType, isSummonerSpell,
-                targetingType, newName, newRange, newMaxCastRange, newDisplayRange, newIconIndex, offsetTargets);
+            if (owner is Champion champion)
+            {
+                _game.PacketNotifier.NotifyChangeSlotSpellData(champion.ClientId, owner, slot, changeType,
+                    isSummonerSpell, targetingType, newName, newRange, newMaxCastRange, newDisplayRange,
+                    newIconIndex, offsetTargets);
+            }
         }
 
         public static SpellMissile CreateCustomMissile(ObjAIBase caster, int slot, SpellSlotType slotType,

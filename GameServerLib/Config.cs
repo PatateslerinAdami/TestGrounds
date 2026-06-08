@@ -33,6 +33,8 @@ namespace LeagueSandbox.GameServer
         public bool ChatCheatsEnabled { get; private set; }
         public string ContentPath { get; private set; }
         public bool IsDamageTextGlobal { get; private set; }
+        public bool ProfilerEnabled { get; private set; }
+        public bool TreatBaseSpellAsEmpty { get; private set; }
 
         public float ForcedStart { get; private set; }
 
@@ -107,6 +109,16 @@ namespace LeagueSandbox.GameServer
 
             // Read global damage text setting
             IsDamageTextGlobal = ReadBool("IS_DAMAGE_TEXT_GLOBAL", false);
+
+            // CPU profiler: off by default and off when the key is missing.
+            ProfilerEnabled = ReadBool("PROFILER_ENABLED", false);
+
+            // When true, the BaseSpell placeholder script (used to fill unused
+            // rune/extra/respawn slots on every ObjAIBase) is treated as empty,
+            // so its no-op OnUpdate isn't called per tick on every slot.
+            // Defaults to true: BaseSpell has no overrides anyway, so skipping
+            // it is a free perf win and a major trace declutter.
+            TreatBaseSpellAsEmpty = ReadBool("BASESPELL_EMPTY", true);
 
             // Read the game configuration
             var gameToken = data.SelectToken("game");

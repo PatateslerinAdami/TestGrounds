@@ -14,7 +14,7 @@ namespace Buffs
 {
     internal class YasuoPassiveMSShieldOn : IBuffGameScript
     {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.SPELL_SHIELD };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.COMBAT_ENCHANCER };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
         
         private float _amt;

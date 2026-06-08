@@ -111,7 +111,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             BubbleRegion = new Region
             (
                 _game, Team, Position,
-                RegionType.Unknown2,
+                RegionType.Circle,
                 collisionUnit: this,
                 visionTarget: null,
                 visionRadius: 800f,

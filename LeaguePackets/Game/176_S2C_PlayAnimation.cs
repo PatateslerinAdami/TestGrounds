@@ -11,7 +11,6 @@ namespace LeaguePackets.Game
     public class S2C_PlayAnimation : GamePacket // 0xB0
     {
         public override GamePacketID ID => GamePacketID.S2C_PlayAnimation;
-        //TODO: figure out this stupid bitfield
         public byte AnimationFlags { get; set; }
         public float ScaleTime { get; set; }
         public float StartProgress { get; set; }

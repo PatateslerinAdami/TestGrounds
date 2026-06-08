@@ -53,7 +53,7 @@ internal class ZedShadowHandler : IBuffGameScript {
         AddParticleTarget(wShadow.Owner, wShadow, "zed_base_w_tar", wShadow);
 
         _currentWIndicator = AddParticleTarget(wShadow.Owner, wShadow.Owner, "zed_shadowindicatorfar", wShadow,
-                                              -1,             flags: FXFlags.TargetDirection, unitOnly: _zed);
+                                              -1,             flags: FXFlags.TargetDirection | FXFlags.SimulateWhileOffScreen, unitOnly: _zed);
         _wShadow = wShadow;
         _wTimer  = 0f;
         _previousWIndicatorState = -1;
@@ -66,7 +66,7 @@ internal class ZedShadowHandler : IBuffGameScript {
         }
 
         _currentRIndicator = AddParticleTarget(rShadow.Owner, rShadow.Owner, "zed_shadowindicatorfar", rShadow,
-                                              -1,             flags: FXFlags.TargetDirection, unitOnly: _zed);
+                                              -1,             flags: FXFlags.TargetDirection | FXFlags.SimulateWhileOffScreen, unitOnly: _zed);
         _rShadow = rShadow;
         _rTimer  = 0f;
         _previousRIndicatorState = -1;
@@ -144,7 +144,7 @@ internal class ZedShadowHandler : IBuffGameScript {
 
             _currentWIndicator = AddParticleTarget(shadow.Owner, shadow.Owner, GetIndicatorName(state), shadow,
                                                   _buff.Duration - _buff.TimeElapsed,
-                                                  flags: FXFlags.TargetDirection, unitOnly: _zed);
+                                                  flags: FXFlags.TargetDirection | FXFlags.SimulateWhileOffScreen, unitOnly: _zed);
         }else if (shadow == _rShadow) {
             var state = GetIndicatorState(shadow);
             if (state == _previousRIndicatorState) return;
@@ -153,7 +153,7 @@ internal class ZedShadowHandler : IBuffGameScript {
 
             _currentRIndicator = AddParticleTarget(shadow.Owner, shadow.Owner, GetIndicatorName(state), shadow,
                                                    _buff.Duration - _buff.TimeElapsed,
-                                                   flags: FXFlags.TargetDirection, unitOnly: _zed);
+                                                   flags: FXFlags.TargetDirection | FXFlags.SimulateWhileOffScreen, unitOnly: _zed);
         }
         
     }

@@ -46,7 +46,7 @@ public class EnchantedCrystalArrow : ISpellScript {
         AddBuff("Stun", _stunDuration, 1, spell, target, _ashe);
             
         var buffVariables1 = new BuffVariables();
-        buffVariables1.Set("slowAmount", 0.5f);
+        buffVariables1.Set("slowPercent", 0.5f);
         AddBuff("Chilled", 3f, 1, spell, target, _ashe, buffVariables: buffVariables1);
         target.TakeDamage(_ashe, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
         AddParticleTarget(_ashe, target, "Ashe_Base_R_tar", target);
@@ -54,7 +54,7 @@ public class EnchantedCrystalArrow : ISpellScript {
 
         foreach (var unit in units) {
             var buffVariables = new BuffVariables();
-            buffVariables.Set("slowAmount", 0.5f);
+            buffVariables.Set("slowPercent", 0.5f);
             AddBuff("Chilled", 3f, 1, spell, unit, _ashe, buffVariables: buffVariables);
             unit.TakeDamage(_ashe, dmg * 0.5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
         }

@@ -67,7 +67,15 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public uint EvolveFlags { get; set; }
         public float SlowResistPercent { get; set; }
         public float MultiplicativeSpeedBonus { get; set; }
-        private List<float> _slows = new List<float>();
+        // Slow registry: every active slow keyed by its StatsModifier instance (reference
+        // identity this is robust against equal percentages from different buffs and against the
+        // per-tick remove/mutate/re-add pattern decaying slows use). Key = named effect
+        // (OriginSpell name via StatsModifier.SourceBuff, "item" for item passives, null =
+        // standalone modifier counting as its own effect). CalculateTrueMoveSpeed regroups
+        // on every recalc, so weaker same-effect instances stay dormant and take over when
+        // the stronger one expires, and decaying slows can change rank order mid-duration.
+        private readonly Dictionary<StatsModifier, (string EffectKey, float Percent)> _slows
+            = new Dictionary<StatsModifier, (string, float)>();
         private readonly List<float> _armorPenPercentMultipliers = new List<float>();
         private readonly List<float> _armorPenBonusPercentMultipliers = new List<float>();
         private readonly List<float> _magicPenPercentMultipliers = new List<float>();
@@ -184,7 +192,9 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
-                _slows.Add(modifier.MoveSpeed.PercentBonus);
+                // Dictionary assignment (not Add): re-adding the same modifier with a new
+                // percent (decaying slows) just updates the entry in place.
+                _slows[modifier] = (GetSlowEffectKey(modifier), modifier.MoveSpeed.PercentBonus);
             }
             else
             {
@@ -224,7 +234,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
-                _slows.Remove(modifier.MoveSpeed.PercentBonus);
+                _slows.Remove(modifier);
             }
             else
             {
@@ -253,6 +263,29 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float GetTrueMoveSpeed()
         {
             return _trueMoveSpeed;
+        }
+
+        /// <summary>
+        /// Whether any slow effect is currently registered (the run-animation watcher uses
+        /// presence rather than net speed: a slowed-but-booted unit still LOOKS slowed).
+        /// </summary>
+        public bool HasActiveSlows => _slows.Count > 0;
+
+        /// <summary>
+        /// Derives the named-effect key for the slow registry from the modifier's owning buff:
+        /// the originating spell name, or the shared "item" bucket for buffs without an origin
+        /// spell (item passives like Rylai. Riot's ItemSlow.lua treats all item slows as one
+        /// strongest-only group). Null when the modifier was applied outside the buff pipeline;
+        /// such entries count as their own effect.
+        /// </summary>
+        private static string GetSlowEffectKey(StatsModifier modifier)
+        {
+            var buff = modifier.SourceBuff;
+            if (buff == null)
+            {
+                return null;
+            }
+            return buff.OriginSpell?.SpellName ?? "item";
         }
 
         public void ClearSlows()
@@ -541,7 +574,58 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public void CalculateTrueMoveSpeed()
         {
+            // Riot order of operations: (Base + Flat) * (1 + sum of additive %)
+            // * multiplicative % * slows so the soft caps are applied to the END value,
+            // NOT to Base+Flat (we previously capped before the multipliers, which made
+            // every %-speedup overshoot Riot's effective speeds and skipped the <220
+            // slow-softening bracket entirely).
             float speed = MoveSpeed.BaseValue + MoveSpeed.FlatBonus;
+
+            speed = speed * (1 + MoveSpeed.PercentBonus) * (1 + MultiplicativeSpeedBonus);
+
+            if (_slows.Count > 0)
+            {
+                // Stage 1: named-effect dedup: the same effect never stacks with itself,
+                // not even from different casters (wiki: Exhaust re-apply = duration reset
+                // only; Riot's ItemSlow.lua funnels ALL item slows through one strongest-only
+                // chain, hence the shared "item" bucket). Only the strongest instance per
+                // effect counts; weaker ones stay dormant and take over when it expires.
+                var effectiveSlows = new List<float>();
+                Dictionary<string, float> strongestPerEffect = null;
+                foreach (var (effectKey, percent) in _slows.Values)
+                {
+                    if (effectKey == null)
+                    {
+                        // Standalone modifier (no buff context): its own effect.
+                        effectiveSlows.Add(percent);
+                        continue;
+                    }
+                    strongestPerEffect ??= new Dictionary<string, float>();
+                    if (!strongestPerEffect.TryGetValue(effectKey, out var current) || percent < current)
+                    {
+                        strongestPerEffect[effectKey] = percent;
+                    }
+                }
+                if (strongestPerEffect != null)
+                {
+                    effectiveSlows.AddRange(strongestPerEffect.Values);
+                }
+
+                // Stage 2: pre-V5.13 cross-effect stacking (our 4.x era): the strongest slow
+                // applies fully, every additional slow only at 35% effectiveness, combined
+                // multiplicatively. Slow values are negative, so ascending sort puts the
+                // strongest first. SlowResist dampens every individual slow.
+                effectiveSlows.Sort();
+                var slowResistFactor = 1 - SlowResistPercent;
+                for (var i = 0; i < effectiveSlows.Count; i++)
+                {
+                    var effectiveness = i == 0 ? 1f : 0.35f;
+                    speed *= 1 + effectiveSlows[i] * effectiveness * slowResistFactor;
+                }
+            }
+
+            // Soft caps on the final raw value: high speeds are compressed, low speeds
+            // cushioned (the <220 bracket is what softens heavy slows; <0 floors near 110).
             if (speed > 490.0f)
             {
                 speed = speed * 0.5f + 230.0f;
@@ -550,27 +634,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             {
                 speed = speed * 0.8f + 83.0f;
             }
+            else if (speed < 0.0f)
+            {
+                speed = 110.0f + speed * 0.01f;
+            }
             else if (speed < 220.0f)
             {
                 speed = speed * 0.5f + 110.0f;
-            }
-
-            speed = speed * (1 + MoveSpeed.PercentBonus) * (1 + MultiplicativeSpeedBonus);
-
-            if (_slows.Count > 0)
-            {
-                // League slow stacking: strongest slow applies fully, every additional slow only at 35% effectiveness,
-                // combined multiplicatively. Slow values are negative, so the smallest value is the strongest slow.
-                // SlowResist dampens every individual slow.
-                var sortedSlows = _slows.OrderBy(z => z).ToList();
-                var slowResistFactor = 1 - SlowResistPercent;
-                for (var i = 0; i < sortedSlows.Count; i++)
-                {
-                    var effectiveness = i == 0 ? 1f : 0.35f;
-                    speed *= 1 + sortedSlows[i] * effectiveness * slowResistFactor;
-                }
-                // Lower-Limit: slows are not allowed to drop the speed below 110 (this implicitly also caps slows below 100%)
-                if (speed < 110f) speed = 110f;
             }
 
             _trueMoveSpeed = speed;

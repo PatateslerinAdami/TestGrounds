@@ -16,14 +16,17 @@ namespace Buffs
 {
     internal class YasuoPassive : IBuffGameScript
     {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.INTERNAL };
+        // Hidden carrier hosting the flow logic (replay: type AURA, IsHidden, permanent,
+        // never updated, the visible flow meter lives on YasuoPassiveMSCharge).
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.AURA, IsHidden = true };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
-        
+
         private Vector2 _lastPos;
-        private bool _isParStateActive = false; 
-        
-        private float _lastHealth; 
-        private float _lastMaxHealth; 
+        private bool _isParStateActive = false;
+        private int _lastFlowCounter = -1;
+
+        private float _lastHealth;
+        private float _lastMaxHealth;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
@@ -59,16 +62,7 @@ namespace Buffs
                 _isParStateActive = false;
             }
             
-            if (!yasuo.HasBuff("YasuoPassiveMovementShield"))
-            {
-                AddBuff("YasuoPassiveMovementShield", float.MaxValue, 1, null, yasuo, yasuo, false);
-            }
-
-            var hud = unit.GetBuffWithName("YasuoPassiveMovementShield");
-            if (hud != null)
-            {
-                hud.SetStacks((byte)Math.Clamp(stacks, 1, 100));
-            }
+            UpdateFlowCounter(yasuo, stacks);
 
             float currentHealth = yasuo.Stats.CurrentHealth;
             float currentMaxHealth = yasuo.Stats.HealthPoints.Total;
@@ -77,14 +71,34 @@ namespace Buffs
                 if (yasuo.Stats.CurrentMana >= (yasuo.Stats.ManaPoints.Total - 1))
                 {
                     yasuo.Stats.CurrentMana = 0;
-                    SetPARState(yasuo, 0); 
+                    SetPARState(yasuo, 0);
                     _isParStateActive = false;
-                    
+                    UpdateFlowCounter(yasuo, 0);
+
                     AddBuff("YasuoPassiveMSShieldOn", 1.0f, 1, null, yasuo, yasuo);
                 }
             }
             _lastHealth = currentHealth;
             _lastMaxHealth = currentMaxHealth;
+        }
+
+        // Flow meter uses NPC_BuffUpdateNumCounter so use edit buff
+        private void UpdateFlowCounter(ObjAIBase yasuo, int stacks)
+        {
+            stacks = Math.Clamp(stacks, 0, 100);
+            if (stacks == _lastFlowCounter)
+            {
+                return;
+            }
+
+            var charge = yasuo.GetBuffWithName("YasuoPassiveMSCharge");
+            if (charge == null)
+            {
+                return;
+            }
+
+            EditBuff(charge, (byte)stacks);
+            _lastFlowCounter = stacks;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

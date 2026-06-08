@@ -66,6 +66,9 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
 
         // TODO: Verify if this can be removed.
         public string[] SpellVOOverrideSkins { get; set; } = { "" };
+        
+        //Determines whether the spell should activate effects like sheen
+        public bool DoesntTriggerSpellCasts { get; set; } = true;
 
         /// <summary>
         /// Determines whether or not the spell stops movement and triggers spell casts (and post).

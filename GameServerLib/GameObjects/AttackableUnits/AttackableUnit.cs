@@ -300,6 +300,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private void UpdateStuckRecovery(float diff)
         {
+            // New per-tick-per-unit work added by the pathing port. Cheap on the early-out path,
+            // but on trigger it calls TryUnstuckRepath -> full A*. Scoped separately from
+            // AttackableUnit.Move so the trace attributes its cost (and its A* fan-out) directly.
+            using var _scope = Profiler.Scope("AttackableUnit.StuckRecovery", "pathing");
             // Skip cases where stuck detection isn't meaningful.
             // NOTE: deliberately do NOT bail on IsPathEnded() if HandleMove's null fallback
             // produced degenerate `[currentPos, currentPos]` waypoints, the path appears "ended"
@@ -381,6 +385,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private bool TryUnstuckRepath()
         {
+            // Stuck-recovery action: GetClosestTerrainExit + a full actor-aware A*. Scoped so the
+            // trace shows how often stuck units force an unplanned repath.
+            using var _scope = Profiler.Scope("AttackableUnit.TryUnstuckRepath", "pathing");
             // Snap to nearest walkable cell. Use radius=0 (= cell walkable check, ignore
             // PathfindingRadius clearance) this is for stuck recovery we just need to escape the
             // blocking cell, even if the destination has tighter clearance than usual. This is
@@ -414,24 +421,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         public override void Update(float diff)
         {
-            UpdateTimers(diff);
-            UpdateBuffs(diff);
+            using (Profiler.Scope("AttackableUnit.Timers"))
+            {
+                UpdateTimers(diff);
+            }
+            using (Profiler.Scope("AttackableUnit.Buffs"))
+            {
+                UpdateBuffs(diff);
+            }
             UpdateRevealSpecificUnit(diff);
 
             // TODO: Rework stat management.
             _statUpdateTimer += diff;
             while (_statUpdateTimer >= 500)
             {
+                using var _statsScope = Profiler.Scope("AttackableUnit.StatsTick");
                 // update Stats (hpregen, manaregen) every 0.5 seconds
                 Stats.Update(this, _statUpdateTimer);
                 _statUpdateTimer -= 500;
                 API.ApiEventManager.OnUpdateStats.Publish(this, diff);
             }
 
-            Replication.Update();
+            using (Profiler.Scope("AttackableUnit.Replication"))
+            {
+                Replication.Update();
+            }
 
             if (CanMove())
             {
+                using var _moveScope = Profiler.Scope("AttackableUnit.Move");
                 float remainingFrameTime = diff;
                 bool moved = false;
                 if (MovementParameters != null)
@@ -506,6 +524,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="isTerrain">Whether or not this AI collided with terrain.</param>
         public override void OnCollision(GameObject collider, bool isTerrain = false)
         {
+            // Fires per collision per tick. The pathing port changed the terrain branch to
+            // SetPosition(repath: true), so each terrain collision now runs a full SafePath A*
+            // (previously a cheap position snap). With crowds wedged against walls/buildings this
+            // can mean many A* searches per tick — the prime regression suspect. Scoped "pathing"
+            // so the trace surfaces collision-driven repath cost. (Returns before any real work for
+            // missiles/sectors/buildings, so those add only a near-zero slice.)
+            using var _scope = Profiler.Scope("AttackableUnit.OnCollision", "pathing");
+
             if (collider is SpellMissile || collider is SpellSector || collider is ObjBuilding || (collider is Region region && region.CollisionUnit == this))
             {
                 return;
@@ -2628,7 +2654,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Given state pairs are expected to follow a specific structure:
         /// First string is the animation to override, second string is the animation to play in place of the first.
         /// <param name="animPairs">Dictionary of animations to set.</param>
-        public void SetAnimStates(Dictionary<string, string> animPairs, object source = null)
+        /// <param name="asBaseLayer">Insert at the BOTTOM of the override stack instead of
+        /// the top: any script/buff override (Aatrox R RUN_ULT, form swaps) keeps winning no
+        /// matter when it was added. Used by the speed-state run-animation watcher, whose
+        /// state can flip mid-buff (Ghost cast during an active ult must not replace the
+        /// ult's run animation).</param>
+        public void SetAnimStates(Dictionary<string, string> animPairs, object source = null, bool asBaseLayer = false)
         {
             if (animPairs == null || animPairs.Count == 0) return;
             if (source == null) source = this;
@@ -2650,7 +2681,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 list.RemoveAll(x => x.Source == source);
                 if (!string.IsNullOrEmpty(newValue))
                 {
-                    list.Add(new AnimOverrideInfo { OverrideValue = newValue, Source = source });
+                    var info = new AnimOverrideInfo { OverrideValue = newValue, Source = source };
+                    if (asBaseLayer)
+                    {
+                        list.Insert(0, info);
+                    }
+                    else
+                    {
+                        list.Add(info);
+                    }
                 }
 
                 string activeVal = list.Count > 0 ? list.Last().OverrideValue : "";

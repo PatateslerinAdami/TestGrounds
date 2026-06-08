@@ -2,6 +2,7 @@
 using GameServerCore.Enums;
 using GameServerCore.NetInfo;
 using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
@@ -102,59 +103,81 @@ namespace LeagueSandbox.GameServer
             }
 
             // For all existing objects
-            foreach (var obj in _objects.Values)
+            using (Profiler.Scope("Objects.Update"))
             {
-                obj.Update(diff);
-            }
-
-            // It is now safe to call RemoveObject at any time,
-            // but compatibility with the older remove method remains.
-            foreach (var obj in _objects.Values)
-            {
-                if (obj.IsToRemove())
+                foreach (var obj in _objects.Values)
                 {
-                    RemoveObject(obj);
+                    using var _objScope = Profiler.Scope($"Update:{obj.GetType().Name}");
+                    obj.Update(diff);
                 }
             }
 
-            foreach (var obj in _objectsToRemove)
+            int oldObjectsCount;
+            using (Profiler.Scope("Objects.Cleanup"))
             {
-                _objects.Remove(obj.NetId);
+                // It is now safe to call RemoveObject at any time,
+                // but compatibility with the older remove method remains.
+                foreach (var obj in _objects.Values)
+                {
+                    if (obj.IsToRemove())
+                    {
+                        RemoveObject(obj);
+                    }
+                }
+
+                foreach (var obj in _objectsToRemove)
+                {
+                    _objects.Remove(obj.NetId);
+                }
+
+                _objectsToRemove.Clear();
+
+                // Captured AFTER removes but BEFORE adds: LateUpdate further
+                // down skips objects that didn't exist at the start of this tick.
+                oldObjectsCount = _objects.Count;
+
+                foreach (var obj in _objectsToAdd)
+                {
+                    _objects.Add(obj.NetId, obj);
+                }
+
+                _objectsToAdd.Clear();
             }
-
-            _objectsToRemove.Clear();
-
-            int oldObjectsCount = _objects.Count;
-
-            foreach (var obj in _objectsToAdd)
-            {
-                _objects.Add(obj.NetId, obj);
-            }
-
-            _objectsToAdd.Clear();
 
             var players = _game.PlayerManager.GetPlayers(includeBots: false);
 
-            int i = 0;
-            foreach (GameObject obj in _objects.Values)
+            using (Profiler.Scope("Objects.VisionAndLateUpdate"))
             {
-                UpdateTeamsVision(obj);
-                if (i++ < oldObjectsCount)
+                int i = 0;
+                foreach (GameObject obj in _objects.Values)
                 {
-                    obj.LateUpdate(diff);
-                }
+                    UpdateTeamsVision(obj);
+                    if (i++ < oldObjectsCount)
+                    {
+                        obj.LateUpdate(diff);
+                    }
 
-                foreach (var kv in players)
-                {
-                    UpdateVisionSpawnAndSync(obj, kv);
-                }
+                    foreach (var kv in players)
+                    {
+                        UpdateVisionSpawnAndSync(obj, kv);
+                    }
 
-                obj.OnAfterSync();
+                    obj.OnAfterSync();
+                }
             }
 
-            _game.PacketNotifier.NotifyOnReplication();
-            _game.PacketNotifier.NotifyWaypointGroup();
-            _game.PacketNotifier.NotifyFXCreateGroupBatch();
+            using (Profiler.Scope("PacketNotifier.NotifyOnReplication", "network"))
+            {
+                _game.PacketNotifier.NotifyOnReplication();
+            }
+            using (Profiler.Scope("PacketNotifier.NotifyWaypointGroup", "network"))
+            {
+                _game.PacketNotifier.NotifyWaypointGroup();
+            }
+            using (Profiler.Scope("PacketNotifier.NotifyFXCreateGroupBatch", "network"))
+            {
+                _game.PacketNotifier.NotifyFXCreateGroupBatch();
+            }
 
             _currentlyInUpdate = false;
         }

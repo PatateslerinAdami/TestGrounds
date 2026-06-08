@@ -3447,12 +3447,10 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="obj">GameObject that is playing the animation.</param>
         /// <param name="animation">Internal name of the animation to play.</param>
-        /// TODO: Implement AnimationFlags enum for this and fill it in.
-        /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        /// <param name="timeScale">How fast the animation should play. Default 1x speed.</param>
-        /// <param name="startTime">Time in the animation to start at.</param>
-        /// TODO: Verify if this description is correct, if not, correct it.
-        /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
+        /// <param name="flags">Animation flags, see <see cref="AnimationFlags"/>.</param>
+        /// <param name="timeScale">Total play time in seconds the clip gets rescaled to (client Controller::SetPlayTime). 0 = natural clip duration.</param>
+        /// <param name="startTime">Progress fraction (0..1) to start the clip at (client Controller::SetProgress). 0 = start from the beginning.</param>
+        /// <param name="speedScale">Playback speed multiplier (client Controller::SetSpeedRatio). Default 1x speed.</param>
         public void NotifyS2C_PlayAnimation(GameObject obj, string animation, AnimationFlags flags = 0, float timeScale = 1.0f, float startTime = 0.0f, float speedScale = 1.0f)
         {
             var animPacket = new S2C_PlayAnimation
@@ -4131,8 +4129,9 @@ namespace PacketDefinitions420
                     DurationID = 0,
                     Flags = 3
                 },
-                // Turret Range Indicators and others (taken from Map11 replay)
-                GameFeatures = 662166610
+                // Riot FeaturesConfig client bitfield captured from a real 4.20 game
+                // (= 662166610); named bits in RiotGameFeatures.Default420.
+                GameFeatures = (ulong)RiotGameFeatures.Default420
             };
 
             for (int i = 0; i < players.Count; i++)

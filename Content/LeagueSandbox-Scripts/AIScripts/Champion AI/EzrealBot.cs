@@ -392,72 +392,93 @@ namespace AIScripts
                 isInCombat = false;
             }
 
-            // Handle lane selection logic
-            if (!_hasSelectedLane && ShouldSelectLanes())
+            using (Profiler.Scope("EzrealBot.LaneSelection", "scripts"))
             {
-                SelectLane();
-            }
-
-            // Handle recall for lane selection
-            if (_isRecallingForLane)
-            {
-                // Check if we've respawned at fountain (teleport completed)
-                // This is a simple check - if we're near our base and not moving, recall is complete
-                if (IsNearFountain())
+                // Handle lane selection logic
+                if (!_hasSelectedLane && ShouldSelectLanes())
                 {
-                    // Clear recalling status
-                    ClearBotRecallingStatus(EzrealInstance);
-                    _isRecallingForLane = false;
+                    SelectLane();
+                }
 
-                    // Select new lane
-                    _assignedLane = GetTargetLane(EzrealInstance);
-                    _hasSelectedLane = true;
+                // Handle recall for lane selection
+                if (_isRecallingForLane)
+                {
+                    // Check if we've respawned at fountain (teleport completed)
+                    // This is a simple check - if we're near our base and not moving, recall is complete
+                    if (IsNearFountain())
+                    {
+                        // Clear recalling status
+                        ClearBotRecallingStatus(EzrealInstance);
+                        _isRecallingForLane = false;
 
-                    // Reassign this bot to the new lane
-                    AssignBotToLane(EzrealInstance, _assignedLane);
+                        // Select new lane
+                        _assignedLane = GetTargetLane(EzrealInstance);
+                        _hasSelectedLane = true;
 
-                    _logger.Debug($"After recall, selected new lane: {_assignedLane}");
+                        // Reassign this bot to the new lane
+                        AssignBotToLane(EzrealInstance, _assignedLane);
 
-                    // Update waypoints
-                    InitializeLaneWaypoints();
+                        _logger.Debug($"After recall, selected new lane: {_assignedLane}");
 
-                    // Reset state to moving to lane
-                    _currentState = BotState.MovingToLane;
+                        // Update waypoints
+                        InitializeLaneWaypoints();
+
+                        // Reset state to moving to lane
+                        _currentState = BotState.MovingToLane;
+                    }
                 }
             }
 
-            // Update personality offset periodically
-            UpdatePersonalityOffset();
+            using (Profiler.Scope("EzrealBot.Chat", "scripts"))
+            {
+                // Update personality offset periodically
+                UpdatePersonalityOffset();
 
-            // Process any pending delayed reaction messages (kill/death taunts)
-            ProcessDelayedMessages();
+                // Process any pending delayed reaction messages (kill/death taunts)
+                ProcessDelayedMessages();
 
-            TryTrashTalk();
+                TryTrashTalk();
+            }
 
-            // Process any active toxic ping spam sequence (sends pings at intervals)
-            ProcessToxicPingSpam(_botSettings, _gameTime, ref _lastToxicPingTime, _toxicPingSpamState);
+            using (Profiler.Scope("EzrealBot.ToxicPings", "scripts"))
+            {
+                // Process any active toxic ping spam sequence (sends pings at intervals)
+                ProcessToxicPingSpam(_botSettings, _gameTime, ref _lastToxicPingTime, _toxicPingSpamState);
 
-            // Check for dead allies and start new toxic ping spam sequences if appropriate
-            CheckForDeadAlliesAndToxicPing(EzrealInstance, _botSettings, _gameTime, ref _lastToxicPingTime,
-                _trackedDeadAllies, _toxicPingSpamState);
+                // Check for dead allies and start new toxic ping spam sequences if appropriate
+                CheckForDeadAlliesAndToxicPing(EzrealInstance, _botSettings, _gameTime, ref _lastToxicPingTime,
+                    _trackedDeadAllies, _toxicPingSpamState);
+            }
 
-            // Track auto-attack state for orbwalking
-            UpdateAutoAttackState();
+            using (Profiler.Scope("EzrealBot.AutoAttackAndLevels", "scripts"))
+            {
+                // Track auto-attack state for orbwalking
+                UpdateAutoAttackState();
 
-            // Level up skills when possible
-            LevelUpSpells();
+                // Level up skills when possible
+                LevelUpSpells();
+            }
 
-            // Update state information
-            _followTarget = GetClosestAllyChampion();
-            isUnderTower = IsUnderEnemyTower();
+            using (Profiler.Scope("EzrealBot.WorldQueries", "scripts"))
+            {
+                // Update state information
+                _followTarget = GetClosestAllyChampion();
+                isUnderTower = IsUnderEnemyTower();
+            }
 
-            // Update bot state based on game conditions
-            UpdateState();
+            using (Profiler.Scope("EzrealBot.UpdateState", "scripts"))
+            {
+                // Update bot state based on game conditions
+                UpdateState();
+            }
             _logger.Debug($"Current state: {_currentState}");
 
 
             // Act based on the current state
-            ActOnState();
+            using (Profiler.Scope($"EzrealBot.ActOnState:{_currentState}", "scripts"))
+            {
+                ActOnState();
+            }
         }
 
         /// <summary>
@@ -841,6 +862,7 @@ namespace AIScripts
         // Movement and positioning
         private void MoveToLane()
         {
+            using var _scope = Profiler.Scope("EzrealBot.MoveToLane", "scripts");
             // Check for enemy towers first - stop if near one
             LaneTurret nearbyEnemyTower = GetNearbyEnemyTower(1000f);
             if (nearbyEnemyTower != null)
@@ -1018,6 +1040,7 @@ namespace AIScripts
 
         private void Farm()
         {
+            using var _scope = Profiler.Scope("EzrealBot.Farm", "scripts");
             // Reset last chase target when back to farming
             _lastChaseTarget = null;
 
@@ -1270,6 +1293,7 @@ namespace AIScripts
 
         private void Poke()
         {
+            using var _scope = Profiler.Scope("EzrealBot.Poke", "scripts");
             // First, check if we're in a dangerous position
             if (IsUnderEnemyTower())
             {
@@ -1311,6 +1335,7 @@ namespace AIScripts
 
         private void ExecuteCombo()
         {
+            using var _scope = Profiler.Scope("EzrealBot.ExecuteCombo", "scripts");
             Champion target = GetBestComboTarget();
 
             if (target == null)
@@ -1356,6 +1381,7 @@ namespace AIScripts
 
         private void Retreat()
         {
+            using var _scope = Profiler.Scope("EzrealBot.Retreat", "scripts");
             // Move toward closest ally or tower
             ClearTargetAndOrders();
             Vector2 safePosition = GetSafePosition();
@@ -1371,6 +1397,7 @@ namespace AIScripts
         // Item shopping methods
         private void TryBuyItems()
         {
+            using var _scope = Profiler.Scope("EzrealBot.TryBuyItems", "scripts");
             if (!_hasItemsToBuy || _currentBuildIndex >= _itemBuildOrder.Count)
             {
                 _hasItemsToBuy = false;
@@ -1672,6 +1699,7 @@ namespace AIScripts
         // Add this new method to find vulnerable enemies
         private Champion FindVulnerableEnemy()
         {
+            using var _scope = Profiler.Scope("EzrealBot.FindVulnerableEnemy", "scripts");
             // Look for enemies in extended range (longer than Q range to allow chasing)
             List<Champion> enemies = GetNearbyEnemyChampions(1500f);
 
@@ -1749,6 +1777,7 @@ namespace AIScripts
         // Add a new method for chasing behavior
         private void ChaseEnemy()
         {
+            using var _scope = Profiler.Scope("EzrealBot.ChaseEnemy", "scripts");
             // Find vulnerable target
             Champion target = FindVulnerableEnemy();
             // Track the last target we chased
@@ -2546,6 +2575,7 @@ namespace AIScripts
         /// </summary>
         private void PushTower()
         {
+            using var _scope = Profiler.Scope("EzrealBot.PushTower", "scripts");
             LaneTurret tower = FindBestEnemyTower();
             if (tower == null)
             {
@@ -2581,6 +2611,7 @@ namespace AIScripts
         /// </summary>
         private void EvaluateDiveOpportunity()
         {
+            using var _scope = Profiler.Scope("EzrealBot.EvaluateDiveOpportunity", "scripts");
             LaneTurret tower = FindBestEnemyTower();
             if (tower == null) return;
 
@@ -2607,6 +2638,7 @@ namespace AIScripts
         /// </summary>
         private float CalculateDiveScore(Champion target, LaneTurret tower)
         {
+            using var _scope = Profiler.Scope("EzrealBot.CalculateDiveScore", "scripts");
             float score = 0f;
 
             // Enemy health factor (0.0 to 1.0, where lower is better)
@@ -2671,6 +2703,7 @@ namespace AIScripts
         /// </summary>
         private void ExecuteDive()
         {
+            using var _scope = Profiler.Scope("EzrealBot.ExecuteDive", "scripts");
             if (_diveTarget == null || _diveTarget.IsDead)
             {
                 _currentState = BotState.Pushing;
@@ -2787,6 +2820,7 @@ namespace AIScripts
         /// </summary>
         private void PerformOrbwalk(Vector2 targetPosition, AttackableUnit attackTarget = null)
         {
+            using var _scope = Profiler.Scope("EzrealBot.PerformOrbwalk", "scripts");
             if (ShouldPushTower())
             {
                 return;

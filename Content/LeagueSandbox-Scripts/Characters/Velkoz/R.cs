@@ -41,7 +41,7 @@ namespace Spells
         {
             _owner = owner;
 
-            _laserTarget = AddMinion(_owner, "testcuberender10vision", "testcuberender10vision", _owner.Position, _owner.Team, ignoreCollision: true, targetable: false, useSpells:false);
+            _laserTarget = AddMinion(_owner, "TestCubeRender10Vision", "TestCubeRender10Vision", _owner.Position, _owner.Team, ignoreCollision: true, targetable: false, useSpells:false);
             _laserTarget.SetStatus(StatusFlags.NoRender, true);
             _laserTarget.SetStatus(StatusFlags.ForceRenderParticles, true);
             _laserTarget.SetCollisionRadius(-1f);

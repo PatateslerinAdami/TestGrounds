@@ -58,10 +58,8 @@ public class SwainMetaHealTracker : IBuffGameScript
     public void OnUpdate(float diff)
     {
         if (!_disableRequest) return;
-        LogDebug("RemovingBuff");
         var ticks = _periodicTicker.ConsumeTicks(diff, _timeout, false, 1, 1);
         if (_ravensReturned < _ravensSent && ticks != 1) return;
-        LogDebug("uwu starting to remove Buff: ravens sent: " + _ravensSent + " ravens returned:  " + _ravensReturned);
         _disableRequest = false;
         _buff.DeactivateBuff();
     }
