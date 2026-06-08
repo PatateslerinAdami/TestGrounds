@@ -408,15 +408,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (_stuckTimerMs > threshold)
             {
                 bool unstuck = TryUnstuckRepath();
-
-                // TEST LOG: a wedged unit forced an unplanned repath (stuck watchdog). Champions
-                // only — repeated [STUCK] lines for one champ = a real body-block/terrain wedge.
-                if (MoveTestLog.Enabled && this is Champion)
-                {
-                    MoveTestLog.Log($"[STUCK] {Model}#{NetId} repath#{_stuckRepathCount} success={unstuck} "
-                        + $"pos=({Position.X:F0},{Position.Y:F0}) wp={Waypoints.Count} pathEnded={IsPathEnded()}");
-                }
-
                 _stuckTimerMs = 0f;
                 if (unstuck)
                 {
@@ -1575,7 +1566,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         // Position already includes originalDelta (the walk above), so the
                         // remaining push is the clamped movement minus what was already walked.
                         Vector2 push = newMovement - originalDelta;
-                        bool pushDropped = false;
                         if (push.LengthSquared() > 0.0001f)
                         {
                             Vector2 candidate = Position + push;
@@ -1586,22 +1576,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                                 _unreplicatedDrift += push;
                                 pushed = true;
                             }
-                            else
-                            {
-                                pushDropped = true;
-                            }
-                        }
-
-                        // TEST LOG: champion collision response. Event-gated (only fires when a
-                        // response was actually produced this tick), so no per-tick spam. [C2C] =
-                        // at least one champion collider; [COLL] = champion vs minions/structures.
-                        if (MoveTestLog.Enabled && this is Champion)
-                        {
-                            string champs = NearbyChampionLabel(nearby);
-                            MoveTestLog.Log($"[{(champs != null ? "C2C" : "COLL")}] {Model}#{NetId} "
-                                + $"{(hadHardColliders ? "HARD" : "avoid")} resp={response.Length():F1}u "
-                                + $"applied={pushed} dropped={pushDropped} pos=({Position.X:F0},{Position.Y:F0})"
-                                + (champs != null ? $" vs [{champs}]" : ""));
                         }
                     }
 
@@ -1616,16 +1590,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         Vector2 stuckPush = ComputeStuckExtraPush(nearby, newDelta, originalDelta, delta);
                         if (stuckPush.LengthSquared() > 0.0001f)
                         {
-                            bool wasGhosted = IsTemporarilyGhosted;
                             _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
-
-                            // TEST LOG: temp-ghost activation edge (champion started phasing through
-                            // bodies after being wedged for TempGhostThreshold consecutive frames).
-                            if (MoveTestLog.Enabled && this is Champion && !wasGhosted && IsTemporarilyGhosted)
-                            {
-                                MoveTestLog.Log($"[GHOST+] {Model}#{NetId} now phasing after {_stuckGhostFrames} "
-                                    + $"stuck frames pos=({Position.X:F0},{Position.Y:F0}) vs [{NearbyChampionLabel(nearby)}]");
-                            }
 
                             Vector2 candidate = Position + stuckPush;
                             bool canApply = _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
@@ -1674,7 +1639,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // so the next tick starts with a fresh push attempt.
                     if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
                     {
-                        float sepMag = _smoothedSeparationPush.Length();
                         Vector2 candidate = Position + _smoothedSeparationPush;
                         bool canApply = _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
                         if (canApply)
@@ -1686,19 +1650,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         else
                         {
                             _smoothedSeparationPush = Vector2.Zero;
-                        }
-
-                        // TEST LOG: stationary separation (spawn / post-dash overlap). Throttled to
-                        // meaningful pushes (>0.5u) and to champion-vs-champion so the smoothing tail
-                        // doesn't log every tick.
-                        if (MoveTestLog.Enabled && this is Champion && sepMag > 0.5f)
-                        {
-                            string champs = NearbyChampionLabel(nearby);
-                            if (champs != null)
-                            {
-                                MoveTestLog.Log($"[SEP] {Model}#{NetId} stationary push={sepMag:F1}u "
-                                    + $"applied={canApply} pos=({Position.X:F0},{Position.Y:F0}) vs [{champs}]");
-                            }
                         }
                     }
                 }
@@ -1774,24 +1725,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             return walked || pushed;
-        }
-
-        // TEST INSTRUMENTATION (movement/collision live test). Returns a comma-separated label of
-        // nearby CHAMPION colliders ("Model#NetId@<dist>u"), or null if none. Only call inside
-        // already event-gated branches (it allocates) — used to tag champion-on-champion collision
-        // logs. Remove with the other `[C2C]/[COLL]/[GHOST+]/[SEP]/[STUCK]` logs after the test.
-        private string NearbyChampionLabel(List<GameObject> nearby)
-        {
-            string s = null;
-            foreach (var o in nearby)
-            {
-                if (o is Champion c && c != this)
-                {
-                    string entry = $"{c.Model}#{c.NetId}@{Vector2.Distance(Position, c.Position):F0}u";
-                    s = s == null ? entry : s + "," + entry;
-                }
-            }
-            return s;
         }
 
         /// <summary>
