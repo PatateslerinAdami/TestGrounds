@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.Logging;
-using log4net;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -15,8 +14,6 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
     {
         private readonly Game _game;
         private readonly PlayerManager _playerManager;
-        // TEMP [SHORTPATH] diagnostic (2026-06-08) — remove after short-path reorder jitter is fixed.
-        private static readonly ILog _logger = LoggerProvider.GetLogger();
 
         public HandleMove(Game game)
         {
@@ -261,31 +258,6 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                         && Vector2.Dot(Vector2.Normalize(curDir), Vector2.Normalize(newDir)) < 0f)
                                     {
                                         broadcast = true;
-                                    }
-                                }
-
-                                // TEMP [SHORTPATH] diagnostic (2026-06-08): on every reorder while
-                                // already moving, measure the turn angle (new heading vs current
-                                // movement heading), path length, speed, time since last broadcast,
-                                // and the predicted client/server divergence over one 96ms window
-                                // (v * t * 2*sin(turn/2)). Hypothesis: short paths produce large turn
-                                // angles for small mouse moves, pushing predicted divergence past the
-                                // client's ~20u hard-snap threshold while the order is throttled.
-                                if (alreadyMoving && waypoints.Count >= 2)
-                                {
-                                    var curDir = champion.CurrentWaypoint - champion.Position;
-                                    var newDir = waypoints[1] - waypoints[0];
-                                    if (curDir.LengthSquared() > float.Epsilon && newDir.LengthSquared() > float.Epsilon)
-                                    {
-                                        float dot = Vector2.Dot(Vector2.Normalize(curDir), Vector2.Normalize(newDir));
-                                        dot = System.Math.Clamp(dot, -1f, 1f);
-                                        float turnDeg = (float)(System.Math.Acos(dot) * 180.0 / System.Math.PI);
-                                        float pathLen = Vector2.Distance(waypoints[0], waypoints[waypoints.Count - 1]);
-                                        float v = champion.GetMoveSpeed();
-                                        float dtSinceBc = _game.GameTime - champion.LastMoveOrderBroadcastTime;
-                                        float predDiv = v * (MoveOrderBroadcastWindowMs / 1000f)
-                                            * 2f * (float)System.Math.Sin(turnDeg * System.Math.PI / 360.0);
-                                        _logger.Info($"[SHORTPATH] {champion.NetId} pathLen={pathLen:F0} turnDeg={turnDeg:F0} v={v:F0} dtSinceBc={dtSinceBc:F0} predDiv={predDiv:F0} broadcast={broadcast}");
                                     }
                                 }
 

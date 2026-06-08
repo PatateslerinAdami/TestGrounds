@@ -106,17 +106,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // current position, so collision drift is folded into small periodic corrections
         // instead of accumulating into one visible snap).
         private float _traveledSinceLastSync;
-        // Time (ms) since the last movement broadcast — drives the Riot-style hero streaming
-        // cadence (replay 343e3502: 471 mid-walk same-destination 0x61 for the walking hero,
-        // median gap 96ms, Waypoint[0] correction median 19u). Without it, a hero walking
-        // without contact never gets corrected at all, so the client's invisible divergence
-        // (latency offset along the path + timing/quantization error) accumulates for the
-        // whole leg and gets released as ONE visible snap by the first drift-triggered
-        // correction — observed as "the first collision of the game snaps, later ones don't"
-        // (the first push tips _unreplicatedDrift over the 20u threshold and the resulting
-        // first-ever packet carries ALL the silent divergence at once; afterwards the client
-        // is freshly synced and every correction stays ~20u).
-        private float _timeSinceLastMovementSync;
         // True when the waypoint LIST itself changed since the last broadcast (new order/path)
         // — the next WaypointGroup then carries the full route (client path-preview needs it;
         // Riot's occasional long lists, max 20, are these). Keepalives/drift corrections with
@@ -361,11 +350,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // AttackableUnit.Move so the trace attributes its cost (and its A* fan-out) directly.
             using var _scope = Profiler.Scope("AttackableUnit.StuckRecovery", "pathing");
             // Skip cases where stuck detection isn't meaningful.
-            // NOTE: deliberately do NOT bail on IsPathEnded() if HandleMove's null fallback
-            // produced degenerate `[currentPos, currentPos]` waypoints, the path appears "ended"
-            // immediately even though the unit is in a stuck cell. We still want recovery in that
-            // case if the unit is actually on a non-walkable cell.
-            bool wantsToMove = Waypoints.Count > 1 || !_game.Map.PathingHandler.IsWalkable(Position, 0f);
+            // Use !IsPathEnded() (NOT Waypoints.Count > 1): a unit that ARRIVED at its goal keeps
+            // its full waypoint list (arrival only advances CurrentWaypointKey to Count, never
+            // clears Waypoints — see Move() line ~1502), so Count stays >1 while IsPathEnded() is
+            // true. The old Count>1 check treated an arrived-at-goal unit as still wanting to move:
+            // actualDist≈0 vs expected>0 → "stuck" → TryUnstuckRepath does GetPath(pos→goal) where
+            // goal==pos → degenerate null → escalates repathCount 0→15 over ~33s, eventually
+            // ResetWaypoints (the "stopped then teleported far" bug, [STUCKDBG]-confirmed:
+            // goal==pos, newPathCount=0, posChanged=False every event). Triggered by very short
+            // paths (pathLen~26) where the unit reaches the goal. The degenerate in-blocker case
+            // the old comment cared about (HandleMove [pos,pos] on a NOT_PASSABLE cell) is still
+            // recovered via the !IsWalkable branch.
+            bool wantsToMove = !IsPathEnded() || !_game.Map.PathingHandler.IsWalkable(Position, 0f);
             if (!CanMove() || MovementParameters != null || !wantsToMove)
             {
                 _stuckTimerMs = 0f;
@@ -662,7 +658,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // accumulated drift is now reflected on the client.
                 _unreplicatedDrift = Vector2.Zero;
                 _traveledSinceLastSync = 0f;
-                _timeSinceLastMovementSync = 0f;
                 FullPathBroadcastPending = false;
             }
             _movementUpdated = false;
@@ -1709,15 +1704,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     _movementUpdated = true;
                 }
 
-                // Riot-style timed hero streaming (replay-measured median 96ms between mid-walk
-                // hero updates): periodic tiny Waypoint[0] corrections while walking keep the
-                // client's hard-snap-on-receive invisible AND prevent silent divergence from
-                // accumulating into one big first correction (see _timeSinceLastMovementSync).
-                _timeSinceLastMovementSync += delta;
-                if (this is Champion && !IsPathEnded() && _timeSinceLastMovementSync >= 96f)
-                {
-                    _movementUpdated = true;
-                }
+                // Champion hero streaming is event-driven, NOT timed (2026-06-08). The old
+                // unconditional 96ms streamer re-sent the full path every tick while walking;
+                // replay analysis showed Riot instead goes SILENT for seconds on a fixed path
+                // (bursts only on path change) and lets the client interpolate. Our per-tick
+                // re-sends each forced a Waypoint[0] hard-snap on the client — on a curving
+                // mouse-held arc those mid-gap snaps were the short-path jitter. Broadcasts now
+                // fire only when the path/state actually changes (SetWaypoints, collision repath,
+                // teleport), matching Riot. WATCH: if straight-line walks drift/rubber-band (our
+                // collision sim diverging from client interpolation), a distance-based safety
+                // resync is needed here (mirror the minion path above with a larger threshold).
             }
             else
             {

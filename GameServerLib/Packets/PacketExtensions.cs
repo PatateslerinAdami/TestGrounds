@@ -104,14 +104,21 @@ namespace PacketDefinitions420
             // stationary) once the path is done.
             var result = new List<Vector2> { unit.Position };
 
-            // Riot-faithful waypoint budget (replay 343e): minions median 1 / p90 4 waypoints
-            // per update; heroes median 2 / p90 3 (25k updates) with occasional full routes
-            // (max 20 — the initial orders, which the client's path-preview needs). Mirror:
-            // full list only while a NEW path is pending its first broadcast; all subsequent
-            // keepalives/drift corrections carry Position + 3 lookahead. Full lists on every
-            // correction previously forced client path-reprocessing per update (measured FPS
-            // drops with minion waves).
-            int maxAhead = unit.FullPathBroadcastPending ? int.MaxValue : 3;
+            // Waypoint budget. The Position+3 trim was designed for the OLD per-tick (96ms) hero
+            // streamer: each WaypointGroup REPLACES the client's path, but a fresh one arrived
+            // every ~33u so 3 lookahead always sufficed. Champions are now event-driven (the 96ms
+            // streamer was removed 2026-06-08) — between path changes the only updates are the
+            // ~5s vision batches. With Position+3 the client runs out of its 4-waypoint copy on a
+            // long route (waypoints closer than ~1725u of 5s travel), STOPS, then snaps forward on
+            // the next batch ("stopped then teleported to a position on the way", MOVEPKT-confirmed:
+            // order broadcast nWp=9 → next vision-batch nWp=4). So a champion must carry its FULL
+            // remaining route every broadcast; it then walks autonomously until the next real
+            // change. Non-champions keep the trim (they still have the 100u distance-streamer
+            // above, so 3 lookahead always covers the gap) — full lists per update caused FPS
+            // drops on minion waves. Fresh orders (FullPathBroadcastPending) always send full.
+            bool needsFullRoute = unit.FullPathBroadcastPending
+                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Champion;
+            int maxAhead = needsFullRoute ? int.MaxValue : 3;
             for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count && maxAhead > 0; i++, maxAhead--)
             {
                 result.Add(unit.Waypoints[i]);
