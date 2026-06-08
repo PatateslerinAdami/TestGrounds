@@ -465,8 +465,9 @@ namespace LeagueSandbox.GameServer
                 }
 
                 double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                double oversleep = lastSleepDuration - timeout;
-                timeout = Math.Max(0, refreshRate - lastUpdateDuration - oversleep);
+
+                double overshoot = Math.Max(0, lastSleepDuration - refreshRate);
+                timeout = Math.Max(0, refreshRate - lastUpdateDuration - overshoot);
 
                 if (timeout > 0)
                 {
