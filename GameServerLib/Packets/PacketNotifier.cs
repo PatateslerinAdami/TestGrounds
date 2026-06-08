@@ -4786,7 +4786,17 @@ namespace PacketDefinitions420
                         Movements = list
                     };
 
-                    _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY);
+                    // Stream movement UNRELIABLE (2026-06-08). The client gates incoming waypoints
+                    // by SyncID (AIManager_Client::CanSyncUpdate — verified in both the 4.17 mac
+                    // decomp and the S4 Ghidra: accept iff new >= current or wraparound), so a
+                    // stale/out-of-order drop is harmless and the unit's full remaining route is
+                    // already client-side. Reliable delivery made an alt-tabbed client buffer a
+                    // backlog of WaypointGroups that replayed as a Waypoint[0] snap-flood on
+                    // refocus. EXCEPTION: a teleport-carrying movement (HasTeleportID, e.g. blink
+                    // landing) is a discrete event the client must not miss, so keep it RELIABLE.
+                    bool hasTeleport = list.Exists(m => m.HasTeleportID);
+                    var flag = hasTeleport ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED;
+                    _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
 
                     list.Clear();
                 }
@@ -4854,13 +4864,15 @@ namespace PacketDefinitions420
                 Movements = new List<MovementDataNormal>() { move }
             };
 
+            // Unreliable stream, reliable teleports — see NotifyWaypointGroup() above.
+            var flag = useTeleportID ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED;
             if (userId < 0)
             {
-                _packetHandlerManager.BroadcastPacketVision(u, packet.GetBytes(), Channel.CHL_LOW_PRIORITY);
+                _packetHandlerManager.BroadcastPacketVision(u, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
             }
             else
             {
-                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY);
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
             }
         }
 
