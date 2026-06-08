@@ -192,12 +192,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
+            // Don't move or re-collide a missile already marked for removal this tick (the
+            // global collision phase may have set it just before ObjectManager.Update ran).
+            if (IsToRemove())
+            {
+                return;
+            }
+
             if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))
             {
                 _timeSinceCreation += diff;
                 UpdateTimedSpeedChange();
                 var positionBeforeMove = Position;
                 Move(diff);
+                CheckSweptCollision(positionBeforeMove);
                 PublishOnSpellMissileUpdate(diff, positionBeforeMove);
             }
             else
@@ -222,6 +230,65 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 // SpellLineMissile.OnCollision for the full rationale (Nautilus Q pattern).
                 API.ApiEventManager.OnCollisionTerrain.Publish(this);
                 return;
+            }
+        }
+
+        /// <summary>
+        /// Swept (continuous) collision check over the segment the missile traversed THIS
+        /// tick. Fixes fast-missile tunnelling/overshoot: the global CollisionHandler runs in
+        /// Map.Update BEFORE missiles move in ObjectManager.Update, so its point-in-circle
+        /// test always lags the missile by a full tick — at Jinx W's 3300 speed that is ~110u
+        /// (30Hz), more than the combined hit radius, so the hit registers (and the destroy
+        /// packet goes out) only after the missile has visibly flown through the target.
+        /// Running the check here, right after Move, registers the hit in the SAME tick along
+        /// the actual path. Routes through OnCollision so each class's hit/dedup/budget logic
+        /// is reused; the lagged global pass becomes a harmless backstop (ObjectsHit / target
+        /// / IsToRemove guards make a double call a no-op).
+        /// </summary>
+        protected void CheckSweptCollision(Vector2 from)
+        {
+            if (IsToRemove())
+            {
+                return;
+            }
+
+            var to = Position;
+            var seg = to - from;
+            var segLenSq = seg.LengthSquared();
+
+            // A bounding circle over the segment, padded for the largest plausible target
+            // radius, gathers candidate units; the precise segment-distance test below
+            // decides actual contact.
+            const float maxUnitRadius = 200.0f;
+            var mid = (from + to) * 0.5f;
+            var queryRadius = (MathF.Sqrt(segLenSq) * 0.5f) + CollisionRadius + maxUnitRadius;
+
+            var candidates = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(mid, queryRadius));
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                if (IsToRemove())
+                {
+                    return;
+                }
+
+                if (candidates[i] is not AttackableUnit unit || unit.IsToRemove())
+                {
+                    continue;
+                }
+
+                // Closest distance from the unit centre to the traversed segment.
+                float t = 0f;
+                if (segLenSq > float.Epsilon)
+                {
+                    t = Math.Clamp(Vector2.Dot(unit.Position - from, seg) / segLenSq, 0f, 1f);
+                }
+                var closest = from + seg * t;
+                var hitRange = CollisionRadius + unit.CollisionRadius;
+
+                if (Vector2.DistanceSquared(unit.Position, closest) <= hitRange * hitRange)
+                {
+                    OnCollision(unit);
+                }
             }
         }
 

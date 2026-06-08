@@ -2128,7 +2128,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (originalMagSq <= 0.01f) return Vector2.Zero;
 
             float stuckThresholdSq = originalMagSq * (MinSpeedRatioBeforeStuck * MinSpeedRatioBeforeStuck);
-            if (newDelta.LengthSquared() >= stuckThresholdSq) return Vector2.Zero; // nicht stuck
+            if (newDelta.LengthSquared() >= stuckThresholdSq) return Vector2.Zero; // not stuck
 
             // FirstWave -> ignore ally lane minion collisions until reaching your own outer turret
             // (similar to ComputeSeparationPush — otherwise the stuck push between ally minions

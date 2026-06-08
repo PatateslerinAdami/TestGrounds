@@ -1000,7 +1000,7 @@ namespace AIScripts
 
             foreach (var unit in units)
             {
-                // Diagnostik: warum kommen zerstörte Turrets durch den Filter?
+                // Diagnostic: why do destroyed turrets get through the filter?
                 _logger.Debug(
                     $"[TurretScan] Model={unit.Model} Type={(unit is LaneTurret lt ? lt.Type.ToString() : unit.GetType().Name)} " +
                     $"IsDead={unit.IsDead} HP={unit.Stats.CurrentHealth}/{unit.Stats.HealthPoints.Total} " +

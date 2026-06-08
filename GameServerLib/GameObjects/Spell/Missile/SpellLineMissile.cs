@@ -45,8 +45,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
+            if (IsToRemove())
+            {
+                return;
+            }
+
             if (!HasDestination() || _atDestination)
             {
+                // Reaching the max-range endpoint is client-INFERABLE (the client knows
+                // launch + direction + range + speed), so Riot sends NO DestroyClientMissile
+                // for it — replay-verified on Jinx W (d756cd43: 27/27 max-range misses carry
+                // no 0x5A; only unit hits, which remove the missile early/off-schedule, get a
+                // destroy). Unit-hit removal goes through CheckFlagsForUnit / the script's
+                // SetToRemove instead and keeps the destroy.
+                if (_atDestination)
+                {
+                    SuppressDestroyNotify = true;
+                }
                 SetToRemove();
                 return;
             }
@@ -88,6 +103,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             UpdateTimedSpeedChange();
             var positionBeforeMove = Position;
             Move(diff);
+            CheckSweptCollision(positionBeforeMove);
             PublishOnSpellMissileUpdate(diff, positionBeforeMove);
         }
 

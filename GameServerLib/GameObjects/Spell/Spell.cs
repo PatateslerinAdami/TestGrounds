@@ -1420,10 +1420,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 else
                 {
                     CastInfo.Owner.UpdateMoveOrder(OrderType.Hold, true);
-                    // Bewusst KEIN NotifyWaypointGroup hier — Replay (KatarinaR @ t=578760+)
-                    // zeigt nach Channel-Ende NUR StopAnimation + BuffRemove2 fuer den Caster,
-                    // keine WaypointGroup. Eine Path-Sync mit der Channel-Lock-Position als Start
-                    // wuerde den Client zurueckschnappen wenn er schon vom Click weiterprediziert hat.
+                    // Intentionally NO NotifyWaypointGroup here — replay (KatarinaR @ t=578760+)
+                    // shows ONLY StopAnimation + BuffRemove2 for the caster after channel end,
+                    // no WaypointGroup. A path-sync with the channel-lock position as start
+                    // would snap the client back if it already predicted forward from the click.
                 }
             }
 

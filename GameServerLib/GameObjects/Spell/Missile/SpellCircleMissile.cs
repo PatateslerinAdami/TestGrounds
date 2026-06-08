@@ -105,6 +105,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
+            if (IsToRemove())
+            {
+                return;
+            }
+
             _timeSinceCreation += diff;
             UpdateTimedSpeedChange();
             _lifeElapsedMs += diff;
@@ -121,6 +126,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             var positionBeforeMove = Position;
             Move(diff);
+            CheckSweptCollision(positionBeforeMove);
             PublishOnSpellMissileUpdate(diff, positionBeforeMove);
         }
 

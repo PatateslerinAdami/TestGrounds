@@ -139,6 +139,19 @@ namespace LeagueSandbox.GameServer
                 foreach (var obj in _objectsToAdd)
                 {
                     _objects.Add(obj.NetId, obj);
+
+                    // Missiles spawned mid-update (windup-end ForceCreateMissile / spawn
+                    // replication) are sent to clients THIS tick, so the client starts
+                    // simulating them immediately. But the object update loop already ran,
+                    // so without this their first server-side Move would be next tick —
+                    // leaving the server missile a full tick (Jinx W: ~110u @30Hz) behind
+                    // the client visual, which reads as "the missile flies out faster than
+                    // the server" and lands the hit after it visually passed. Give them
+                    // their first move now to stay in lockstep with the client.
+                    if (obj is SpellMissile spawnedMissile && !spawnedMissile.IsToRemove())
+                    {
+                        spawnedMissile.Update(diff);
+                    }
                 }
 
                 _objectsToAdd.Clear();
