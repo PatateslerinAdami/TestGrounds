@@ -7,6 +7,7 @@ using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Logging;
+using Buildings = LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 
 namespace LeagueSandbox.GameServer.Handlers
 {
@@ -93,7 +94,10 @@ namespace LeagueSandbox.GameServer.Handlers
             // case the per-waypoint loop below misses so a new blocker (e.g., a freshly built
             // turret, a respawned inhibitor) sitting between two still-walkable waypoints.
             // Big win in the common case: no allocation, no A*.
-            if (path.ValidateLineOfSight(_map.NavigationGrid, obj.PathfindingRadius))
+            // Cell-based (radius 0) for consistency with GetPath's cell-based corridors —
+            // validating cell-built paths with the unit radius would re-flag every wall-hugging
+            // path as blocked and churn rebuilds each 3s batch.
+            if (path.ValidateLineOfSight(_map.NavigationGrid, 0f))
             {
                 return;
             }
@@ -149,7 +153,47 @@ namespace LeagueSandbox.GameServer.Handlers
             bool useFastPath = obj is ObjAIBase ai && ai.UsesFastPath;
             float radius = usePathingRadius ? obj.PathfindingRadius : 0f;
             var actorBlocked = BuildActorBlockedPredicate(obj);
-            return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked);
+            return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked,
+                ENABLE_MOVEMENT_HINT_PENALTY ? ComputeMovementHint(obj) : null);
+        }
+
+        // DISABLED 2026-06-07 (in-game regression): penalizing the cell directly ahead by +100
+        // world units (~2 cell-steps) makes a straight walk and a one-cell sidestep nearly
+        // equal-cost — successive repaths (stuck recovery, RefreshWaypoints) flip-flop between
+        // them, producing zigzag/slow-walk/repath feedback loops after unit contact (user-
+        // observed: champion + minion both crawling and re-pathing after a head-on bump).
+        // The port's client-fidelity is also questionable: the client's GetNextTargetLocator
+        // has an `x != 0 AND z != 0` gate, so for AXIS-ALIGNED movement it adds the raw
+        // (tiny, per-frame) movement vector instead of a full cell offset — i.e. it usually
+        // marks the unit's OWN cell (harmless, start is closed) and only hits the true
+        // ahead-cell on diagonal movement. Re-enable only after verifying the real client
+        // behavior end-to-end (what m_Movement contains at hint time + measured path shapes).
+        private const bool ENABLE_MOVEMENT_HINT_PENALTY = false;
+
+        /// <summary>
+        /// Server equivalent of the client's <c>Actor_Common::GetNextTargetLocator</c>
+        /// (S4 Actor.cpp:2569): the position one cell-size ahead of the unit along its current
+        /// movement direction, or the unit's own position when idle. Feeds the A* hint-cell
+        /// arrival penalty (see NavigationGrid.GetPath). The client offsets by
+        /// normalize(m_Movement) * (cellSize + 1); our movement direction is the vector toward
+        /// the current waypoint. Currently UNUSED — see <see cref="ENABLE_MOVEMENT_HINT_PENALTY"/>.
+        /// </summary>
+        private Vector2? ComputeMovementHint(AttackableUnit obj)
+        {
+            if (obj.IsPathEnded())
+            {
+                return obj.Position;
+            }
+
+            Vector2 dir = obj.CurrentWaypoint - obj.Position;
+            float lenSq = dir.LengthSquared();
+            if (lenSq < 0.0001f)
+            {
+                return obj.Position;
+            }
+
+            float scale = (_map.NavigationGrid.CellSize + 1f) / MathF.Sqrt(lenSq);
+            return obj.Position + dir * scale;
         }
 
         /// <summary>
@@ -228,6 +272,218 @@ namespace LeagueSandbox.GameServer.Handlers
         }
 
         /// <summary>
+        /// F2 Phase 2: full path-based attack-approach recommendation — the client's
+        /// <c>Actor_Common::GetClosestAttackPoint</c> (S4 Actor.cpp:2812-2852 prediction wrapper)
+        /// + <c>NavGrid::GetClosestAttackPoint</c> (NavigationGrid.cpp:2397-2554), the C++
+        /// backend of the Lua AI API <c>SetStateAndCloseToTarget</c>. Flow:
+        ///   1. Project the target forward along ITS path (differential-speed prediction, capped
+        ///      at 300u; sanity fallback to the raw position when the projection lands closer
+        ///      than 50% of the current gap to the attacker).
+        ///   2. Snap the projected position to the nearest get-to-able cell, path to it
+        ///      (actor-aware A*), and scan the waypoints for the FIRST one within
+        ///      <paramref name="effectiveRange"/> of the target.
+        ///   3. Recommend the waypoint TWO past that entry point (capped at the first waypoint
+        ///      within the close radius max(radii sum, 15)) — the unit pushes slightly into
+        ///      range instead of stopping on the boundary. Beeline shortcut: when walking the
+        ///      path costs much more than the crow distance to the snapped end
+        ///      ((0.6*travel)² > beeline²), recommend the snapped end directly.
+        ///
+        /// <paramref name="effectiveRange"/> is center-to-center (include both collision radii
+        /// for AAs — same convention as <see cref="GetAttackStandPosition"/>).
+        /// `closingAttackRangeModifier` = ar_ClosingAttackRangeModifier, a CVar defaulting to 0
+        /// in code (Actor.cpp:155) but set to 300 by Map1's Constants.var:16 — found 2026-06-07
+        /// in the playable-client level data. With 300, the close-walk radius
+        /// max(radiiSum − 300, 15) collapses to the 15u floor, i.e. the close scan runs to the
+        /// waypoint that practically touches the target.
+        ///
+        /// Residual divergence (documented): the client threads ignoreTargetRadius
+        /// (= effectiveRange − radii − halfCell) into the A* so actor-blocking is bypassed
+        /// ANYWHERE within attack range of the goal; our GetPath's near-goal exemption is a
+        /// fixed 2-cell radius. Ranged attackers may route around crowds the client would
+        /// path straight through — thread the parameter if that shows up in testing.
+        /// </summary>
+        /// <returns>true when a recommendation was produced; false when no path exists.</returns>
+        public bool GetClosestAttackPoint(AttackableUnit attacker, AttackableUnit target, float effectiveRange,
+            out Vector2 recommendedAttackPos, out bool canReachCloseSpot, out float travelDistanceNeededBeforeTargetable)
+        {
+            recommendedAttackPos = target.Position;
+            canReachCloseSpot = false;
+            travelDistanceNeededBeforeTargetable = float.MaxValue;
+
+            // --- 1. Target-movement prediction (Actor.cpp:2816-2850) ---
+            Vector2 projected = target.Position;
+            float attackerSpeed = attacker.GetMoveSpeed();
+            if (!target.IsPathEnded() && attackerSpeed > 0f)
+            {
+                float targetSpeed = target.GetMoveSpeed();
+                float distFromUnit = Vector2.Distance(attacker.Position, target.Position)
+                    - attacker.CollisionRadius - target.CollisionRadius;
+                if (targetSpeed > 0f && distFromUnit > 0f)
+                {
+                    float differential = targetSpeed / (attackerSpeed * 0.95f);
+                    float distToTrack = Math.Min(differential * distFromUnit * 1.5f, 300f);
+                    projected = GetPathCollisionPosition(target, distToTrack, attacker.Position);
+                    // Projection landing closer than half the current gap means the target is
+                    // pathing TOWARD us — chase its real position instead (Actor.cpp:2843-2847).
+                    if (Vector2.Distance(attacker.Position, projected) / distFromUnit < 0.5f)
+                    {
+                        projected = target.Position;
+                    }
+                }
+            }
+
+            // --- 2. Snap + path (NavigationGrid.cpp:2417-2447) ---
+            float halfCell = _map.NavigationGrid.CellSize * 0.5f;
+            float closeRadius = attacker.CollisionRadius + target.CollisionRadius;
+            float ignoreTargetRadius = effectiveRange - closeRadius - halfCell;
+
+            Vector2 end = SetToNearestGetToAbleCell(attacker, projected,
+                attacker.PathfindingRadius, ignoreTargetRadius, effectiveRange);
+
+            var path = GetPath(attacker, end);
+            if (path == null || path.Count < 2)
+            {
+                return false;
+            }
+
+            // --- 3. Waypoint scans (NavigationGrid.cpp:2453-2545) ---
+            float rangeSq = effectiveRange * effectiveRange;
+            int firstInRange = -1;
+            for (int i = 1; i < path.Count; i++)
+            {
+                if (Vector2.DistanceSquared(projected, path[i]) < rangeSq)
+                {
+                    firstInRange = i;
+                    break;
+                }
+            }
+
+            if (firstInRange < 0)
+            {
+                // No waypoint enters range (far / partial path): walk to the path end.
+                // travelDistance = 0 is the client literal here (NavigationGrid.cpp:2468-2472).
+                recommendedAttackPos = path[path.Count - 1];
+                travelDistanceNeededBeforeTargetable = 0f;
+                canReachCloseSpot = true;
+                return true;
+            }
+
+            float travel = 0f;
+            for (int i = 1; i <= firstInRange; i++)
+            {
+                travel += Vector2.Distance(path[i - 1], path[i]);
+            }
+            travelDistanceNeededBeforeTargetable = travel;
+
+            // Beeline shortcut (NavigationGrid.cpp:2503-2545 else-branch): the path detours so
+            // much that the crow distance to the snapped end cell is shorter than 60% of it —
+            // recommend the end directly.
+            float beelineSq = Vector2.DistanceSquared(end, attacker.Position);
+            if (0.36f * travel * travel <= beelineSq)
+            {
+                // Close-walk scan: first waypoint within max(radii sum − closingModifier, 15).
+                // closingModifier = ar_ClosingAttackRangeModifier = 300 on Map1 (Constants.var:16)
+                // → the subtraction goes negative and the 15u floor binds.
+                const float ClosingAttackRangeModifier = 300f;
+                float closeRange = Math.Max(closeRadius - ClosingAttackRangeModifier, 15f);
+                float closeRangeSq = closeRange * closeRange;
+                int closeIdx = 1;
+                while (Vector2.DistanceSquared(projected, path[closeIdx]) >= closeRangeSq)
+                {
+                    closeIdx++;
+                    if (closeIdx >= path.Count)
+                    {
+                        closeIdx = path.Count - 1;
+                        break;
+                    }
+                }
+
+                int recommended = Math.Min(firstInRange + 2, closeIdx);
+                recommendedAttackPos = path[recommended];
+            }
+            else
+            {
+                recommendedAttackPos = end;
+            }
+            canReachCloseSpot = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Port of <c>NavigationPath::GetCollisionPosition</c> (S4 NavigationPath.cpp:~570):
+        /// walks <paramref name="unit"/>'s remaining path up to <paramref name="distanceToTravel"/>
+        /// and returns where it will be — cut short at the point of closest approach to
+        /// <paramref name="otherUnitPos"/> when the path passes near it (the client's literal
+        /// heuristic: traveled-distance² &gt; point-to-segment distance², approach param &lt; 1).
+        /// Used by the attack-approach prediction to aim at where a fleeing target WILL be.
+        /// </summary>
+        private static Vector2 GetPathCollisionPosition(AttackableUnit unit, float distanceToTravel, Vector2 otherUnitPos)
+        {
+            var waypoints = unit.Waypoints;
+            int i = unit.CurrentWaypointKey;
+            if (i >= waypoints.Count)
+            {
+                return waypoints.Count > 0 ? waypoints[waypoints.Count - 1] : unit.Position;
+            }
+
+            Vector2 lastPoint = unit.Position;
+            float totalDist = 0f;
+            while (true)
+            {
+                Vector2 wp = waypoints[i];
+                float prevDist = totalDist;
+                totalDist += Vector2.Distance(lastPoint, wp);
+
+                if (totalDist > distanceToTravel)
+                {
+                    // Final partial segment: check close approach, else walk distanceRemaining in.
+                    float distSq = DistPointSegmentSq(otherUnitPos, lastPoint, wp, out float s);
+                    if (prevDist * prevDist > distSq && s > 0f)
+                    {
+                        return Vector2.Lerp(lastPoint, wp, s);
+                    }
+                    float segLen = Vector2.Distance(lastPoint, wp);
+                    float remaining = Math.Max(distanceToTravel - prevDist, 0f);
+                    return segLen > 1e-4f
+                        ? lastPoint + (wp - lastPoint) * (remaining / segLen)
+                        : wp;
+                }
+
+                float dSq = DistPointSegmentSq(otherUnitPos, lastPoint, wp, out float t);
+                if (totalDist * totalDist > dSq && t > 0f)
+                {
+                    return Vector2.Lerp(lastPoint, wp, t);
+                }
+
+                lastPoint = wp;
+                i++;
+                if (i >= waypoints.Count)
+                {
+                    return waypoints[waypoints.Count - 1];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Squared distance from <paramref name="p"/> to segment AB; <paramref name="t"/> is the
+        /// closest-approach parameter along A→B in [0,1]. (Client's DistPoint3DLine3DSq measures
+        /// its param from B toward A; ours is A→B, with the `t &gt; 0` guard mirroring the
+        /// client's `intersection &lt; 1`.)
+        /// </summary>
+        private static float DistPointSegmentSq(Vector2 p, Vector2 a, Vector2 b, out float t)
+        {
+            Vector2 ab = b - a;
+            float lenSq = ab.LengthSquared();
+            if (lenSq < 1e-6f)
+            {
+                t = 0f;
+                return Vector2.DistanceSquared(p, a);
+            }
+            t = Math.Clamp(Vector2.Dot(p - a, ab) / lenSq, 0f, 1f);
+            return Vector2.DistanceSquared(p, a + ab * t);
+        }
+
+        /// <summary>
         /// Local-window reachability check (A2 — S1:9069 / S4:1694). Returns true if <paramref name="to"/>
         /// is reachable from <paramref name="unit"/>'s position within ~4 cells, considering both
         /// terrain and actor blocking via the same predicate as <see cref="GetPath"/>. Ghosted
@@ -244,7 +500,8 @@ namespace LeagueSandbox.GameServer.Handlers
                 return _map.NavigationGrid.CheckIsGetToAble(Vector2.Zero, to, null, radius, ignoreTargetRadius);
             }
             // S1:9131 short-circuit -> ghosted unit ignores all collision and is trivially "able to get there".
-            if (unit.Status.HasFlag(StatusFlags.Ghosted))
+            // Temp-ghost (stuck-recovery mIgnoreCollisions) gets the same treatment.
+            if (unit.Status.HasFlag(StatusFlags.Ghosted) || unit.IsTemporarilyGhosted)
             {
                 return true;
             }
@@ -268,7 +525,7 @@ namespace LeagueSandbox.GameServer.Handlers
             {
                 return _map.NavigationGrid.SetToNearestGetToAbleCell(target, Vector2.Zero, null, radius, ignoreTargetRadius, targetRadius);
             }
-            if (unit.Status.HasFlag(StatusFlags.Ghosted))
+            if (unit.Status.HasFlag(StatusFlags.Ghosted) || unit.IsTemporarilyGhosted)
             {
                 return target;
             }
@@ -284,7 +541,7 @@ namespace LeagueSandbox.GameServer.Handlers
             }
             // A ghosted attacker mirrors the client's mIgnoreCollisions short-circuit at S1:6556
             // the entire HasStuckActor is no-op'd. Cheap to detect once at build time.
-            if (attacker.Status.HasFlag(StatusFlags.Ghosted))
+            if (attacker.Status.HasFlag(StatusFlags.Ghosted) || attacker.IsTemporarilyGhosted)
             {
                 return null;
             }
@@ -307,7 +564,7 @@ namespace LeagueSandbox.GameServer.Handlers
                     if (other.IsToRemove()) continue;
                     if (other is AttackableUnit otherUnit)
                     {
-                        if (otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                        if (otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
                     }
                     if (other.Team == attackerTeam) continue;
 

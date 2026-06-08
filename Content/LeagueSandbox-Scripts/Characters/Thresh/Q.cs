@@ -73,7 +73,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle,
+                Type = MissileType.Arc,
             },
             IsDamagingSpell = true,
         };
@@ -91,7 +91,7 @@ namespace Spells
 
         public void OnMissileEnd(SpellMissile missile)
         {
-            if (missile is SpellCircleMissile circleMissile && circleMissile.ObjectsHit.Count == 0)
+            if (missile.ObjectsHit.Count == 0)
             {
                 missile.CastInfo.Owner.StopAnimation("Spell1_IN", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
             }

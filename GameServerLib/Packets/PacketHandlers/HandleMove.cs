@@ -7,6 +7,7 @@ using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.Logging;
+using log4net;
 
 namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
@@ -14,6 +15,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
     {
         private readonly Game _game;
         private readonly PlayerManager _playerManager;
+        // TEMP [SHORTPATH] diagnostic (2026-06-08) — remove after short-path reorder jitter is fixed.
+        private static readonly ILog _logger = LoggerProvider.GetLogger();
 
         public HandleMove(Game game)
         {
@@ -65,18 +68,17 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             waypoints = new NavigationPath(req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates));
 
-                            // Client-prediction smoothing: snap server-side position to client's
-                            // claimed start if it's a small drift. Gated on walkability — if the
-                            // client predicted a position inside one of our dynamic blockers (e.g.,
-                            // their nav-grid uses Riot's 186/214/353 bake while ours is reduced
-                            // to ~100/150 to match body-push-at-visual-edge), unconditional snap
-                            // would put us inside NOT_PASSABLE → OnCollision fires every tick →
-                            // can't move regardless of click direction.
-                            if (Vector2.Distance(champion.Position, waypoints[0]) < 150f
-                                && nav.IsWalkable(waypoints[0], 0f))
-                            {
-                                champion.SetPosition(waypoints[0], false);
-                            }
+                            // REMOVED (2026-06-07): the old "client-prediction smoothing" snapped
+                            // the SERVER position to the client's claimed start (up to 150u). With
+                            // the 96ms hero-streaming cadence the client structurally trails the
+                            // server by ~one packet flight, so every click yanked the server BACK
+                            // onto a stale client position — and the resulting full-path
+                            // WaypointGroup then yanked the walking client back too (visible
+                            // occasional snap/zigzag on plain click-to-move). Riot's server is
+                            // authoritative over position: paths start at the SERVER position
+                            // (waypoints.Replace(0, ...) below) and the 0x61 response resyncs the
+                            // client — client drift is folded into the regular streamed
+                            // corrections instead of being trusted.
 
                             // Upfront extraction: if the champion is currently on a NOT_PASSABLE
                             // cell (post-teleport, knockback-into-wall, or stale client-prediction
@@ -212,9 +214,88 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                     break;
                                 }
                             }
-                            champion.UpdateMoveOrder(req.OrderType, true);
-                            champion.SetWaypoints(waypoints);
-                            champion.SetTargetUnit(null);
+                            // Degenerate-order guard (2026-06-07): clicking INTO an adjacent
+                            // blocker (building footprint right next to the champion) ends up
+                            // with the clamp fallback producing [pos, pos] — start == end.
+                            // Broadcasting that as a full-path WaypointGroup makes the client
+                            // hard-snap to Waypoint[0] and process a zero-length path (one-frame
+                            // visible hitch). No walkable progress exists for this order, so
+                            // treat it as a no-op: keep the current path/state, send nothing.
+                            bool degenerateOrder = waypoints.Count <= 1
+                                || (waypoints.Count == 2
+                                    && Vector2.DistanceSquared(waypoints[0], waypoints[waypoints.Count - 1]) < 16f);
+                            if (!degenerateOrder)
+                            {
+                                champion.UpdateMoveOrder(req.OrderType, true);
+
+                                // Move-order rate limiter (2026-06-07): holding the mouse issues a
+                                // fresh MoveTo every mouse-move frame (log shows 10-30 orders/s).
+                                // Broadcasting each as a full-path WaypointGroup makes the client
+                                // hard-snap to Waypoint[0] at that rate — visible jitter while held.
+                                // If the champion is ALREADY moving and the last broadcast was within
+                                // the streaming window, apply the new path silently: the server walks
+                                // it and the 96ms champion streamer carries a small Position+3
+                                // correction. Well-spaced single clicks (> window apart) still
+                                // broadcast immediately and stay responsive.
+                                const float MoveOrderBroadcastWindowMs = 96f;
+                                bool alreadyMoving = !champion.IsPathEnded();
+                                bool broadcast = !alreadyMoving
+                                    || (_game.GameTime - champion.LastMoveOrderBroadcastTime) >= MoveOrderBroadcastWindowMs;
+
+                                // Reversal override (2026-06-08): throttling is only safe when the
+                                // client's forward extrapolation moves the SAME way the server does
+                                // — then the gap stays under the client's ~20u drift-snap threshold.
+                                // When the new order points BACK against the current heading (mouse
+                                // held, dragged to the opposite side), the client keeps extrapolating
+                                // forward for up to one window while the server already walks
+                                // backward; the two diverge at ~2*speed*window (~65u) and the
+                                // eventual throttled WaypointGroup snaps the client back onto the
+                                // server position. Direction reversal is exactly the event that must
+                                // resync immediately, so bypass the limiter when headings oppose.
+                                if (!broadcast && alreadyMoving && waypoints.Count >= 2)
+                                {
+                                    var curDir = champion.CurrentWaypoint - champion.Position;
+                                    var newDir = waypoints[1] - waypoints[0];
+                                    if (curDir.LengthSquared() > float.Epsilon
+                                        && newDir.LengthSquared() > float.Epsilon
+                                        && Vector2.Dot(Vector2.Normalize(curDir), Vector2.Normalize(newDir)) < 0f)
+                                    {
+                                        broadcast = true;
+                                    }
+                                }
+
+                                // TEMP [SHORTPATH] diagnostic (2026-06-08): on every reorder while
+                                // already moving, measure the turn angle (new heading vs current
+                                // movement heading), path length, speed, time since last broadcast,
+                                // and the predicted client/server divergence over one 96ms window
+                                // (v * t * 2*sin(turn/2)). Hypothesis: short paths produce large turn
+                                // angles for small mouse moves, pushing predicted divergence past the
+                                // client's ~20u hard-snap threshold while the order is throttled.
+                                if (alreadyMoving && waypoints.Count >= 2)
+                                {
+                                    var curDir = champion.CurrentWaypoint - champion.Position;
+                                    var newDir = waypoints[1] - waypoints[0];
+                                    if (curDir.LengthSquared() > float.Epsilon && newDir.LengthSquared() > float.Epsilon)
+                                    {
+                                        float dot = Vector2.Dot(Vector2.Normalize(curDir), Vector2.Normalize(newDir));
+                                        dot = System.Math.Clamp(dot, -1f, 1f);
+                                        float turnDeg = (float)(System.Math.Acos(dot) * 180.0 / System.Math.PI);
+                                        float pathLen = Vector2.Distance(waypoints[0], waypoints[waypoints.Count - 1]);
+                                        float v = champion.GetMoveSpeed();
+                                        float dtSinceBc = _game.GameTime - champion.LastMoveOrderBroadcastTime;
+                                        float predDiv = v * (MoveOrderBroadcastWindowMs / 1000f)
+                                            * 2f * (float)System.Math.Sin(turnDeg * System.Math.PI / 360.0);
+                                        _logger.Info($"[SHORTPATH] {champion.NetId} pathLen={pathLen:F0} turnDeg={turnDeg:F0} v={v:F0} dtSinceBc={dtSinceBc:F0} predDiv={predDiv:F0} broadcast={broadcast}");
+                                    }
+                                }
+
+                                champion.SetWaypoints(waypoints, broadcastImmediately: broadcast);
+                                if (broadcast)
+                                {
+                                    champion.LastMoveOrderBroadcastTime = _game.GameTime;
+                                }
+                                champion.SetTargetUnit(null);
+                            }
                         }
                         break;
                     case OrderType.PetHardAttack:

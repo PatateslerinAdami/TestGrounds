@@ -21,7 +21,7 @@ public class DarkBindingMissile: ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         TriggersSpellCasts   = true
     };

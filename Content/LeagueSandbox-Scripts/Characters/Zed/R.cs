@@ -63,6 +63,8 @@ public class ZedUlt : ISpellScript {
     }
 }
 
+
+//unused but could add the reap passive that zed had for a while with that
 public class ZedUltMissile : ISpellScript {
     private ObjAIBase _zed;
     private Spell     _spell;
@@ -71,7 +73,7 @@ public class ZedUltMissile : ISpellScript {
         TriggersSpellCasts = true,
         IsDamagingSpell    = true,
         MissileParameters = new MissileParameters {
-            Type = MissileType.Target
+            Type = MissileType.Arc
         },
     };
 

@@ -30,8 +30,8 @@ namespace Spells;
 //   No per-bounce ForceCreateMissile, no S2C_ChainMissileSync. Bouncing handled in client.
 public class KatarinaQ : ISpellScript
 {
-    Spell _qMis;
-    ObjAIBase _katarina;
+    private Spell _qMis;
+    private ObjAIBase _katarina;
     private readonly Dictionary<uint, HashSet<AttackableUnit>> _chainHitUnits = new();
 
     public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -39,10 +39,17 @@ public class KatarinaQ : ISpellScript
         MissileParameters = new MissileParameters
         {
             Type = MissileType.Chained,
-            BounceSpellName = "KatarinaQMis",
+            BounceSpellNameEnemy = "KatarinaQMis",
             CanHitSameTarget = false,
             CanHitSameTargetConsecutively = false,
-            MaximumHits = 5
+            MaximumHits = 5,
+            CanHitEnemies =  true,
+            CanHitFriends = false,
+            CanHitCaster = false,
+            // 4.20 tooltip: "bounces to the 4 closest enemies" — replay-confirmed
+            // (segment-length median 0.37·BounceRadius vs 0.60·R for the random-class
+            // chains Fiddle E / Ryze E). The 2012-rework Q is the only Nearest chain.
+            BounceSelection = BounceSelection.Nearest,
         },
         TriggersSpellCasts = true,
         IsDamagingSpell = true,
@@ -58,8 +65,9 @@ public class KatarinaQ : ISpellScript
 
     private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
     {
-        var ap = _katarina.Stats.AbilityPower.Total * 0.45f;
-        var dmg = 60 + 25 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1 - 1) + ap;
+        var ap = _katarina.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
+        
         switch (_katarina.SkinID)
         {
             case 9: AddParticleTarget(_katarina, target, "Katarina_Skin09_Q_tar", target); break;
@@ -67,6 +75,8 @@ public class KatarinaQ : ISpellScript
             case 6: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar_sand", target); break;
             default: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar", target); break;
         }
+
+        dmg -= dmg * (0.1f * (missile.HitCount - 1));
         target.TakeDamage(_katarina, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
             false);
 

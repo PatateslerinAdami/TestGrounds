@@ -85,7 +85,7 @@ public class PantheonEChannel : ISpellScript
         _timer = 250f;
         _isActive = true;
         _p = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_E_cas", _pantheon, 0.75f,
-            bone: "L_BUFFBONE_GLB_HAND_LOC", flags: FXFlags.GivenDirection, direction: -_pantheon.Direction);
+            bone: "L_BUFFBONE_GLB_HAND_LOC", flags: FXFlags.UpdateOrientation, direction: -_pantheon.Direction);
     }
 
     public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)

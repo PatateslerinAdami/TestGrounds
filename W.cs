@@ -61,7 +61,7 @@ namespace Spells
             if (arrowCount == 1)
             {
                 Vector2 missileEnd = start + (direction * 1200f);
-                CreateCustomMissile(_owner, "VolleyAttack", start, missileEnd, new MissileParameters { Type = MissileType.Circle });
+                CreateCustomMissile(_owner, "VolleyAttack", start, missileEnd, new MissileParameters { Type = MissileType.Arc });
                 return;
             }
 
@@ -75,7 +75,7 @@ namespace Spells
 
                 Vector2 missileEnd = start + (rotatedDir * 1200f);
 
-                var parameters = new MissileParameters { Type = MissileType.Circle };
+                var parameters = new MissileParameters { Type = MissileType.Arc };
                 CreateCustomMissile(_owner, "VolleyAttack", start, missileEnd, parameters);
             }
         }
@@ -97,7 +97,7 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            MissileParameters = new MissileParameters { Type = MissileType.Circle }
+            MissileParameters = new MissileParameters { Type = MissileType.Arc }
         };
 
         private ObjAIBase _owner;

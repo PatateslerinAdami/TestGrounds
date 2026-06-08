@@ -29,9 +29,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
             Vector2 position = new Vector2(),
             int visionRadius = 0,
             Stats stats = null,
-            uint netId = 0
+            uint netId = 0,
+            int pathfindingRadius = 0
         ) : base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
         {
+            // Separate pathing footprint (mirrors Nexus): the nav-grid bake radius comes from
+            // the map's ObjectCFG.cfg PathfindingCollisionRadius, independent of the gameplay
+            // CollisionRadius used for attack range / contact.
+            if (pathfindingRadius > 0)
+            {
+                PathfindingRadius = pathfindingRadius;
+            }
             InhibitorState = DampenerState.RespawningState;
             Lane = laneId;
         }
@@ -68,7 +76,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
             {
                 return;
             }
-            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, CollisionRadius);
+            // Footprint radius: explicit pathfinding radius when provided (ObjectCFG bake
+            // values, e.g. Map1 Order ~187 / Chaos 213.75), else the legacy CollisionRadius.
+            float footprint = PathfindingRadius > 0 ? PathfindingRadius : CollisionRadius;
+            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, footprint);
         }
 
         private void UnbakeFootprint()

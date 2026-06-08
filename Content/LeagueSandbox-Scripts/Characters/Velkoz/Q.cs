@@ -10,10 +10,12 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
 namespace Spells
 {
     public class VelkozQ : ISpellScript
     {
+
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
@@ -34,14 +36,13 @@ namespace Spells
 
             var targetPos = startPos + (direction * 1050f);
 
-            var missile = CreateCustomMissile(owner, "VelkozQMissile", startPos, targetPos, new MissileParameters { Type = MissileType.Circle });
+            SpellCast(owner, 0, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);
 
-            if (missile != null)
-            {
-                SetSpell(owner, "VelkozQSplitActivate", SpellSlotType.SpellSlots, 0);
-                Vector3 direction3D = new Vector3(-direction.X, 0, -direction.Y);
-                AddParticlePos(owner, "velkoz_base_q_endindicator.troy", targetPos, targetPos, lifetime: 1.5f, direction: direction3D, overrideTargetHeight: 100);
-            }
+            //null check here is just a band-aid fix for interaction like yasuo windwall this should be respected in the engine
+            SetSpell(owner, "VelkozQSplitActivate", SpellSlotType.SpellSlots, 0);
+            Vector3 direction3D = new Vector3(-direction.X, 0, -direction.Y);
+            AddParticlePos(owner, "velkoz_base_q_endindicator.troy", targetPos, targetPos, lifetime: 1.5f,
+                direction: direction3D, overrideTargetHeight: 100);
         }
     }
 
@@ -51,7 +52,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };
@@ -63,21 +64,23 @@ namespace Spells
             ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile, false);
         }
 
-        public void OnLaunchMissile(Spell spell, SpellMissile missile)
+        private void OnLaunchMissile(Spell spell, SpellMissile missile)
         {
             ActiveMissile = missile;
             ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnMissileHit, false);
             ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, false);
         }
 
-        public void OnMissileHit(SpellMissile missile, AttackableUnit target)
+        private void OnMissileHit(SpellMissile missile, AttackableUnit target)
         {
             var owner = missile.SpellOrigin.CastInfo.Owner;
             var ap = owner.Stats.AbilityPower.Total;
             var damage = 40f + (40f * missile.SpellOrigin.CastInfo.SpellLevel) + (ap * 0.6f);
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, missile.SpellOrigin);
-            AddBuff("VelkozQSlow", 1.0f + (0.25f * missile.SpellOrigin.CastInfo.SpellLevel), 1, missile.SpellOrigin, target, owner);
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false,
+                missile.SpellOrigin);
+            AddBuff("VelkozQSlow", 1.0f + (0.25f * missile.SpellOrigin.CastInfo.SpellLevel), 1, missile.SpellOrigin,
+                target, owner);
             AddBuff("VelkozQSplitImmunity", 0.5f, 1, missile.SpellOrigin, target, owner);
             AddParticleTarget(owner, null, "velkoz_base_q_missile_tar.troy", target, lifetime: 1.0f);
             missile.SetToRemove();
@@ -94,6 +97,7 @@ namespace Spells
             {
                 currentDir = new Vector2(1, 0);
             }
+
             currentDir = Vector2.Normalize(currentDir);
 
             Vector2 leftDir = new Vector2(-currentDir.Y, currentDir.X);
@@ -104,15 +108,19 @@ namespace Spells
             Vector2 rightEnd = missile.Position + (rightDir * splitRange);
 
             Vector3 forward3D = new Vector3(currentDir.X, 0, currentDir.Y);
-            AddParticlePos(owner, "velkoz_base_q_splitimplosion.troy", missile.Position, missile.Position, lifetime: 1.0f, direction: forward3D, overrideTargetHeight:100);
+            AddParticlePos(owner, "velkoz_base_q_splitimplosion.troy", missile.Position, missile.Position,
+                lifetime: 1.0f, direction: forward3D, overrideTargetHeight: 100);
             owner.RegisterTimer(new GameScriptTimer(0.25f, () =>
             {
                 //AddParticlePos(owner, "velkoz_base_q_splitimplosion.troy", missile.Position, missile.Position, lifetime: 1.0f, direction: forward3D);
-                AddParticlePos(owner, "velkoz_base_q_splitexplosion.troy", missile.Position, missile.Position, lifetime: 1.0f, direction: forward3D, overrideTargetHeight: 100);
+                AddParticlePos(owner, "velkoz_base_q_splitexplosion.troy", missile.Position, missile.Position,
+                    lifetime: 1.0f, direction: forward3D, overrideTargetHeight: 100);
 
 
-                CreateCustomMissile(owner, "VelkozQMissileSplit", missile.Position, leftEnd, new MissileParameters { Type = MissileType.Circle });
-                CreateCustomMissile(owner, "VelkozQMissileSplit", missile.Position, rightEnd, new MissileParameters { Type = MissileType.Circle });
+                CreateCustomMissile(owner, "VelkozQMissileSplit", missile.Position, leftEnd,
+                    new MissileParameters { Type = MissileType.Arc });
+                CreateCustomMissile(owner, "VelkozQMissileSplit", missile.Position, rightEnd,
+                    new MissileParameters { Type = MissileType.Arc });
             }));
         }
     }
@@ -148,7 +156,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };
@@ -177,7 +185,8 @@ namespace Spells
             var ap = owner.Stats.AbilityPower.Total;
             var damage = 40f + (40f * spellLevel) + (ap * 0.6f);
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, missile.SpellOrigin);
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false,
+                missile.SpellOrigin);
             //AddBuff("VelkozQSlow", 1.0f + (0.25f * spellLevel), 1, missile.SpellOrigin, target, owner);
             AddParticleTarget(owner, null, "velkoz_base_q_missile_tar.troy", target, lifetime: 1.0f);
             missile.SetToRemove();

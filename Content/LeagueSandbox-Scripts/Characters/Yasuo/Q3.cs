@@ -80,7 +80,7 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            MissileParameters = new MissileParameters { Type = MissileType.Circle },
+            MissileParameters = new MissileParameters { Type = MissileType.Arc },
             IsDamagingSpell = true,
         };
 

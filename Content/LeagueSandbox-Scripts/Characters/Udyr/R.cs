@@ -36,17 +36,17 @@ public class UdyrPhoenixStance : ISpellScript {
     }
 }
 
-public class UdyrPhoenixMissile : ISpellScript {
+public class UdyrPhoenixBreath : ISpellScript { //Check if use breath or missile here
     private ObjAIBase _udyr;
     private Spell     _spell;
 
     public StatsModifier StatsModifier { get; } = new();
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts = true,
+        TriggersSpellCasts = false,
         IsDamagingSpell    = true,
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         }
     };
 

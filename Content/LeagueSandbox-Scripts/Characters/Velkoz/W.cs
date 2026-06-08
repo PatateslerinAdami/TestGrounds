@@ -16,13 +16,25 @@ namespace Spells
 {
     public class VelkozW : ISpellScript
     {
+
+        private ObjAIBase _velkoz;
+        private Vector2 _endPos;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
             IsDamagingSpell = true
         };
 
-        // in VelkozWMissile.inibin changed [SpellData] MissileFollowsTerrainHeight to 0 because missile visual was sometimes going inside the terrain.
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _velkoz = owner;
+        }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            _endPos = end;
+        }
+
         public void OnSpellPostCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner;
@@ -37,11 +49,9 @@ namespace Spells
 
             var targetPos = startPos + (direction * 1200f);
             var dir3D = new Vector3(direction.X, 0, direction.Y);
-
-            CreateCustomMissile(owner, "VelkozWMissile", startPos, targetPos,
-                new MissileParameters { Type = MissileType.Circle }, customHeightOffset: -100f);
+            
             PlayAnimation(owner, "Spell2", 1f);
-
+            SpellCast(_velkoz, 1, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);
             AddParticlePos(owner, "velkoz_base_w_telegraph_green.troy", startPos, targetPos, lifetime: 3f,
                 direction: dir3D, teamOnly: owner.Team);
             AddParticlePos(owner, "velkoz_base_w_telegraph_red.troy", startPos, targetPos, lifetime: 3f,
@@ -55,7 +65,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };
@@ -65,13 +75,18 @@ namespace Spells
             ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile, false);
         }
 
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            ScriptMetadata.MissileParameters.OverrideEndPosition = end;
+        }
+
         public void OnLaunchMissile(Spell spell, SpellMissile missile)
         {
             ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnMissileHit, false);
             ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, false);
         }
 
-        public void OnMissileHit(SpellMissile missile, AttackableUnit target)
+        private void OnMissileHit(SpellMissile missile, AttackableUnit target)
         {
             var owner = missile.SpellOrigin.CastInfo.Owner;
             var ap = owner.Stats.AbilityPower.Total;
@@ -102,11 +117,11 @@ namespace Spells
 
             var ap = owner.Stats.AbilityPower.Total;
             var damage = 25f + (20f * spell.CastInfo.SpellLevel) + (ap * 0.25f);
-
+            
             var units = GetUnitsInRange(owner, centerPos, 1200f, true,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
                 SpellDataFlags.AffectNeutral);
-            float halfWidth = 85f;
+            float halfWidth = 87.5f;
 
             foreach (var unit in units)
             {

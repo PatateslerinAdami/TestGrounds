@@ -54,31 +54,33 @@ namespace Spells
 
     public class EzrealEssenceFluxMissile : ISpellScript
     {
+        private ObjAIBase _ezreal;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
+            _ezreal = owner;
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
 
         private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
+            var mainSpell = _ezreal.GetSpell("EzrealEssenceFluxMissile");
             var owner = spell.CastInfo.Owner;
-            var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
             var ap = owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient2;
-            var damage = 70 + 45 * (spell.CastInfo.SpellLevel - 1) + ad + ap;
-
-            var spellO = owner.GetSpell("EzrealEssenceFlux");
+            var damage = mainSpell.SpellData.EffectLevelAmount[1][mainSpell.CastInfo.SpellLevel] + ap;
+            
             if(target.Team != owner.Team)
             {
-                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
+                AddParticleTarget(_ezreal, target, "Ezreal_essenceflux_tar.troy", target);
+                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, mainSpell);
                 AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
             }
             else if(target.Team == owner.Team)

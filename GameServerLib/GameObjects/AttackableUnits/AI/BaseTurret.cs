@@ -107,6 +107,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             
             _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, PathfindingRadius);
 
+            // Vision half of Riot's turret bake (AITurret.cpp:185 SetFlagInRadius(pos, 140, 0x46)):
+            // mark the turret's own emplacement structure SEE_THROUGH so it never occludes line of
+            // sight (the real turret sees over its own base). Fixes the nexus-turret-only vision
+            // flicker — its baked base blob sits ~110u out, past the LoS-ray start offset, and was
+            // grazing the turret↔enemy ray. 140u is Riot's exact bake radius.
+            _game.Map.NavigationGrid.MarkSeeThroughInRadius(Position, 140f);
+
             // TODO: Handle this via map script for LaneTurret and via CharScript for AzirTurret.
             BubbleRegion = new Region
             (

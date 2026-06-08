@@ -20,9 +20,13 @@ namespace Spells
             MissileParameters = new MissileParameters
             {
                 Type = MissileType.Chained,
+                BounceSpellNameEnemy = "FiddleSticksDarkWindMissile",
                 MaximumHits = 5,
                 CanHitSameTarget = true,
-                BounceSpellName = "FiddleSticksDarkWindMissile",
+                CanHitEnemies = true,
+                CanHitFriends = false,
+                CanHitCaster = false,
+                BounceSelection =  BounceSelection.Random
             },
             IsDamagingSpell = true,
             TriggersSpellCasts = true,
@@ -40,16 +44,16 @@ namespace Spells
 
         private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
+
+            var ap = _fiddlesticks.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+            var dmg = spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel] + ap;
+            dmg *= IsValidTarget(_fiddlesticks, target,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions) ? 1.5f : 1f;
+            
             AddBuff("Silence", 1.2f, 1, spell, target, _fiddlesticks, false);
             AddParticleTarget(_fiddlesticks, target, spell.SpellData.HitEffectName, target);
-            target.TakeDamage(_fiddlesticks,
-                (65f + 15f * (spell.CastInfo.SpellLevel - 1) +
-                 _fiddlesticks.Stats.AbilityPower.Total * spell.SpellData.Coefficient) *
-                (IsValidTarget(_fiddlesticks, target,
-                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions)
-                    ? 1.5f
-                    : 1f), DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
-                DamageResultType.RESULT_NORMAL);
+            
+            target.TakeDamage(_fiddlesticks, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
         }
     }
 

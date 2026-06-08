@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -29,6 +30,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// </summary>
         public Spell SpellOrigin { get; protected set; }
         /// <summary>
+        /// Position this projectile is moving towards (location-targeted skillshots:
+        /// line/arc and circle classes). Vector2.Zero for plain targeted missiles.
+        /// Projectile is destroyed once it reaches this destination.
+        /// </summary>
+        public Vector2 Destination { get; protected set; }
+        /// <summary>
+        /// Units hit by this projectile (piercing skillshots accumulate, chains carry
+        /// the list across segments as their no-revisit exclusion set).
+        /// </summary>
+        public List<GameObject> ObjectsHit { get; }
+        /// <summary>
         /// Whether or not this projectile's visuals should not be networked to clients.
         /// </summary>
         public bool IsServerOnly { get; }
@@ -41,7 +53,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// announcement (BounceToNextTarget); those still need MissileReplication for the
         /// client to know about them at all. Default true; only Bounce/sub paths flip it.
         /// </summary>
+        /// <summary>
+        /// Script-side override for SpellData.MissileTargetHeightAugment (see
+        /// MissileParameters.OverrideHeightAugment). Null = use the JSON value.
+        /// </summary>
+        public float? HeightAugmentOverride { get; set; }
+
         public bool HasClientCastInfo { get; set; } = true;
+
+        /// <summary>
+        /// Set by subclasses BEFORE an on-arrival removal: Riot sends DestroyClientMissile
+        /// ONLY when the server-side removal does NOT coincide with the client-inferable
+        /// end (arrival at the target, or MissileLifetime expiry — see the CastType-4 rule
+        /// above). Replay-proven on chain segments: 0/967 KatarinaQMis, 0/320 FiddleE,
+        /// 0/237 NamiW, 0/318 SpellFlux, 0/327 SivirWAttackBounce carry a destroy; the
+        /// exceptions are off-schedule removals (target died mid-flight, Brand R's
+        /// inter-bounce-delay lifecycle 57/57, Diana orb early detonations 92/117).
+        /// </summary>
+        protected bool SuppressDestroyNotify { get; set; }
 
         public override bool IsAffectedByFoW => true;
         public override bool SpawnShouldBeHidden => true;
@@ -52,7 +81,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             Spell originSpell,
             CastInfo castInfo,
             float moveSpeed,
-            SpellDataFlags overrideFlags = 0, // TODO: Find a use for these
             uint netId = 0,
             bool serverOnly = false
         ) : base(game, new Vector2(castInfo.SpellCastLaunchPosition.X, castInfo.SpellCastLaunchPosition.Z), collisionRadius, 0, 0, netId)
@@ -68,6 +96,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (castInfo.Targets.Count > 0 && castInfo.Targets[0].Unit != null)
             {
                 TargetUnit = castInfo.Targets[0].Unit;
+
+                // Non-zero spawn Direction toward the target (2026-06-07). The spawn
+                // MissileReplication carries Velocity = Direction × Speed and the client derives
+                // the missile's initial orientation from it; (0,0,0) leaves a targeted missile
+                // mis-oriented until its first homing step. At oblique firing angles that shows
+                // as the missile visually launching along a wrong heading and then snapping onto
+                // the homing line (reported on the nexus turret's AA "path changes at certain
+                // angles"). Location-targeted classes (line/circle) already set this in
+                // InitializeDestination for the same reason; targeted missiles skipped it.
+                var launch2D = new Vector2(castInfo.SpellCastLaunchPosition.X, castInfo.SpellCastLaunchPosition.Z);
+                var toTarget = TargetUnit.Position - launch2D;
+                if (toTarget.LengthSquared() > float.Epsilon)
+                {
+                    var d = Vector2.Normalize(toTarget);
+                    Direction = new Vector3(d.X, 0, d.Y);
+                }
             }
 
             VisionRadius = SpellOrigin.SpellData.MissilePerceptionBubbleRadius;
@@ -75,6 +119,75 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             Team = CastInfo.Owner.Team;
 
             IsServerOnly = serverOnly;
+
+            ObjectsHit = new List<GameObject>();
+        }
+
+        /// <summary>
+        /// Shared skillshot destination setup for location-targeted missile classes
+        /// (line/arc and circle — both derive directly from SpellMissile, mirroring the
+        /// flat S4 hierarchy): aims from the launch position toward TargetPositionEnd,
+        /// clamps to the spell's current cast range, honors script end-position
+        /// overrides and falls back to the owner's facing when the cast direction
+        /// degenerates.
+        /// </summary>
+        protected void InitializeDestination(Vector2 overrideEndPos)
+        {
+            // Location-targeted classes: a unit in Targets[0] is kept only as a
+            // homing/orbit anchor by the subclasses that use it.
+            if (CastInfo.Targets.Count <= 0 || CastInfo.Targets[0].Unit == null)
+            {
+                TargetUnit = null;
+            }
+
+            Position = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+
+            var goingTo = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z) - Position;
+            var dirTemp = Vector2.Normalize(goingTo);
+            var endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
+
+            // usually doesn't happen
+            if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y))
+            {
+                if (float.IsNaN(CastInfo.Owner.Direction.X) || float.IsNaN(CastInfo.Owner.Direction.Y))
+                {
+                    dirTemp = new Vector2(1, 0);
+                }
+                else
+                {
+                    dirTemp = new Vector2(CastInfo.Owner.Direction.X, CastInfo.Owner.Direction.Z);
+                }
+
+                endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
+                CastInfo.TargetPositionEnd = new Vector3(endPos.X, 0, endPos.Y);
+            }
+
+            if (overrideEndPos != default)
+            {
+                endPos = overrideEndPos;
+                var overrideDir = endPos - Position;
+                if (overrideDir.LengthSquared() > float.Epsilon)
+                {
+                    dirTemp = Vector2.Normalize(overrideDir);
+                }
+            }
+
+            Destination = endPos;
+
+            // Direction MUST be non-zero at spawn: the spawn MissileReplication carries
+            // Velocity = Direction × Speed — (0,0,0) gives the client a stationary missile
+            // with broken oriented emitters (only some sub-particles render). Orbit
+            // missiles override this with the tangent direction afterwards.
+            // (Replay-verified fix, see memory: spell_missile_direction_at_spawn.)
+            Direction = new Vector3(dirTemp.X, 0, dirTemp.Y);
+        }
+
+        /// <summary>
+        /// Whether or not this projectile has a destination; if it is a valid skillshot.
+        /// </summary>
+        public bool HasDestination()
+        {
+            return Destination != Vector2.Zero && Destination.X != float.NaN && Destination.Y != float.NaN;
         }
 
         public override void Update(float diff)
@@ -82,8 +195,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))
             {
                 _timeSinceCreation += diff;
+                UpdateTimedSpeedChange();
+                var positionBeforeMove = Position;
                 Move(diff);
-                API.ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+                PublishOnSpellMissileUpdate(diff, positionBeforeMove);
             }
             else
             {
@@ -103,7 +218,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             if (isTerrain)
             {
-                // TODO: Implement methods for isTerrain for projectiles such as Nautilus Q, ShyvanaDragon Q, or Ziggs Q.
+                // Script-side opt-in via OnCollisionTerrain keyed on the missile — see
+                // SpellLineMissile.OnCollision for the full rationale (Nautilus Q pattern).
+                API.ApiEventManager.OnCollisionTerrain.Publish(this);
                 return;
             }
         }
@@ -127,6 +244,74 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// Gets the time since this projectile was created.
         /// </summary>
         /// <returns></returns>
+        /// <summary>
+        /// Number of units hit so far. Scripting convenience: chain missiles report their
+        /// chain-wide hit counter (carried across bounce segments — Nami W's per-bounce
+        /// heal/damage decay keys off this), piercing circle/line missiles report how many
+        /// units they passed through, plain targeted missiles 0/1.
+        /// </summary>
+        public virtual int HitCount => 0;
+
+        /// <summary>
+        /// Scheduled one-shot speed change (wire: MissileReplication.TimedSpeedDelta /
+        /// TimedSpeedDeltaTime; client mirror: SpellMissileClient mTimedSpeedChange — the
+        /// client adds the delta to its speed once the time elapses). Replay-verified on
+        /// Jinx R: spawn packet carries Speed=1700, TimedSpeedDelta=+500,
+        /// TimedSpeedDeltaTime=0.75 (rocket boosts to 2200 after 0.75s); vision-acquire
+        /// packets after the boost carry Speed=2200 + TimedSpeedDeltaTime=FLT_MAX.
+        /// </summary>
+        public float TimedSpeedDelta { get; set; }
+        /// <summary>Seconds after spawn at which TimedSpeedDelta is applied.</summary>
+        public float TimedSpeedDeltaTime { get; set; }
+        public bool TimedSpeedChangeApplied { get; private set; }
+
+        // --- Distance-paced script updates (Riot: LuaOnMissileUpdateDistanceInterval) ---
+        // Riot's server fires the spell script's OnMissileUpdate every N units of travel
+        // (JSON field; ~105 spells use it: 50-100u for proximity/retarget logic like Ahri
+        // FoxFire, 1350u as Jinx R's one-shot boost trigger). interval <= 0 (the 1305
+        // default spells) keeps the legacy per-tick publish. Mirrors the
+        // ChargeUpdateInterval pacing pattern used for channel ticks.
+        private float _distanceSinceScriptUpdate;
+        private float _timeSinceScriptUpdateMs;
+
+        /// <summary>
+        /// Publishes OnSpellMissileUpdate — per-tick when the spell has no
+        /// LuaOnMissileUpdateDistanceInterval, otherwise once per N units traveled.
+        /// The diff passed to listeners is the accumulated ms since the last publish.
+        /// Example consumer: Jinx R (Characters/Jinx/R.cs) — JinxR.json interval=1350
+        /// paces its OnMissileUpdate to Riot's boost-trigger cadence.
+        /// </summary>
+        protected void PublishOnSpellMissileUpdate(float diff, Vector2 positionBeforeMove)
+        {
+            float interval = SpellOrigin?.SpellData.LuaOnMissileUpdateDistanceInterval ?? 0f;
+            if (interval <= 0f)
+            {
+                API.ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+                return;
+            }
+
+            _timeSinceScriptUpdateMs += diff;
+            _distanceSinceScriptUpdate += Vector2.Distance(positionBeforeMove, Position);
+            if (_distanceSinceScriptUpdate >= interval)
+            {
+                // Subtract instead of zeroing so the cadence stays distance-stable across
+                // ticks of varying length.
+                _distanceSinceScriptUpdate -= interval;
+                API.ApiEventManager.OnSpellMissileUpdate.Publish(this, _timeSinceScriptUpdateMs);
+                _timeSinceScriptUpdateMs = 0f;
+            }
+        }
+
+        protected void UpdateTimedSpeedChange()
+        {
+            if (!TimedSpeedChangeApplied && TimedSpeedDelta != 0f
+                && _timeSinceCreation / 1000.0f >= TimedSpeedDeltaTime)
+            {
+                SetSpeed(GetSpeed() + TimedSpeedDelta);
+                TimedSpeedChangeApplied = true;
+            }
+        }
+
         public float GetTimeSinceCreation()
         {
             return _timeSinceCreation;
@@ -143,6 +328,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             var next = GetTargetPosition();
 
+            // 3D direction is kept for replication packets only (the client wants the
+            // height-aware vector). Movement itself MUST step in 2D — stepping with the
+            // 3D-normalized direction shortens the XZ step whenever Direction.Y != 0
+            // (|Direction.XZ| < 1), so the missile flies below its nominal speed on any
+            // terrain height difference AND asymptotically crawls into the target at the
+            // end (the old hit check additionally required EXACT float equality with the
+            // target position). Compounded per chain segment, this made Kata Q bounces
+            // visibly slower than their 1200 data speed. Same fix as SpellLineMissile.Move.
             var goingTo = new Vector3(next.X, _game.Map.NavigationGrid.GetHeightAtLocation(next), next.Y)
                         - new Vector3(cur.X, _game.Map.NavigationGrid.GetHeightAtLocation(cur), cur.Y);
             var dirTemp = Vector3.Normalize(goingTo);
@@ -157,37 +350,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             var moveSpeed = GetSpeed();
 
-            var dist = MathF.Abs(Vector2.Distance(cur, next));
+            var dist = Vector2.Distance(cur, next);
 
             var deltaMovement = moveSpeed * 0.001f * diff;
 
-            // Prevent moving past the next waypoint.
-            if (deltaMovement > dist)
+            // Reached (or would step past) the target this tick: snap onto it and apply
+            // the hit instead of relying on exact float equality.
+            if (deltaMovement >= dist || dist <= MOVEMENT_EPSILON)
             {
-                deltaMovement = dist;
-            }
-
-            var xx = Direction.X * deltaMovement;
-            var yy = Direction.Z * deltaMovement;
-
-            Position = new Vector2(Position.X + xx, Position.Y + yy);
-
-            // (X, Y) has moved to the next position
-            cur = Position;
-
-            // Check if we reached the target position/destination.
-            // REVIEW (of previous code): (deltaMovement * 2) being used here is problematic; if the server lags, the diff will be much greater than the usual values
-            if ((cur - next).LengthSquared() < MOVEMENT_EPSILON * MOVEMENT_EPSILON)
-            {
-                if (this is SpellMissile && TargetUnit != null)
+                Position = next;
+                if (TargetUnit != null)
                 {
-                    if (Position == TargetUnit.Position)
-                    {
-                        CheckFlagsForUnit(TargetUnit);
-                    }
-                    return;
+                    CheckFlagsForUnit(TargetUnit);
                 }
+                return;
             }
+
+            var dir2D = (next - cur) / dist;
+            Position = new Vector2(cur.X + dir2D.X * deltaMovement, cur.Y + dir2D.Y * deltaMovement);
         }
 
         public virtual void CheckFlagsForUnit(AttackableUnit unit)
@@ -205,7 +385,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             if (CastInfo.Owner is ObjAIBase ai && SpellOrigin.CastInfo.IsAutoAttack)
             {
-                ai.AutoAttackHit(TargetUnit);
+                ai.AutoAttackHit(TargetUnit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
             }
 
             SetToRemove();
@@ -219,7 +399,25 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
                 base.SetToRemove();
 
-                _game.PacketNotifier.NotifyDestroyClientMissile(this);
+                // Natural MissileLifetime expiry needs NO destroy packet — but ONLY for
+                // CastType-4 (circle/orbit) spells: of the four client missile classes,
+                // exclusively SpellCircleMissileClient consumes mMissileLifetime
+                // (mEndLifetime = now + lifetime - TimeFromCreation, S4
+                // SpellCircleMissileClient.cpp:187-200). Replay-proven on Diana W
+                // (426a49ca + enemy-POV d667082f: 40 vision-verified expiry orbs, zero
+                // 0x5A; destroys only accompany EARLY detonation). CastType-3 spells
+                // also carry lifetime values in their JSONs (NamiQDummyMissile 0.667s,
+                // YasuoWMovingWallMis* 3.75s) but their client class (line) does NOT
+                // self-expire — those MUST keep the destroy packet or they orphan.
+                // 50ms epsilon covers tick granularity of the timed removal.
+                float clientLifetime = SpellOrigin?.SpellData.MissileLifetime ?? 0f;
+                bool clientSelfExpired = SpellOrigin?.SpellData.CastType == 4
+                    && clientLifetime > 0f
+                    && GetTimeSinceCreation() / 1000f >= clientLifetime - 0.05f;
+                if (!clientSelfExpired && !SuppressDestroyNotify)
+                {
+                    _game.PacketNotifier.NotifyDestroyClientMissile(this);
+                }
             }
         }
 

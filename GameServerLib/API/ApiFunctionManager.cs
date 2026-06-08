@@ -2071,7 +2071,7 @@ namespace LeagueSandbox.GameServer.API
         public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 pos, Vector2 endPos,
             bool fireWithoutCasting, Vector2 overrideCastPos, List<CastTarget> targets = null,
             bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false,
-            bool useAutoAttackSpell = false)
+            bool useAutoAttackSpell = false, CastInfo inheritVariablesFrom = null)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -2089,8 +2089,8 @@ namespace LeagueSandbox.GameServer.API
                 SpellLevel = spell.CastInfo.SpellLevel,
                 AttackSpeedModifier = caster.Stats.AttackSpeedMultiplier.Total,
                 Owner = caster,
-                // TODO: Verify
-                SpellChainOwnerNetID = caster.NetId,
+                // Pet casts report the owning champion (replay-verified — see CastInfo doc).
+                SpellChainOwnerNetID = CastInfo.ResolveChainOwnerNetId(caster),
                 PackageHash = caster.GetObjHash(),
                 MissileNetID = _game.NetworkIdManager.GetNewNetId(),
                 TargetPosition = new Vector3(pos.X, caster.GetHeight(), pos.Y),
@@ -2099,7 +2099,9 @@ namespace LeagueSandbox.GameServer.API
                 Targets = targets,
 
                 IsAutoAttack = updateAutoAttackTimer,
-                // TODO: Verify the differences between these two and make separate options for them.
+                // UseAttackCastTime = attack-pipeline timing (windup + total from the
+                // AS-scaled attack cycle); UseAttackCastDelay is derived from the spell's
+                // own data flags in Spell.Cast, never forced here — see CastInfo for both.
                 UseAttackCastTime = useAutoAttackSpell,
                 UseAttackCastDelay = false,
                 IsForceCastingOrChannel = isForceCastingOrChanneling,
@@ -2111,8 +2113,12 @@ namespace LeagueSandbox.GameServer.API
             if (overrideCastPos != Vector2.Zero)
             {
                 castInfo.IsOverrideCastPosition = true;
+                // Height at the OVERRIDE position, not at the caster — the launch spot can be
+                // on different terrain (e.g. Talon W return blades launch from the blade
+                // endpoints; Riot's packet carries the ground height at that spot). Using the
+                // caster's height buried remotely-launched missiles under higher terrain.
                 castInfo.SpellCastLaunchPosition =
-                    new Vector3(overrideCastPos.X, caster.GetHeight(), overrideCastPos.Y);
+                    new Vector3(overrideCastPos.X, _game.Map.NavigationGrid.GetHeightAtLocation(overrideCastPos), overrideCastPos.Y);
 
                 if (endPos == Vector2.Zero)
                 {
@@ -2125,19 +2131,28 @@ namespace LeagueSandbox.GameServer.API
                 castInfo.SpellLevel = (byte)overrideForceLevel;
             }
 
+            // Sub-cast variable inheritance (Riot: one shared LuaVars table per cast chain):
+            // the sub-cast's CastInfo SHARES the parent's Variables bag by reference, so every
+            // missile/effect spawned by either cast reads and writes the same per-cast state.
+            if (inheritVariablesFrom != null)
+            {
+                castInfo.Variables = inheritVariablesFrom.Variables;
+            }
+
             spell.Cast(castInfo, !fireWithoutCasting);
         }
 
         public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, bool fireWithoutCasting,
             AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false,
-            int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false)
+            int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false,
+            CastInfo inheritVariablesFrom = null)
         {
             CastTarget castTarget = new CastTarget(target,
                 CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit));
 
             SpellCast(caster, slot, slotType, target.Position, target.Position, fireWithoutCasting, overrideCastPos,
                 new List<CastTarget> { castTarget }, isForceCastingOrChanneling, overrideForceLevel,
-                updateAutoAttackTimer, useAutoAttackSpell);
+                updateAutoAttackTimer, useAutoAttackSpell, inheritVariablesFrom);
         }
 
         public static void SpellCastItem(ObjAIBase caster, string itemSpellName, bool fireWithoutCasting,
@@ -2553,6 +2568,19 @@ namespace LeagueSandbox.GameServer.API
         public static void InstantStopTest(AttackableUnit unit, bool forceClient = true, bool keepAnimating = false)
         {
             _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, false, keepAnimating, false, true, forceClient, 0);
+        }
+
+        /// <summary>
+        /// Broadcasts NPC_InstantStop_Attack with the replay-verified all-flags-false wire shape
+        /// (100% of 32,808 packets). Client-side this force-finalizes the active spellcasting
+        /// instance (S4 obj_AI_Base::DoInstantStopAttack -> StopSpellcastingObjectForced/ForceStop)
+        /// — the ONLY path that clears a CantCancelWhileWindingUp=1 cast frame. Riot sends this at
+        /// windup end for casts like Nami Q (78/93 casts, median +255ms = the FinishCasting tick);
+        /// without it the client's cast frame sticks and silently eats the next spell press.
+        /// </summary>
+        public static void NotifyInstantStopAttack(AttackableUnit unit, bool isSummonerSpell = false)
+        {
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, isSummonerSpell);
         }
 
         public static void CustomDashTest(AttackableUnit unit, Vector2 targetPos, float speed, float gravity,

@@ -70,7 +70,8 @@ namespace Spells
             SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
             AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
 
-            const AnimationFlags spell4Flags = AnimationFlags.UniqueOverride | AnimationFlags.Override | AnimationFlags.Unknown8;
+            // Lock | NoBlend; the replay value also carried bit 7, which is unread client-side junk.
+            const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
             {
                 default: PlayAnimation(_katarina, "Spell4", timeScale: 0f, speedScale: 1f, flags: spell4Flags); break;

@@ -301,18 +301,22 @@ namespace MapScripts.Map1
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                // Riot ObjectCFG.cfg HQ_T1/T2 has Collision Radius=319.4445, PathfindingCollisionRadius=352.7778 (found this out with help of Yashiro)
-                // those values are what the client bakes into ITS internal nav grid (NOT_PASSABLE flags
-                // via NavCellFlagManager::WriteFlagsToFilledCircleOriginal at S4 obj_HQ.cpp:926). They are
-                // NOT the right values for the SERVER's body push collision-response radius: with 319,
-                // body push activates at distance < 319 + champion_radius (~65) = ~385 from nexus center,
-                // far beyond the visual model (~150 world units). Symptom: champion paths past the nexus,
-                // body-push triggers before visual contact, OnCollision-snap then drift-loops the unit
-                // back toward the nexus on each tick.
-                // Reduced both args to 150 to match visual size; pathing+body-push now both fire only at
-                // visible contact. Server diverges from client's internal pathing-blocker bake by design
-                // if I see this correctly the server's role is collision response and waypoint replication, not nav-grid sync.
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 150, 1700, nexusStats, 150);
+                // ObjectCFG.cfg HQ_T1/T2: Collision Radius = 319.4445, PathfindingCollisionRadius
+                // = 352.7778. Both restored 2026-06-07 (were 150/150): the old reduction targeted a
+                // body-push drift loop that no longer exists (buildings are excluded from the
+                // body-push quad; their footprints act via the nav grid only). The two values are
+                // COUPLED: with CR=150 and the 352.78 footprint, melee reach (125+65+150=340)
+                // couldn't touch the nexus — Riot's CR=319.44 gives reach 509 > 352.78.
+                //
+                // Position correction (2026-06-07): the HQ .sco header CentralPoint sits (-37,-13)
+                // off the mesh bbox center (same delta on both HQ_T1/T2 — shared mesh). The nexus
+                // geometry statically baked into the .aimesh navgrid is centered on the BBOX center
+                // (measured blue ≈ (1167,1441), purple ≈ (12800,13040)), as is the rendered scene
+                // mesh. Anchoring our 353 footprint at the raw CentralPoint pushed ~75u of blocked
+                // air one-sidedly toward (-X,-Z) past the visible building (purple: toward the left
+                // nexus turret; blue: toward the fountain).
+                position += new Vector2(37f, 13f);
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 319, 1700, nexusStats, 353);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
@@ -329,17 +333,22 @@ namespace MapScripts.Map1
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                // Riot ObjectCFG.cfg has Order Barracks_T1=186 / Chaos Barracks_T2=214 — the client's
-                // internal nav-grid NOT_PASSABLE bake (S1 barrackdampener.cpp:1896, S4 obj_HQ.cpp:926).
-                // Same reason as the nexus comment above: those are CLIENT pathing-blocker values, not
-                // suitable for the SERVER's body-push trigger which fires whenever
-                // distance < CollisionRadius + champion_radius. With 214, body-push triggers at ~280
-                // from inhib center while the visual model is ~100 — Vayne and other small-radius
-                // champions get caught in a drift loop where each OnCollision-snap pushes them deeper
-                // toward the inhib. Reduced to 100 to match visual: body-push and dynamic blocker now
-                // both fire only at visible contact. Server diverges from client pathing-blocker bake by
-                // design (server's role is response, not nav-grid sync).
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 100, 0, inhibitorStats);
+                // Pathing footprint restored to Riot's nav-grid bake (2026-06-07): ObjectCFG.cfg
+                // PathfindingCollisionRadius — Order Barracks_T1 ≈ 185.5-187.2 per lane, Chaos
+                // Barracks_T2 = 213.75. The earlier reduction to 100 targeted a body-push drift
+                // loop that no longer exists (buildings are excluded from the body-push quad;
+                // footprints act via the nav grid only). Without the full bake, lane minions cut
+                // the corner ~90-115u tighter than Riot's, bunch at the inhibitor and briefly
+                // stop on each other (replays show them passing on the wide arc without stopping).
+                // Gameplay CollisionRadius is COUPLED to the footprint like the nexus
+                // (HQ: CR 319.44 = bake 352.78 × 0.9055 — same ratio applied here). The old
+                // CR=100 made melee attack range (125 + 30 + 100 = 255 from center for Akali)
+                // fall short of the nearest standable spot outside the footprint
+                // (214 bake + ~35 terrain-exit margin ≈ 250-266) → champions ran to the
+                // recommended attack point and stood 10u out of range forever (2026-06-07).
+                int inhibFootprint = teamId == TeamId.TEAM_BLUE ? 187 : 214;
+                int inhibCollisionRadius = teamId == TeamId.TEAM_BLUE ? 169 : 194;
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, inhibCollisionRadius, 0, inhibitorStats, inhibFootprint);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;

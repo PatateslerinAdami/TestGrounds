@@ -88,7 +88,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };

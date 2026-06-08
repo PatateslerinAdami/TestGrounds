@@ -83,10 +83,8 @@ public class JaxEvasion : IBuffGameScript {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_p1);
         RemoveParticle(_p2);
-        SpellCast(_jax, 3, SpellSlotType.ExtraSlots, false, _jax, Vector2.Zero);
-        var counterAttackSpell = _jax.GetSpell("JaxCounterStrikeAttack");
-        _counterAttack = counterAttackSpell.Script as JaxCounterStrikeAttack;
-        _counterAttack?.SetAttacksDodged(_attacksDodged);
+        spell.CastInfo.Variables.Set("attacksDodge", _attacksDodged);
+        SpellCast(_jax, 3, SpellSlotType.ExtraSlots, true, _jax, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
         spell.SetCooldown(spell.CastInfo.Cooldown, false);
     }
 }

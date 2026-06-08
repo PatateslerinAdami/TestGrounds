@@ -1,4 +1,7 @@
+using System;
+using System.Linq;
 using System.Numerics;
+using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
@@ -7,6 +10,8 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
+using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -26,7 +31,8 @@ public class JinxE : ISpellScript {
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _targetPosition = end;
         FaceDirection(_targetPosition, _jinx, true);
-        PlayAnimation(_jinx, "Spell3", 0.5f, flags: AnimationFlags.Override);
+        // Replay-attributed (172 casts): Spell3/Spell3_Run are sent with no flags.
+        PlayAnimation(_jinx, _jinx.IsPathEnded() ? "Spell3" : "Spell3_Run", 0.5f, flags: AnimationFlags.None);
     }
 
     public void OnSpellCast(Spell spell) { }
@@ -40,13 +46,17 @@ public class JinxE : ISpellScript {
         var forward = Vector2.Normalize(direction);
         var perpendicular = new Vector2(-forward.Y, forward.X);
 
-        var leftTarget = _targetPosition + perpendicular * 200.0f;
-        var centerTarget = _targetPosition;
-        var rightTarget = _targetPosition - perpendicular * 200.0f;
         
-        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, _jinx.Position, leftTarget, true, Vector2.Zero);
-        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, _jinx.Position, centerTarget, true, Vector2.Zero);
-        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, _jinx.Position, rightTarget, true, Vector2.Zero);
+        var leftTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget1", _targetPosition + perpendicular * 200.0f, _jinx.Team, 0, true,  true, false, isVisible: false);
+        HideHealthBar(leftTarget);
+        var centerTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget2", _targetPosition, _jinx.Team, 0, true,  true, false, isVisible: false);
+        HideHealthBar(centerTarget);
+        var rightTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget3", _targetPosition - perpendicular * 200.0f, _jinx.Team, 0, true,  true, false, isVisible: false);
+        HideHealthBar(rightTarget);
+        
+        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, true, leftTarget,  Vector2.Zero);
+        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, true, centerTarget,  Vector2.Zero);
+        SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, true, rightTarget,  Vector2.Zero);
     }
 }
 
@@ -56,36 +66,35 @@ public class JinxEHit : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = false,
-        CastTime = 0
+        MissileParameters = new MissileParameters()
+        {
+            Type = MissileType.Target,
+        },
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) { _jinx = owner; }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _spell = spell;
-        CreateMissile(spell, end);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+        //CreateMissile(spell, end);
     }
 
-    private void CreateMissile(Spell spell, Vector2 targetPosition) {
-        var missile = spell.CreateSpellMissile(new MissileParameters {
-            Type = MissileType.Arc,
-            OverrideEndPosition = targetPosition,
-        });
-        if (missile == null) {
-            return;
-        }
-        missile.SetSpeed(1500f);
-        LogInfo("" + missile.GetSpeed());
-
-        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);
+    private void OnLaunchMissile(Spell spell, SpellMissile missile)
+    {
+        ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnMissileHit);
     }
 
-    private void OnMissileEnd(SpellMissile missile) {
+    private void OnMissileHit(SpellMissile missile, AttackableUnit target)
+    {
+        target.Die(CreateDeathData(false, 0, target, target, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0));
         var chomper = AddMinion(_jinx, "JinxMine", "FlameChompers", missile.Position, _jinx.Team, _jinx.SkinID, true, false, false, 0);
-        if (chomper == null) {
-            return;
-        }
         AddBuff("JinxEMine", 5.75f, 1, _spell, chomper, _jinx);
-        FaceDirection(GetPointFromUnit(_jinx, 400, 0), chomper, true);
+        //TODO: refactor spawn default engine wide, because: In the replays riot spawns minions with the engine-default facing: OnEnterVisibilityClient carries
+        // MovementDataStop with Forward = (0, 1) = world +Z,
+        FaceDirection(chomper.Position + new Vector2(0f, 100f), chomper, true);
+        ApiEventManager.OnLaunchMissile.RemoveListener(this, _spell, OnLaunchMissile);
+        ApiEventManager.OnSpellMissileHit.RemoveListener(this, missile, OnMissileHit);
+        missile.SetToRemove();
     }
 }

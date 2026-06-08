@@ -95,6 +95,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public float VisionRadius { get; protected set; }
 
+
         public virtual bool IsAffectedByFoW => false;
         public virtual bool SpawnShouldBeHidden => false;
 

@@ -89,7 +89,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             base.Die(data);
         }
 
-        public override void AutoAttackHit(AttackableUnit target)
+        public override void AutoAttackHit(AttackableUnit target, HitResult? wireHitResult = null)
         {
             if (Type == TurretType.FOUNTAIN_TURRET)
             {
@@ -97,7 +97,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
             else
             {
-                base.AutoAttackHit(target);
+                base.AutoAttackHit(target, wireHitResult);
             }
         }
     }

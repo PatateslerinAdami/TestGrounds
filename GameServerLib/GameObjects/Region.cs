@@ -27,6 +27,12 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public float Scale { get; }
         public float AdditionalSize { get; }
+        /// <summary>
+        /// Server-internal only: drives CollisionHandler registration. A LeagueSandbox
+        /// extension with no client counterpart — real client regions are vision-only.
+        /// Deliberately NOT on the wire (the AddRegion flags bit0 carries Riot's
+        /// RequiresLOS = !IgnoresLineOfSight instead). Do not re-map this onto bit0.
+        /// </summary>
         public bool HasCollision { get; }
         public bool GrantVision { get; }
         public bool RevealsStealth { get; }

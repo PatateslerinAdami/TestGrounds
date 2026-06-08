@@ -21,7 +21,7 @@ namespace Spells
             IsDamagingSpell = true,
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle,
+                Type = MissileType.Arc,
             }
         };
         ObjAIBase _owner;

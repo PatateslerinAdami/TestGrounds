@@ -48,7 +48,8 @@ internal class JinxEMine : IBuffGameScript
                     teamOnly: TeamId.TEAM_BLUE); break;
         }
 
-        PlayAnimation(unit, "Wait1", flags: AnimationFlags.Override);
+        // Replay-attributed (493 mines, 7 replays): Wait1 is sent with no flags.
+        PlayAnimation(unit, "Wait1", flags: AnimationFlags.None);
         PauseAnimation(unit, true);
     }
 
@@ -60,7 +61,8 @@ internal class JinxEMine : IBuffGameScript
             if (armingTicks != 1) return;
 
             PauseAnimation(_unit, false);
-            PlayAnimation(_unit, "Idle1", flags: AnimationFlags.Override);
+            // Replay-attributed: armed Idle1 is sent with Lock (track locked until clip ends).
+            PlayAnimation(_unit, "Idle1", flags: AnimationFlags.Lock);
             _readyParticle = AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Green", _unit, _buff.Duration, enemyParticle: "Jinx_E_Mine_Ready_Red");
 
             _isArmed = true;
@@ -99,6 +101,16 @@ internal class JinxEMine : IBuffGameScript
     {
         PauseAnimation(unit, false);
         RemoveParticle(_readyParticle);
+        // Replay-attributed: unit-triggered mines play Attack1 (no flags), timeout/kill plays
+        // Death1 (NoBlend). Mutually exclusive (403x Death1 + 92x Attack1 = ~493 mines).
+        if (_triggeredByUnit)
+        {
+            PlayAnimation(unit, "Attack1", flags: AnimationFlags.None);
+        }
+        else
+        {
+            PlayAnimation(unit, "Death1", flags: AnimationFlags.NoBlend);
+        }
         AddBuff("JinxEMineExplode", 0.75f, 1, ownerSpell, unit, _jinx);
         if (_triggeredByUnit)
         {

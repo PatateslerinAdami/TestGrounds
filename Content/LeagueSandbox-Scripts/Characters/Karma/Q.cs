@@ -54,17 +54,15 @@ public class KarmaQMissile : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
-        TriggersSpellCasts = true,
+        TriggersSpellCasts = false,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _karma = owner;
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
-
-    public void OnSpellPostCast(Spell spell) { }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
         if (!IsValidTarget(_karma, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
@@ -95,9 +93,9 @@ public class KarmaQMissileMantra : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
-        TriggersSpellCasts = true,
+        TriggersSpellCasts = false,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -109,8 +107,6 @@ public class KarmaQMissileMantra : ISpellScript {
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _endPos = end;
     }
-
-    public void OnSpellPostCast(Spell spell) { }
 
     private void OnLaunchMissile(Spell spell, SpellMissile missile) {
         ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);

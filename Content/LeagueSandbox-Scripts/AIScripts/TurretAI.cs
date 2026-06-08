@@ -26,12 +26,23 @@ namespace AIScripts
                 CheckForTargets();
             }
 
-            // Lose focus of the unit target if the target is out of range
-            if (baseTurret.TargetUnit != null &&
-                Vector2.DistanceSquared(baseTurret.Position, baseTurret.TargetUnit.Position) >
-                baseTurret.Stats.Range.Total * baseTurret.Stats.Range.Total)
+            // Lose focus of the unit target if the target is out of range.
+            // Edge-based (range + both collision radii) to stay consistent with both the
+            // acquisition query (QuadTree circle-overlap = edge-based) and UpdateTarget's
+            // attack-start check (idealRange = Range + tCR + sCR). The previous raw
+            // center-to-center check sat BELOW the acquisition threshold, producing an
+            // acquire→drop loop every tick in the ~30u boundary band — visible as the
+            // turret repeatedly starting and aborting its attack (fixed 2026-06-07).
+            if (baseTurret.TargetUnit != null)
             {
-                baseTurret.SetTargetUnit(null, true);
+                float dropRange = baseTurret.Stats.Range.Total
+                    + baseTurret.TargetUnit.CollisionRadius
+                    + baseTurret.CollisionRadius;
+                if (Vector2.DistanceSquared(baseTurret.Position, baseTurret.TargetUnit.Position) >
+                    dropRange * dropRange)
+                {
+                    baseTurret.SetTargetUnit(null, true);
+                }
             }
         }
 

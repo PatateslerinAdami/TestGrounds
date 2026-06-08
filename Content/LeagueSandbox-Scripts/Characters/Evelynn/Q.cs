@@ -152,7 +152,7 @@ public class HateSpikeLineMissile : ISpellScript {
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = true,
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         }
     };
 

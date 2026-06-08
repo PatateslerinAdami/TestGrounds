@@ -57,7 +57,6 @@ public class JaxCounterStrike : ISpellScript {
 public class JaxCounterStrikeAttack : ISpellScript {
     private ObjAIBase _jax; 
     Spell             _counterStrikeAttack;
-    private float     _attacksDodged = 0f;
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts   = false,
         IsDamagingSpell = true
@@ -69,6 +68,7 @@ public class JaxCounterStrikeAttack : ISpellScript {
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+        var attacksDodged = spell.CastInfo.Variables.GetFloat("attacksDodged");
         PlayAnimation(_jax, "Spell3b", 0.5f);
         AddParticleTarget(_jax, _jax, "Counterstrike_cas", _jax, 1.5f);
         var enemiesInRange = GetUnitsInRange(_jax, _jax.Position, 375f, true,
@@ -76,17 +76,12 @@ public class JaxCounterStrikeAttack : ISpellScript {
                                              SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
         var ad  = _jax.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
         var dmg = 50f + 25f * (_jax.GetSpell("JaxCounterStrike").CastInfo.SpellLevel - 1) + ad;
-        dmg += dmg * Math.Min(1f, _attacksDodged);
+        dmg += dmg * Math.Min(1f, attacksDodged);
         foreach (var enemy in enemiesInRange) {
             AddParticleTarget(_jax, enemy, spell.SpellData.HitEffectName, _jax, bone: spell.SpellData.HitBoneName);
             AddBuff("Stun", 1f, 1, _jax.GetSpell("JaxCounterStrike"), enemy, _jax);
             enemy.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                              DamageResultType.RESULT_NORMAL);
         }
-        SetAttacksDodged(0f);
-    }
-    
-    internal void SetAttacksDodged(float amount) {
-        _attacksDodged = amount;
     }
 }

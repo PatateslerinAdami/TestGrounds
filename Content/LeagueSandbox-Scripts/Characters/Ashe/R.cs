@@ -25,7 +25,7 @@ public class EnchantedCrystalArrow : ISpellScript {
     private ObjAIBase _ashe;
     public SpellScriptMetadata ScriptMetadata { get; }  = new () {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         TriggersSpellCasts = true
     };

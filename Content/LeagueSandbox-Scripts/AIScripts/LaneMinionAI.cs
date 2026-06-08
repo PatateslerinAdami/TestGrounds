@@ -28,6 +28,12 @@ namespace AIScripts
         float localTime = 0f;
         bool callsForHelpMayBeCleared = false;
         bool followsWaypoints = true;
+        // Last lane waypoint an explicit move order was issued for. Intent-tracking instead of
+        // comparing against Waypoints[last]: collision/stuck repaths (OnCollision SafePath,
+        // UpdateStuckRecovery) may legitimately change the waypoint list — comparing against the
+        // live list re-issued the raw lane order every tick and overwrote those repaths,
+        // looping minions back into building footprints.
+        Vector2 _lastOrderedLaneWaypoint = new Vector2(float.NaN, float.NaN);
         bool _useFirstAcquisitionRange = false;
         bool _firstTargetSearchActive = false;
 
@@ -111,9 +117,6 @@ namespace AIScripts
                 {
                     _engagementTriggered = true;
                     AssignSpreadSlot();
-                    LogInfo($"[SPREAD] {LaneMinion.Team} {LaneMinion.BarracksName} netId={LaneMinion.NetId} " +
-                            $"wave={LaneMinion.WaveNumber} → assigned SlotIndex={LaneMinion.SpreadSlotIndex} " +
-                            $"at pos={LaneMinion.Position} asleep={LaneMinion.IsAsleep}");
                 }
 
                 if(LaneMinion.IsAttacking || LaneMinion.TargetUnit == null)
@@ -270,7 +273,6 @@ namespace AIScripts
             return (isLeft ? leftPerp : -leftPerp) * magnitude;
         }
 
-        bool _loggedFirstSpreadOffset = false;
         Vector2 GetSpreadedWaypoint(int waypointIndex)
         {
             Vector2 baseWaypoint = LaneMinion.PathingWaypoints[waypointIndex];
@@ -285,13 +287,6 @@ namespace AIScripts
             Vector2 dirAxis = Vector2.Normalize(axis);
             Vector2 leftPerp = new Vector2(-dirAxis.Y, dirAxis.X);
             Vector2 offset = ComputeLateralOffset(LaneMinion.SpreadSlotIndex, leftPerp);
-            if (!_loggedFirstSpreadOffset)
-            {
-                _loggedFirstSpreadOffset = true;
-                LogInfo($"[SPREAD] netId={LaneMinion.NetId} slot={LaneMinion.SpreadSlotIndex} " +
-                        $"wpIdx={waypointIndex} base={baseWaypoint} offset={offset} " +
-                        $"target={baseWaypoint + offset}");
-            }
             return baseWaypoint + offset;
         }
 
@@ -504,54 +499,34 @@ namespace AIScripts
             if(notYetOutOfRange)
             {
                 Vector2 currentWaypoint = GetSpreadedWaypoint(currentWaypointIndex);
-                Vector2 currentDestination = LaneMinion.Waypoints[LaneMinion.Waypoints.Count - 1];
 
-                if(currentDestination != currentWaypoint)
+                // Re-order when the lane target advanced OR the current path ran out without
+                // reaching it (partial path end, stuck-recovery ResetWaypoints, ...).
+                if(_lastOrderedLaneWaypoint != currentWaypoint || LaneMinion.IsPathEnded())
                 {
-                    List<Vector2> path = null;
+                    followsWaypoints = true;
 
-                    // If the minion returns to lane
-                    // Instead of continuing to move along the waypoints
-                    if(!followsWaypoints)
-                    {
-                        followsWaypoints = true;
-                        path = GetPath(LaneMinion.Position, currentWaypoint, LaneMinion.PathfindingRadius);
-                    }
+                    // Lane walking goes through the blocker-aware A* — mirrors Riot, where the
+                    // minion AI's move order runs CreatePath/BuildNavigationPath and therefore
+                    // arcs around baked building footprints (inhibitor 186/214, nexus 353).
+                    // The previous raw two-point segment (and the artificial spread
+                    // intermediate) cut straight through those footprints: terrain-OnCollision
+                    // fired, its SafePath repath got overwritten the next tick by the raw
+                    // order, and minions looped into/“stuck inside” the inhibitor. GetPath also
+                    // snaps blocked spread targets via GetClosestTerrainExit internally.
+                    List<Vector2> path = GetPath(LaneMinion.Position, currentWaypoint, LaneMinion.PathfindingRadius);
 
                     if(path == null)
                     {
-                        if(LaneMinion.SpreadSlotIndex >= 1)
+                        // Degenerate (sub-10u or unreachable): straight segment as last resort.
+                        path = new List<Vector2>()
                         {
-                            Vector2 prev = currentWaypointIndex > 0
-                                ? LaneMinion.PathingWaypoints[currentWaypointIndex - 1]
-                                : LaneMinion.SpawnPosition;
-                            Vector2 axis = LaneMinion.PathingWaypoints[currentWaypointIndex] - prev;
-                            if(axis.LengthSquared() > 0.001f)
-                            {
-                                Vector2 dirAxis = Vector2.Normalize(axis);
-                                Vector2 leftPerp = new Vector2(-dirAxis.Y, dirAxis.X);
-                                Vector2 offset = ComputeLateralOffset(LaneMinion.SpreadSlotIndex, leftPerp);
-
-                                Vector2 toAxis = LaneMinion.Position - prev;
-                                float along = Vector2.Dot(toAxis, dirAxis);
-                                Vector2 onAxis = prev + dirAxis * along;
-                                float forwardLength = MathF.Max(300f, offset.Length() * 8f);
-                                Vector2 intermediate = onAxis + dirAxis * forwardLength + offset;
-
-                                path = new List<Vector2> { LaneMinion.Position, intermediate, currentWaypoint };
-                            }
-                        }
-
-                        if(path == null)
-                        {
-                            path = new List<Vector2>()
-                            {
-                                LaneMinion.Position,
-                                currentWaypoint
-                            };
-                        }
+                            LaneMinion.Position,
+                            currentWaypoint
+                        };
                     }
                     LaneMinion.SetWaypoints(path);
+                    _lastOrderedLaneWaypoint = currentWaypoint;
                 }
                 
                 return OrderType.MoveTo;

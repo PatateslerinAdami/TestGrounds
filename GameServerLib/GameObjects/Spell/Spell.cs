@@ -263,6 +263,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (m != null)
                 {
                     ApiEventManager.OnSpellMissileHit.Publish(m, u);
+                    // Drives the client's on-hit FX + WWise audio path (Spells/<name>/hit).
+                    _game.PacketNotifier.NotifyS2C_LineMissileHitList(m, u);
                 }
                 if (s != null)
                 {
@@ -327,11 +329,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
 
                 // Regular auto attacks can lose their target due to untargetability and distance.
-                float cancelBuffer = 300.0f;
+                // ar_StopAttackRangeModifier = 100 (LEVELS/*/Constants.var:62, all maps) — the
+                // slack behind the Lua AI API `TargetInCancelAttackRange`; mirrors the twin
+                // check in ObjAIBase.UpdateTarget. Edge-to-edge RESOLVED: both collision radii
+                // MUST be included — engage range is edge-to-edge (S4 GetClosestAttackPoint:
+                // range + both radii), so a center-to-center cancel range would undercut the
+                // engage range for large-radius targets (Baron/Cho radius alone can exceed
+                // the slack) and cancel windups on targets that are still attackable.
+                float cancelBuffer = 100.0f;
                 float maxCancelRange = CastInfo.Owner.Stats.Range.Total + spellTarget.CollisionRadius + CastInfo.Owner.CollisionRadius + cancelBuffer;
                 if (CastInfo.IsAutoAttack
                 && (spellTarget != CastInfo.Owner.TargetUnit
-                || Vector2.Distance(spellTarget.Position, CastInfo.Owner.Position) > maxCancelRange // TODO: Verify if edge-to-edge
+                || Vector2.Distance(spellTarget.Position, CastInfo.Owner.Position) > maxCancelRange
                 || CastInfo.Owner.GetCastSpell() != null
                 || CastInfo.Owner.ChannelSpell != null))
                 {
@@ -396,6 +405,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             CastInfo.SpellNetID = _networkIdManager.GetNewNetId();
 
+            // Fresh per-cast variable bag (Riot: new cast = new LuaVars table). In-flight
+            // missiles of the PREVIOUS cast keep the old bag — their cloned CastInfo still
+            // references it — so overlapping casts never share per-cast state.
+            CastInfo.Variables = new BuffVariables();
+
             CastInfo.AttackSpeedModifier = stats.AttackSpeedMultiplier.Total;
 
             CastInfo.MissileNetID = _networkIdManager.GetNewNetId();
@@ -417,10 +431,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 trueChannel = Script.ScriptMetadata.ChannelDuration;
             }
 
-            // For things like Garen Q, Leona Q, and TF W (and probably more)
-            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
+            // Spells cast through the NORMAL pipeline (not attack slots) whose timing must
+            // still be the champion's attack timing: windup = AA cast delay, total = full
+            // AA cycle, both AS-scaled. Data flags: UseAutoattackCastTime (Yasuo Q+W
+            // variants, ItemTiamatCleave, Jinx Q attacks) and ConsideredAsAutoAttack
+            // (TF cards, Draven spinning axes, Parley). Replay-verified (630b7ceb): Yasuo
+            // QW at SLOT 0 sends ct=0.318/tt=1.448 = exactly windup/cycle, ct/tt constant
+            // per champion (= AttackDelayCastPercent sum), tt shrinking with live AS.
+            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime))
             {
-                CastInfo.IsAutoAttack = false;
                 CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
                 CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
                 CastInfo.UseAttackCastDelay = true;
@@ -461,15 +480,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _attackType = AttackType.ATTACK_TYPE_TARGETED;
                 CastInfo.UseAttackCastTime = true;
-                CastInfo.AmmoUsed = 0; // TODO: Verify
-                CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
             }
-            else
-            {
-                CastInfo.AmmoUsed = 1; // TODO: Verify
-                CastInfo.AmmoRechargeTime = CurrentAmmoCooldown; // TODO: Verify
-            }
+
+            // Replay-verified (630b7ceb, 2599 ANS): AmmoUsed = 1 on EVERY cast — including
+            // auto-attack overrides (JinxQAttack, CaitlynHeadshotMissile). AmmoRechargeTime
+            // is 0 for everything except real ammo spells (AkaliShadowDance: 28.5s recharge
+            // alongside its 1.9s between-cast cooldown).
+            CastInfo.AmmoUsed = 1;
+            CastInfo.AmmoRechargeTime = CurrentAmmoCooldown;
 
             // TODO: Account for multiple targets
             CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit)));
@@ -564,7 +583,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     if (!SpellData.CanMoveWhileChanneling)
                     {
-                        //CastInfo.Owner.StopMovement(networked:false);
+                        // Replay-verified (Jinx W, 143 casts): when a movement-locking cast
+                        // starts while the unit is moving, Riot broadcasts a 1-waypoint
+                        // WaypointGroup stop for the caster in the cast tick — without it the
+                        // client keeps walking the stale path during the windup ("sliding"
+                        // forward while cast-locked). networked:true routes through the safe
+                        // batched flush (no direct Notify — see gray-line fix in StopMovement).
+                        // Dash guard: never cancel an active forced movement from the generic
+                        // cast pipeline (OnSpellPreCast at line ~535 may have started one).
+                        if (CastInfo.Owner.MovementParameters == null)
+                        {
+                            CastInfo.Owner.StopMovement(MoveStopReason.Finished);
+                        }
                         // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                         CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                     }
@@ -585,7 +615,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // If we are supposed to automatically cast a skillshot for this spell, then calculate the proper end position before casting.
-            if (Script.ScriptMetadata.MissileParameters != null && Script.ScriptMetadata.MissileParameters.Type == MissileType.Circle)
+            // SERVER-INTERNAL heuristic (not wire-verifiable — Riot's server logic is not
+            // visible): both Circle and Arc are location-targeted skillshot missiles
+            // (Circle: e.g. Diana W orbs; Arc: straight skillshots after the JSON-CastType
+            // cleanup). Originally Circle-only; Arc added so retyped skillshots keep their
+            // auto-computed end position.
+            if (Script.ScriptMetadata.MissileParameters != null
+                && (Script.ScriptMetadata.MissileParameters.Type == MissileType.Circle
+                 || Script.ScriptMetadata.MissileParameters.Type == MissileType.Arc))
             {
                 var targetPos = ApiFunctionManager.GetPointFromUnit(CastInfo.Owner, GetCurrentCastRange());
                 CastInfo.TargetPosition = new Vector3(targetPos.X, _game.Map.NavigationGrid.GetHeightAtLocation(targetPos), targetPos.Y);
@@ -615,7 +652,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     index = 0;
                 }
 
-                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
+                // Replay-verified (TalonNoxianDiplomacyAttack CastSpellAns, 56 casts): both the
+                // windup and the total scale with the LIVE attack-speed multiplier — the ratio
+                // ct/tt stays exactly (AttackDelayCastPercent + AttackDelayCastOffsetPercent)
+                // (0.2005 for Talon) while tt = baseCycle / attackSpeedMod (measured
+                // 1.533 / 1.20..1.76). Unscaled values made the client animate empowered-AA
+                // cast frames too slowly at high attack speed.
+                float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
+                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
                 CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
 
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
@@ -630,11 +674,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     }
                 }
 
-                if (CastInfo.UseAttackCastTime)
-                {
-                    // TODO: Verify
-                    CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
-                }
+                // Riot wire: DesignerTotalTime of EVERY attack-timed cast = the full
+                // (AS-scaled) attack cycle, never ct + channel. Verified twice:
+                // TalonNoxianDiplomacyAttack (56 casts, tt = baseCycle/ASmod) and replay
+                // 630b7ceb (JinxQAttack family: tt*ASmod constant 1.600 across all AS
+                // values). The old "UseAttackCastTime ? ct + trueChannel" branch shadowed
+                // this for all attacks since UseAttackCastTime is set alongside
+                // IsAutoAttack — sending windup-only totals.
+                CastInfo.DesignerTotalTime = autoAttackTotalTime + trueChannel;
             }
 
             if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
@@ -760,9 +807,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             CastInfo.MissileNetID = _networkIdManager.GetNewNetId();
 
-            CastInfo.ExtraCastTime = 0.0f; // TODO: Unhardcode
+            // 0 is the correct default for both: replay 630b7ceb shows 2541/2599 ANS with
+            // ExtraCastTime = StartCastTime = 0. The two non-zero patterns (not implemented):
+            //  (a) small negative ExtraCastTime (−0.001..−0.03, StartCastTime 0) exclusively
+            //      on auto-attack override casts — attack-cycle drift compensation that
+            //      shortens the next windup by the previous attack's overshoot;
+            //  (b) StartCastTime > 0 with ExtraCastTime = −StartCastTime (e.g. RocketGrab
+            //      +0.259/−0.259, KhazixWLong +0.194/−0.194) — an in-progress cast announced
+            //      late (likely vision-acquire mid-windup): the client fast-forwards the
+            //      windup by StartCastTime.
+            CastInfo.ExtraCastTime = 0.0f;
             CastInfo.Cooldown = GetCooldown();
-            CastInfo.StartCastTime = 0.0f; // TODO: Unhardcode
+            CastInfo.StartCastTime = 0.0f;
 
             var trueChannel = SpellData.ChannelDuration[CastInfo.SpellLevel];
             if (Script.ScriptMetadata.ChannelDuration > 0)
@@ -770,10 +826,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 trueChannel = Script.ScriptMetadata.ChannelDuration;
             }
 
-            // For things like Garen Q, Leona Q, and TF W (and probably more)
-            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime || CastInfo.UseAttackCastDelay)) // TODO: Verify
+            // Spells cast through the NORMAL pipeline (not attack slots) whose timing must
+            // still be the champion's attack timing: windup = AA cast delay, total = full
+            // AA cycle, both AS-scaled. Data flags: UseAutoattackCastTime (Yasuo Q+W
+            // variants, ItemTiamatCleave, Jinx Q attacks) and ConsideredAsAutoAttack
+            // (TF cards, Draven spinning axes, Parley). Replay-verified (630b7ceb): Yasuo
+            // QW at SLOT 0 sends ct=0.318/tt=1.448 = exactly windup/cycle, ct/tt constant
+            // per champion (= AttackDelayCastPercent sum), tt shrinking with live AS.
+            if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime))
             {
-                CastInfo.IsAutoAttack = false;
                 CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
                 CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
                 CastInfo.UseAttackCastDelay = true;
@@ -813,15 +874,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.IsAutoAttack)
             {
                 CastInfo.UseAttackCastTime = true;
-                CastInfo.AmmoUsed = 0; // TODO: Verify
-                CastInfo.AmmoRechargeTime = 0; // TODO: Verify
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
             }
-            else
-            {
-                CastInfo.AmmoUsed = 1; // TODO: Verify
-                CastInfo.AmmoRechargeTime = CurrentCooldown; // TODO: Verify
-            }
+
+            // Replay-verified (630b7ceb, 2599 ANS): AmmoUsed = 1 on EVERY cast incl.
+            // auto-attack overrides; AmmoRechargeTime = the AMMO recharge (0 for non-ammo
+            // spells) — the previous CurrentCooldown here would have leaked every spell's
+            // cooldown into the field, which Riot never does.
+            CastInfo.AmmoUsed = 1;
+            CastInfo.AmmoRechargeTime = CurrentAmmoCooldown;
 
             // TODO: implement check for IsForceCastingOrChannel and IsOverrideCastPosition
             if (SpellData.CastType == (int)CastType.CAST_TargetMissile
@@ -849,7 +910,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         if (!SpellData.CanMoveWhileChanneling)
                         {
-                            //CastInfo.Owner.StopMovement(networked:false);
+                            // Replay-verified (Jinx W, 143 casts): Riot broadcasts a 1-waypoint
+                            // WaypointGroup stop for the caster in the cast tick. This overload is
+                            // the SpellCast/forced path — without the stop here, a sub-cast like
+                            // JinxWMissile (cast from JinxW.OnSpellPostCast) sends no stop packet
+                            // and the client keeps walking its stale path during the 0.6s windup
+                            // ("sliding"). The parent JinxW is InstantCast-flagged, so the player-
+                            // path stop above never covers it. cast=false (fireWithoutCasting,
+                            // e.g. Talon blades) correctly skips this whole block.
+                            // Dash guard: only clear the WALKING path — never cancel an active
+                            // forced movement (StopMovement would SetDashingState(false)).
+                            // Scripts may start a dash in OnSpellPreCast (runs before this
+                            // block, e.g. FioraDanceStrike's windup mini-dash) and manage its
+                            // end themselves.
+                            if (CastInfo.Owner.MovementParameters == null)
+                            {
+                                CastInfo.Owner.StopMovement(MoveStopReason.Finished);
+                            }
                             // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
                             CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                         }
@@ -893,7 +970,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     index = 0;
                 }
 
-                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
+                // Replay-verified (TalonNoxianDiplomacyAttack CastSpellAns, 56 casts): both the
+                // windup and the total scale with the LIVE attack-speed multiplier — the ratio
+                // ct/tt stays exactly (AttackDelayCastPercent + AttackDelayCastOffsetPercent)
+                // (0.2005 for Talon) while tt = baseCycle / attackSpeedMod (measured
+                // 1.533 / 1.20..1.76). Unscaled values made the client animate empowered-AA
+                // cast frames too slowly at high attack speed.
+                float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
+                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
                 CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
 
                 // TODO: Verify if this should be affected by cast variable.
@@ -909,11 +993,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     }
                 }
 
-                if (CastInfo.UseAttackCastTime)
-                {
-                    // TODO: Verify
-                    CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
-                }
+                // Riot wire: DesignerTotalTime of EVERY attack-timed cast = the full
+                // (AS-scaled) attack cycle, never ct + channel. Verified twice:
+                // TalonNoxianDiplomacyAttack (56 casts, tt = baseCycle/ASmod) and replay
+                // 630b7ceb (JinxQAttack family: tt*ASmod constant 1.600 across all AS
+                // values). The old "UseAttackCastTime ? ct + trueChannel" branch shadowed
+                // this for all attacks since UseAttackCastTime is set alongside
+                // IsAutoAttack — sending windup-only totals.
+                CastInfo.DesignerTotalTime = autoAttackTotalTime + trueChannel;
             }
 
             if (cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
@@ -1401,6 +1488,55 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             SpellMissile p = null;
             var castInfoClone = CastInfo.Clone();
+            // The packet's inner MissileNetID must match the actual missile NetId — Riot's
+            // wire holds outer SenderNetID == inner CastInfo.MissileNetID == missile id in
+            // 2179/2179 MissileReplications across two replays. When the collision branch
+            // above assigned a fresh netId, the clone still carried the old one.
+            // CreateCustomMissile already does this; mirror it here.
+            castInfoClone.MissileNetID = netId;
+
+            // Forensic-verified (memory: MissileReplication wire shape §"How
+            // MissileTargetHeightAugment propagates"): the clone's launch Y carries the
+            // height augment ("bow level"); TargetPosition/-End stay at ground level. The
+            // packet builder copies this launch Y into ALL outer Y fields — without it the
+            // client renders the missile inside the terrain.
+            var launchPos = castInfoClone.SpellCastLaunchPosition;
+            float effectiveHeightAugment = parameters.OverrideHeightAugment ?? SpellData.MissileTargetHeightAugment;
+            castInfoClone.SpellCastLaunchPosition = new Vector3(
+                launchPos.X, launchPos.Y + effectiveHeightAugment, launchPos.Z);
+
+            // Script-side CollisionRadius override falls back to SpellData.LineWidth when null.
+            // Useful for missiles whose visible hit area doesn't match the JSON LineWidth
+            // (e.g. Diana W orbs have LineWidth=0 in JSON but need a 150u hit radius to match
+            // the visible orb size — without this override, orbs phase through enemies).
+            int collisionRadius = parameters.CollisionRadius ?? (int)SpellData.LineWidth;
+
+            // MissileFixedTravelTime (JSON): lob missiles fly with a FIXED travel time, so the
+            // speed scales with distance — speed = dist / time. Replay-verified on JinxEHit
+            // (MissileFixedTravelTime=0.4): 126 MISREPs with dist/v = 0.368..0.414s and wire
+            // speeds 364..2283, NOT clamped to MissileMin-/MaxSpeed. Must be computed BEFORE
+            // construction so the server simulation and the spawn MissileReplication (sent
+            // inline by AddObject) carry the same velocity — a post-spawn SetSpeed only fixes
+            // the server side and desyncs the client visual.
+            float missileSpeed = SpellData.MissileSpeed;
+            if (SpellData.MissileFixedTravelTime > 0)
+            {
+                var launch2D = new Vector2(castInfoClone.SpellCastLaunchPosition.X, castInfoClone.SpellCastLaunchPosition.Z);
+                Vector2 end2D;
+                if (parameters.OverrideEndPosition != default)
+                {
+                    end2D = parameters.OverrideEndPosition;
+                }
+                else if (castInfoClone.Targets.Count > 0 && castInfoClone.Targets[0].Unit != null)
+                {
+                    end2D = castInfoClone.Targets[0].Unit.Position;
+                }
+                else
+                {
+                    end2D = new Vector2(castInfoClone.TargetPositionEnd.X, castInfoClone.TargetPositionEnd.Z);
+                }
+                missileSpeed = MathF.Max(1f, Vector2.Distance(launch2D, end2D) / SpellData.MissileFixedTravelTime);
+            }
 
             switch (parameters.Type)
             {
@@ -1408,11 +1544,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         p = new SpellMissile(
                             _game,
-                            (int)SpellData.LineWidth,
+                            collisionRadius,
                             this,
                             castInfoClone,
-                            SpellData.MissileSpeed,
-                            SpellData.Flags,
+                            missileSpeed,
                             netId,
                             isServerOnly
                         );
@@ -1422,27 +1557,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         p = new SpellChainMissile(
                             _game,
-                            (int)SpellData.LineWidth,
+                            collisionRadius,
                             this,
                             castInfoClone,
                             parameters,
-                            SpellData.MissileSpeed,
-                            SpellData.Flags,
+                            missileSpeed,
                             netId,
                             isServerOnly
                         );
                         break;
                     }
+                // Canonical name→class mapping (same as CreateCustomMissile):
+                // Circle = SpellCircleMissile (orbit, e.g. Diana W orbs),
+                // Arc = SpellLineMissile (straight line + optional unit tracking).
                 case MissileType.Circle:
                     {
                         p = new SpellCircleMissile(
                             _game,
-                            (int)SpellData.LineWidth,
+                            collisionRadius,
                             this,
                             castInfoClone,
-                            SpellData.MissileSpeed,
+                            missileSpeed,
                             parameters.OverrideEndPosition,
-                            SpellData.Flags,
                             netId,
                             isServerOnly
                         );
@@ -1452,12 +1588,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     {
                         p = new SpellLineMissile(
                             _game,
-                            (int)SpellData.LineWidth,
+                            collisionRadius,
                             this,
                             castInfoClone,
-                            SpellData.MissileSpeed,
+                            missileSpeed,
                             parameters.OverrideEndPosition,
-                            SpellData.Flags,
                             netId,
                             isServerOnly
                         );
@@ -1467,7 +1602,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             // If the position is the same as the destination, the server will have destroyed the missile before notifying of creation, causing the client to crash.
             // TODO: Make a better check.
-            if (p == null || (p is SpellCircleMissile c && c.Position == c.Destination)
+            if (p == null || (p.HasDestination() && p.Position == p.Destination)
                 || p.Position == p.GetTargetPosition())
             {
                 return null;
@@ -1489,6 +1624,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 p.HasClientCastInfo = false;
             }
 
+            // Must be set before AddObject — the spawn MissileReplication is constructed
+            // inline there and reads the missile's effective height augment.
+            p.HeightAugmentOverride = parameters.OverrideHeightAugment;
+            p.TimedSpeedDelta = parameters.TimedSpeedDelta;
+            p.TimedSpeedDeltaTime = parameters.TimedSpeedDeltaTime;
+
             _game.ObjectManager.AddObject(p);
 
             ApiEventManager.OnLaunchMissile.Publish(this, p);
@@ -1501,7 +1642,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // for AA missiles (98%); both flows route through CreateSpellMissile so this single
             // call site covers all cases. Bounce missiles in SpellChainMissile.BounceToNextTarget
             // intentionally bypass this — replay confirms no per-bounce ForceCreateMissile.
-            _game.PacketNotifier.NotifyForceCreateMissile(p);
+            //
+            // Sub-missiles (HasClientCastInfo=false, e.g. Diana W orbs, KatarinaRMis daggers)
+            // also skip this packet: the client's handler gates on a pending spellbook entry
+            // whose missileNetworkID matches — sub-missiles have neither (parent cast already
+            // completed, sub-missile NetID differs), so the packet is silently dropped client-
+            // side. Riot's replay confirms 0× ForceCreateMissile for DianaOrbsMissile across
+            // 40 W casts. Skip the wasted broadcast.
+            if (p.HasClientCastInfo)
+            {
+                _game.PacketNotifier.NotifyForceCreateMissile(p);
+            }
 
             return p;
         }
@@ -2008,30 +2159,46 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             castInfoClone.MissileNetID = netId;
 
-            bool isServerOnly = SpellData.MissileEffect != "";
+            // Replay-verified (Talon W return blades: 162 MissileReplications across two
+            // replays/perspectives; also Varus Q): Riot DOES replicate script-spawned
+            // sub-missiles via MissileReplication — a non-empty MissileEffect does NOT mean
+            // server-only; the client renders the missile effect FROM the replicated missile.
+            // The old `isServerOnly = MissileEffect != ""` heuristic made every such missile
+            // invisible (see project_deferred_sub_missile_replication).
+            const bool isServerOnly = false;
 
             SpellMissile p = null;
+
+            // Script-side CollisionRadius override falls back to SpellData.LineWidth when null.
+            // Useful for missiles whose visible hit area doesn't match the JSON LineWidth
+            // (e.g. Diana W orbs have LineWidth=0 in JSON but a 175u visual hit radius).
+            int collisionRadius = parameters.CollisionRadius ?? (int)SpellData.LineWidth;
 
             switch (parameters.Type)
             {
                 case MissileType.Target:
-                    p = new SpellMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, SpellData.Flags, netId, isServerOnly);
+                    p = new SpellMissile(_game, collisionRadius, this, castInfoClone, SpellData.MissileSpeed, netId, isServerOnly);
                     break;
                 case MissileType.Chained:
-                    p = new SpellChainMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, parameters, SpellData.MissileSpeed, SpellData.Flags, netId, isServerOnly);
-                    break;
-                case MissileType.Circle:
-                    p = new SpellCircleMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, end, SpellData.Flags, netId, isServerOnly);
+                    p = new SpellChainMissile(_game, collisionRadius, this, castInfoClone, parameters, SpellData.MissileSpeed, netId, isServerOnly);
                     break;
                 case MissileType.Arc:
-                    p = new SpellLineMissile(_game, (int)SpellData.LineWidth, this, castInfoClone, SpellData.MissileSpeed, end, SpellData.Flags, netId, isServerOnly);
+                    p = new SpellLineMissile(_game, collisionRadius, this, castInfoClone, SpellData.MissileSpeed, end, netId, isServerOnly);
+                    break;
+                case MissileType.Circle:
+                    p = new SpellCircleMissile(_game, collisionRadius, this, castInfoClone, SpellData.MissileSpeed, end, netId, isServerOnly);
                     break;
             }
 
-            if (p == null || (p is SpellCircleMissile c && c.Position == c.Destination) || p.Position == p.GetTargetPosition())
+            if (p == null || (p.HasDestination() && p.Position == p.Destination) || p.Position == p.GetTargetPosition())
             {
                 return null;
             }
+
+            // Script-spawned missiles have no pending client cast (no CastSpellAns was sent
+            // for them), so they must take the MissileReplication spawn path. MUST be set
+            // before AddObject — the spawn packet is constructed inline there.
+            p.HasClientCastInfo = false;
 
             _game.ObjectManager.AddObject(p);
             ApiEventManager.OnLaunchMissile.Publish(this, p);
@@ -2083,7 +2250,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         else
                         {
                             CurrentDelayTime += diff / 1000.0f;
-                            if (CurrentDelayTime >= CastInfo.DesignerCastTime / CastInfo.AttackSpeedModifier)
+                            // DesignerCastTime is already attack-speed-scaled at cast time
+                            // (AA block divides by AttackSpeedModifier so the CastSpellAns
+                            // carries the wire-true scaled windup) — dividing again here
+                            // would finish the windup modifier² too fast.
+                            if (CurrentDelayTime >= CastInfo.DesignerCastTime)
                             {
                                 FinishCasting();
                             }

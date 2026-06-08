@@ -19,58 +19,39 @@ namespace Spells;
 
 public class JinxW : ISpellScript {
     private Vector2      _targetPos;
-    private SpellMissile _missile;
-
     private ObjAIBase _jinx;
     private Spell     _spell;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
-        },
         TriggersSpellCasts = true,
-        IsDamagingSpell    = true
+        IsDamagingSpell    = true,
+        NotSingleTargetSpell = false,
+        SpellFXOverrideSkins = ["JinxSkin01"],
+        SpellVOOverrideSkins = ["JinxSkin01"],
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _jinx  = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate);
-        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnMissileLaunch);
     }
-
-    public void OnDeactivate(ObjAIBase owner, Spell spell) {
-        ApiEventManager.OnUpdateStats.RemoveListener(this, owner, OnStatsUpdate);
-        ApiEventManager.OnLaunchMissile.RemoveListener(this, spell, OnMissileLaunch);
-    }
-
-    public void OnMissileLaunch(Spell spell, SpellMissile missile) {
-        _missile = missile;
-        AddParticleTarget(_jinx, _jinx, "Jinx_W_Beam", _missile, 5f, bone: "spine", targetBone: "root");
-    }
-
+    
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _targetPos                      = end;
         FaceDirection(_targetPos, _jinx, true);
-        var duration = _jinx.Stats.AttackSpeedMultiplier.FlatBonus switch {
-            > 2.5f  => 0.4f,
-            > 2.25f => 0.42f,
-            > 2f    => 0.44f,
-            > 1.75f => 0.46f,
-            > 1.5f  => 0.48f,
-            > 1.25f => 0.5f,
-            > 1f    => 0.52f,
-            > 0.75f => 0.54f,
-            > 0.5f  => 0.56f,
-            > 0.25f => 0.58f,
-            _       => 0.6f
-        };
-        AddBuff("JinxWLockout", duration, 1, spell, _jinx, _jinx);
+        // Patch 4.x: Zap's wind-up is a FIXED 0.6s (JinxWMissile.json OverrideCastTime);
+        // the attack-speed scaling (0.6 → 0.4) was only introduced in V9.1 — don't model it.
+        // No lockout buff: 0 hits for "JinxWLockout" across 143 replay W casts — the
+        // movement lock comes from the real JinxWMissile cast itself (CantCancelWhileWindingUp).
+
+        var dir = Vector2.Normalize(end - _jinx.Position);
+        AddParticlePos(_jinx, "Jinx_W_Beam", _jinx.Position, _jinx.Position, lifetime: 1f, direction: new Vector3(dir.X, 0, dir.Y), flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
     }
+
+    
 
     public void OnSpellPostCast(Spell spell) {
         SpellCast(_jinx, 6, SpellSlotType.ExtraSlots, _targetPos, _targetPos, false, Vector2.Zero);
-        _missile?.SetToRemove();
     }
 
     private void OnStatsUpdate(AttackableUnit unit, float diff) {
@@ -82,12 +63,30 @@ public class JinxW : ISpellScript {
 public class JinxWMissile : ISpellScript {
     private ObjAIBase _jinx;
 
+    // Replay-verified flow (144 W casts): the 0.6s Zap delay lives in THIS spell's own
+    // cast — NPC_CastSpellAns JinxWMissile with castTime=0.60 goes out at W cast time
+    // (same tick as the JinxW CastSpellAns), the client opens a 0.6s pending cast, and the
+    // server fires the missile at windup end via ForceCreateMissile (+594ms median).
+    // Requirements for that wire pattern:
+    //  - TriggersSpellCasts = true → CastSpellAns is sent AND HasClientCastInfo=true →
+    //    FinishCasting emits FCM instead of a MissileReplication.
+    //  - cast via SpellCast(..., fireWithoutCasting: false, ...) (JinxW.OnSpellPostCast)
+    //    so the real 0.6s windup runs server-side.
+    //  - the 0.6 comes from JinxWMissile.json OverrideCastTime automatically (Spell.Cast
+    //    reads it into DesignerCastTime) — no manual override needed. Fixed in 4.x; the
+    //    attack-speed scaling is a V9.1 change.
+    //  - NOTE: Riot's server-lua stub says DoesntTriggerSpellCasts=true, yet the wire has
+    //    144 CastSpellAns for this spell — Riot's flag governs PROC/event semantics
+    //    (Sheen, stealth break), NOT the cast packet. Our TriggersSpellCasts is overloaded
+    //    (gates packets too), so it must stay true here. Never copy that lua flag 1:1.
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
-        TriggersSpellCasts = false,
-        IsDamagingSpell    = true
+        NotSingleTargetSpell = false,
+        TriggersSpellCasts = true,
+        IsDamagingSpell    = true,
+        SpellFXOverrideSkins = ["JinxSkin01"],
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -95,28 +94,7 @@ public class JinxWMissile : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        var duration = _jinx.Stats.AttackSpeedMultiplier.FlatBonus switch {
-            > 2.5f  => 0.4f,
-            > 2.25f => 0.42f,
-            > 2f    => 0.44f,
-            > 1.75f => 0.46f,
-            > 1.5f  => 0.48f,
-            > 1.25f => 0.5f,
-            > 1f    => 0.52f,
-            > 0.75f => 0.54f,
-            > 0.5f  => 0.56f,
-            > 0.25f => 0.58f,
-            _       => 0.6f
-        };
-        PlayAnimation(_jinx, "Spell2", 1f - 0.6f - duration);
-        spell.CastInfo.DesignerCastTime  = duration;
-        spell.CastInfo.DesignerTotalTime = duration + spell.SpellData.ChannelDuration[spell.CastInfo.SpellLevel];
-    }
-
-    public void OnSpellPostCast(Spell spell) { SetStatus(_jinx, StatusFlags.Rooted, false); }
-
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
         var ad     = _jinx.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
         var damage = 10 + 50 * (spell.CastInfo.SpellLevel - 1) + ad;
 

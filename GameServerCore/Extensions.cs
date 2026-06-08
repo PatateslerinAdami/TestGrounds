@@ -276,7 +276,7 @@ namespace GameServerCore
         /// Gets the closest edge point on a circle from the given starting position.
         /// </summary>
         /// <param name="from">Starting position.</param>
-        /// <param name="circlePos">Circle position.</param>
+        /// <param name="circlePos">Arc position.</param>
         /// <param name="radius">Radius of the circle.</param>
         /// <returns>Vector2 point on the circle closest to the starting position..</returns>
         public static Vector2 GetClosestCircleEdgePoint(Vector2 from, Vector2 circlePos, float radius)
@@ -365,17 +365,23 @@ namespace GameServerCore
         /// <param name="c">Center of the circle.</param>
         /// <param name="r">Radius of the circle.</param>
         /// <returns>Array of 2 points representing the left and right bounds of the circle respectively.</returns>
-        /// TODO: Could probably be more efficient by using an alternative to Cos and Sin.
         public static Vector2[] CastRayCircleBounds(Vector2 p, Vector2 c, float r)
         {
-            var angleToCenter = p.AngleTo(c, p);
-            var angleToLeft = angleToCenter + 270f;
-            var angleToRight = angleToCenter + 90f;
+            // The left/right bounds are the points on the circle perpendicular to the
+            // p->c line, offset by r. That is just the perpendicular of the (c - p) unit
+            // vector scaled by r - no trig needed. (The old version added 90/270 *degrees*
+            // and fed them to MathF.Cos/Sin, which expect radians, producing garbage.)
+            var toCenter = c - p;
+            if (toCenter == Vector2.Zero)
+            {
+                return new Vector2[] { c, c };
+            }
+            var dir = Vector2.Normalize(toCenter);
+            var perp = new Vector2(-dir.Y, dir.X) * r;
 
-            var cLeftBound = new Vector2(c.X + (MathF.Cos(angleToLeft) * r), c.Y + (MathF.Sin(angleToLeft) * r));
-            var cRightBound = new Vector2(c.X + (MathF.Cos(angleToRight) * r), c.Y + (MathF.Sin(angleToRight) * r));
-
-            return new Vector2[] { cLeftBound, cRightBound };
+            // Index 0 = left bound, 1 = right bound (matches the old angle-270/angle+90
+            // ordering; SpellSectorCone checks both symmetrically so order is not critical).
+            return new Vector2[] { c - perp, c + perp };
         }
     }
 

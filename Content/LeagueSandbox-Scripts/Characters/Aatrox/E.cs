@@ -126,8 +126,10 @@ public class AatroxE : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        Vector2 startingPosRight = GetPointFromUnit(_aatrox, 100f, 90);
-        Vector2 startingPosLeft = GetPointFromUnit(_aatrox, 100f, 270);
+        // Replay 39988886 (294 side / 136 center MISREPs): side-blade launch offset is 115u
+        // perpendicular (|Start − OwnerPos| = 114..115 in every packet), not 100.
+        Vector2 startingPosRight = GetPointFromUnit(_aatrox, 115f, 90);
+        Vector2 startingPosLeft = GetPointFromUnit(_aatrox, 115f, 270);
         Vector2 endPos = GetPointFromUnit(_aatrox, 1000f, 0);
         _targetPosition = endPos;
         SpellCast(_aatrox, 0, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, _aatrox.Position);
@@ -145,7 +147,8 @@ public class AatroxEConeMissile : ISpellScript {
     private ObjAIBase _aatrox;
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle,
+            Type = MissileType.Arc,
+            OverrideHeightAugment = 0f,
         },
         IsDamagingSpell = true
     };
@@ -190,7 +193,7 @@ public class AatroxEConeMissile2 : ISpellScript {
     private ObjAIBase _aatrox;
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle,
+            Type = MissileType.Arc,
         },
         IsDamagingSpell = true
     };

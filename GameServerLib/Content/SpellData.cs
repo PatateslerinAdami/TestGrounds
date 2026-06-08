@@ -118,6 +118,7 @@ namespace LeagueSandbox.GameServer.Content
         public float LineMissileTargetHeightAugment { get; set; } = 100;
         public float LineMissileTimePulseBetweenCollisionSpellHits { get; set; }
         public bool LineMissileTrackUnits { get; set; }
+        public bool LineMissileTrackUnitsAndContinues { get; set; }
         public bool LineMissileUsesAccelerationForBounce { get; set; }
         //LineTargetingBaseTextureOverrideName
         //LineTargetingBaseTextureOverrideName
@@ -303,16 +304,22 @@ namespace LeagueSandbox.GameServer.Content
             return (1.0f + DelayTotalTimePercent) * 2.0f;
         }
 
-        // TODO: read Global Character Data constants from constants.var (gcd_AttackDelay = 1.600f, gcd_AttackDelayCastPercent = 0.300f)
+        // gcd_AttackDelay / gcd_AttackMinDelay / gcd_AttackMaxDelay are loaded per-map from
+        // Constants.var into GlobalData.GlobalCharacterDataConstants (Map1: 1.6 / 0.4 / 5.0).
+        // Pass float.NaN for the clamp bounds to fall back to the loaded gcd_ constants;
+        // C# default params must be compile-time constant, hence the NaN sentinel.
         public float GetCharacterAttackDelay
         (
             float attackSpeedMod,
             float attackDelayOffsetPercent,
-            float attackMinimumDelay = 0.4f,
-            float attackMaximumDelay = 5.0f
+            float attackMinimumDelay = float.NaN,
+            float attackMaximumDelay = float.NaN
         )
         {
-            float result = ((attackDelayOffsetPercent + 1.0f) * 1.600f) / attackSpeedMod;
+            var gcd = GlobalData.GlobalCharacterDataConstants;
+            if (float.IsNaN(attackMinimumDelay)) attackMinimumDelay = gcd.AttackMinDelay;
+            if (float.IsNaN(attackMaximumDelay)) attackMaximumDelay = gcd.AttackMaxDelay;
+            float result = ((attackDelayOffsetPercent + 1.0f) * gcd.AttackDelay) / attackSpeedMod;
             return System.Math.Clamp(result, attackMinimumDelay, attackMaximumDelay);
         }
 
@@ -322,11 +329,11 @@ namespace LeagueSandbox.GameServer.Content
             float attackDelayOffsetPercent,
             float attackDelayCastOffsetPercent,
             float attackDelayCastOffsetPercentAttackSpeedRatio,
-            float attackMinimumDelay = 0.4f,
-            float attackMaximumDelay = 5.0f
+            float attackMinimumDelay = float.NaN,
+            float attackMaximumDelay = float.NaN
         )
         {
-            float castPercent = System.Math.Min(0.300f + attackDelayCastOffsetPercent, 0.0f);
+            float castPercent = System.Math.Min(GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + attackDelayCastOffsetPercent, 0.0f);
             float percentDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, attackMinimumDelay, attackMaximumDelay) * castPercent;
             float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayCastOffsetPercent, attackMinimumDelay, attackMaximumDelay);
             float result = (((attackDelay * castPercent) - percentDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + percentDelay;
@@ -457,6 +464,12 @@ namespace LeagueSandbox.GameServer.Content
             LineMissileTargetHeightAugment = file.GetFloat("SpellData", "LineMissileTargetHeightAugment", LineMissileTargetHeightAugment);
             LineMissileTimePulseBetweenCollisionSpellHits = file.GetFloat("SpellData", "LineMissileTimePulseBetweenCollisionSpellHits", LineMissileTimePulseBetweenCollisionSpellHits);
             LineMissileTrackUnits = file.GetBool("SpellData", "LineMissileTrackUnits", LineMissileTrackUnits);
+            // S4 SpellDataResource.cpp:584-589: the AndContinues variant implies TrackUnits.
+            LineMissileTrackUnitsAndContinues = file.GetBool("SpellData", "LineMissileTrackUnitsAndContinues", LineMissileTrackUnitsAndContinues);
+            if (LineMissileTrackUnitsAndContinues)
+            {
+                LineMissileTrackUnits = true;
+            }
             LineMissileUsesAccelerationForBounce = file.GetBool("SpellData", "LineMissileUsesAccelerationForBounce", LineMissileUsesAccelerationForBounce);
             //LineTargetingBaseTextureOverrideName
             //LineTargetingBaseTextureOverrideName

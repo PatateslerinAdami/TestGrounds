@@ -117,7 +117,10 @@ namespace PacketDefinitions420
                 SizeMultiplier = region.Scale,
                 SizeAdditive = region.AdditionalSize,
 
-                HasCollision = region.HasCollision,
+                // Wire bit0 = Riot's RequiresLOS, decoupled from the server-internal
+                // HasCollision (which still drives CollisionHandler off-wire). Real client
+                // regions are vision-only; a region requires LOS unless it explicitly ignores it.
+                RequiresLOS = !region.IgnoresLineOfSight,
                 GrantVision = region.GrantVision,
                 RevealStealth = region.RevealsStealth,
 
@@ -443,6 +446,49 @@ namespace PacketDefinitions420
             return spawnPacket;
         }
 
+        /// <summary>
+        /// Converts the server's 1-based spell level (0 = unlearned) to the 0-based value
+        /// the S4 client expects in embedded wire CastInfo blobs. Replay-verified: Riot
+        /// sends 0 for rank-1 casts (MF Q rank progression arrives as bytes 0..4), and the
+        /// client indexes its per-level SpellData arrays (CastRange, mi_MaximumHits[6])
+        /// directly with this value (asserts SpellLevel < kMaxSpellLevel). CHAR_SpawnPet's
+        /// wire field is literally named CastSpellLevelPlusOne — our internal level IS the
+        /// "plus one", so that site stays unconverted. Internal level 0 (auto attacks,
+        /// unleveled force-casts) clamps to 0 instead of underflowing.
+        /// </summary>
+        private static byte GetWireSpellLevel(byte spellLevel)
+        {
+            return (byte)Math.Max(0, spellLevel - 1);
+        }
+
+        // ============================== DO NOT REVERT ==================================
+        // This packet's shape is forensically verified against Riot replays (Varus Q both
+        // POVs, Talon W both POVs) and the S4 client decomp (SpellMissileLogicClient::
+        // MissileReplication). It has been silently regressed multiple times. Invariants:
+        //   1. SenderNetID = m.NetId (the MISSILE's id, never the caster's).
+        //   2. Inner CastInfo.MissileNetID must equal the actual missile NetId.
+        //   3. CasterPosition = LAUNCH position at ground Y — the client maps it to
+        //      mBasePos, its RENDER base. Never the owner's position (that's UnitPosition).
+        //   4. Position/StartPoint Y = launch ground + MissileTargetHeightAugment;
+        //      EndPoint Y = terrain@endpoint + augment.
+        //   5. Velocity Y arc-drop (-augment/flightTime) ONLY for non-tracked missiles;
+        //      LineMissileTrackUnits missiles get velocityY = 0.
+        //   6. Embedded CastInfo.DesignerCastTime = -1.0 sentinel.
+        // Details: memory "MissileReplication wire shape (forensic-verified)".
+        // ================================================================================
+        // Current height of a missile along its (linear) launch→end arc, by horizontal progress.
+        // Used so mid-flight replications carry a continuous height instead of the launch height.
+        private static float MissileCurrentArcHeight(SpellMissile m, Vector2 launchXZ, float xzDistance, float launchY, float endY)
+        {
+            if (xzDistance <= 1f)
+            {
+                return launchY;
+            }
+            float traveled = Vector2.Distance(launchXZ, m.Position);
+            float progress = Math.Clamp(traveled / xzDistance, 0f, 1f);
+            return launchY + (endY - launchY) * progress;
+        }
+
         MissileReplication ConstructMissileReplicationPacket(SpellMissile m)
         {
             var castInfo = new LeaguePackets.Game.Common.CastInfo
@@ -450,17 +496,28 @@ namespace PacketDefinitions420
                 SpellHash = m.CastInfo.SpellHash,
                 SpellNetID = m.CastInfo.SpellNetID,
 
-                SpellLevel = m.CastInfo.SpellLevel,
+                SpellLevel = GetWireSpellLevel(m.CastInfo.SpellLevel),
                 AttackSpeedModifier = m.CastInfo.AttackSpeedModifier,
                 CasterNetID = m.CastInfo.Owner.NetId,
-                // TODO: Implement spell chains?
-                SpellChainOwnerNetID = m.CastInfo.SpellChainOwnerNetID != 0 ? m.CastInfo.SpellChainOwnerNetID : m.CastInfo.Owner.NetId,
+                // Pet casts report the owning champion; explicit script values win
+                // (replay-verified — see GameObjects.SpellNS.CastInfo doc).
+                SpellChainOwnerNetID = m.CastInfo.SpellChainOwnerNetID != 0
+                    ? m.CastInfo.SpellChainOwnerNetID
+                    : LeagueSandbox.GameServer.GameObjects.SpellNS.CastInfo.ResolveChainOwnerNetId(m.CastInfo.Owner),
                 PackageHash = m.CastInfo.PackageHash,
                 MissileNetID = m.CastInfo.MissileNetID,
                 // Not sure if we want to add height for these, but i did it anyway
                 TargetPosition = m.CastInfo.TargetPosition,
                 TargetPositionEnd = m.CastInfo.TargetPositionEnd,
-                DesignerCastTime = m.CastInfo.DesignerCastTime,
+                // Replay-verified: -1.0 sentinel ("no cast frame, missile in flight") in
+                // 2143/2179 MissileReplications. The exception class is resolved: missiles
+                // spawned DURING an in-progress cast inherit that cast's designer cast time
+                // (all 36 exceptions = JinxEHit, spawned at JinxE's cast, OverrideCastTime
+                // 0.25); missiles spawned outside a cast (Talon return blades ~390ms after
+                // cast end, Varus Q charge-fire) carry -1. We hardcode -1 — correct for all
+                // post-cast/script spawns; implement the inherit rule only if at-cast
+                // spawned sub-missiles ever show timing artifacts.
+                DesignerCastTime = -1.0f,
                 ExtraCastTime = m.CastInfo.ExtraCastTime,
                 DesignerTotalTime = m.CastInfo.DesignerTotalTime,
 
@@ -496,40 +553,133 @@ namespace PacketDefinitions420
             }
 
             var replicationDirection = m.Direction;
-            if (m is SpellCircleMissile circleMissile && circleMissile.Type == MissileType.Circle)
+            // Polar (radius, angle) replication data is ONLY for true orbit missiles
+            // (SpellCircleMissile — e.g. Diana W orbs). Line missiles (their own class,
+            // Type=Arc, e.g. Talon W return blades) keep the normal normalized
+            // direction — feeding them polar data breaks the client-side missile/particle.
+            if (m is SpellCircleMissile circleMissile)
             {
                 replicationDirection = circleMissile.GetReplicationDirection();
             }
 
+            // Forensic-verified outer wire shape (memory: MissileReplication wire shape;
+            // refined 2026-06-01 via Talon W cross-plane samples):
+            // - Position/StartPoint Y = terrain@launch + MissileTargetHeightAugment (the
+            //   launch Y in CastInfo already carries the augment). Ground-Y renders the
+            //   missile inside terrain (only stray sub-particles visible).
+            // - EndPoint.Y = terrain@endpoint + augment (NOT constant launch Y — Varus Q's
+            //   flat-ground samples couldn't distinguish; Talon's cross-plane ones do).
+            // - Velocity.Y arc-drop (-augment / xzFlightTime, Varus-verified ±0.05; the
+            //   implied-augment histogram over 1129 non-tracked replications clusters at
+            //   exactly +100u for the dominant class) applies ONLY to non-tracked missiles.
+            //   LineMissileTrackUnits missiles get velY=0 (replay: all 162 Talon return
+            //   blades) — the client re-aims at the target (incl. height) every frame; a
+            //   forced descent fights that and shoves the missile under higher terrain.
+            // - Gravity-lob class (MissileGravity != 0, e.g. JinxEHit): velY =
+            //   (EndY − StartY + augment) / xzFlightTime — the sign-MIRROR of the arc-drop
+            //   (126 JinxEHit MISREPs: constant = +augment bit-exact, residual 0.00; this
+            //   was the formerly-unmodeled "climbing" class). Wire-fidelity only: the S4
+            //   client ZEROES velY whenever MissileGravity != 0 (SpellMissile.cpp:731 +
+            //   SpellLineMissile.cpp:635) and renders the parabola itself via
+            //   CalculateHeightUnderGravity from the wire POSITIONS + its own spell data.
+            float launchY = m.CastInfo.SpellCastLaunchPosition.Y;
+            float missileSpeed = m.GetSpeed();
+            float heightAugment = m.HeightAugmentOverride ?? m.SpellOrigin?.SpellData.MissileTargetHeightAugment ?? 0f;
+            // "Tracking" here means the client re-aims the missile at a unit every frame,
+            // INCLUDING its height — so the server must NOT add a forced arc-drop velY or it
+            // fights the client's per-frame height re-aim (see EndPoint.Y comment above). This
+            // covers both the line-missile track flag AND any homing targeted missile (a plain
+            // SpellMissile with a live TargetUnit homes to the unit incl. height every frame).
+            // Without the TargetUnit clause, targeted auto-attack missiles fired from elevated
+            // ground (e.g. the nexus turret) got velY = -augment/flightTime while the client was
+            // also homing the height — the missile visibly dropped, then "held" height as the two
+            // fought (2026-06-07). The gravity-lob branch above takes precedence and is unaffected.
+            bool tracksUnits = (m.SpellOrigin?.SpellData.LineMissileTrackUnits ?? false)
+                || m.TargetUnit != null;
+            var launchXZ = new Vector2(m.CastInfo.SpellCastLaunchPosition.X, m.CastInfo.SpellCastLaunchPosition.Z);
+            var endXZ = new Vector2(m.CastInfo.TargetPositionEnd.X, m.CastInfo.TargetPositionEnd.Z);
+            float endTerrainY = _navGrid.GetHeightAtLocation(endXZ);
+            float xzDistance = Vector2.Distance(launchXZ, endXZ);
+            float velocityY = 0f;
+            float missileGravity = m.SpellOrigin?.SpellData.MissileGravity ?? 0f;
+            if (missileGravity != 0f && missileSpeed > 0f && xzDistance > 1f)
+            {
+                // Gravity-lob: takes precedence over the tracked rule (JinxEHit carries a
+                // target unit yet uses this formula in all 126 replay samples).
+                velocityY = ((endTerrainY + heightAugment) - launchY + heightAugment) / (xzDistance / missileSpeed);
+            }
+            else if (!tracksUnits && missileSpeed > 0f && xzDistance > 1f && heightAugment > 0f)
+            {
+                velocityY = -heightAugment / (xzDistance / missileSpeed);
+            }
+
             var misPacket = new MissileReplication
             {
-                SenderNetID = m.CastInfo.Owner.NetId,
-                Position = new Vector3(m.Position.X, m.CastInfo.SpellCastLaunchPosition.Y, m.Position.Y),
-                CasterPosition = m.CastInfo.Owner.GetPosition3D(),
-                // Not sure if we want to add height for these, but i did it anyway
+                // Forensic-verified (Varus Q both POVs + Talon W replay dump): the outer
+                // sender is the MISSILE's NetID, not the caster's — a wrong sender makes the
+                // client route the payload to the caster and never spawn the missile.
+                // (See memory: MissileReplication wire shape.) Do not revert to Owner.NetId.
+                SenderNetID = m.NetId,
+                // Position.Y must be the missile's CURRENT height along its arc, NOT the constant
+                // launchY. This packet also fires on MID-FLIGHT vision-reacquire (a viewer/target
+                // flickering in and out of FoW — happens repeatedly at certain spots, e.g. the
+                // nexus-turret socket): with launchY the client yanked the missile's visual back up
+                // to the (elevated) launch height on every re-replication, so it "lost height then
+                // held" as the flicker re-fired. Interpolating launchY→endY by XZ progress keeps the
+                // height continuous no matter how often the packet repeats. At t=0 (progress 0) this
+                // equals launchY, so initial/sub-missile spawns are unchanged. (2026-06-07)
+                Position = new Vector3(m.Position.X, MissileCurrentArcHeight(m, launchXZ, xzDistance, launchY, endTerrainY + heightAugment), m.Position.Y),
+                // Riot: CasterPosition = the LAUNCH position at ground level (terrain@launch,
+                // no augment) — NOT the owner's position (that one goes into UnitPosition).
+                // Self-cast missiles can't tell the two apart (why the Varus forensics missed
+                // it); Talon W's remotely-launched return blades show it: CasterPosition =
+                // blade endpoint at ground Y. The client derives its height-from-ground
+                // anchor from StartPoint.Y − CasterPosition.Y (= the height augment).
+                CasterPosition = new Vector3(launchXZ.X, launchY - heightAugment, launchXZ.Y),
                 Direction = replicationDirection,
-                Velocity = m.Direction * m.GetSpeed(),
+                Velocity = new Vector3(m.Direction.X * missileSpeed, velocityY, m.Direction.Z * missileSpeed),
                 StartPoint = m.CastInfo.SpellCastLaunchPosition,
-                EndPoint = m.CastInfo.TargetPositionEnd,
+                EndPoint = new Vector3(m.CastInfo.TargetPositionEnd.X, endTerrainY + heightAugment, m.CastInfo.TargetPositionEnd.Z),
                 // TODO: Verify
                 UnitPosition = m.CastInfo.Owner.GetPosition3D(),
                 // _timeSinceCreation accumulates in ms (same unit as Game.GameTime)
                 TimeFromCreation = m.GetTimeSinceCreation() / 1000f, // TODO: Unhardcode
-                Speed = m.GetSpeed(),
-                LifePercentage = 0f, // TODO: Unhardcode
+                // CastType-2 chain missiles carry Speed = FLT_MAX on the wire while
+                // Velocity stays direction * real speed (replay ccca6cd9: ALL
+                // SivirWAttackBounce MISREPs Speed=3.403e38, |Velocity|=700 = the JSON
+                // MissileSpeed) — the client flies chain missiles at its own spell-data
+                // speed and ignores the scalar.
+                Speed = (m is SpellChainMissile && m.SpellOrigin?.SpellData.CastType == 2)
+                    ? float.MaxValue
+                    : m.GetSpeed(),
+                // Elapsed fraction of the FIXED TRAVEL TIME — consumed only by the
+                // client's OverrideTravelTime mode (S4 SpellMissile.cpp:816: velocity =
+                // remainingDist / ((1 - pct) * travelTime)). Without it, a client
+                // acquiring vision mid-flight of a lob missile (MissileFixedTravelTime,
+                // e.g. JinxEHit) restarts the fraction at 0 and arrives late. 0 for all
+                // other missile classes (the field is ignored there).
+                LifePercentage = (m.SpellOrigin?.SpellData.MissileFixedTravelTime ?? 0f) > 0f
+                    ? Math.Clamp(m.GetTimeSinceCreation() / 1000f / m.SpellOrigin.SpellData.MissileFixedTravelTime, 0f, 1f)
+                    : 0f,
                 //TODO: Implement time limited projectiles
-                TimedSpeedDelta = 0f, // TODO: Implement time limited projectiles for this
-                TimedSpeedDeltaTime = 0x7F7FFFFF, // Same as above (this value is from the SpawnProjectile packet, it is a placeholder)
+                // Scheduled speed change (Jinx R boost class, replay-verified): pending →
+                // delta + remaining seconds; consumed/none → delta as-is + FLT_MAX (Riot's
+                // post-boost vision-acquire packets keep the delta with time=FLT_MAX).
+                TimedSpeedDelta = m.TimedSpeedDelta,
+                TimedSpeedDeltaTime = (m.TimedSpeedDelta != 0f && !m.TimedSpeedChangeApplied)
+                    ? Math.Max(0f, m.TimedSpeedDeltaTime - m.GetTimeSinceCreation() / 1000f)
+                    : float.MaxValue,
 
                 Bounced = false, //TODO: Implement bouncing projectiles
 
                 CastInfo = castInfo
             };
 
-            if (m is SpellChainMissile chainMissile && chainMissile.ObjectsHit.Count > 0)
-            {
-                misPacket.Bounced = true;
-            }
+            // Bounced stays FALSE: replay-verified across 2032 bounce-segment MISREPs of all
+            // chain classes (KatarinaQMis 775, SivirWAttackBounce 661, FiddleE 322, NamiW 217,
+            // BrandWildfire 57) — Riot never sets the flag. Wire-wise every chain segment is a
+            // plain target missile (their CastType=1); the chain is server-side orchestration.
+            // Setting it was a server-internal-model leak (SpellChainMissile.ObjectsHit > 0).
 
             return misPacket;
         }
@@ -738,7 +888,10 @@ namespace PacketDefinitions420
                 SizeMultiplier = sizemult,
                 SizeAdditive = addsize,
 
-                HasCollision = false,
+                // Wire bit0 = Riot's RequiresLOS (vision-only regions require line-of-sight).
+                // The old code set this bit from collisionRadius > 0 (server HasCollision
+                // overload) — that conflated two unrelated concepts on the same wire bit.
+                RequiresLOS = true,
                 GrantVision = grantVis,
                 RevealStealth = stealthVis,
 
@@ -757,12 +910,6 @@ namespace PacketDefinitions420
             if (obj != null)
             {
                 regionPacket.VisionTargetNetID = obj.NetId;
-            }
-
-            // TODO: Verify
-            if (collisionRadius > 0.0f)
-            {
-                regionPacket.HasCollision = true;
             }
 
             _packetHandlerManager.BroadcastPacketTeam(team, regionPacket.GetBytes(), Channel.CHL_S2C);
@@ -2338,30 +2485,28 @@ namespace PacketDefinitions420
         /// <param name="s">Spell being cast.</param>
         public void NotifyNPC_CastSpellAns(Spell s)
         {
+            // Attack-speed scaling happens at the SOURCE now: the AA block in Spell.Cast
+            // divides DesignerCastTime AND DesignerTotalTime by AttackSpeedModifier when the
+            // CastInfo is built (replay-verified on TalonNoxianDiplomacyAttack: ct/tt ratio
+            // constant 0.2005 over 56 casts, tt = baseCycle / ASmod). Dividing again here
+            // sent ct/mod² for AA overrides in non-basic slots.
             var packetDesignerCastTime = s.CastInfo.DesignerCastTime;
             var packetDesignerTotalTime = s.CastInfo.DesignerTotalTime;
             var packetExtraCastTime = s.CastInfo.ExtraCastTime;
             var packetStartCastTime = s.CastInfo.StartCastTime;
 
-            // Auto attacks in non-basic slots are sent through cast packets for custom animations.
-            // Scale cast timing here so client playback matches attack-speed-scaled server timing.
-            if (s.CastInfo.IsAutoAttack && s.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
-            {
-                var safeAttackSpeed = Math.Max(0.0001f, s.CastInfo.AttackSpeedModifier);
-                packetDesignerCastTime /= safeAttackSpeed;
-                packetDesignerTotalTime /= safeAttackSpeed;
-                packetExtraCastTime /= safeAttackSpeed;
-                packetStartCastTime /= safeAttackSpeed;
-            }
-
             var castInfo = new LeaguePackets.Game.Common.CastInfo
             {
                 SpellHash = (uint)s.GetId(),
                 SpellNetID = s.CastInfo.SpellNetID,
-                SpellLevel = s.CastInfo.SpellLevel,
+                SpellLevel = GetWireSpellLevel(s.CastInfo.SpellLevel),
                 AttackSpeedModifier = s.CastInfo.AttackSpeedModifier,
                 CasterNetID = s.CastInfo.Owner.NetId,
-                SpellChainOwnerNetID = s.CastInfo.Owner.NetId,
+                // Pet casts report the owning champion; explicit script values win
+                // (replay-verified — see GameObjects.SpellNS.CastInfo doc).
+                SpellChainOwnerNetID = s.CastInfo.SpellChainOwnerNetID != 0
+                    ? s.CastInfo.SpellChainOwnerNetID
+                    : LeagueSandbox.GameServer.GameObjects.SpellNS.CastInfo.ResolveChainOwnerNetId(s.CastInfo.Owner),
                 PackageHash = s.CastInfo.Owner.GetObjHash(),
                 MissileNetID = s.CastInfo.MissileNetID,
                 TargetPosition = s.CastInfo.TargetPosition,
@@ -2967,6 +3112,43 @@ namespace PacketDefinitions420
             }
 
             _packetHandlerManager.BroadcastPacketVision(p, changePacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        // Per-hit missile-target notification. Client routes this to
+        // SpellLineMissileClient::OnNetworkPacket / SpellCircleMissileClient::OnNetworkPacket,
+        // which forwards each target into SpellManagerInstance.CastSpell which is the entry-point
+        // for the on-hit FX spawn (HitEffectName) and the WWise on-hit audio event lookup
+        // (Spells/<SpellName>/hit, per Diana_Base_EventLookupTable.csv et al). Replay-verified
+        // as Riot's standard missile-hit wire mechanism: 1704 occurrences in a single game
+        // (426a49ca…), always size=1 or 2 with sender = missile NetID. Packet name is
+        // "Line" historically, but the client handler is implemented on both line and circle
+        // missile classes.
+        //
+        // SKILLSHOT-ONLY (CastType 3/4): only SpellLineMissileClient and
+        // SpellCircleMissileClient register for this packet (S4 class headers) —
+        // location-targeted missiles don't know their victims at launch, so the server
+        // announces each hit and the client plays the per-target hit cast (FX/audio
+        // oriented along missile velocity; the LINE handler even processes netids it
+        // can't resolve, the CIRCLE handler skips unknown units). Target/chain missiles
+        // (CastType 0/1/2) carry their victim in CastInfo and resolve the hit on
+        // arrival — no handler registered, the packet would be dead wire. Replay-
+        // verified across 6 games: every resolvable 0x26 sender is a CastType-3/4
+        // missile (AatroxECone, TalonRakeMisTwo, DianaArcThrow, …), zero chain segments
+        // or targeted missiles.
+        public void NotifyS2C_LineMissileHitList(SpellMissile missile, AttackableUnit target)
+        {
+            int castType = missile.SpellOrigin?.SpellData.CastType ?? 0;
+            if (castType != 3 && castType != 4)
+            {
+                return;
+            }
+
+            var packet = new S2C_LineMissileHitList
+            {
+                SenderNetID = missile.NetId,
+                Targets = new List<uint> { target.NetId }
+            };
+            _packetHandlerManager.BroadcastPacketVision(missile, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -4811,16 +4993,23 @@ namespace PacketDefinitions420
             {
                 SpellHash = (uint)s.GetId(),
                 SpellNetID = s.CastInfo.SpellNetID,
-                SpellLevel = s.CastInfo.SpellLevel,
+                SpellLevel = GetWireSpellLevel(s.CastInfo.SpellLevel),
                 AttackSpeedModifier = s.CastInfo.AttackSpeedModifier,
                 CasterNetID = s.CastInfo.Owner.NetId,
-                SpellChainOwnerNetID = s.CastInfo.Owner.NetId,
+                // Pet casts report the owning champion; explicit script values win
+                // (replay-verified — see GameObjects.SpellNS.CastInfo doc).
+                SpellChainOwnerNetID = s.CastInfo.SpellChainOwnerNetID != 0
+                    ? s.CastInfo.SpellChainOwnerNetID
+                    : LeagueSandbox.GameServer.GameObjects.SpellNS.CastInfo.ResolveChainOwnerNetId(s.CastInfo.Owner),
                 PackageHash = s.CastInfo.Owner.GetObjHash(),
                 MissileNetID = s.CastInfo.MissileNetID,
                 TargetPosition = s.CastInfo.TargetPosition,
                 TargetPositionEnd = s.CastInfo.TargetPositionEnd,
                 DesignerCastTime = s.CastInfo.DesignerCastTime,
-                ExtraCastTime = s.CastInfo.ExtraCastTime,
+                // Wire pair for in-progress announcements (replay 630b7ceb: RocketGrab
+                // +0.259/−0.259): StartCastTime = elapsed, ExtraCastTime compensated by
+                // −elapsed so the client fast-forwards and the remaining windup stays true.
+                ExtraCastTime = s.CastInfo.ExtraCastTime - startTimeOffset,
                 DesignerTotalTime = s.CastInfo.DesignerTotalTime,
                 Cooldown = s.CastInfo.Cooldown,
                 StartCastTime = s.CastInfo.StartCastTime + startTimeOffset,
@@ -4872,6 +5061,20 @@ namespace PacketDefinitions420
         public void NotifyNPC_CastSpellTeam(GamePacket gp, ObjAIBase oa, TeamId team)
         {
             _packetHandlerManager.BroadcastPacketTeam(team, gp.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Catch-up CastSpellAns for ONE recipient who acquired vision of the caster while a
+        /// windup was already running. The original ANS is vision-scoped
+        /// (BroadcastPacketVision), so late viewers never saw it — Riot re-announces with
+        /// StartCastTime = elapsed and ExtraCastTime = −elapsed in the same tick as the
+        /// OnEnterVisibilityClient bundle (replay 630b7ceb: RocketGrab/KhazixW/DianaArc,
+        /// 3/3 alongside 0xBA+0xAE). The client fast-forwards the windup accordingly.
+        /// </summary>
+        public void NotifyNPC_CastSpellAnsCatchUp(Spell s, float elapsedSeconds, int userId)
+        {
+            var packet = ConstructCastSpellPacket(s, elapsedSeconds);
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
         }
         public void NotifyCustomDashTest(AttackableUnit u, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
         {

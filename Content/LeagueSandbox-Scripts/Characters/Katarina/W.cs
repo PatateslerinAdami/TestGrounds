@@ -27,7 +27,8 @@ namespace Spells
         public void OnSpellCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner;
-            PlayAnimation(owner, "Spell2", 0.5f, flags: AnimationFlags.Unknown8);
+            // Replay byte was 0x80 = pure junk bit 7; effective flags are None.
+            PlayAnimation(owner, "Spell2", 0.5f, flags: AnimationFlags.None);
             AddParticleTarget(owner, owner, "katarina_w_cas.troy", owner, bone: "C_BUFFBONE_GLB_CENTER_LOC");
 
             spell.CreateSpellSector(new SectorParameters

@@ -21,7 +21,8 @@ internal class JinxEMineExplode : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _jinx = ownerSpell.CastInfo.Owner;
-        PlayAnimation(unit, "Death1", flags: AnimationFlags.Override);
+        // Animation (Attack1 vs Death1) is played by JinxEMine.OnDeactivate, which knows
+        // whether the mine was unit-triggered (replay-attributed split).
         AddParticleTarget(_jinx, unit, "Jinx_E_Mine_Explosion", unit);
     }
 

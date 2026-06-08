@@ -12,10 +12,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
     public class SpellCircleMissile : SpellMissile
     {
         // Function Vars.
-        private bool _atDestination;
-
-        private readonly bool _useCircularPath;
-        private readonly bool _useCircularReplicationDirection;
         private readonly float _circleAngularVelocity;
         private readonly float _circleRadialVelocity;
         private readonly Vector2 _circleCenter;
@@ -33,52 +29,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             CastInfo castInfo,
             float moveSpeed,
             Vector2 overrideEndPos,
-            SpellDataFlags overrideFlags = 0, // TODO: Find a use for these
             uint netId = 0,
             bool serverOnly = false
-        ) : base(game, collisionRadius, originSpell, castInfo, moveSpeed, overrideFlags, netId, serverOnly)
+        ) : base(game, collisionRadius, originSpell, castInfo, moveSpeed, netId, serverOnly)
         {
-            // TODO: Verify if there is a case which contradicts this.
-            // Line and Circle Missiles are location targeted only.
-            if (castInfo.Targets.Count <= 0 || castInfo.Targets[0].Unit == null)
-            {
-                TargetUnit = null;
-            }
-
-            Position = new Vector2(castInfo.SpellCastLaunchPosition.X, castInfo.SpellCastLaunchPosition.Z);
-
-            var goingTo = new Vector2(castInfo.TargetPositionEnd.X, castInfo.TargetPositionEnd.Z) - Position;
-            var dirTemp = Vector2.Normalize(goingTo);
-            var endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
-
-            // usually doesn't happen
-            if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y))
-            {
-                if (float.IsNaN(CastInfo.Owner.Direction.X) || float.IsNaN(CastInfo.Owner.Direction.Y))
-                {
-                    dirTemp = new Vector2(1, 0);
-                }
-                else
-                {
-                    dirTemp = new Vector2(CastInfo.Owner.Direction.X, CastInfo.Owner.Direction.Z);
-                }
-
-                endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
-                CastInfo.TargetPositionEnd = new Vector3(endPos.X, 0, endPos.Y);
-            }
-
-            if (overrideEndPos != default)
-            {
-                endPos = overrideEndPos;
-            }
-
-            Destination = endPos;
+            InitializeDestination(overrideEndPos);
 
             _circleAngularVelocity = SpellOrigin.SpellData.CircleMissileAngularVelocity;
             _circleRadialVelocity = SpellOrigin.SpellData.CircleMissileRadialVelocity;
-            _useCircularReplicationDirection = MathF.Abs(_circleAngularVelocity) > float.Epsilon
-                                           || MathF.Abs(_circleRadialVelocity) > float.Epsilon;
-            _useCircularPath = _useCircularReplicationDirection && SpellOrigin.SpellData.MissileLifetime > 0.0f;
 
             _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
             var circleReferenceEnd = overrideEndPos != default
@@ -102,39 +60,34 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             _circleAngle = MathF.Atan2(circleOffset.Y, circleOffset.X);
             _replicationDirection = new Vector3(_circleRadius, _circleAngle, 0.0f);
 
-            if (_useCircularPath)
+            // S1-faithful unconditional polar placement (obj_SpellCircleMissile::
+            // UpdateProjectile: pos = center + cos/sin*radius, no straight-line mode).
+            // With both velocities 0 the offset never changes — the missile sits at a
+            // fixed offset / attaches to the (tracked) center, which is exactly the
+            // zero-velocity attachment class (StyleBatteringRam, jungle mushrooms).
+            Position = _circleCenter + new Vector2(MathF.Cos(_circleAngle), MathF.Sin(_circleAngle)) * _circleRadius;
+
+            var tangentSign = (float)MathF.Sign(_circleAngularVelocity);
+            if (MathF.Abs(tangentSign) <= float.Epsilon)
             {
-                Position = _circleCenter + new Vector2(MathF.Cos(_circleAngle), MathF.Sin(_circleAngle)) * _circleRadius;
-
-                var tangentSign = (float)MathF.Sign(_circleAngularVelocity);
-                if (MathF.Abs(tangentSign) <= float.Epsilon)
-                {
-                    tangentSign = 1.0f;
-                }
-                var tangent = new Vector2(-MathF.Sin(_circleAngle), MathF.Cos(_circleAngle)) * tangentSign;
-                Direction = new Vector3(tangent.X, 0.0f, tangent.Y);
+                tangentSign = 1.0f;
             }
-
-            ObjectsHit = new List<GameObject>();
+            var tangent = new Vector2(-MathF.Sin(_circleAngle), MathF.Cos(_circleAngle)) * tangentSign;
+            Direction = new Vector3(tangent.X, 0.0f, tangent.Y);
         }
 
+        // Circle — orbit missiles (e.g. Diana W orbs). This Type routes the missile into
+        // PacketNotifier's polar GetReplicationDirection branch (radius/angle encoding the
+        // client needs to reconstruct the orbit).
         public override MissileType Type { get; protected set; } = MissileType.Circle;
-        public bool FollowCasterForCircularPath { get; set; }
 
-        /// <summary>
-        /// Number of objects this projectile has hit since it was created.
-        /// </summary>
-        public List<GameObject> ObjectsHit { get; }
-        /// <summary>
-        /// Position this projectile is moving towards. Projectile is destroyed once it reaches this destination. Equals Vector2.Zero if TargetUnit is not null.
-        /// </summary>
-        public Vector2 Destination { get; protected set; }
+        public override int HitCount => ObjectsHit.Count;
 
         public override void OnAdded()
         {
             base.OnAdded();
 
-            // Circle missiles like Diana W orbs are visually attached to a moving unit.
+            // Orbit missiles like Diana W orbs are visually attached to a moving unit.
             // A post-spawn target sync binds the orbit center correctly.
             if (HasTarget())
             {
@@ -144,37 +97,31 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public Vector3 GetReplicationDirection()
         {
-            return _useCircularReplicationDirection ? _replicationDirection : Direction;
+            // The client's circle class reads MISREP.direction as (radius, phase)
+            // UNCONDITIONALLY (SpellCircleMissileClient::OnNetworkPacket: mRotateRadius
+            // = direction.x, mRotatePhase = direction.y) — so polar data always.
+            return _replicationDirection;
         }
 
         public override void Update(float diff)
         {
             _timeSinceCreation += diff;
+            UpdateTimedSpeedChange();
+            _lifeElapsedMs += diff;
 
-            if (_useCircularPath)
-            {
-                _lifeElapsedMs += diff;
-
-                var lifetimeSeconds = SpellOrigin.SpellData.MissileLifetime;
-                if (lifetimeSeconds > 0.0f && _lifeElapsedMs >= lifetimeSeconds * 1000.0f)
-                {
-                    SetToRemove();
-                    return;
-                }
-
-                Move(diff);
-                ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
-                return;
-            }
-
-            if (!HasDestination() || _atDestination)
+            // Lifetime self-expiry (client mirrors this locally from MissileLifetime,
+            // see the destroy-packet suppression in SpellMissile.SetToRemove). Missiles
+            // without a lifetime live until a script/hit removes them (attachment class).
+            var lifetimeSeconds = SpellOrigin.SpellData.MissileLifetime;
+            if (lifetimeSeconds > 0.0f && _lifeElapsedMs >= lifetimeSeconds * 1000.0f)
             {
                 SetToRemove();
                 return;
             }
 
+            var positionBeforeMove = Position;
             Move(diff);
-            ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+            PublishOnSpellMissileUpdate(diff, positionBeforeMove);
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)
@@ -186,7 +133,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             if (isTerrain)
             {
-                // TODO: Implement methods for isTerrain for projectiles such as Nautilus Q, ShyvanaDragon Q, or Ziggs Q.
+                // Script-side opt-in via OnCollisionTerrain keyed on the missile — see
+                // SpellLineMissile.OnCollision for the full rationale (Nautilus Q pattern).
+                API.ApiEventManager.OnCollisionTerrain.Publish(this);
                 return;
             }
 
@@ -197,73 +146,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         }
 
         /// <summary>
-        /// Moves this projectile to either its target unit, or its destination, and updates its coordinates along the way.
+        /// Unconditional polar motion (S1 obj_SpellCircleMissile::UpdateProjectile):
+        /// position = center + (cos/sin angle) * radius, angle/radius advanced by the
+        /// spell's angular/radial velocities. Zero velocities = fixed offset from the
+        /// (live) center — the attachment behavior, NOT straight-line travel.
         /// </summary>
         /// <param name="diff">The amount of milliseconds the AI is supposed to move</param>
         public override void Move(float diff)
-        {
-            if (_useCircularPath)
-            {
-                MoveCircular(diff);
-                return;
-            }
-
-            // current position
-            var cur = Position;
-
-            var next = Destination;
-
-            var goingTo = new Vector3(next.X, _game.Map.NavigationGrid.GetHeightAtLocation(next), next.Y)
-                        - new Vector3(cur.X, _game.Map.NavigationGrid.GetHeightAtLocation(cur), cur.Y);
-            var dirTemp = Vector3.Normalize(goingTo);
-
-            // usually doesn't happen
-            if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y) || float.IsNaN(dirTemp.Z))
-            {
-                dirTemp = new Vector3(0, 0, 0);
-            }
-
-            Direction = dirTemp;
-
-            var moveSpeed = GetSpeed();
-
-            var dist = MathF.Abs(Vector2.Distance(cur, next));
-
-            var deltaMovement = moveSpeed * 0.001f * diff;
-
-            // Prevent moving past the next waypoint.
-            if (deltaMovement > dist)
-            {
-                deltaMovement = dist;
-            }
-
-            var xx = Direction.X * deltaMovement;
-            var yy = Direction.Z * deltaMovement;
-
-            Position = new Vector2(Position.X + xx, Position.Y + yy);
-
-            // (X, Y) has moved to the next position
-            cur = Position;
-
-            // Check if we reached the target position/destination.
-            // REVIEW (of previous code): (deltaMovement * 2) being used here is problematic; if the server lags, the diff will be much greater than the usual values
-            if ((cur - next).LengthSquared() < MOVEMENT_EPSILON * MOVEMENT_EPSILON)
-            {
-                // remove this projectile because it has reached its destination
-                if (Position == Destination)
-                {
-                    _atDestination = true;
-                }
-            }
-        }
-
-        private void MoveCircular(float diff)
         {
             var deltaSeconds = diff * 0.001f;
             _circleRadius = MathF.Max(0.0f, _circleRadius + _circleRadialVelocity * deltaSeconds);
             _circleAngle += _circleAngularVelocity * deltaSeconds;
 
-            var center = FollowCasterForCircularPath ? CastInfo.Owner.Position : _circleCenter;
+            // Orbital center selection:
+            // • If a CastTarget is passed (TargetUnit != null), orbit around its live
+            //   position — matches Riot's client behavior (SpellCircleMissileClient reads
+            //   mCastInfo.Targets[0] as the rotation anchor for live-tracking orbits like
+            //   Diana W's orbs).
+            // • Otherwise fall back to the static launch position (e.g. Ahri W ball,
+            //   which orbits a fixed spawn point, not a unit).
+            var center = TargetUnit != null ? TargetUnit.Position : _circleCenter;
             var next = center + new Vector2(MathF.Cos(_circleAngle), MathF.Sin(_circleAngle)) * _circleRadius;
             var movement = next - Position;
 
@@ -275,7 +177,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             Position = next;
 
-            if (FollowCasterForCircularPath && HasTarget())
+            // Periodic ChangeMissileTarget broadcast to keep the client's missile
+            // target-anchor in sync — matches OnAdded's initial sync, refreshed every
+            // 100ms while we have a tracked target.
+            if (HasTarget())
             {
                 _targetSyncAccumulatorMs += diff;
                 if (_targetSyncAccumulatorMs >= 100.0f)
@@ -302,17 +207,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             if (CastInfo.Owner is ObjAIBase ai && SpellOrigin.CastInfo.IsAutoAttack)
             {
-                ai.AutoAttackHit(TargetUnit);
+                ai.AutoAttackHit(TargetUnit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
+            }
+
+            // Per-level hit budget, same family as the line-missile rule (0 = uncapped).
+            // S4's SpellCircleMissile::UpdateCircleMissile demonstrably READS
+            // mi_MaximumHits[SpellLevel] (DWARF locals numMaxHitsAtCurrentLevel + the
+            // >= 0 assert) — the reconstructed body is still a decomp stub, so the exact
+            // consumption is presumed line-equivalent; revisit when the body lands.
+            int maxHits = SpellOrigin?.Script?.ScriptMetadata?.MissileParameters?
+                .GetMaximumHits(CastInfo.SpellLevel) ?? 0;
+            if (maxHits > 0 && ObjectsHit.Count >= maxHits)
+            {
+                SetToRemove();
             }
         }
 
-        /// <summary>
-        /// Whether or not this projectile has a destination; if it is a valid projectile.
-        /// </summary>
-        /// <returns>True/False.</returns>
-        public bool HasDestination()
-        {
-            return Destination != Vector2.Zero && Destination.X != float.NaN && Destination.Y != float.NaN;
-        }
     }
 }

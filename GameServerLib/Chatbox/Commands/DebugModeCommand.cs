@@ -104,7 +104,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                     // Arbitrary ratio is required for the DebugCircle particle to look accurate
                     var circlesize = _debugCircleScale * _userChampion.PathfindingRadius;
 
-                    var startdebugmsg = $"Started debugging {_modes[idx]}. Your Debug Circle Radius: {_debugCircleScale} * {_userChampion.PathfindingRadius} = {circlesize}";
+                    var startdebugmsg = $"Started debugging {_modes[idx]}. Your Debug Arc Radius: {_debugCircleScale} * {_userChampion.PathfindingRadius} = {circlesize}";
                     _logger.Debug(startdebugmsg);
                     ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.NORMAL, startdebugmsg);
 
@@ -309,7 +309,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
                             //_game.PacketNotifier.NotifyFXCreateGroup(arrowparticle, userId);
                         }
-                        else if (missile is SpellCircleMissile skillshot)
+                        else if (missile.HasDestination())
                         {
                             if (!_arrowParticlesList.ContainsKey(missile.NetId))
                             {
@@ -318,7 +318,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
                             var current = new Vector2(missile.CastInfo.SpellCastLaunchPosition.X, missile.CastInfo.SpellCastLaunchPosition.Z);
 
-                            var wpTarget = skillshot.Destination;
+                            var wpTarget = missile.Destination;
 
                             // Points the arrow towards the target
                             var dirTangent = Extensions.Rotate(new Vector2(missile.Direction.X, missile.Direction.Z), 90.0f) * missile.CollisionRadius;

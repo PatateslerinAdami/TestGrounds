@@ -4,6 +4,7 @@ using System.Numerics;
 using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -23,6 +24,9 @@ public class NamiQ : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = true,
+        IsDeathRecapSource = true,
+        SpellFXOverrideSkins = ["NamiKoi"],
+        SpellVOOverrideSkins = ["NamiSkin02"]
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -43,64 +47,80 @@ public class NamiQ : ISpellScript {
                 AddParticle(_nami, null, "Nami_Base_Q_indicator_red", _endPos, BubbleDelay, 1f, teamOnly: TeamId.TEAM_BLUE);
                 break;
         }
-        SpellCast(_nami, 5, SpellSlotType.ExtraSlots, _endPos, _endPos, true, Vector2.Zero);
-        SpellCast(_nami, 1, SpellSlotType.ExtraSlots, _endPos, _endPos, true, Vector2.Zero);
-    }
-}
 
-public class NamiQDummyMissile : ISpellScript {
-    private ObjAIBase _nami;
-    private Spell     _spell;
-    private const float BubbleDelay = 0.725f;
+        var bubbleMinion = AddMinion(_nami, "TestCubeRender10Vision", "bubble", _endPos, _nami.Team, 0, true, true, false, isVisible: false);
+        HideHealthBar(bubbleMinion);
+        // Replay-verified (ec72643482, 93 Q casts): Riot casts NamiQMissile as a REAL spell —
+        // CastSpellAns(NamiQMissile, slot 50, targets=1) + ForceCreateMissile in the SAME tick
+        // at Q's windup end (+230..260ms; the missile spell is InstantCast). NOT a script-spawn.
+        // fireWithoutCasting=true (no CastSpellAns/FCM) leaves the client's NamiQ cast frame
+        // unexecuted -> the client silently rejects every second Q press (no cd, no anim)
+        // until the rejection/a move order clears the stale frame ("alternating Q" bug).
+        SpellCast(_nami, 5, SpellSlotType.ExtraSlots, false, bubbleMinion, Vector2.Zero);
 
-    public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts = true,
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _nami = owner;
-    }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _spell = spell;
-        var missile = spell.CreateSpellMissile(new MissileParameters {
-            Type = MissileType.Arc,
-            OverrideEndPosition = end
-        });
-        if (missile == null) return;
-        var distance = Vector2.Distance(missile.Position, end);
-        if (distance > 0.0f) missile.SetSpeed(distance / BubbleDelay);
-        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
-    }
-
-    public void OnMissileEnd(SpellMissile missile) {
-        var center  = missile.Position;
-        var ap      = _nami.Stats.AbilityPower.Total * 0.5f;
-        var dmg     = 75f + (55f * _nami.GetSpell("NamiQ").CastInfo.SpellLevel - 1) + ap;
-        var enemies = GetUnitsInRange(_nami, center, 200f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-        foreach (var enemy in enemies) {
-            AddBuff("NamiQDebuff", 1.5f, 1, _spell, enemy, _nami);
-            enemy.TakeDamage(_nami, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                             DamageResultType.RESULT_NORMAL);
-        }
-        var allies = GetUnitsInRange(_nami, center, 225f, true, SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes);
-        foreach (var ally in allies) {
-            AddBuff("NamiPassive", 1.5f, 1, _spell, ally, _nami);
-        }
+        // NOTE: Riot also sends NPC_InstantStop_Attack in this tick on ~44% of Q casts
+        // (41/93 tight-window vs 4/93 base rate; NOT auto-attack-related — 37/41 had no
+        // prior AA). The trigger condition is server-internal and not visible in any of our
+        // artifacts (client decomp has only the receive side, no Lua API exists), so we
+        // deliberately DON'T send it until the condition is understood — an unconditional
+        // send would be guessing. See memory: nami-q-wire-and-cast-lockout.
     }
 }
 
 public class NamiQMissile : ISpellScript {
     private ObjAIBase _nami;
-
+    private Spell     _spell;
+    
+    // TriggersSpellCasts=true: the real-cast pipeline sends CastSpellAns + (HasClientCastInfo)
+    // ForceCreateMissile — the client needs that FCM to execute its open NamiQ cast frame
+    // (see comment in NamiQ.OnSpellPostCast; Riot wire shows exactly this pattern).
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Arc
+            Type = MissileType.Target
         },
         TriggersSpellCasts = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _nami = owner;
+    }
+
+    public void OnDeactivate(ObjAIBase owner, Spell spell) {
+        ApiEventManager.RemoveAllListenersForOwner(this);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        _spell = spell;
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+    }
+
+    // Constant ~0.7s travel time comes from NamiQMissile.json MissileFixedTravelTime=0.7 —
+    // the missile factory computes speed = dist / 0.7 BEFORE creation (replay: 98 casts,
+    // distance 82..849u with constant landing delay). No post-spawn SetSpeed needed; the
+    // client spawns its own missile from the same data via the FCM path anyway.
+    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
+        ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnMissileHit, true);
+    }
+    
+    private void OnMissileHit(SpellMissile missile, AttackableUnit target) {
+        var center  = missile.Position;
+        AddParticlePos(_nami, "Nami_Base_Q_pop", center, center);
+        var ap      = _nami.Stats.AbilityPower.Total * 0.5f;
+        var dmg     = 75f + (55f * _nami.GetSpell("NamiQ").CastInfo.SpellLevel - 1) + ap;
+        var enemies = GetUnitsInRange(_nami, center, 200f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        foreach (var enemy in enemies) {
+            AddBuff("NamiQDebuff", 1.5f, 1, _spell, enemy, _nami);
+            enemy.TakeDamage(_nami, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                DamageResultType.RESULT_NORMAL);
+        }
+        var allies = GetUnitsInRange(_nami, center, 225f, true, SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes);
+        foreach (var ally in allies) {
+            AddBuff("NamiPassive", 1.5f, 1, _spell, ally, _nami);
+        }
+        
+        target.Die(CreateDeathData(false, 0, target, target, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0));
+        ApiEventManager.OnLaunchMissile.RemoveListener(this, _spell, OnLaunchMissile);
+        ApiEventManager.OnSpellMissileHit.RemoveListener(this, missile, OnMissileHit);
     }
 }

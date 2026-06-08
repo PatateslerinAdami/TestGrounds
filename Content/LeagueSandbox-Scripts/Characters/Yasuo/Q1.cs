@@ -43,7 +43,7 @@ namespace Spells
         public void OnSpellPostCast(Spell spell)
         {
             _owner.GetSpell("YasuoQ").Cast(_start, _end, _target);
-
+            //AddParticleTarget(_owner, _owner, "yasuo_q2_ready_buff.troy", _owner, flags: FXFlags.SimulateWhileOffScreen);
             int charLevel = _owner.Stats.Level;
             int trueQLevel = charLevel >= 9 ? 5 : charLevel >= 7 ? 4 : charLevel >= 5 ? 3 : charLevel >= 4 ? 2 : 1;
 

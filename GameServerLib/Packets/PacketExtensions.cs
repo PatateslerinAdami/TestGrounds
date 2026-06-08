@@ -103,7 +103,16 @@ namespace PacketDefinitions420
             // Building the list explicitly from CurrentWaypointKey forward keeps it [Position] (=
             // stationary) once the path is done.
             var result = new List<Vector2> { unit.Position };
-            for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count; i++)
+
+            // Riot-faithful waypoint budget (replay 343e): minions median 1 / p90 4 waypoints
+            // per update; heroes median 2 / p90 3 (25k updates) with occasional full routes
+            // (max 20 — the initial orders, which the client's path-preview needs). Mirror:
+            // full list only while a NEW path is pending its first broadcast; all subsequent
+            // keepalives/drift corrections carry Position + 3 lookahead. Full lists on every
+            // correction previously forced client path-reprocessing per update (measured FPS
+            // drops with minion waves).
+            int maxAhead = unit.FullPathBroadcastPending ? int.MaxValue : 3;
+            for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count && maxAhead > 0; i++, maxAhead--)
             {
                 result.Add(unit.Waypoints[i]);
             }

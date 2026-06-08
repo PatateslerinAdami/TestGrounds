@@ -200,7 +200,7 @@ public class ZedShurikenMisOne : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };
@@ -254,7 +254,7 @@ public class ZedShurikenMisTwo : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };
@@ -308,7 +308,7 @@ public class ZedShurikenMisThree : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };

@@ -58,7 +58,7 @@ namespace Spells
         public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
         {
             LetGo();
-            if (reason == ChannelingStopSource.PlayerCommand)
+            if (reason == ChannelingStopSource.NotCancelled)
             {
 
                 float maxChannelTime = ScriptMetadata.ChannelDuration;
@@ -84,7 +84,7 @@ namespace Spells
                 }
                 Vector2 castPos = ownerPos + (direction * currentRange);
 
-                CreateCustomMissile(_owner, "VarusQMissile", ownerPos, castPos, new MissileParameters { Type = MissileType.Circle });
+                CreateCustomMissile(_owner, "VarusQMissile", ownerPos, castPos, new MissileParameters { Type = MissileType.Arc });
                 PlayAnimation(_owner, "Spell1_Fire");
                 if(_owner.IsPathEnded()) FaceDirection(castPos, _owner, true);
                 //SpellCast(_owner, 0, SpellSlotType.ExtraSlots, castPos, castPos, false, Vector2.Zero);
@@ -120,7 +120,10 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                // Arc per VarusQMissile.json CastType 3 — the actual missile is spawned
+                // by the parent script's CreateCustomMissile (also Arc); this metadata
+                // previously said Circle, a dead misconfig that never took effect.
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };

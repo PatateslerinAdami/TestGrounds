@@ -29,7 +29,16 @@ public class JinxR : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-            Type = MissileType.Circle
+            Type = MissileType.Arc,
+            // Replay-verified rocket boost (7 R MISREPs, d756cd43 + 66987596): spawn packet
+            // carries Speed=1700 + TimedSpeedDelta=+500 + TimedSpeedDeltaTime=0.75 → the
+            // CLIENT applies the boost natively at 0.75s; post-boost vision-acquire packets
+            // show Speed=2200/FLT_MAX. The old post-spawn SetSpeed(2200) only changed the
+            // server — the client kept flying 1700, so on global casts the server rocket
+            // arrived early and DestroyClientMissile killed the client rocket mid-flight
+            // ("missile particle disappears, only flames remain").
+            TimedSpeedDelta = 500f,
+            TimedSpeedDeltaTime = 0.75f,
         },
         TriggersSpellCasts = true,
     };
@@ -38,12 +47,12 @@ public class JinxR : ISpellScript
     {
         _jinx = owner;
         _spell = spell;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
-        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
         _boosted = false;
         //AddParticleTarget(_jinx, _jinx, "Jinx_R_Cas",          _jinx);
         //AddParticleTarget(_jinx, _jinx, "Jinx_R_Booster",      _jinx);
@@ -60,13 +69,17 @@ public class JinxR : ISpellScript
         }
     }
 
-    public void OnLaunchMissile(Spell spell, SpellMissile missile)
+    private void OnLaunchMissile(Spell spell, SpellMissile missile)
     {
         ApiEventManager.OnSpellMissileUpdate.AddListener(this, missile, OnMissileUpdate);
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);
     }
 
-    public void OnUpdate(float diff)
+    private void OnMissileEnd(SpellMissile missile)
     {
+        ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnMissileEnd);
+        ApiEventManager.OnSpellMissileUpdate.RemoveListener(this, missile, OnMissileUpdate);
+        ApiEventManager.OnLaunchMissile.RemoveListener(this, _spell, OnLaunchMissile);
     }
 
     private void SpawnRHitIndicator(AttackableUnit target, float distance)
@@ -103,17 +116,12 @@ public class JinxR : ISpellScript
         // }
     }
 
-    public void OnMissileUpdate(SpellMissile missile, float diff)
+    private void OnMissileUpdate(SpellMissile missile, float diff)
     {
-        LogInfo("Distance: ");
-        if (_boosted) return;
-        var castPosition = new Vector2(_spell.CastInfo.SpellCastLaunchPosition.X,
-            _spell.CastInfo.SpellCastLaunchPosition.Z);
-        var distance = Vector2.Distance(missile.Position, castPosition);
-        LogInfo("Distance: " + distance);
-        if (distance < 1350f) return;
+        // Speed boost is engine-driven now (MissileParameters.TimedSpeedDelta — server and
+        // client both apply +500 at 0.75s); only the booster FX remains script-side.
+        if (_boosted || !missile.TimedSpeedChangeApplied) return;
         AddParticleTarget(_jinx, missile, "Jinx_R_Booster", missile, 25f);
-        missile.SetSpeed(2200f);
         _boosted = true;
     }
 
@@ -123,7 +131,6 @@ public class JinxR : ISpellScript
         var castPosition = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X,
             spell.CastInfo.SpellCastLaunchPosition.Z);
         var distance = Vector2.Distance(target.Position, castPosition);
-        LogInfo("Distance: " + distance);
 
 
         var bonusAd = _jinx.Stats.AttackDamage.FlatBonus;
@@ -137,7 +144,6 @@ public class JinxR : ISpellScript
         var missingHealthDamage = (target.Stats.HealthPoints.Total - target.Stats.CurrentHealth) * 0.25f;
         var primaryDamage = baseDamage + missingHealthDamage;
         var splashDamage = primaryDamage * 0.8f;
-        LogInfo($"R ramp={ramp}, primaryDamage={primaryDamage}");
 
         SpawnRHitIndicator(target, distance);
 
@@ -149,7 +155,7 @@ public class JinxR : ISpellScript
             unit.TakeDamage(_jinx, unit == target ? primaryDamage : splashDamage, DamageType.DAMAGE_TYPE_PHYSICAL,
                 DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
         }
-
+        ApiEventManager.OnSpellHit.RemoveListener(this, spell, OnSpellHit);
         missile?.SetToRemove();
     }
 }

@@ -72,7 +72,7 @@ public class ZedShadowDashMissile : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle,
+            Type = MissileType.Arc,
         },
     };
 

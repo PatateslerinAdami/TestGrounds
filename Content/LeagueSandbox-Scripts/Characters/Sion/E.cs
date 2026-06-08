@@ -30,7 +30,7 @@ namespace Spells
         }
         public void OnSpellPostCast(Spell spell)
         {
-            CreateCustomMissile(_owner, "SionEMissile", _owner.Position, GetPointFromUnit(_owner, 800f), new MissileParameters { Type = MissileType.Circle });
+            CreateCustomMissile(_owner, "SionEMissile", _owner.Position, GetPointFromUnit(_owner, 800f), new MissileParameters { Type = MissileType.Arc });
         }
     }
 
@@ -40,7 +40,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };

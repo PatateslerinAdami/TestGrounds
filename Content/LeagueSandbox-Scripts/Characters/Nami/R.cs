@@ -39,7 +39,7 @@ public class NamiR : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        SpellCast(_nami, 0, SpellSlotType.ExtraSlots, _endPos, _endPos, true, Vector2.Zero);
+        SpellCast(_nami, 0, SpellSlotType.ExtraSlots, _endPos, _endPos, false, Vector2.Zero);
     }
 }
 
@@ -48,8 +48,7 @@ public class NamiRMissile : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters() {
-            Type                          = MissileType.Circle,
-            CanHitSameTargetConsecutively = false,
+            Type                          = MissileType.Arc,
         },
         TriggersSpellCasts = true,
     };
@@ -59,7 +58,7 @@ public class NamiRMissile : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
         var   ap       = _nami.Stats.AbilityPower.Total * 0.6f;
         var   dmg      = 150f + 100f * (_nami.GetSpell("NamiR").CastInfo.SpellLevel - 1) + ap;
         float distance = Vector2.Distance(target.Position, new Vector2(spell.CastInfo.SpellCastLaunchPosition.X, spell.CastInfo.SpellCastLaunchPosition.Y));

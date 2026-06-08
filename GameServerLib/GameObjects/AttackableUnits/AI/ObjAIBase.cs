@@ -260,7 +260,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     Spells[(byte)slot].LevelUp();
                 }
 
-                Spells[(int)SpellSlotType.RespawnSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.RespawnSpellSlot, enableScripts);
+                // Riot layout: 61 = use-spell, 62 = passive (no respawn slot exists at Riot).
                 Spells[(int)SpellSlotType.UseSpellSlot] = new Spell(game, this, "BaseSpell", (int)SpellSlotType.UseSpellSlot, enableScripts);
 
                 // BasicAttackNormalSlots & BasicAttackCriticalSlots
@@ -381,7 +381,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <summary>
         /// Function called by this AI's auto attack projectile when it hits its target.
         /// </summary>
-        public virtual void AutoAttackHit(AttackableUnit target)
+        /// <param name="wireHitResult">The HitResult baked into the attack's wire CastInfo
+        /// at cast time (CastInfo.Targets[0].HitResult). MUST be passed by every delayed
+        /// hit (missiles): IsNextAutoCrit is re-rolled when the NEXT attack's windup
+        /// begins, so a ranged attack still in flight would otherwise read the next
+        /// attack's roll — crit FX (driven by the cast-time value via crit-spell selection
+        /// and the wire byte) and damage then disagree. Null = read the live flag
+        /// (instant hits only).</param>
+        public virtual void AutoAttackHit(AttackableUnit target, HitResult? wireHitResult = null)
         {
             if (target == null || target.IsDead)
             {
@@ -391,7 +398,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             var damage = Stats.AttackDamage.Total;
 
             // Apply crit BEFORE building damageData, so PostMitigationDamage is correct too
-            bool isCrit = IsNextAutoCrit;
+            bool isCrit = wireHitResult.HasValue
+                ? wireHitResult.Value == HitResult.HIT_Critical
+                : IsNextAutoCrit;
             if (isCrit)
             {
                 damage *= Stats.CriticalDamage.Total;
@@ -881,16 +890,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 else
                 {
-                    // F2 Phase 1: path to a stand-position computed from the target's edge instead
-                    // of the target's exact center. Mirrors the client's `Actor_Common::GetClosestAttackPoint`
-                    // chain (S4 NavGrid.cpp:3706) -> the C++ backend of the Lua API
-                    // `SetStateAndCloseToTarget` that every AI script (Minion.lua / Hero.lua /
-                    // BaronMinionAI.lua / Aggro.lua / Pet AIs) uses to approach a target. Without
-                    // this, ranged units overshoot their attack range while approaching, and
-                    // multiple attackers cluster on the target's exact position.
-                    Vector2 pathDestination = TargetUnit != null
-                        ? _game.Map.PathingHandler.GetAttackStandPosition(this, TargetUnit, idealRange)
-                        : targetPos;
+                    // F2 Phase 2: full client `Actor_Common::GetClosestAttackPoint` chain — the
+                    // C++ backend of the Lua API `SetStateAndCloseToTarget` that every AI script
+                    // (Minion.lua / Hero.lua / BaronMinionAI.lua / Aggro.lua / Pet AIs) uses to
+                    // approach a target. Path-based: predicts the target's position along its
+                    // path, paths to it, and recommends the waypoint ~2 past the point where the
+                    // path enters attack range (so approaching units commit slightly into range
+                    // instead of stopping on the boundary). Falls back to the Phase-1 geometric
+                    // stand position when no path exists (target unreachable / degenerate).
+                    Vector2 pathDestination = targetPos;
+                    if (TargetUnit != null)
+                    {
+                        pathDestination = _game.Map.PathingHandler.GetClosestAttackPoint(
+                                this, TargetUnit, idealRange,
+                                out Vector2 recommended, out _, out _)
+                            ? recommended
+                            : _game.Map.PathingHandler.GetAttackStandPosition(this, TargetUnit, idealRange);
+                    }
 
                     if (!_game.Map.PathingHandler.IsWalkable(pathDestination, PathfindingRadius))
                     {
@@ -1159,10 +1175,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             // Auto-attack overrides in non-basic slots can have longer cycle times.
+            // DesignerTotalTime is already attack-speed-scaled at cast time (Spell.Cast AA
+            // block divides by AttackSpeedModifier, replay-verified on
+            // TalonNoxianDiplomacyAttack) — don't divide a second time here.
             if (spell.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
             {
-                float attackSpeedModifier = Math.Max(0.0001f, spell.CastInfo.AttackSpeedModifier);
-                float overrideCycleTime = spell.CastInfo.DesignerTotalTime / attackSpeedModifier;
+                float overrideCycleTime = spell.CastInfo.DesignerTotalTime;
                 if (overrideCycleTime > cooldown)
                 {
                     cooldown = overrideCycleTime;
@@ -2124,7 +2142,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
             else if (IsAttacking)
             {
-                float cancelBuffer = 300.0f;
+                // ar_StopAttackRangeModifier = 100 (Map1 Constants.var:62) — the buffer behind
+                // the Lua AI API `TargetInCancelAttackRange` (Aggro.lua/MinionOdin.lua/pet AIs):
+                // a windup is cancelled once the target leaves range + this slack. The previous
+                // 300 here borrowed ar_ClosingAttackRangeModifier's value (Constants.var:16) —
+                // that constant belongs to GetClosestAttackPoint's close-walk scan instead.
+                float cancelBuffer = 100.0f;
                 float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius + cancelBuffer;
                 if (Vector2.Distance(TargetUnit.Position, Position) > maxCancelRange
                         && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
@@ -2177,7 +2200,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
                             if (CanAttack())
                             {
-                                IsNextAutoCrit = _random.Next(0, 100) < Stats.CriticalChance.Total * 100;
+                                IsNextAutoCrit = RollAutoAttackCrit(TargetUnit);
                                 if (_autoAttackCurrentCooldown <= 0)
                                 {
                                     HasAutoAttacked = false;

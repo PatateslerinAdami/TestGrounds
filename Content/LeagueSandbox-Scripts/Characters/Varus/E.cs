@@ -42,7 +42,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Arc
+                Type = MissileType.Target,
             },
             IsDamagingSpell = true
         };
@@ -60,7 +60,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Arc
+                Type = MissileType.Target
             },
             IsDamagingSpell = true
         };
