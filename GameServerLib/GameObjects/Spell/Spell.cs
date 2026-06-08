@@ -1962,7 +1962,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (forceStop)
             {
-                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.PlayerCommand);
+                // Player release/recast of a charge channel. Riot's source for this is
+                // NotCancelled ("stopped, but not a cancellation" - TF WildCards lock-in uses
+                // (NotCancelled, NotCancelled)). We keep Cancel as the condition because our
+                // Cancel branch carries the ISA wire signal + OnSpellChannelCancel publish,
+                // and ISA at release-fire is replay-verified for Varus Q.
+                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.NotCancelled);
             }
         }
         public SpellMissile CreateCustomMissile(Vector2 start, Vector2 end, MissileParameters parameters, bool isForceCastingOrChannel = false, bool isOverrideCastPosition = true, float? customHeightOffset = null, AttackableUnit target = null)

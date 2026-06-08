@@ -3,6 +3,7 @@ using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeaguePackets.Game;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
@@ -1644,6 +1645,94 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public Spell GetCastSpell()
         {
             return _castingSpell;
+        }
+
+        // Speed-state RUN animation watcher (Riot server engine system, replay-verified
+        // 630b7ceb): the RUN slot is swapped via S2C_SetAnimStates depending on movement
+        // state — run_haste while a HASTE-type buff is active (Ghost etc.), run_fast while
+        // above base move speed (boots alone qualify — enter values in the replay are
+        // exactly base+25 tiers), run_slow while a slow effect is registered (presence,
+        // not net speed: a slowed-but-booted Jinx kept RUN_FAST because she has no
+        // run_slow variant — the fall-through below reproduces that). Spell-bound anim
+        // sets (Nautilus W, Jinx Q stance) stay script territory and win via the
+        // source-layered SetAnimStates stack. run_slow_back (backpedal) not implemented.
+        private string _runVariantApplied;
+        private readonly object _runAnimSource = new object();
+
+        private void UpdateRunAnimationVariant()
+        {
+            var variants = Content.RunAnimationVariants.Get(Model);
+            if (variants == null)
+            {
+                return;
+            }
+
+            string desired = null;
+            if (!IsDead)
+            {
+                if (HasBuffType(BuffType.HASTE))
+                {
+                    desired = variants.Haste ?? variants.Fast;
+                }
+                else if (variants.Brush != null
+                    && _game.Map.NavigationGrid.GetNearestGrassGroup(Position, 0f) != 0)
+                {
+                    // Brush outranks Fast: the replay shows run_in_brush at above-base MS
+                    // (base+boots values), so being in a brush wins over the speed tier.
+                    desired = variants.Brush;
+                }
+                else if (Stats.HasActiveSlows && variants.Slow != null)
+                {
+                    desired = variants.Slow;
+                }
+                else if (Stats.GetTrueMoveSpeed() > Stats.MoveSpeed.BaseValue + 5.0f)
+                {
+                    desired = variants.Fast;
+                }
+            }
+
+            if (desired != _runVariantApplied)
+            {
+                // asBaseLayer: script/buff RUN overrides (Aatrox R RUN_ULT, form swaps)
+                // always outrank the speed variant, regardless of registration order.
+                SetAnimStates(new Dictionary<string, string> { { "RUN", desired ?? "" } }, _runAnimSource, asBaseLayer: true);
+                _runVariantApplied = desired;
+            }
+        }
+
+        protected override void OnEnterVision(int userId, TeamId team)
+        {
+            base.OnEnterVision(userId, team);
+
+            // CastSpellAns is vision-scoped, so a client acquiring vision MID-WINDUP never
+            // saw the cast — without a catch-up the windup animation is simply missing and
+            // the missile pops out of nowhere (fog-edge Blitz Q). Riot re-announces the
+            // running cast to exactly this recipient with StartCastTime = elapsed /
+            // ExtraCastTime = −elapsed (replay 630b7ceb: 3/3 catch-up ANS in the same tick
+            // as the enter-visibility bundle). Base-slot basic attacks are excluded — those
+            // are announced via Basic_Attack packets, never ANS.
+            var inFlight = _castingSpell;
+            if ((inFlight == null || inFlight.State != SpellState.STATE_CASTING)
+                && AutoAttackSpell != null && AutoAttackSpell.State == SpellState.STATE_CASTING
+                && AutoAttackSpell.CastInfo.SpellSlot < 64)
+            {
+                inFlight = AutoAttackSpell;
+            }
+
+            if (inFlight != null && inFlight.State == SpellState.STATE_CASTING
+                && inFlight.CastInfo.SpellSlot < 64)
+            {
+                // Attack-timed casts count UP (CurrentDelayTime), normal casts count DOWN
+                // from DesignerCastTime (CurrentCastTime).
+                float elapsed = inFlight.CastInfo.IsAutoAttack || inFlight.CastInfo.UseAttackCastTime
+                    ? inFlight.CurrentDelayTime
+                    : inFlight.CastInfo.DesignerCastTime - inFlight.CurrentCastTime;
+
+                if (elapsed > 0.001f)
+                {
+                    _game.PacketNotifier.NotifyNPC_CastSpellAnsCatchUp(inFlight, elapsed, userId);
+                }
+            }
         }
 
         /// <summary>
