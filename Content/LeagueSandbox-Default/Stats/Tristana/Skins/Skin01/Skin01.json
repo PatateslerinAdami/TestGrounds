@@ -10,10 +10,10 @@
             "Animations": "TristanaBase.blnd",
             "ChampionSkinID": 18001,
             "ChampionSkinName": "PinkTristana",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Tristana.skn",
             "Skeleton": "Tristana.skl",
-            "SkinScale": 1.57,
+            "SkinScale": 1.5700000524520874,
             "Texture": "TristanaPink_Diffuse.dds"
         }
     }

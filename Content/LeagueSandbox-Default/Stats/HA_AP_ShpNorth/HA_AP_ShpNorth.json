@@ -7,7 +7,7 @@
     },
     "Values": {
         "IdleParticles": {
-            "NumberOfParticles": "0",
+            "NumberOfParticles": 0,
             "Particle1": "env_Lantern_glow.troy Buffbone_Cstm_Lantern"
         }
     }

@@ -10,10 +10,10 @@
             "Animations": "BaseSoraka.blnd",
             "ChampionSkinID": 16001,
             "ChampionSkinName": "DryadSoraka",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Soraka_dryad.skn",
             "Skeleton": "Soraka_dryad.skl",
-            "SkinScale": 1.27,
+            "SkinScale": 1.2699999809265137,
             "Texture": "soraka_dryad_2012_TX_CM.dds"
         }
     }

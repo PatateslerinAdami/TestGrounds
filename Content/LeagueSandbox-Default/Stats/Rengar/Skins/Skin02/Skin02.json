@@ -10,15 +10,13 @@
             "Animations": "rengarSkin02.blnd",
             "ChampionSkinID": 107002,
             "ChampionSkinName": "rengarSkin02",
-            "OverrideBoundingBox": "180 250 180",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "180.0000 250.0000 180.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "rengar_Skin02.skn",
             "Skeleton": "rengar_Skin02.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "Hood",
             "Texture": "rengar_Skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Hood"
         }
     }
 }

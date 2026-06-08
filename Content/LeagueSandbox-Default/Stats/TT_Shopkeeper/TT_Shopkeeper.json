@@ -7,19 +7,19 @@
     },
     "Values": {
         "IdleParticles": {
-            "NumberOfParticles": "0"
+            "NumberOfParticles": 0
         },
         "MeshSkin": {
             "Animations": "ShopMaleBase.blnd",
             "ChampionSkinName": "ShopMaleBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Shopkeeper_TT.skn",
             "Skeleton": "Shopkeeper_TT.skl",
-            "SkinScale": 2.05,
+            "SkinScale": 2.049999952316284,
             "Texture": "TT_shopkeeper_TX_CM.dds"
         },
         "UNKNOWN_HASHES": {
-            "910253920": 44.2
+            "910253920": 44.20000076293945
         }
     }
 }

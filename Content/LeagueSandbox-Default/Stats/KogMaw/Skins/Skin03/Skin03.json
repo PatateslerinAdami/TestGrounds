@@ -10,11 +10,11 @@
             "Animations": "ButterflyKogMaw.blnd",
             "ChampionSkinID": 96003,
             "ChampionSkinName": "ButterflyKogMaw",
-            "OverrideBoundingBox": "283 303 283",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "283.0000 303.0000 283.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "KogMaw_butterfly.skn",
             "Skeleton": "KogMaw_butterfly.skl",
-            "SkinScale": 0.65,
+            "SkinScale": 0.6499999761581421,
             "Texture": "kogmaw_butterfly_TX_CM.dds"
         }
     }

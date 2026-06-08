@@ -10,10 +10,10 @@
             "Animations": "TristanaBase.blnd",
             "ChampionSkinID": 18005,
             "ChampionSkinName": "ScurvyDogTristana",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "tristana_ScurvyDog.skn",
             "Skeleton": "tristana_ScurvyDog.skl",
-            "SkinScale": 1.57,
+            "SkinScale": 1.5700000524520874,
             "Texture": "tristana_ScurvyDog_TX_CM.dds"
         }
     }

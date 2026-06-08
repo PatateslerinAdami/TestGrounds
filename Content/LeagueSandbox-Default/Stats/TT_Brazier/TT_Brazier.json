@@ -14,10 +14,10 @@
             "Animations": "TT_Brazier.blnd",
             "ChampionSkinID": 987123,
             "ChampionSkinName": "TT_Brazier",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "TT_Brazier.skn",
             "Skeleton": "TT_Brazier.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "TT_Brazier.dds"
         }
     }

@@ -19,18 +19,16 @@
         },
         "MeshSkin": {
             "Animations": "Azir.blnd",
-            "ChampionSkinID": "268000",
+            "BrushAlphaOverride": 0.4,
+            "ChampionSkinID": 268000,
             "ChampionSkinName": "Azir",
             "ExtraCharacterPreloads": "AzirSunDisc,AzirSoldier,AzirUltSoldier,AzirTowerClicker",
-            "OverrideBoundingBox": "170 250 170",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "170.0000 250.0000 170.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Azir.skn",
             "Skeleton": "Azir.skl",
-            "SkinScale": "0.85",
+            "SkinScale": 0.85,
             "Texture": "Azir_base_TX_CM.DDS"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.4
         }
     }
 }

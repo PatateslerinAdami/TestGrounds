@@ -10,10 +10,10 @@
             "Animations": "KoreanShaco.blnd",
             "ChampionSkinID": 35006,
             "ChampionSkinName": "KoreanShaco",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Shaco_Korean.skn",
             "Skeleton": "Shaco_Korean.skl",
-            "SkinScale": 1.85,
+            "SkinScale": 1.850000023841858,
             "Texture": "Shaco_Korean_TX_CM.dds"
         }
     }

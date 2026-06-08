@@ -10,7 +10,7 @@
             "Animations": "maokai.blnd",
             "ChampionSkinID": 57001,
             "ChampionSkinName": "BurntMaokai",
-            "OverrideBoundingBox": "190 260 190",
+            "OverrideBoundingBox": "190.0000 260.0000 190.0000",
             "SelfIllumination": 0.5,
             "SimpleSkin": "Maokai_burnt.skn",
             "Skeleton": "Maokai_burnt.skl",

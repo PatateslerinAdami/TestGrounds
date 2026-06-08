@@ -12,10 +12,10 @@
         "MeshSkin": {
             "Animations": "OdinClawBase.blnd",
             "ChampionSkinName": "OdinClawBase",
-            "SelfIllumination": 0.65,
+            "SelfIllumination": 0.6499999761581421,
             "SimpleSkin": "OdinClaw.skn",
             "Skeleton": "OdinClaw.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "OdinClaw.dds"
         },
         "UNKNOWN_HASHES": {

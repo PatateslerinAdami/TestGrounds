@@ -11,19 +11,17 @@
         },
         "MeshSkin": {
             "Animations": "TwitchBase.blnd",
-            "ChampionSkinID": "29000",
+            "ChampionSkinID": 29000,
             "ChampionSkinName": "TwitchBase",
-            "MaterialOverride0Submesh": "Twitch_cheese_Mat",
+            "MaterialOverride0SubMesh": "Twitch_cheese_Mat",
             "MaterialOverride0Texture": "twitch_cheese_TX_CM.dds",
-            "OverrideBoundingBox": "140 160 140",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "140.0000 160.0000 140.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Twitch.skn",
             "Skeleton": "Twitch.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "Twitch_Cheese_Mat",
             "Texture": "twitch_Base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Twitch_Cheese_Mat"
         }
     }
 }

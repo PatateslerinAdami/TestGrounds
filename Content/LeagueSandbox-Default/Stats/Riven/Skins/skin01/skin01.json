@@ -10,7 +10,7 @@
             "Animations": "BaseRiven.blnd",
             "ChampionSkinID": 92001,
             "ChampionSkinName": "RedeemedRiven",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "riven_redeemed.skn",
             "Skeleton": "riven_redeemed.skl",
             "SkinScale": 1.5,

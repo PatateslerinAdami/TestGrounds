@@ -10,10 +10,10 @@
             "Animations": "BaseKogMaw.blnd",
             "ChampionSkinID": 96001,
             "ChampionSkinName": "CaterpillarKogMaw",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "KogMaw.skn",
             "Skeleton": "KogMaw.skl",
-            "SkinScale": 0.7,
+            "SkinScale": 0.7000000000000001,
             "Texture": "kogmaw_catterpillar_TX_CM.dds"
         }
     }

@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "ShopMaleBase.blnd",
             "ChampionSkinName": "ShopMaleBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "ShopMale.skn",
             "Skeleton": "ShopMale.skl",
-            "SkinScale": 1.9,
+            "SkinScale": 1.9000000000000001,
             "Texture": "shopkeeper_male_TX_CM.dds"
         }
     }

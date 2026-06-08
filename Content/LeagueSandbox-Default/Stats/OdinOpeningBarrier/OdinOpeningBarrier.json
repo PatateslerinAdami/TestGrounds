@@ -8,10 +8,10 @@
     "Values": {
         "Data": {
             "PathfindingCollisionRadius": 1,
-            "PerceptionBubbleRadius": "0",
+            "PerceptionBubbleRadius": 0,
             "SelectionHeight": 1,
             "SelectionRadius": 1,
-            "ServerOnly": "0"
+            "ServerOnly": 0
         },
         "MeshSkin": {
             "Animations": "OdinOpeningBarrierBase.blnd",

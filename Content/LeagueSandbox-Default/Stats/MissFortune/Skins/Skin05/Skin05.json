@@ -10,10 +10,10 @@
             "Animations": "BaseMissFortune.blnd",
             "ChampionSkinID": 21005,
             "ChampionSkinName": "WastelandMissFortune",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "missfortune_wasteland.skn",
             "Skeleton": "missfortune_wasteland.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "missfortune_wasteland_TX_CM.dds"
         }
     }

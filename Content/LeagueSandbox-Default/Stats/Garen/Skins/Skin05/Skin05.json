@@ -10,10 +10,10 @@
             "Animations": "RangerGaren.blnd",
             "ChampionSkinID": 86005,
             "ChampionSkinName": "RangerGaren",
-            "SelfIllumination": "1.0",
+            "SelfIllumination": 1.0,
             "SimpleSkin": "Garen_ranger.skn",
             "Skeleton": "Garen_ranger.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "garen_rugged_TX_CM.dds"
         }
     }

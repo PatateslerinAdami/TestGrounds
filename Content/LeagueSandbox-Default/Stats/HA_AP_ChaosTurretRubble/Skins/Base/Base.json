@@ -12,7 +12,7 @@
             "SelfIllumination": 1,
             "SimpleSkin": "HA_AP_ChaosTurretRubble.skn",
             "Skeleton": "HA_AP_ChaosTurretRubble.skl",
-            "SkinScale": "770",
+            "SkinScale": 770,
             "Texture": "HA_AP_ChaosTurret.dds"
         }
     }

@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "KalistaSpawn.blnd",
             "ChampionSkinName": "KalistaSpawn_Skin01",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "KalistaSpawn_Skin01.skn",
             "Skeleton": "KalistaSpawn_Skin01.skl",
             "SkinScale": 1,
+            "SubmeshesToHide": "Alert",
             "Texture": "KalistaSpawn_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Alert"
         }
     }
 }

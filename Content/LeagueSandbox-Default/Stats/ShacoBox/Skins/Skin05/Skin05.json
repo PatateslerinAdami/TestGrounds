@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "ShacoBoxBase.blnd",
             "ChampionSkinName": "AsylumJester",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "JackintheBox.skn",
             "Skeleton": "JackintheBox.skl",
             "SkinScale": 4.3,

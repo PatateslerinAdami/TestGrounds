@@ -10,10 +10,10 @@
             "Animations": "Alistar.blnd",
             "ChampionSkinID": 12004,
             "ChampionSkinName": "CowboyMinotaur",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar_cowboy.skn",
             "Skeleton": "Alistar_cowboy.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "alistar_cowboy_TX_CM.dds"
         }
     }

@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Khazix.blnd",
-            "ChampionSkinID": "121000",
+            "ChampionSkinID": 121000,
             "ChampionSkinName": "Khazix",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "khazix_base.skn",
             "Skeleton": "khazix_base.skl",
             "SkinScale": 1,

@@ -10,7 +10,7 @@
             "Animations": "BaseUdyr.blnd",
             "ChampionSkinID": 77001,
             "ChampionSkinName": "BlackBeltUdyr",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Udyr.skn",
             "Skeleton": "Udyr.skl",
             "SkinScale": 1.1,

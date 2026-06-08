@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "rumble.blnd",
-            "ChampionSkinID": "68000",
+            "ChampionSkinID": 68000,
             "ChampionSkinName": "rumble",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "rumble.skn",
             "Skeleton": "rumble.skl",
-            "SkinScale": 1.9,
+            "SkinScale": 1.9000000000000001,
             "Texture": "rumble_base_TX_CM.dds"
         }
     }

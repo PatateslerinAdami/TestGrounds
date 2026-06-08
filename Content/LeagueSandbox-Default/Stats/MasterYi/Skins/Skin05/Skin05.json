@@ -11,17 +11,17 @@
             "ChampionSkinID": 11005,
             "ChampionSkinName": "TribalMasterYi",
             "GlossTexture": "masteryi_tribal_GM.dds",
-            "ReflectionFresnel": 0.6,
+            "ReflectionFresnel": 0.6000000000000001,
             "ReflectionFresnelBlue": 1.6,
             "ReflectionFresnelGreen": 1.6,
             "ReflectionFresnelRed": 1.6,
             "ReflectionMap": "masteryi_tribal_TX_RM.dds",
-            "ReflectionOpacityDirect": 0.3,
-            "ReflectionOpacityGlancing": 0.3,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 0.30000000000000004,
+            "ReflectionOpacityGlancing": 0.30000000000000004,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "masteryi_tribal.skn",
             "Skeleton": "masteryi_tribal.skl",
-            "SkinScale": 1.55,
+            "SkinScale": 1.5499999523162842,
             "Texture": "masteryi_tribal_TX_CM.dds"
         }
     }

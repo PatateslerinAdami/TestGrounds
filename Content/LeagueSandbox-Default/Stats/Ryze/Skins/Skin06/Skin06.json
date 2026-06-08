@@ -10,14 +10,12 @@
             "Animations": "RyzeBase.blnd",
             "ChampionSkinID": 13006,
             "ChampionSkinName": "ZombieRyze",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze_zombie.skn",
             "Skeleton": "Ryze_zombie.skl",
-            "SkinScale": 1.67,
-            "Texture": "ryze_zombie_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31"
+            "SkinScale": 1.6699999570846558,
+            "Texture": "ryze_zombie_TX_CM.dds",
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

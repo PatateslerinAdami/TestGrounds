@@ -10,11 +10,11 @@
             "Animations": "HunterRengar.blnd",
             "ChampionSkinID": 107001,
             "ChampionSkinName": "HunterRengar",
-            "OverrideBoundingBox": "180 250 180",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "180.0000 250.0000 180.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Rengar_hunter.skn",
             "Skeleton": "Rengar_hunter.skl",
-            "SkinScale": "0.95",
+            "SkinScale": 0.95,
             "Texture": "Rengar_hunter_TX_CM.dds"
         }
     }

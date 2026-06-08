@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "AzirUltSoldier.blnd",
-            "ChampionSkinID": "436000",
+            "ChampionSkinID": 436000,
             "ChampionSkinName": "AzirUltSoldierBase",
-            "SelfIllumination": 0.900000036,
+            "SelfIllumination": 0.9,
             "SimpleSkin": "AzirUltSoldier.skn",
             "Skeleton": "AzirUltSoldier.skl",
             "SkinScale": 1,

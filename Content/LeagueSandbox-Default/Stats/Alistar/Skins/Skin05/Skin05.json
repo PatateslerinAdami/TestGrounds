@@ -10,10 +10,10 @@
             "Animations": "BlueAlistar.blnd",
             "ChampionSkinID": 12005,
             "ChampionSkinName": "BlueAlistar",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar_blue.skn",
             "Skeleton": "Alistar_blue.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "alistar_blue_TX_CM.dds"
         }
     }

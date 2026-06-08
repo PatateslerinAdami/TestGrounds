@@ -11,12 +11,12 @@
         },
         "MeshSkin": {
             "Animations": "BaseXerath.blnd",
-            "ChampionSkinID": "101000",
+            "ChampionSkinID": 101000,
             "ChampionSkinName": "BaseXerath",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Xerath.skn",
             "Skeleton": "Xerath.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "Xerath_base_TX_CM.dds"
         }
     }

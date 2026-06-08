@@ -15,18 +15,16 @@
             "ChampionSkinID": 75005,
             "ChampionSkinName": "NasusSkin05",
             "ExtraCharacterPreloads": "NasusUlt",
-            "MaterialOverride0Submesh": "Nasus_kicker",
+            "MaterialOverride0SubMesh": "Nasus_kicker",
             "MaterialOverride0Texture": "Nasus_Skin06_Boombox.dds",
-            "OverrideBoundingBox": "120 240 120",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "120.0000 240.0000 120.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nasus_Skin05.skn",
             "Skeleton": "Nasus_Skin05.skl",
-            "SkinScale": 1.22,
-            "Texture": "nasus_Skin05_normal_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true",
-            "708066840": "Nasus_Cerberus_Weapon2 Nasus_Cerberus_Bone Nasus_kicker"
+            "SkinScale": 1.2200000286102295,
+            "SubmeshesToHide": "Nasus_Cerberus_Weapon2 Nasus_Cerberus_Bone Nasus_kicker",
+            "Texture": "nasus_Skin05_normal_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

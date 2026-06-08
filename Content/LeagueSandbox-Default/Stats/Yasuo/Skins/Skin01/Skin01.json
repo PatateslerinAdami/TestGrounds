@@ -8,18 +8,16 @@
     "Values": {
         "MeshSkin": {
             "Animations": "YasuoSkin01.blnd",
+            "BrushAlphaOverride": 0.44999998807907104,
             "ChampionSkinID": 157001,
             "ChampionSkinName": "YasuoSkin01",
-            "OverrideBoundingBox": "230 180 230",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "230.0000 180.0000 230.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Yasuo_Skin01.skn",
             "Skeleton": "Yasuo_Skin01.skl",
-            "SkinScale": 0.93,
+            "SkinScale": 0.9300000071525574,
+            "SubmeshesToHide": "Yasuo_Instrument_Mat",
             "Texture": "Yasuo_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.45,
-            "708066840": "Yasuo_Instrument_Mat"
         }
     }
 }

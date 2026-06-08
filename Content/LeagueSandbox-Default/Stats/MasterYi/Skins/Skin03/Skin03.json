@@ -10,10 +10,10 @@
             "Animations": "BaseMasterYi.blnd",
             "ChampionSkinID": 11003,
             "ChampionSkinName": "IonianMasterYi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "masteryi_ionian.skn",
             "Skeleton": "masteryi_ionian.skl",
-            "SkinScale": 1.55,
+            "SkinScale": 1.5499999523162842,
             "Texture": "masteryi_ionian_TX_CM.dds"
         }
     }

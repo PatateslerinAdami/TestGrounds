@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "MaokaiSproutlingBase.blnd",
             "ChampionSkinName": "MaokaiSaplingSkin05",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sapling_skin05.skn",
             "Skeleton": "Sapling_skin05.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "maokai_Skin05_TX_CM.dds"
         }
     }

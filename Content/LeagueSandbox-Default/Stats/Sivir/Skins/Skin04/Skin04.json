@@ -13,12 +13,12 @@
             "Animations": "BaseSivir.blnd",
             "ChampionSkinID": 15004,
             "ChampionSkinName": "FreljordSivir",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sivir_frejlord.skn",
             "Skeleton": "Sivir_frejlord.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "sivir_frejlord_TX_CM.dds",
-            "YOffset": "-0.2"
+            "YOffset": -0.2
         }
     }
 }

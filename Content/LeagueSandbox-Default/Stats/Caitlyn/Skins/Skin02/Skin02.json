@@ -10,7 +10,7 @@
             "Animations": "CaitlynBase.blnd",
             "ChampionSkinID": 51002,
             "ChampionSkinName": "SheriffCaitlyn",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Caitlyn_sheriff.skn",
             "Skeleton": "Caitlyn_sheriff.skl",
             "SkinScale": 1.6,

@@ -8,7 +8,7 @@
     "Values": {
         "HealthBar": {
             "ParallaxOffset": 5,
-            "XOffset": "0",
+            "XOffset": 0,
             "YOffset": 2
         },
         "IdleParticles": {
@@ -21,10 +21,10 @@
         "MeshSkin": {
             "Animations": "QuinnValor.blnd",
             "ChampionSkinName": "QuinnValor_Phoenix",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "phoenix.skn",
             "Skeleton": "phoenix.skl",
-            "SkinScale": "2.0",
+            "SkinScale": 2.0,
             "Texture": "QuinnValor_phoenix_TX_CM.dds"
         }
     }

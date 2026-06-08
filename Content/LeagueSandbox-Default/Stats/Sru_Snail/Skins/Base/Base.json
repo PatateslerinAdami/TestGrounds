@@ -10,10 +10,10 @@
             "Animations": "Sru_Snail.blnd",
             "CastShadows": 1,
             "ChampionSkinName": "Sru_Snail",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Snail.skn",
             "Skeleton": "Sru_Snail.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sru_Snail_CM_TX.dds"
         }
     }

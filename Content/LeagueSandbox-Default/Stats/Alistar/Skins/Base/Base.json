@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Alistar.blnd",
-            "ChampionSkinID": "12000",
+            "ChampionSkinID": 12000,
             "ChampionSkinName": "Alistar",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar.skn",
             "Skeleton": "Alistar.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "Minotaur_Diffuse.dds"
         }
     }

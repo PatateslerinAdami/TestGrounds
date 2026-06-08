@@ -20,24 +20,22 @@
             "ChampionSkinID": 201001,
             "ChampionSkinName": "BraumSkin01",
             "GlossTexture": "Braum_Skin01_TX_GM.DDS",
-            "MaterialOverride0Submesh": "Poro",
+            "MaterialOverride0SubMesh": "Poro",
             "MaterialOverride0Texture": "Braum_Skin01_Poro_TX_CM.dds",
-            "OverrideBoundingBox": "180 180 180",
+            "OverrideBoundingBox": "180.0000 180.0000 180.0000",
             "ReflectionFresnel": 0.5,
-            "ReflectionFresnelBlue": 0.6,
-            "ReflectionFresnelGreen": 0.6,
-            "ReflectionFresnelRed": 0.6,
+            "ReflectionFresnelBlue": 0.6000000000000001,
+            "ReflectionFresnelGreen": 0.6000000000000001,
+            "ReflectionFresnelRed": 0.6000000000000001,
             "ReflectionMap": "Braum_Skin01_TX_RM.dds",
             "ReflectionOpacityDirect": 1,
-            "ReflectionOpacityGlancing": "1.0",
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityGlancing": 1.0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Braum_Skin01.skn",
             "Skeleton": "Braum_Skin01.skl",
-            "SkinScale": 1.15,
+            "SkinScale": 1.149999976158142,
+            "SubmeshesToHide": "Poro",
             "Texture": "Braum_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Poro"
         }
     }
 }

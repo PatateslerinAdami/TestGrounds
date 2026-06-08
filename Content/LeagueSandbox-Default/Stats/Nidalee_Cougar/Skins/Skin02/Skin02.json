@@ -10,7 +10,7 @@
             "Animations": "Nidalee_CougarBase.blnd",
             "ChampionSkinID": 76002,
             "ChampionSkinName": "LeopardNidaleeCougar",
-            "SelfIllumination": 0.55,
+            "SelfIllumination": 0.550000011920929,
             "SimpleSkin": "Nidalee_Cougar_leopard.skn",
             "Skeleton": "Nidalee_Cougar_leopard.skl",
             "SkinScale": 1,

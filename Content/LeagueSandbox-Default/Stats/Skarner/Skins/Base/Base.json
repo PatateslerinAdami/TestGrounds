@@ -8,28 +8,26 @@
     "Values": {
         "MeshSkin": {
             "Animations": "SkarnerBase.blnd",
-            "ChampionSkinID": "72000",
+            "ChampionSkinID": 72000,
             "ChampionSkinName": "SkarnerBase",
+            "Fresnel": 0.1,
+            "FresnelBlue": 0.05000000074505806,
+            "FresnelGreen": 0.15000000596046448,
+            "FresnelRed": 0.25,
             "GlossTexture": "Skarner_base_TX_GM.dds",
-            "OverrideBoundingBox": "230 190 230",
+            "OverrideBoundingBox": "230.0000 190.0000 230.0000",
             "ReflectionFresnel": 0.8,
-            "ReflectionFresnelBlue": 0.6,
-            "ReflectionFresnelGreen": 0.6,
-            "ReflectionFresnelRed": 0.6,
+            "ReflectionFresnelBlue": 0.6000000000000001,
+            "ReflectionFresnelGreen": 0.6000000000000001,
+            "ReflectionFresnelRed": 0.6000000000000001,
             "ReflectionMap": "Skarner_base_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": "1.0",
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 1.0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Skarner.skn",
             "Skeleton": "Skarner.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "Skarner_base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "3400833179": 0.1,
-            "343518805": 0.05,
-            "3966094422": 0.25,
-            "455913160": 0.15
         }
     }
 }

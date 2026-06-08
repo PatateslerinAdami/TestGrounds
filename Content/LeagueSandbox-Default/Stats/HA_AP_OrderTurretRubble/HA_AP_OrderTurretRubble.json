@@ -7,7 +7,7 @@
     },
     "Values": {
         "IdleParticles": {
-            "GameplayCollisionRadius": 88.4
+            "GameplayCollisionRadius": 88.4000015258789
         },
         "Info": {
             "IconSquare": "OrderLaneTower_Icon.dds"

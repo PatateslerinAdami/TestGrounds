@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseKogMaw.blnd",
-            "ChampionSkinID": "96000",
+            "ChampionSkinID": 96000,
             "ChampionSkinName": "BaseKogMaw",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "KogMaw.skn",
             "Skeleton": "KogMaw.skl",
-            "SkinScale": 0.7,
+            "SkinScale": 0.7000000000000001,
             "Texture": "KogMaw_TX_CM.dds"
         }
     }

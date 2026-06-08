@@ -11,7 +11,7 @@
             "ChampionSkinID": 1003,
             "ChampionSkinName": "AnnieWonderland",
             "ExtraCharacterPreloads": "AnnieTibbers",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "annie_wonderland.skn",
             "Skeleton": "annie_wonderland.skl",
             "SkinScale": 1,

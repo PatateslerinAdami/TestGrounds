@@ -11,7 +11,7 @@
             "ChampionSkinID": 60001,
             "ChampionSkinName": "EliseLotusFlower",
             "ExtraCharacterPreloads": "EliseSpider,EliseSpiderling",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Elise_LotusFlower.skn",
             "Skeleton": "Elise_LotusFlower.skl",
             "SkinScale": 1.25,

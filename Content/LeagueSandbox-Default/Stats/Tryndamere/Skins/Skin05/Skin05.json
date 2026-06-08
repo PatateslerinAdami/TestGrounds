@@ -10,15 +10,13 @@
             "Animations": "TryndamereSultan.blnd",
             "ChampionSkinID": 23005,
             "ChampionSkinName": "TryndamereSultan",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "tryndamere_sultan.skn",
             "Skeleton": "tryndamere_sultan.skl",
-            "SkinScale": "2.0",
+            "SkinScale": 2.0,
             "Texture": "tryndamere_sultan_TX_CM.dds",
-            "YOffset": 0.3
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "UsesSkinVO": 1,
+            "YOffset": 0.30000000000000004
         }
     }
 }

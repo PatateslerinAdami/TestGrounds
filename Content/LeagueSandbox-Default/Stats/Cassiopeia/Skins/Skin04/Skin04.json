@@ -13,10 +13,10 @@
             "Animations": "LunarRevelCassiopeia.blnd",
             "ChampionSkinID": 69004,
             "ChampionSkinName": "LunarRevelCassiopeia",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Cassiopeia_LunarRevel.skn",
             "Skeleton": "Cassiopeia_LunarRevel.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "cassiopeia_lunarrevel_TX_CM.dds"
         }
     }

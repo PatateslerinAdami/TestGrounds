@@ -9,8 +9,8 @@
         "MeshSkin": {
             "Animations": "LuluSnowman.blnd",
             "ChampionSkinName": "LuluSnowman",
-            "MaterialOverridePriority": "1200",
-            "SelfIllumination": 0.7,
+            "MaterialOverridePriority": 1200,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "LuluSnowman.skn",
             "Skeleton": "LuluSnowman.skl",
             "SkinScale": 1.5,

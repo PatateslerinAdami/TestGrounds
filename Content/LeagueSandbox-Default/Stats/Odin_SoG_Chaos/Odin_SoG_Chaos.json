@@ -8,7 +8,7 @@
     "Values": {
         "Data": {
             "AssetCategory": "obj",
-            "PathfindingCollisionRadius": 44.2
+            "PathfindingCollisionRadius": 44.20000076293945
         },
         "MeshSkin": {
             "Animations": "Odin_SoG_ChaosBase.blnd",

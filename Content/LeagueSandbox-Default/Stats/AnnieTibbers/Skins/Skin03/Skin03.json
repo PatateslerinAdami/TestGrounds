@@ -13,7 +13,7 @@
             "SelfIllumination": 0.8,
             "SimpleSkin": "AnnieTibbers_Wonderland.skn",
             "Skeleton": "AnnieTibbers_Wonderland.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "AnnieTibbers_Wonderland_TX_CM.dds"
         }
     }

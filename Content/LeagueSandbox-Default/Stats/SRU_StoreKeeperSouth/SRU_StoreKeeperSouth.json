@@ -10,7 +10,7 @@
             "RuleConfigFile": "SRU_StoreKeeperSouth.cac"
         },
         "IdleParticles": {
-            "NumberOfParticles": "0",
+            "NumberOfParticles": 0,
             "Particle1": ""
         }
     }

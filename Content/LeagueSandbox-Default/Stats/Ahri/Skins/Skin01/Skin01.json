@@ -10,10 +10,10 @@
             "Animations": "AhriHanbok.blnd",
             "ChampionSkinID": 103001,
             "ChampionSkinName": "AhriHanbok",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ahri_hanbok.skn",
             "Skeleton": "Ahri_hanbok.skl",
-            "SkinScale": 1.26,
+            "SkinScale": 1.2599999904632568,
             "Texture": "Ahri_hanbok_TX_CM.dds"
         }
     }

@@ -15,12 +15,12 @@
             "Animations": "Cyber3Ezreal.blnd",
             "ChampionSkinID": 81005,
             "ChampionSkinName": "CyberEzreal",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ezreal_Cyber3.skn",
             "Skeleton": "Ezreal_Cyber3.skl",
             "SkinScale": 1.1,
             "Texture": "ezreal_cyber3_TX_CM.dds",
-            "UsesSkinVO": "true"
+            "UsesSkinVO": 1
         },
         "Package": {
             "FallbackPackage": "Ezreal"

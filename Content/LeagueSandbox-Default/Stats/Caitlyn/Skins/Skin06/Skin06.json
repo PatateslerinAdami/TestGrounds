@@ -10,7 +10,7 @@
             "Animations": "CaitlynSkin06.blnd",
             "ChampionSkinID": 51006,
             "ChampionSkinName": "CaitlynSkin06",
-            "OverrideBoundingBox": "65 130 65",
+            "OverrideBoundingBox": "65.0000 130.0000 65.0000",
             "SelfIllumination": 1,
             "SimpleSkin": "Caitlyn_Skin06.skn",
             "Skeleton": "Caitlyn_Skin06.skl",

@@ -15,10 +15,10 @@
             "Animations": "SteellegionGaren.blnd",
             "ChampionSkinID": 86006,
             "ChampionSkinName": "SteellegionGaren",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Garen_Steellegion.skn",
             "Skeleton": "Garen_Steellegion.skl",
-            "SkinScale": 1.09,
+            "SkinScale": 1.090000033378601,
             "Texture": "garen_steelLegion_TX_CM.dds"
         }
     }

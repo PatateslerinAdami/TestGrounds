@@ -11,10 +11,10 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 79005,
             "ChampionSkinName": "VandalsGragas",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gragas_vandals.skn",
             "Skeleton": "Gragas_vandals.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "gragas_vandals_TX_CM.dds"
         }
     }

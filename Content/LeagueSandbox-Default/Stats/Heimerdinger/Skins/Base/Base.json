@@ -8,18 +8,16 @@
     "Values": {
         "MeshSkin": {
             "Animations": "HeimerdingerBase.blnd",
-            "ChampionSkinID": "74000",
+            "ChampionSkinID": 74000,
             "ChampionSkinName": "HeimerdingerBase",
             "ExtraCharacterPreloads": "HeimerTYellow,HeimerTBlue",
-            "OverrideBoundingBox": "100 200 100",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "100.0000 200.0000 100.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Heimerdinger.skn",
             "Skeleton": "Heimerdinger.skl",
             "SkinScale": 1,
+            "SubmeshesToHide": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna",
             "Texture": "heimerdinger_base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna"
         }
     }
 }

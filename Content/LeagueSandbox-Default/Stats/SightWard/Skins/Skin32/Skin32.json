@@ -9,13 +9,13 @@
         "MeshSkin": {
             "Animations": "SightWardBattleCast.blnd",
             "ChampionSkinName": "SightWardBattleCast",
-            "ParallaxOffset": "0",
-            "SelfIllumination": "1.0",
+            "ParallaxOffset": 0,
+            "SelfIllumination": 1.0,
             "SimpleSkin": "SightWard_Battlecast.skn",
             "Skeleton": "SightWard_Battlecast.skl",
             "SkinScale": 0.8,
             "Texture": "Ward_Battlecast_TX_CM.dds",
-            "YOffset": -2.4
+            "YOffset": -2.4000000953674316
         }
     }
 }

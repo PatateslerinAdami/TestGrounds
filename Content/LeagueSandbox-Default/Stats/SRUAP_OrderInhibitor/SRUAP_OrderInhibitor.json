@@ -13,10 +13,10 @@
         },
         "HealthBar": {
             "UnitBarKey": "Turret",
-            "WorldOffset": "0 -3.7 0"
+            "WorldOffset": "0.0000 -3.7000 0.0000"
         },
         "IdleParticles": {
-            "NumberOfParticles": "0"
+            "NumberOfParticles": 0
         },
         "Info": {
             "IconCircle": "Inhibitor_Blue_Circle.dds",

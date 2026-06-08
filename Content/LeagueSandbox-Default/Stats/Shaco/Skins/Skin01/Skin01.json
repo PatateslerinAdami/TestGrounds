@@ -10,10 +10,10 @@
             "Animations": "BaseJester.blnd",
             "ChampionSkinID": 35001,
             "ChampionSkinName": "HatterJester",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Shaco_madHatter.skn",
             "Skeleton": "Shaco_madHatter.skl",
-            "SkinScale": 1.85,
+            "SkinScale": 1.850000023841858,
             "Texture": "Shaco_Hatter_TX_CM.dds"
         }
     }

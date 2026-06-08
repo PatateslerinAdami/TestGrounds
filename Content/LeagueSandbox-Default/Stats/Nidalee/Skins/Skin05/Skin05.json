@@ -11,14 +11,12 @@
             "ChampionSkinID": 76005,
             "ChampionSkinName": "WitchNidalee",
             "ExtraCharacterPreloads": "Nidalee_Cougar,Nidalee_Spear",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_witch.skn",
             "Skeleton": "Nidalee_witch.skl",
-            "SkinScale": 1.35,
-            "Texture": "Nidalee_witch_2012_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31"
+            "SkinScale": 1.350000023841858,
+            "Texture": "Nidalee_witch_2012_CM.dds",
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

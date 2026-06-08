@@ -10,12 +10,12 @@
             "Animations": "Viktor_base.blnd",
             "ChampionSkinID": 112001,
             "ChampionSkinName": "Viktor_fullmachine",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "viktor_full_machine.skn",
             "Skeleton": "viktor_full_machine.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "viktor_full_machine_TX_CM.dds",
-            "YOffset": 0.88
+            "YOffset": 0.8799999952316284
         }
     }
 }

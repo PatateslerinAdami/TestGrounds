@@ -7,7 +7,7 @@
     },
     "Values": {
         "Data": {
-            "PathfindingCollisionRadius": 44.2
+            "PathfindingCollisionRadius": 44.20000076293945
         },
         "MeshSkin": {
             "Animations": "Odin_skeletonBase.blnd",
@@ -17,7 +17,7 @@
             "Texture": "Odin_skeleton.dds"
         },
         "UNKNOWN_HASHES": {
-            "2977633954": 0.6
+            "2977633954": 0.6000000000000001
         }
     }
 }

@@ -10,16 +10,14 @@
             "Animations": "ArcadeMissFortune.blnd",
             "ChampionSkinID": 21007,
             "ChampionSkinName": "MissFortuneSkin07",
-            "SelfIllumination": 0.7,
+            "MaterialOverride1SubMesh": "Arcade_TV_MAT",
+            "MaterialOverride1Texture": "Missfortune_Skin07_TV_TX_CM.dds",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Missfortune07.skn",
             "Skeleton": "Missfortune07.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
+            "SubmeshesToHide": "Arcade_TV_MAT",
             "Texture": "Missfortune_skin07_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1943617021": "Missfortune_Skin07_TV_TX_CM.dds",
-            "3700722767": "Arcade_TV_MAT",
-            "708066840": "Arcade_TV_MAT"
         }
     }
 }

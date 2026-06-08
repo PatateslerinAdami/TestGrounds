@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Diana.blnd",
-            "ChampionSkinID": "131000",
+            "ChampionSkinID": 131000,
             "ChampionSkinName": "Diana",
-            "SelfIllumination": 0.85,
+            "SelfIllumination": 0.8500000238418579,
             "SimpleSkin": "Diana.skn",
             "Skeleton": "Diana.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "Diana_base_TX_CM.dds"
         }
     }

@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "SRU_Spiritwolf.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinName": "SRU_SpiritWolf",
-            "SelfIllumination": 0.85,
+            "SelfIllumination": 0.8500000238418579,
             "SimpleSkin": "SRU_Spiritwolf.skn",
             "Skeleton": "SRU_Spiritwolf.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
             "Texture": "SRU_Spiritwolf.dds"
         }
     }

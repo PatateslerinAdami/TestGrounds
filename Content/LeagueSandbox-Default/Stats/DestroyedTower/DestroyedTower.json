@@ -7,7 +7,7 @@
     },
     "Values": {
         "IdleParticles": {
-            "GameplayCollisionRadius": 88.4,
+            "GameplayCollisionRadius": 88.4000015258789,
             "NumberOfParticles": 1,
             "Particle1": "DestroyedBuilding_idle.troy root"
         },
@@ -16,7 +16,7 @@
             "ChampionSkinName": "DestroyedTowerBase",
             "SelfIllumination": 0.5,
             "Skeleton": "DestroyedTower.skl",
-            "SkinScale": "0.87",
+            "SkinScale": 0.87,
             "Texture": "tower_destroyed_diff.dds"
         }
     }

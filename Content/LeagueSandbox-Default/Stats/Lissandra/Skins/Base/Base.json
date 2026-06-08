@@ -8,25 +8,23 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseLiss.blnd",
-            "ChampionSkinID": "127000",
+            "ChampionSkinID": 127000,
             "ChampionSkinName": "BaseLiss",
             "GlossTexture": "Lissandra_base_TX_GM.dds",
-            "OverrideBoundingBox": "130 330 130",
-            "ReflectionFresnel": 0.6,
+            "OverrideBoundingBox": "130.0000 330.0000 130.0000",
+            "ReflectionFresnel": 0.6000000000000001,
             "ReflectionFresnelBlue": 1.6,
             "ReflectionFresnelGreen": 1.6,
             "ReflectionFresnelRed": 1.6,
             "ReflectionMap": "Lissandra_base_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": 0.7,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 0.7000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Lissandra.skn",
             "Skeleton": "Lissandra.skl",
-            "SkinScale": 1.12,
+            "SkinScale": 1.1200000047683716,
+            "SubmeshesToHide": "Lissandra_Q_Spike2",
             "Texture": "Lissandra_base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Lissandra_Q_Spike2"
         }
     }
 }

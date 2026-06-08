@@ -14,10 +14,8 @@
             "SimpleSkin": "Olaf_bro.skn",
             "Skeleton": "Olaf_bro.skl",
             "SkinScale": 1.1,
-            "Texture": "olaf_brolaff_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "Texture": "olaf_brolaff_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

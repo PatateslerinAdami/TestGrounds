@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "SRUAP_turret_Chaos1.blnd",
             "ChampionSkinName": "SRUAPTurretChaos3",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRUAP_turret_Chaos1.skn",
             "Skeleton": "SRUAP_turret_Chaos1.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "Stage1,Stage2,Rubble,Break1,Break2,Break3",
             "Texture": "SRUAP_turret_Chaos1_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Stage1,Stage2,Rubble,Break1,Break2,Break3"
         }
     }
 }

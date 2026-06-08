@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseLeblanc.blnd",
-            "ChampionSkinID": "7000",
+            "ChampionSkinID": 7000,
             "ChampionSkinName": "BaseLeblanc",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Leblanc.skn",
             "Skeleton": "Leblanc.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
             "Texture": "leblanc_base_TX_CM.dds"
         }
     }

@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Nidalee_CougarBase.blnd",
-            "ChampionSkinID": "76000",
+            "ChampionSkinID": 76000,
             "ChampionSkinName": "Nidalee_CougarBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_Cougar.skn",
             "Skeleton": "Nidalee_Cougar.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "nidalee_base_cat_2012_TX_CM.dds"
         }
     }

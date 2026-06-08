@@ -140,7 +140,10 @@ namespace LeagueSandbox.GameServer.Content
             HpRegenPerLevel = file.GetFloat("Data", "HPRegenPerLevel", HpRegenPerLevel);
             HpPerLevel = file.GetFloat("Data", "HPPerLevel", HpPerLevel);
             Immobile = file.GetBool("Data", "Imobile", Immobile);
-            IsMelee = file.GetString("Data", "IsMelee", IsMelee ? "true" : "false").Equals("true");
+
+            var isMeleeStr = file.GetString("Data", "IsMelee", IsMelee ? "Yes" : "No");
+            IsMelee = isMeleeStr.Equals("Yes", StringComparison.OrdinalIgnoreCase)
+                   || isMeleeStr.Equals("true", StringComparison.OrdinalIgnoreCase);
             LocalGoldGivenOnDeath = file.GetFloat("Data", "LocalGoldGivenOnDeath", LocalGoldGivenOnDeath);
             MoveSpeed = file.GetInt("Data", "MoveSpeed", MoveSpeed);
             MpRegenPerLevel = file.GetFloat("Data", "MPRegenPerLevel", MpRegenPerLevel);

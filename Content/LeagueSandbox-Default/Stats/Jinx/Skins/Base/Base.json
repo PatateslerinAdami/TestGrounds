@@ -8,17 +8,15 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Jinx.blnd",
-            "ChampionSkinID": "222000",
+            "BrushAlphaOverride": 0.4,
+            "ChampionSkinID": 222000,
             "ChampionSkinName": "Jinx",
             "ExtraCharacterPreloads": "JinxMine",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Jinx.skn",
             "Skeleton": "Jinx.skl",
-            "SkinScale": 1.03,
+            "SkinScale": 1.0299999713897705,
             "Texture": "Jinx_base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.4
         }
     }
 }

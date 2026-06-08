@@ -11,7 +11,7 @@
             "ChampionSkinID": 1001,
             "ChampionSkinName": "AnnieGoth",
             "ExtraCharacterPreloads": "AnnieTibbers",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Annie_Goth.skn",
             "Skeleton": "Annie_Goth.skl",
             "SkinScale": 1,

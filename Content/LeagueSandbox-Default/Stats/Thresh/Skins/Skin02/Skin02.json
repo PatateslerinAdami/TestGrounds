@@ -11,15 +11,13 @@
             "ChampionSkinID": 412002,
             "ChampionSkinName": "ThreshSkin02",
             "ExtraCharacterPreloads": "ThreshLantern",
-            "OverrideBoundingBox": "160 280 160",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "160.0000 280.0000 160.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Thresh_Skin02.skn",
             "Skeleton": "Thresh_Skin02.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
+            "SubmeshesToHide": "Thresh_Skin02_Platform_Mat",
             "Texture": "Thresh_Skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Thresh_Skin02_Platform_Mat"
         }
     }
 }

@@ -10,10 +10,10 @@
             "Animations": "FossilKogMaw.blnd",
             "ChampionSkinID": 96007,
             "ChampionSkinName": "FossilKogMaw",
-            "SelfIllumination": 0.3,
+            "SelfIllumination": 0.30000000000000004,
             "SimpleSkin": "KogMaw_fossil_Dead.skn",
             "Skeleton": "KogMaw_fossil_Dead.skl",
-            "SkinScale": "0.7",
+            "SkinScale": 0.7,
             "Texture": "kogmaw_fossil_dead.dds"
         }
     }

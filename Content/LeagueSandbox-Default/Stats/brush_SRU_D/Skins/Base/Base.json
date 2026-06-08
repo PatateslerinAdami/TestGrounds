@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "brush_SRU_A.blnd",
             "ChampionSkinName": "brushSRUD",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "brush_SRU_D.skn",
             "Skeleton": "brush_SRU_D.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "SRU_Brush.dds"
         }
     }

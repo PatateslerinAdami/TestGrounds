@@ -10,14 +10,12 @@
             "Animations": "PaxSona.blnd",
             "ChampionSkinID": 37005,
             "ChampionSkinName": "PaxSona",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sona_pax.skn",
             "Skeleton": "Sona_pax.skl",
-            "SkinScale": 1.30000007,
-            "Texture": "sona_pax_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.3,
+            "Texture": "sona_pax_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

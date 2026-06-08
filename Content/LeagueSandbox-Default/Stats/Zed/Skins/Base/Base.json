@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Zed.blnd",
-            "ChampionSkinID": "238000",
+            "ChampionSkinID": 238000,
             "ChampionSkinName": "Zed",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Zed.skn",
             "Skeleton": "Zed.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "Zed_base_TX_CM.dds"
         }
     }

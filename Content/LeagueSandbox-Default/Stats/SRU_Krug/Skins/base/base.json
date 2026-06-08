@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRU_Krug.blnd",
             "ChampionSkinName": "SRU_Krug",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_Krug.skn",
             "Skeleton": "SRU_Krug.skl",
-            "SkinScale": 1.15,
+            "SkinScale": 1.149999976158142,
             "Texture": "SRU_Krug.dds"
         }
     }

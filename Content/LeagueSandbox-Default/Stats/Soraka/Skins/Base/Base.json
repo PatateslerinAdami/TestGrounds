@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "basesoraka.blnd",
-            "ChampionSkinID": "16000",
+            "ChampionSkinID": 16000,
             "ChampionSkinName": "BaseSoraka",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Soraka.skn",
             "Skeleton": "Soraka.skl",
-            "SkinScale": 1.27,
+            "SkinScale": 1.2699999809265137,
             "Texture": "Soraka_base_TX_CM.dds"
         }
     }

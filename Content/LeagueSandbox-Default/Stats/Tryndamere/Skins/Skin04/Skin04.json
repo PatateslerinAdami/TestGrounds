@@ -10,14 +10,12 @@
             "Animations": "TryndamereDemonsword.blnd",
             "ChampionSkinID": 23004,
             "ChampionSkinName": "TryndamereDemonsword",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Tryndamere_Demonsword.skn",
             "Skeleton": "Tryndamere_Demonsword.skl",
-            "SkinScale": "2.0",
-            "Texture": "Tryndamere_Demonsword_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 2.0,
+            "Texture": "Tryndamere_Demonsword_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

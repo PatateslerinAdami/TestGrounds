@@ -8,10 +8,10 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Annie.blnd",
-            "ChampionSkinID": "1000",
+            "ChampionSkinID": 1000,
             "ChampionSkinName": "Annie",
             "ExtraCharacterPreloads": "AnnieTibbers",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "annie_2012.skn",
             "Skeleton": "annie_2012.skl",
             "SkinScale": 1,

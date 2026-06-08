@@ -10,10 +10,10 @@
             "Animations": "ZedStormNinja.blnd",
             "ChampionSkinID": 238001,
             "ChampionSkinName": "ZedStormNinja",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Zed_StormNinja.skn",
             "Skeleton": "Zed_StormNinja.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "Zed_stormNinja_TX_CM.DDS"
         }
     }

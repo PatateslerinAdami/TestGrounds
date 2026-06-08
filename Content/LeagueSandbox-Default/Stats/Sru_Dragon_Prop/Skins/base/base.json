@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "Sru_Dragon_Prop.blnd",
             "ChampionSkinName": "SruDragonProp",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Dragon_Prop.skn",
             "Skeleton": "Sru_Dragon_Prop.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sru_Dragon_Prop_TX_CM.dds"
         }
     }

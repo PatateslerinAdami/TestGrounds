@@ -9,13 +9,13 @@
         "MeshSkin": {
             "Animations": "SightWardGhost.blnd",
             "ChampionSkinName": "SightWardGhost",
-            "ParallaxOffset": "0",
-            "SelfIllumination": 0.7,
+            "ParallaxOffset": 0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "sightWard_ghost.skn",
             "Skeleton": "sightWard_ghost.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "sightWard_ghost_TX_CM.dds",
-            "YOffset": -3.8
+            "YOffset": -3.799999952316284
         }
     }
 }

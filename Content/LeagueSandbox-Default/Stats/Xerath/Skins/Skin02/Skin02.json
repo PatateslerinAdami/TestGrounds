@@ -13,10 +13,10 @@
             "Animations": "BaseXerath.blnd",
             "ChampionSkinID": 101002,
             "ChampionSkinName": "IronXerath",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Xerath_Iron.skn",
             "Skeleton": "Xerath_Iron.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "Xerath_iron_TX_CM.dds"
         }
     }

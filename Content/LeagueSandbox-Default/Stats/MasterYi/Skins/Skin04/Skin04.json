@@ -10,10 +10,10 @@
             "Animations": "BaseMasterYi.blnd",
             "ChampionSkinID": 11004,
             "ChampionSkinName": "SamuraiMasterYi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "masteryi_samurai.skn",
             "Skeleton": "masteryi_samurai.skl",
-            "SkinScale": 1.55,
+            "SkinScale": 1.5499999523162842,
             "Texture": "masteryi_samurai_TX_CM.dds"
         }
     }

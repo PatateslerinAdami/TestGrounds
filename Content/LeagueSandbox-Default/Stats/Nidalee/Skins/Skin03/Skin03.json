@@ -11,10 +11,10 @@
             "ChampionSkinID": 76003,
             "ChampionSkinName": "FrenchMaidNidalee",
             "ExtraCharacterPreloads": "Nidalee_Cougar,Nidalee_Spear",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_frenchmaid.skn",
             "Skeleton": "Nidalee_frenchmaid.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "Nidalee_Frenchmaid_2012_TX_CM.dds"
         }
     }

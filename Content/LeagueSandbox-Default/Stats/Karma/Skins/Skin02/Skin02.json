@@ -10,14 +10,12 @@
             "Animations": "GeishaKarma.blnd",
             "ChampionSkinID": 43002,
             "ChampionSkinName": "GeishaKarma",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Karma_geisha.skn",
             "Skeleton": "Karma_geisha.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
+            "SubmeshesToHide": "karma_sakura_fans_mat",
             "Texture": "Karma_sakura_2012_cm.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "karma_sakura_fans_mat"
         }
     }
 }

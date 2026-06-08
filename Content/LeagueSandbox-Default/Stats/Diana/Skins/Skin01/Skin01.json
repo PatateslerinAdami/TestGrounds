@@ -10,10 +10,10 @@
             "Animations": "DianaDarkValkyrie.blnd",
             "ChampionSkinID": 131001,
             "ChampionSkinName": "DianaDarkValkyrie",
-            "SelfIllumination": 0.85,
+            "SelfIllumination": 0.8500000238418579,
             "SimpleSkin": "Diana_Dark_Valkyrie.skn",
             "Skeleton": "Diana_Dark_Valkyrie.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "Diana_dark_valkyrie_TX_CM.dds"
         }
     }

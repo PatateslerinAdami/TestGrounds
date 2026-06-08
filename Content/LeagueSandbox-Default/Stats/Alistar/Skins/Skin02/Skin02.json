@@ -10,10 +10,10 @@
             "Animations": "Alistar.blnd",
             "ChampionSkinID": 12002,
             "ChampionSkinName": "GoldenMinotaur",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar.skn",
             "Skeleton": "Alistar.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "Minotaur_golden_Diffuse.dds"
         }
     }

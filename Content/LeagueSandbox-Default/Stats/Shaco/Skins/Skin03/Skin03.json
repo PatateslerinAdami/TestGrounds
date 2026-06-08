@@ -10,14 +10,12 @@
             "Animations": "BaseJester.blnd",
             "ChampionSkinID": 35003,
             "ChampionSkinName": "NutcrackerJester",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Shaco_nutcracker.skn",
             "Skeleton": "Shaco_nutcracker.skl",
-            "SkinScale": 1.85,
-            "Texture": "shaco_nutcracker_TX_CM_v01.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31"
+            "SkinScale": 1.850000023841858,
+            "Texture": "shaco_nutcracker_TX_CM_v01.dds",
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

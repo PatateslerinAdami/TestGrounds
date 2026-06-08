@@ -9,11 +9,11 @@
         "MeshSkin": {
             "Animations": "SightWardTree.blnd",
             "ChampionSkinName": "SightWardTree",
-            "ParallaxOffset": "0",
-            "SelfIllumination": 0.7,
+            "ParallaxOffset": 0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "sightWard_tree.skn",
             "Skeleton": "sightWard_tree.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
             "Texture": "sightWard_tree_TX_CM.dds",
             "YOffset": -4
         }

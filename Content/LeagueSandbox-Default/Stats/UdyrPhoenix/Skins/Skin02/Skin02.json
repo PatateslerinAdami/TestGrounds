@@ -10,7 +10,7 @@
             "Animations": "PrimalUdyr.blnd",
             "ChampionSkinID": 77002,
             "ChampionSkinName": "PrimalUdyr",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Udyr_primal_phoenix.skn",
             "Skeleton": "Udyr_primal_phoenix.skl",
             "SkinScale": 1.1,

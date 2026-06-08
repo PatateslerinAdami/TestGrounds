@@ -13,10 +13,10 @@
             "Animations": "BaseLich.blnd",
             "ChampionSkinID": 30003,
             "ChampionSkinName": "KarthusSkin03",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "karthus_grimreaper.skn",
             "Skeleton": "karthus_grimreaper.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "karthus_grimreaper_TX_CM.dds"
         }
     }

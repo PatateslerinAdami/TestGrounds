@@ -11,17 +11,17 @@
             "ChampionSkinID": 254003,
             "ChampionSkinName": "Skin03",
             "GlossTexture": "Vi_Skin03_TX_GM.dds",
-            "ReflectionFresnel": 0.900000036,
+            "ReflectionFresnel": 0.9,
             "ReflectionFresnelBlue": 1.5,
-            "ReflectionFresnelGreen": 1.9,
-            "ReflectionFresnelRed": 1.9,
+            "ReflectionFresnelGreen": 1.9000000000000001,
+            "ReflectionFresnelRed": 1.9000000000000001,
             "ReflectionMap": "Vi_Skin03_TX_RM.dds",
             "ReflectionOpacityDirect": 0.5,
             "ReflectionOpacityGlancing": 0.5,
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Vi_Skin03.skn",
             "Skeleton": "Vi_Skin03.skl",
-            "SkinScale": 1.07,
+            "SkinScale": 1.0700000524520874,
             "Texture": "Vi_Skin03_TX_CM.dds"
         }
     }

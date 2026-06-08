@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SightWardSeason3.blnd",
             "ChampionSkinName": "SightWardSeason3",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Season3.skn",
             "Skeleton": "SightWard_Season3.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "sightWard_Season3_TX_CM.dds"
         }
     }

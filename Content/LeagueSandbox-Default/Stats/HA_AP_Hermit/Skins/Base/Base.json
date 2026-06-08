@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "HA_AP_Hermit.blnd",
             "ChampionSkinName": "HA_AP_Hermit",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_Hermit.skn",
             "Skeleton": "HA_AP_Hermit.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "HA_AP_Hermit.dds"
         }
     }

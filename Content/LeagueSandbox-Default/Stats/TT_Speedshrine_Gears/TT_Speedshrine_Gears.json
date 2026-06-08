@@ -12,13 +12,13 @@
         },
         "MeshSkin": {
             "Animations": "TT_Speedshrine_Gears.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinID": 987126,
             "ChampionSkinName": "TT_Speedshrine_Gears",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "TT_Speedshrine_Gears.skn",
             "Skeleton": "TT_Speedshrine_Gears.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "TT_Speedshrine_Gears.dds"
         }
     }

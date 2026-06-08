@@ -10,10 +10,10 @@
             "Animations": "DreadknightGaren.blnd",
             "ChampionSkinID": 86004,
             "ChampionSkinName": "DreadknightGaren",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Garen_dreadknight.skn",
             "Skeleton": "Garen_dreadknight.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "garen_dreadknight_TX_CM.dds"
         }
     }

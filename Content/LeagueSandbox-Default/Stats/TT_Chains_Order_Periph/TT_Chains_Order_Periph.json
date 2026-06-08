@@ -14,10 +14,10 @@
             "Animations": "TT_Chains_Order_Periph.blnd",
             "ChampionSkinID": 988125,
             "ChampionSkinName": "TT_Chains_Order_Periph",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "TT_Chains_Order_Periph.skn",
             "Skeleton": "TT_Chains_Order_Periph.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "TT_Chains.dds"
         }
     }

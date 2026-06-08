@@ -15,11 +15,11 @@
             "ChampionSkinID": 412001,
             "ChampionSkinName": "ThreshUndersea",
             "ExtraCharacterPreloads": "ThreshLantern",
-            "OverrideBoundingBox": "160 280 160",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "160.0000 280.0000 160.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Thresh_undersea.skn",
             "Skeleton": "Thresh_undersea.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
             "Texture": "Thresh_UnderSea_TX_CM.dds"
         }
     }

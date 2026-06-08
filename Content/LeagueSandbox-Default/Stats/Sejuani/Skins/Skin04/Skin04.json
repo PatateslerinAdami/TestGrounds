@@ -12,17 +12,15 @@
         },
         "MeshSkin": {
             "Animations": "SejuaniSkin04.blnd",
+            "BrushAlphaOverride": 0.5,
             "ChampionSkinID": 113004,
             "ChampionSkinName": "SejuaniSkin04",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sejuani_Skin04.skn",
             "Skeleton": "Sejuani_Skin04.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "sejuani_Skin04_world_weapon",
             "Texture": "sejuani_Skin04_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.5,
-            "708066840": "sejuani_Skin04_world_weapon"
         }
     }
 }

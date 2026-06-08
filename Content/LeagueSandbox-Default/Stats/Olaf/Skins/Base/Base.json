@@ -8,7 +8,7 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseOlaf.blnd",
-            "ChampionSkinID": "2000",
+            "ChampionSkinID": 2000,
             "ChampionSkinName": "BaseOlaf",
             "SelfIllumination": 0.5,
             "SimpleSkin": "Olaf.skn",

@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRU_RedMini.blnd",
             "ChampionSkinName": "SRU_RedMini",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_RedMini.skn",
             "Skeleton": "SRU_RedMini.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "SRU_RedMini.dds"
         }
     }

@@ -11,21 +11,19 @@
             "ChampionSkinID": 254002,
             "ChampionSkinName": "ViSkin02",
             "GlossTexture": "Vi_Skin02_TX_GM.dds",
-            "ReflectionFresnel": 0.6,
+            "ReflectionFresnel": 0.6000000000000001,
             "ReflectionFresnelBlue": 1.6,
             "ReflectionFresnelGreen": 1.6,
             "ReflectionFresnelRed": 1.6,
             "ReflectionMap": "Vi_Skin02_TX_RM.dds",
-            "ReflectionOpacityDirect": 0.900000036,
-            "ReflectionOpacityGlancing": 0.7,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 0.9,
+            "ReflectionOpacityGlancing": 0.7000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Vi_Skin02.skn",
             "Skeleton": "Vi_Skin02.skl",
-            "SkinScale": 1.07,
+            "SkinScale": 1.0700000524520874,
+            "SubmeshesToHide": "Vi_PoliceOfficer_Baton_Mat donut",
             "Texture": "Vi_Skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Vi_PoliceOfficer_Baton_Mat donut"
         }
     }
 }

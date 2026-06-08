@@ -8,13 +8,13 @@
     "Values": {
         "MeshSkin": {
             "Animations": "ZedShadow.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinID": 84006,
             "ChampionSkinName": "ZedShadow",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "ZedShadow.skn",
             "Skeleton": "ZedShadow.skl",
-            "SkinScale": 1.07,
+            "SkinScale": 1.0700000524520874,
             "Texture": "ZedShadow_base_TX_CM.DDS"
         }
     }
