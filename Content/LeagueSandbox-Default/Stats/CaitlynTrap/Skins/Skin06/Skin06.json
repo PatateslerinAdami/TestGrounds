@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "CaitlynTrapBase.blnd",
             "ChampionSkinName": "CaitlynTrapSkin06",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "CaitlynTrap_Skin06.skn",
             "Skeleton": "CaitlynTrap_Skin06.skl",
             "SkinScale": 2,

@@ -10,10 +10,10 @@
             "Animations": "RyzeBase.blnd",
             "ChampionSkinID": 13005,
             "ChampionSkinName": "ScholarRyze",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze_scholar.skn",
             "Skeleton": "Ryze_scholar.skl",
-            "SkinScale": 1.67,
+            "SkinScale": 1.6699999570846558,
             "Texture": "ryze_scholar_TX_CM.dds"
         }
     }

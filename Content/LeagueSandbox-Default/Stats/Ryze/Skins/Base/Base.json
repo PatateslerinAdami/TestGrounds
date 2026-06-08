@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "RyzeBase.blnd",
-            "ChampionSkinID": "13000",
+            "ChampionSkinID": 13000,
             "ChampionSkinName": "RyzeBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze.skn",
             "Skeleton": "Ryze.skl",
-            "SkinScale": 1.67,
+            "SkinScale": 1.6699999570846558,
             "Texture": "Ryze.dds"
         }
     }

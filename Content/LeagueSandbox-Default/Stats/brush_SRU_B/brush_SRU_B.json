@@ -7,9 +7,9 @@
     },
     "Values": {
         "Interaction": {
-            "DoubleSided": "true",
+            "DoubleSided": 1,
             "IdleAnim": "Distance",
-            "RandomizeIdleAnimPhase": "true"
+            "RandomizeIdleAnimPhase": 1
         },
         "Package": {
             "FallbackPackage": "brush_SRU_A"

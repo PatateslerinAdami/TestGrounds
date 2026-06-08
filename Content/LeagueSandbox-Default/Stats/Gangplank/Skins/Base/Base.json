@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Gangplank.blnd",
-            "ChampionSkinID": "41000",
+            "ChampionSkinID": 41000,
             "ChampionSkinName": "Gangplank",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gangplank.skn",
             "Skeleton": "Gangplank.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "gangplank_base_2011_TX_CM.dds"
         }
     }

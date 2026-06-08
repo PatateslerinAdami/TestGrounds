@@ -13,14 +13,12 @@
             "Animations": "BaseLich.blnd",
             "ChampionSkinID": 30004,
             "ChampionSkinName": "KarthusSkin04",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "karthus_pentakill.skn",
             "Skeleton": "karthus_pentakill.skl",
-            "SkinScale": 1.07,
-            "Texture": "karthus_pentakill_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.0700000524520874,
+            "Texture": "karthus_pentakill_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

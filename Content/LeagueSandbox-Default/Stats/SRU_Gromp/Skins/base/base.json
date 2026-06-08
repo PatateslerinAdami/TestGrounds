@@ -10,27 +10,27 @@
             "Animations": "SRU_Gromp.blnd",
             "ChampionSkinName": "SRU_Gromp",
             "GlossTexture": "SRU_Gromp_base_TX_GM.dds",
-            "MaterialOverride0Submesh": "SRU_Gromp_mini_mat",
+            "MaterialOverride0SubMesh": "SRU_Gromp_mini_mat",
             "MaterialOverride0Texture": "SRU_Gromp_mini_TX_CM.dds",
-            "ReflectionFresnel": 0.3,
-            "ReflectionFresnelBlue": 0.3,
-            "ReflectionFresnelGreen": 0.3,
-            "ReflectionFresnelRed": 0.3,
+            "ReflectionFresnel": 0.30000000000000004,
+            "ReflectionFresnelBlue": 0.30000000000000004,
+            "ReflectionFresnelGreen": 0.30000000000000004,
+            "ReflectionFresnelRed": 0.30000000000000004,
             "ReflectionMap": "SRU_Gromp_base_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": "1.0",
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 1.0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_Gromp.skn",
             "Skeleton": "SRU_Gromp.skl",
             "SkinScale": 1,
+            "SubmeshesToHide": "Gromp_Spawn_Mat",
             "Texture": "SRU_Gromp_base_TX_CM.dds"
         },
         "UNKNOWN_HASHES": {
-            "1963414016": 0.3,
-            "2403406705": 0.1,
-            "708066840": "Gromp_Spawn_Mat",
-            "890371954": 0.3,
-            "971215659": 0.3
+            "890371954": 0.30000000000000004,
+            "971215659": 0.30000000000000004,
+            "1963414016": 0.30000000000000004,
+            "2403406705": 0.1
         }
     }
 }

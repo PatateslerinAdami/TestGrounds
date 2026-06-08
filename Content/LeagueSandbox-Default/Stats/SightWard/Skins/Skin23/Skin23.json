@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "sightwardfutbol.blnd",
             "ChampionSkinName": "SightWardFutbol",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Futbol.skn",
             "Skeleton": "SightWard_Futbol.skl",
-            "SkinScale": "0.85",
+            "SkinScale": 0.85,
             "Texture": "Sightward_Futbol_TX_CM.dds",
             "YOffset": -2
         }

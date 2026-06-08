@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseJester.blnd",
-            "ChampionSkinID": "35000",
+            "ChampionSkinID": 35000,
             "ChampionSkinName": "BaseJester",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Shaco.skn",
             "Skeleton": "Shaco.skl",
-            "SkinScale": 1.85,
+            "SkinScale": 1.850000023841858,
             "Texture": "Jester.dds"
         }
     }

@@ -10,10 +10,10 @@
             "Animations": "SanguineGaren.blnd",
             "ChampionSkinID": 86001,
             "ChampionSkinName": "SanguineGaren",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Garen_Sanguine.skn",
             "Skeleton": "Garen_Sanguine.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "Garen_RedGoldArmor_TX_CM.dds"
         }
     }

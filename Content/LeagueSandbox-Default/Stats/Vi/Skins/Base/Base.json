@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Vi.blnd",
-            "ChampionSkinID": "254000",
+            "ChampionSkinID": 254000,
             "ChampionSkinName": "Vi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Vi.skn",
             "Skeleton": "Vi.skl",
-            "SkinScale": 1.07,
+            "SkinScale": 1.0700000524520874,
             "Texture": "Vi_TX_CM.dds"
         }
     }

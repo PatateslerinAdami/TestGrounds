@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "HA_AP_Poro.blnd",
             "ChampionSkinName": "HA_AP_Poro",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_Poro.skn",
             "Skeleton": "HA_AP_Poro.skl",
-            "SkinScale": 0.28,
+            "SkinScale": 0.2800000011920929,
             "Texture": "HA_AP_Poro.dds"
         }
     }

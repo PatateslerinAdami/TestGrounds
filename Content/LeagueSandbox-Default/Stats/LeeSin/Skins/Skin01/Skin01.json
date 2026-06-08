@@ -10,10 +10,10 @@
             "Animations": "BaseBlindMonk.blnd",
             "ChampionSkinID": 64001,
             "ChampionSkinName": "ClassicBlindMonk",
-            "SelfIllumination": 0.900000036,
+            "SelfIllumination": 0.9,
             "SimpleSkin": "LeeSin_classic.skn",
             "Skeleton": "LeeSin_classic.skl",
-            "SkinScale": 1.82,
+            "SkinScale": 1.8200000524520874,
             "Texture": "LeeSin_classic_TX_CM.DDS"
         }
     }

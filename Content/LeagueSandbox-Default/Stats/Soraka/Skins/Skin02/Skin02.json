@@ -10,10 +10,10 @@
             "Animations": "humansoraka.blnd",
             "ChampionSkinID": 16002,
             "ChampionSkinName": "HumanSoraka_REWORK",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Soraka_human.skn",
             "Skeleton": "Soraka_human.skl",
-            "SkinScale": 1.27,
+            "SkinScale": 1.2699999809265137,
             "Texture": "soraka_divine_2012_TX_CM.dds"
         }
     }

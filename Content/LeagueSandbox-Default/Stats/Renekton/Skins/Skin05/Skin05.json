@@ -13,10 +13,10 @@
             "Animations": "renekton_volcanogod.blnd",
             "ChampionSkinID": 58005,
             "ChampionSkinName": "Renekton_VolcanoGod",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Renekton_VolcanoGod.skn",
             "Skeleton": "Renekton_VolcanoGod.skl",
-            "SkinScale": 1.56,
+            "SkinScale": 1.559999942779541,
             "Texture": "renekton_volcanogod_TX_CM.dds",
             "YOffset": 0.5
         }

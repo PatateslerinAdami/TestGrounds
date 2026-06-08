@@ -13,10 +13,10 @@
             "Animations": "BaseNasus.blnd",
             "ChampionSkinID": 75002,
             "ChampionSkinName": "PharaohNasus",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nasus_pharaoh.skn",
             "Skeleton": "Nasus_pharaoh.skl",
-            "SkinScale": 1.18,
+            "SkinScale": 1.1799999475479126,
             "Texture": "nasus_pharoah_TX_CM.dds"
         }
     }

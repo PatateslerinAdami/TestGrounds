@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRUAP_flag.blnd",
             "ChampionSkinName": "SRUAPflag",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRUAP_flag.skn",
             "Skeleton": "SRUAP_flag.skl",
-            "SkinScale": 0.45,
+            "SkinScale": 0.44999998807907104,
             "Texture": "SRUAP_flag_TX_CM.dds"
         }
     }

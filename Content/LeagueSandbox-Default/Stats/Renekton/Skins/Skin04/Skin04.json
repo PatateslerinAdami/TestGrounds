@@ -13,10 +13,10 @@
             "Animations": "renekton_runewars.blnd",
             "ChampionSkinID": 58004,
             "ChampionSkinName": "Renekton_RuneWars",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Renekton_runewars.skn",
             "Skeleton": "Renekton_runewars.skl",
-            "SkinScale": 1.48,
+            "SkinScale": 1.4800000190734863,
             "Texture": "renekton_rune_wars_TX_CM.dds",
             "YOffset": 0.5
         }

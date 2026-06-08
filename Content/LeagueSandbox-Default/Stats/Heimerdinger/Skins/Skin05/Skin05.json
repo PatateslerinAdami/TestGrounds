@@ -12,25 +12,23 @@
             "ChampionSkinName": "HeimerdingerSkin05",
             "ExtraCharacterPreloads": "HeimerTYellow,HeimerTBlue",
             "GlossTexture": "Heimerdinger_Skin05_TX_GM.dds",
-            "MaterialOverride0Submesh": "Heimerdinger_Recall",
+            "MaterialOverride0SubMesh": "Heimerdinger_Recall",
             "MaterialOverride0Texture": "Heimerdinger_Skin05_Recall_TX_CM.dds",
-            "OverrideBoundingBox": "100 200 100",
-            "ReflectionFresnel": 0.900000036,
+            "OverrideBoundingBox": "100.0000 200.0000 100.0000",
+            "ReflectionFresnel": 0.9,
             "ReflectionFresnelBlue": 1.5,
-            "ReflectionFresnelGreen": 1.9,
-            "ReflectionFresnelRed": 1.9,
+            "ReflectionFresnelGreen": 1.9000000000000001,
+            "ReflectionFresnelRed": 1.9000000000000001,
             "ReflectionMap": "Heimerdinger_Skin05_TX_RM.dds",
-            "ReflectionOpacityDirect": 0.7,
-            "ReflectionOpacityGlancing": 0.7,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 0.7000000000000001,
+            "ReflectionOpacityGlancing": 0.7000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Heimerdinger_Skin05.skn",
             "Skeleton": "Heimerdinger_Skin05.skl",
             "SkinScale": 1,
+            "SubmeshesToHide": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna, Heimerdinger_Recall",
             "Texture": "Heimerdinger_Skin05_TX_CM.dds",
             "YOffset": -1
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna, Heimerdinger_Recall"
         }
     }
 }

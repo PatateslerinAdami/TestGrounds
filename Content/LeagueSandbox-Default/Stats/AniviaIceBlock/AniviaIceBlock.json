@@ -7,44 +7,47 @@
     },
     "Values": {
         "Data": {
-            "Armor": "10.0",
-            "ArmorPerLevel": "0",
-            "AttackDelayCastOffsetPercent": 0.0958,
+            "Armor": 10.0,
+            "ArmorPerLevel": 0,
+            "AttackDelayCastOffsetPercent": 0.0957999974489212,
             "AttackDelayOffsetPercent": 0,
-            "AttackRange": "100",
+            "AttackRange": 100,
             "AttackSpeed": 1.6,
             "AttackSpeedPerLevel": 0,
-            "BaseCritChance": "0",
-            "BaseDamage": "40.0",
+            "BaseCritChance": 0,
+            "BaseDamage": 40.0,
             "BaseDodge": 0,
-            "BaseFactorHPRegen": 0.0015,
-            "BaseFactorMPRegen": 0.0015,
-            "BaseHP": "402.0",
+            "BaseFactorHPRegen": 0.001500000013038516,
+            "BaseFactorMPRegen": 0.001500000013038516,
+            "BaseHP": 402.0,
             "BaseMP": 0,
+            "BaseSpellEffectiveness": 1.0,
             "BaseStaticHPRegen": 0.5,
             "BaseStaticMPRegen": 0.5,
             "CritDamageBonus": 1,
-            "CritPerLevel": "0",
-            "DamagePerLevel": "0",
+            "CritPerLevel": 0,
+            "DamagePerLevel": 0,
             "Description": "game_character_description_IceBlock",
-            "ExpGivenOnDeath": "0",
-            "GoldGivenOnDeath": "0",
-            "HPPerLevel": "150",
-            "IsMelee": "true",
+            "ExpGivenOnDeath": 0,
+            "GoldGivenOnDeath": 0,
+            "HPPerLevel": 150,
+            "IsMelee": "Yes",
             "LevelDodge": 0,
-            "MoveSpeed": "0",
-            "MPPerLevel": "0",
+            "LevelSpellEffectiveness": 0,
+            "MPPerLevel": 0,
+            "MoveSpeed": 0,
             "Name": "game_character_displayname_IceBlock",
             "NoHealthBar": 1,
-            "PathfindingCollisionRadius": "100",
-            "SelectionHeight": "100",
-            "SelectionRadius": "130",
+            "PathfindingCollisionRadius": 100,
+            "SelectionHeight": 100,
+            "SelectionRadius": 130,
             "Significance": 0.1,
             "SoulGivenOnDeath": 0,
             "Spell1": "BaseSpell",
             "Spell2": "BaseSpell",
             "Spell3": "BaseSpell",
-            "Spell4": "BaseSpell"
+            "Spell4": "BaseSpell",
+            "baseAttackSpeedBonus": 0
         },
         "Info": {
             "IconCircle": "bear_Circle.dds",
@@ -56,7 +59,7 @@
             "SelfIllumination": 0.5,
             "SimpleSkin": "IceBlock.skn",
             "Skeleton": "IceBlock.skl",
-            "SkinScale": "0.25",
+            "SkinScale": 0.25,
             "Texture": "IceBlock.dds"
         },
         "MeshSkin1": {
@@ -65,7 +68,7 @@
             "SelfIllumination": 0.5,
             "SimpleSkin": "IceBlock.skn",
             "Skeleton": "IceBlock.skl",
-            "SkinScale": "0.25",
+            "SkinScale": 0.25,
             "Texture": "IceBlock.dds"
         },
         "MeshSkin2": {
@@ -74,7 +77,7 @@
             "SelfIllumination": 0.5,
             "SimpleSkin": "IceBlock.skn",
             "Skeleton": "IceBlock.skl",
-            "SkinScale": "0.25",
+            "SkinScale": 0.25,
             "Texture": "IceBlock.dds"
         },
         "MeshSkin3": {
@@ -83,7 +86,7 @@
             "SelfIllumination": 0.5,
             "SimpleSkin": "IceBlock.skn",
             "Skeleton": "IceBlock.skl",
-            "SkinScale": "0.25",
+            "SkinScale": 0.25,
             "Texture": "IceBlock.dds"
         },
         "MeshSkin4": {
@@ -92,29 +95,24 @@
             "SelfIllumination": 0.5,
             "SimpleSkin": "IceBlock.skn",
             "Skeleton": "IceBlock.skl",
-            "SkinScale": "0.25",
+            "SkinScale": 0.25,
             "Texture": "IceBlock.dds"
         },
         "MeshSkin5": {
             "Animations": "AniviaIceBlockBlackIce.blnd",
             "ChampionSkinName": "AniviaIceBlockBlackIce",
-            "ReflectionFresnel": "1.0",
+            "ReflectionFresnel": 1.0,
             "ReflectionFresnelBlue": 1,
             "ReflectionFresnelGreen": 0.5,
             "ReflectionFresnelRed": 0.5,
             "ReflectionMap": "AniviaIceBlock_BlackIce_TX_RM.dds",
             "ReflectionOpacityDirect": 0.2,
-            "ReflectionOpacityGlancing": 0.3,
+            "ReflectionOpacityGlancing": 0.30000000000000004,
             "SelfIllumination": 0.5,
             "SimpleSkin": "AniviaIceBlock_BlackIce.skn",
             "Skeleton": "AniviaIceBlock_BlackIce.skl",
             "SkinScale": 1,
             "Texture": "AniviaIceBlock_BlackIce_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2818610673": 0,
-            "386495002": 0,
-            "3983263047": "1.0"
         }
     }
 }

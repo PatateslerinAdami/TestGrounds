@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "KoreanShaco.blnd",
             "ChampionSkinName": "KoreanShaco",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "ShacoBox_Korean.skn",
             "Skeleton": "ShacoBox_Korean.skl",
             "SkinScale": 4.3,

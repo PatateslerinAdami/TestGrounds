@@ -10,10 +10,10 @@
             "Animations": "AzirSoldier.blnd",
             "ChampionSkinID": 436001,
             "ChampionSkinName": "AzirSoldierSkin01",
-            "SelfIllumination": 0.900000036,
+            "SelfIllumination": 0.9,
             "SimpleSkin": "AzirSoldier_Skin01.skn",
             "Skeleton": "AzirSoldier_Skin01.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "AzirSoldier_Skin01_TX_CM.dds"
         }
     }

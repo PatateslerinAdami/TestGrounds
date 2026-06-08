@@ -10,10 +10,10 @@
             "Animations": "CouncilMasterYi.blnd",
             "ChampionSkinID": 11002,
             "ChampionSkinName": "CouncilMasterYi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "MasterYi_chosen.skn",
             "Skeleton": "MasterYi_chosen.skl",
-            "SkinScale": 1.55,
+            "SkinScale": 1.5499999523162842,
             "Texture": "MasterYi_chosen_TX_CM.dds"
         }
     }

@@ -13,15 +13,13 @@
             "Animations": "GnarSkin01.blnd",
             "ChampionSkinID": 150001,
             "ChampionSkinName": "GnarSkin01",
-            "SelfIllumination": 0.7,
+            "MaterialOverride1SubMesh": "Dino_Gnar_Angry_Mat",
+            "MaterialOverride1Texture": "Gnar_skin01_angry_TX_CMM.dds",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gnar_Skin01.skn",
             "Skeleton": "Gnar_Skin01.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Gnar_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1943617021": "Gnar_skin01_angry_TX_CMM.dds",
-            "3700722767": "Dino_Gnar_Angry_Mat"
         }
     }
 }

@@ -13,10 +13,10 @@
             "Animations": "BaseLich.blnd",
             "ChampionSkinID": 30005,
             "ChampionSkinName": "KarthusSkin05",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Karthus_Skin05.skn",
             "Skeleton": "Karthus_Skin05.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Karthus_Skin05_TX_CM.dds"
         }
     }

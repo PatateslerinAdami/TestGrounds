@@ -10,7 +10,7 @@
             "Animations": "Ashe.blnd",
             "ChampionSkinID": 22003,
             "ChampionSkinName": "WoadBowmaster",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ashe_Woadleader.skn",
             "Skeleton": "Ashe_Woadleader.skl",
             "SkinScale": 1.1,

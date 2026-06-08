@@ -10,10 +10,10 @@
             "Animations": "ArmoredAlistar.blnd",
             "ChampionSkinID": 12006,
             "ChampionSkinName": "ArmoredAlistar",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar_armored.skn",
             "Skeleton": "Alistar_armored.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "alistar_armored_TX_CM.dds"
         }
     }

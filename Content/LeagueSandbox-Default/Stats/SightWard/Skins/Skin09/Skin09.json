@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SightWardBanner.blnd",
             "ChampionSkinName": "SightWardBanner",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Banner.skn",
             "Skeleton": "SightWard_Banner.skl",
-            "SkinScale": 1.30000007,
+            "SkinScale": 1.3,
             "Texture": "sightWard_banner_TX_CM.dds"
         }
     }

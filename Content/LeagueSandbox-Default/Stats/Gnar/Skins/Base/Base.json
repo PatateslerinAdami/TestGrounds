@@ -11,18 +11,16 @@
         },
         "MeshSkin": {
             "Animations": "gnar.blnd",
-            "ChampionSkinID": "150000",
+            "ChampionSkinID": 150000,
             "ChampionSkinName": "Gnar",
-            "MaterialOverride0Submesh": "Gnar_Boomerang",
+            "MaterialOverride0SubMesh": "Gnar_Boomerang",
             "MaterialOverride0Texture": "Gnar_Base_Boomerang_TX_CM.dds",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gnar.skn",
             "Skeleton": "Gnar.skl",
-            "SkinScale": "0.9",
+            "SkinScale": 0.9,
+            "SubmeshesToHide": "Gnar_Boomerang",
             "Texture": "Gnar_Base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Gnar_Boomerang"
         }
     }
 }

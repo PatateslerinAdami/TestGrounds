@@ -10,16 +10,14 @@
             "Animations": "Jayce_Base.blnd",
             "ChampionSkinID": 126001,
             "ChampionSkinName": "Jayce_Sentinel",
-            "ParallaxOffset": "0",
-            "SelfIllumination": 0.7,
+            "ParallaxOffset": 0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Jayce_Sentinel.skn",
             "Skeleton": "Jayce_Sentinel.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "Jayce_sentinel_TX_CM.dds",
+            "UsesSkinVO": 1,
             "YOffset": -0.25
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
         }
     }
 }

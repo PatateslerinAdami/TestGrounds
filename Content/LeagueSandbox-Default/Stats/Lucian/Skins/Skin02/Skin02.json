@@ -9,16 +9,14 @@
         "MeshSkin": {
             "Animations": "lucianskin02.blnd",
             "AttributeFlags": 1,
+            "BrushAlphaOverride": 0.4,
             "ChampionSkinID": 236002,
             "ChampionSkinName": "LucianSkin02",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Lucian_Skin02.skn",
             "Skeleton": "Lucian_Skin02.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "Lucian_Skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.4
         }
     }
 }

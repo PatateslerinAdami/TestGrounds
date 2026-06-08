@@ -12,7 +12,7 @@
         "MeshSkin": {
             "Animations": "Nidalee_SpearBase.manifest",
             "ChampionSkinName": "Nidalee_SpearBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_Spear.skn",
             "Skeleton": "Nidalee_Spear.skl",
             "SkinScale": 3.2,

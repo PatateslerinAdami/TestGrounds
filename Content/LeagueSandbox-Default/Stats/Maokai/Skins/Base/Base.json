@@ -8,13 +8,13 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Maokai.blnd",
-            "ChampionSkinID": "57000",
+            "ChampionSkinID": 57000,
             "ChampionSkinName": "Maokai",
-            "OverrideBoundingBox": "190 260 190",
+            "OverrideBoundingBox": "190.0000 260.0000 190.0000",
             "SelfIllumination": 1,
             "SimpleSkin": "Maokai.skn",
             "Skeleton": "Maokai.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "Maokai_Base_2014_TX_CM.dds"
         }
     }

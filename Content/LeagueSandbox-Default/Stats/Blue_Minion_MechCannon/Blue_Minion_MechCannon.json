@@ -10,19 +10,20 @@
             "Armor": 15,
             "ArmorMaterial": "Wood",
             "ArmorPerLevel": 0,
-            "AttackDelayCastOffsetPercent": 0.045,
+            "AttackDelayCastOffsetPercent": 0.04500000178813934,
             "AttackDelayOffsetPercent": -0.375,
-            "AttackRange": "300",
-            "AttackSpeed": "2.0",
+            "AttackRange": 300,
+            "AttackSpeed": 2.0,
             "AttackSpeedPerLevel": 0,
             "BaseAttack_Probability": 0.8,
             "BaseCritChance": 0,
-            "BaseDamage": "40.0",
+            "BaseDamage": 40.0,
             "BaseDodge": 0,
             "BaseFactorHPRegen": 0,
             "BaseFactorMPRegen": 0,
-            "BaseHP": "700",
-            "BaseMP": "0",
+            "BaseHP": 700,
+            "BaseMP": 0,
+            "BaseSpellEffectiveness": 0,
             "BaseStaticHPRegen": 0,
             "BaseStaticMPRegen": 0,
             "CritDamageBonus": 2,
@@ -31,23 +32,24 @@
             "DeathTime": 2.5,
             "Description": "game_character_description_Blue_Minion_MechCannon",
             "EnemyTooltip": "",
-            "ExpGivenOnDeath": "94.0",
+            "ExpGivenOnDeath": 94.0,
             "ExtraAttack1": "Blue_Minion_MechCannonBasicAttack2",
             "ExtraAttack1_Probability": 0.2,
             "FriendlyTooltip": "",
-            "GameplayCollisionRadius": "65.0",
-            "GoldGivenOnDeath": "35.0",
-            "HPPerLevel": "0",
-            "IsMelee": "false",
+            "GameplayCollisionRadius": 65.0,
+            "GoldGivenOnDeath": 35.0,
+            "HPPerLevel": 0,
+            "IsMelee": "No",
             "LevelDodge": 0,
+            "LevelSpellEffectiveness": 0,
+            "MPPerLevel": 0,
             "Metadata": "class:minion",
             "MoveSpeed": 325,
-            "MPPerLevel": "0",
             "Name": "game_character_displayname_Blue_Minion_MechCannon",
-            "PathfindingCollisionRadius": 55.7437,
-            "PerceptionBubbleRadius": "1200",
+            "PathfindingCollisionRadius": 55.74369812011719,
+            "PerceptionBubbleRadius": 1200,
             "SelectionHeight": 95,
-            "SelectionRadius": "140",
+            "SelectionRadius": 140,
             "Significance": 0.5,
             "SoulGivenOnDeath": 0,
             "Spell1": "BaseSpell",
@@ -55,7 +57,8 @@
             "Spell3": "BaseSpell",
             "Spell4": "BaseSpell",
             "TowerTargetingPriorityBoost": 4,
-            "UnitTags": "Minion | Minion_Lane | Minion_Lane_Siege"
+            "UnitTags": "Minion | Minion_Lane | Minion_Lane_Siege",
+            "baseAttackSpeedBonus": 30.0
         },
         "Info": {
             "IconCircle": "Bluemechcannon_Circle.dds",
@@ -64,7 +67,7 @@
         "MeshSkin": {
             "Animations": "Blue_Minion_MechCannonBase.blnd",
             "ChampionSkinName": "Blue_Minion_MechCannonBase",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Blue_Minion_MechCannon.skn",
             "Skeleton": "Blue_Minion_MechCannon.skl",
             "Texture": "Blue_Minion_MechCannon.dds"
@@ -72,7 +75,7 @@
         "MeshSkin1": {
             "Animations": "Blue_Minion_MechCannonBase.blnd",
             "ChampionSkinName": "MeshSkin1",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Blue_Minion_MechCannon.skn",
             "Skeleton": "Blue_Minion_MechCannon.skl",
             "Texture": "blueminion_mechcannon_bathead_minions_TX_CM_v01.dds"
@@ -80,18 +83,13 @@
         "MeshSkin2": {
             "Animations": "Blue_Minion_MechCannonBase.blnd",
             "ChampionSkinName": "MeshSkin2",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Blue_Minion_MechCannon.skn",
             "Skeleton": "Blue_Minion_MechCannon.skl",
             "Texture": "blueminion_mechcannon_raindeer_TX_CM_v01.dds"
         },
         "Sounds": {
             "Death": "Order_Minion_Rider_Death_1.wav"
-        },
-        "UNKNOWN_HASHES": {
-            "2818610673": "30.0",
-            "386495002": "0",
-            "3983263047": "0"
         }
     }
 }

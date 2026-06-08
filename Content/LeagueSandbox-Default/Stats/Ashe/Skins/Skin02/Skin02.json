@@ -11,7 +11,7 @@
             "ChampionSkinID": 22002,
             "ChampionSkinName": "SherwoodBowmaster",
             "EmissiveTexture": "Bowmaster_Diffuse_Cmask.dds",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ashe.skn",
             "Skeleton": "Ashe.skl",
             "SkinScale": 1.1,

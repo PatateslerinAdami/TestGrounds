@@ -11,10 +11,10 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 86003,
             "ChampionSkinName": "CommandoGaren",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "garen_commando.skn",
             "Skeleton": "garen_commando.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "garen_commando_TX_CM.dds"
         }
     }

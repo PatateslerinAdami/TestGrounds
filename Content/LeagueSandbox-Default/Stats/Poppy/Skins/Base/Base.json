@@ -8,7 +8,7 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BasePoppy.blnd",
-            "ChampionSkinID": "78000",
+            "ChampionSkinID": 78000,
             "ChampionSkinName": "BasePoppy",
             "SelfIllumination": 0.5,
             "SimpleSkin": "Poppy.skn",

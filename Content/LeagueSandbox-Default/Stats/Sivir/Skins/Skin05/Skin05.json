@@ -14,12 +14,12 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 15005,
             "ChampionSkinName": "PaxSivir",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sivir_pax.skn",
             "Skeleton": "Sivir_pax.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "sivir_pax_TX_CM.dds",
-            "YOffset": "-0.2"
+            "YOffset": -0.2
         }
     }
 }

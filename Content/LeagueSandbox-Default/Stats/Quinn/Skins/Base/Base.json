@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseQuinn.blnd",
-            "ChampionSkinID": "133000",
+            "ChampionSkinID": 133000,
             "ChampionSkinName": "BaseQuinn",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Quinn.skn",
             "Skeleton": "Quinn.skl",
-            "SkinScale": 1.30000007,
+            "SkinScale": 1.3,
             "Texture": "Quinn_base_TX_CM.dds"
         }
     }

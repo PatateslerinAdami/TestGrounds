@@ -11,7 +11,7 @@
             "ChampionSkinID": 1008,
             "ChampionSkinName": "AnniePanda",
             "ExtraCharacterPreloads": "AnnieTibbers",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Annie_Panda.skn",
             "Skeleton": "Annie_Panda.skl",
             "SkinScale": 1,

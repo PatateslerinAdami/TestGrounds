@@ -13,18 +13,16 @@
             "Animations": "GangsterTwitch.blnd",
             "ChampionSkinID": 29004,
             "ChampionSkinName": "GangsterTwitch",
-            "MaterialOverride0Submesh": "Twitch_cheese_Mat",
+            "MaterialOverride0SubMesh": "Twitch_cheese_Mat",
             "MaterialOverride0Texture": "twitch_cheese_TX_CM.dds",
-            "OverrideBoundingBox": "140 160 140",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "140.0000 160.0000 140.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "twitch_gangster.skn",
             "Skeleton": "twitch_gangster.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "Twitch_Cheese_Mat",
             "Texture": "twitch_gangster_TX_CM.dds",
-            "YOffset": 0.15
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Twitch_Cheese_Mat"
+            "YOffset": 0.15000000596046448
         }
     }
 }

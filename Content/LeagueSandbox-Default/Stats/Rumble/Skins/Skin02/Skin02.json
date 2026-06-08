@@ -10,10 +10,10 @@
             "Animations": "bilgeratRumble.blnd",
             "ChampionSkinID": 68002,
             "ChampionSkinName": "bilgeratRumble",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "rumble_bilgerat.skn",
             "Skeleton": "rumble_bilgerat.skl",
-            "SkinScale": 1.9,
+            "SkinScale": 1.9000000000000001,
             "Texture": "rumble_bilgerat_TX_CM.dds"
         }
     }

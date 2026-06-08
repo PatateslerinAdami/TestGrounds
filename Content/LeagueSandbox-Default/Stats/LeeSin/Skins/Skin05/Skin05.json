@@ -11,17 +11,15 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 64005,
             "ChampionSkinName": "LeeSinSkin05",
-            "MaterialOverride0Submesh": "LeeSin_tree",
+            "MaterialOverride0SubMesh": "LeeSin_tree",
             "MaterialOverride0Texture": "LeeSin_Skin05_Recall_TX_CM.dds",
-            "OverrideBoundingBox": "75 120 75",
-            "SelfIllumination": 0.900000036,
+            "OverrideBoundingBox": "75.0000 120.0000 75.0000",
+            "SelfIllumination": 0.9,
             "SimpleSkin": "LeeSin_Skin05.skn",
             "Skeleton": "LeeSin_Skin05.skl",
-            "SkinScale": 1.82,
+            "SkinScale": 1.8200000524520874,
+            "SubmeshesToHide": "LeeSin_Tree",
             "Texture": "LeeSin_Skin05_TX_CM.DDS"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "LeeSin_Tree"
         }
     }
 }

@@ -13,7 +13,7 @@
             "SelfIllumination": 0.8,
             "SimpleSkin": "AnnieTibbers_Reverse.skn",
             "Skeleton": "AnnieTibbers_Reverse.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "AnnieTibbers_Reverse_TX_CM.dds"
         }
     }

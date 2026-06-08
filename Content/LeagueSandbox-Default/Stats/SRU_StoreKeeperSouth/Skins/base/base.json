@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRUStoreKeeperSouth.blnd",
             "ChampionSkinName": "SRUStoreKeeperSouth",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_StoreKeeperSouth.skn",
             "Skeleton": "SRU_StoreKeeperSouth.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "SRU_StoreKeeperSouth_TX_CM.dds"
         }
     }

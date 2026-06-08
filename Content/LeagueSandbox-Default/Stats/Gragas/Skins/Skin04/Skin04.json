@@ -14,10 +14,10 @@
             "Animations": "ClassyGragas.blnd",
             "ChampionSkinID": 79004,
             "ChampionSkinName": "ClassyGragas",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gragas_classy.skn",
             "Skeleton": "Gragas_classy.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "gragas_classy_TX_CM.dds"
         }
     }

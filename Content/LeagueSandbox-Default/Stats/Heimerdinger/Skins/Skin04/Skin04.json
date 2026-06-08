@@ -11,15 +11,13 @@
             "ChampionSkinID": 74004,
             "ChampionSkinName": "HeimerdingerSkin04",
             "ExtraCharacterPreloads": "HeimerTYellow,HeimerTBlue",
-            "OverrideBoundingBox": "100 200 100",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "100.0000 200.0000 100.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Heimerdinger_Snowman.skn",
             "Skeleton": "Heimerdinger_Snowman.skl",
             "SkinScale": 1,
+            "SubmeshesToHide": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna",
             "Texture": "heimerdinger_snowman_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Heimerdinger_Grab_Hand, Heimerdinger_Antenna"
         }
     }
 }

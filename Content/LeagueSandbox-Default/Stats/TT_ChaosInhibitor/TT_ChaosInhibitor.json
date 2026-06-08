@@ -12,8 +12,8 @@
             "UnitTags": "Structure | Structure_Inhibitor"
         },
         "HealthBar": {
-            "Scale": "2.0",
-            "WorldOffset": "0 16 0"
+            "Scale": 2.0,
+            "WorldOffset": "0.0000 16.0000 0.0000"
         },
         "IdleParticles": {
             "NumberOfParticles": 8,

@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "Chaos_Minion_Siege.blnd",
             "ChampionSkinName": "Chaos_Minion_Siege",
-            "SelfIllumination": 0.6,
+            "MaxNumBlendWeights": 2,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Chaos_Minion_Siege.skn",
             "Skeleton": "Chaos_Minion_Siege.skl",
-            "SkinScale": 0.925,
+            "SkinScale": 0.925000011920929,
             "Texture": "Chaos_Minion_Siege_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2047148300": 2
         }
     }
 }

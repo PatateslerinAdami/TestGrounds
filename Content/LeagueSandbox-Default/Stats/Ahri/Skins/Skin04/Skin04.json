@@ -10,14 +10,12 @@
             "Animations": "AhriSkin04.blnd",
             "ChampionSkinID": 103004,
             "ChampionSkinName": "AhriSkin04",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ahri_Skin04.skn",
             "Skeleton": "Ahri_Skin04.skl",
-            "SkinScale": 1.26,
-            "Texture": "Ahri_Skin04_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.2599999904632568,
+            "Texture": "Ahri_Skin04_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

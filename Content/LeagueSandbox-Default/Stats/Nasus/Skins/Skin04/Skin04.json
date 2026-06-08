@@ -14,10 +14,10 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 75004,
             "ChampionSkinName": "RiotNasus",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nasus_Riot.skn",
             "Skeleton": "Nasus_Riot.skl",
-            "SkinScale": 1.18,
+            "SkinScale": 1.1799999475479126,
             "Texture": "nasus_Riot_TX_CM.dds"
         }
     }

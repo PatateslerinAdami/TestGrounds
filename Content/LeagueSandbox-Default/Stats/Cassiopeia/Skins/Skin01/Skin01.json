@@ -13,10 +13,10 @@
             "Animations": "Cassiopeia.blnd",
             "ChampionSkinID": 69001,
             "ChampionSkinName": "RattlesnakeCassiopeia",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Cassiopeia_rattlesnake.skn",
             "Skeleton": "Cassiopeia_rattlesnake.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "cassiopeia_rattlesnake_TX_CM.dds"
         }
     }

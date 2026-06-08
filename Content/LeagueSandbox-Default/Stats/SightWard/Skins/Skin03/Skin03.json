@@ -9,8 +9,8 @@
         "MeshSkin": {
             "Animations": "SightWardSpider.blnd",
             "ChampionSkinName": "SightWardSpider",
-            "ParallaxOffset": "0",
-            "SelfIllumination": 0.7,
+            "ParallaxOffset": 0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "sightWard_spider.skn",
             "Skeleton": "sightWard_spider.skl",
             "SkinScale": 0.8,

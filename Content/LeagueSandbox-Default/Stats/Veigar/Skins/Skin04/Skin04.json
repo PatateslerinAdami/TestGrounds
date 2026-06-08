@@ -10,11 +10,11 @@
             "Animations": "Veigar.blnd",
             "ChampionSkinID": 45004,
             "ChampionSkinName": "LeprechaunVeigar",
-            "OverrideBoundingBox": "80 100 80",
+            "OverrideBoundingBox": "80.0000 100.0000 80.0000",
             "SelfIllumination": 0.75,
             "SimpleSkin": "veigar_leprechaun.skn",
             "Skeleton": "veigar_leprechaun.skl",
-            "SkinScale": 1.80000007,
+            "SkinScale": 1.8,
             "Texture": "veigar_leprechaun_TX_CM.dds"
         }
     }

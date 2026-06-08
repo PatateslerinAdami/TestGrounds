@@ -10,15 +10,13 @@
             "Animations": "Lissandra_skin01.blnd",
             "ChampionSkinID": 127001,
             "ChampionSkinName": "Lissandra_skin01",
-            "OverrideBoundingBox": "130 330 130",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "130.0000 330.0000 130.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Lissandra_deadwood.skn",
             "Skeleton": "Lissandra_deadwood.skl",
-            "SkinScale": 1.12,
+            "SkinScale": 1.1200000047683716,
+            "SubmeshesToHide": "Lissandra_Q_Spike2",
             "Texture": "Lissandra_deadwood_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Lissandra_Q_Spike2"
         }
     }
 }

@@ -13,10 +13,10 @@
             "Animations": "KarthusSkin02.blnd",
             "ChampionSkinID": 30002,
             "ChampionSkinName": "KarthusSkin02",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Karthus_Liberty.skn",
             "Skeleton": "Karthus_Liberty.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "karthus_liberty_TX_CM.dds"
         }
     }

@@ -12,7 +12,7 @@
             "SelfIllumination": 0.75,
             "SimpleSkin": "KalistaAltar.skn",
             "Skeleton": "KalistaAltar.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "KalistaAltar_Base_TX_CM.dds"
         }
     }

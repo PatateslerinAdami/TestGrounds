@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "SightWardSoraka.blnd",
             "ChampionSkinName": "SightWardSoraka",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Soraka.skn",
             "Skeleton": "SightWard_Soraka.skl",
             "SkinScale": 1.1,

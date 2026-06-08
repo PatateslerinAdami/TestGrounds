@@ -10,10 +10,10 @@
             "Animations": "Gragas.blnd",
             "ChampionSkinID": 79001,
             "ChampionSkinName": "ScubaGragas",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "gragas_scuba.skn",
             "Skeleton": "gragas_scuba.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "gragas_scuba.dds"
         }
     }

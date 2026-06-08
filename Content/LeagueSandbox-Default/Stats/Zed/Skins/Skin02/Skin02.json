@@ -10,10 +10,10 @@
             "Animations": "zed.blnd",
             "ChampionSkinID": 238002,
             "ChampionSkinName": "zedSkin02",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "zed_Skin02.skn",
             "Skeleton": "zed_Skin02.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "zed_Skin02_TX_CM.dds"
         }
     }

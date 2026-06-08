@@ -11,17 +11,15 @@
             "ChampionSkinID": 60002,
             "ChampionSkinName": "EliseSkin02",
             "ExtraCharacterPreloads": "EliseSpider,EliseSpiderling",
-            "MaterialOverride0Submesh": "Elise_Skin02_spiders_MAT",
+            "MaterialOverride0SubMesh": "Elise_Skin02_spiders_MAT",
             "MaterialOverride0Texture": "EliseSpider_Skin02_TX_CM.dds",
-            "OverrideBoundingBox": "110 200 110",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "110.0000 200.0000 110.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Elise_Skin02.skn",
             "Skeleton": "Elise_Skin02.skl",
             "SkinScale": 1.25,
+            "SubmeshesToHide": "Elise_Skin02_spiders_MAT",
             "Texture": "Elise_Skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Elise_Skin02_spiders_MAT"
         }
     }
 }

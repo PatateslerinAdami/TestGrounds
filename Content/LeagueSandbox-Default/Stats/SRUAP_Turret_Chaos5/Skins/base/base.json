@@ -8,17 +8,15 @@
     "Values": {
         "MeshSkin": {
             "Animations": "SRUAP_Turret_Chaos5.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinName": "SRUAPTurretChaos5",
-            "SelfIllumination": 0.7,
+            "MaxNumBlendWeights": 2,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRUAP_Turret_Chaos5.skn",
             "Skeleton": "SRUAP_Turret_Chaos5.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
+            "SubmeshesToHide": "SRUAP_ChaosTurret5_Mat",
             "Texture": "SRUAP_ChaosInhibitor_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2047148300": 2,
-            "708066840": "SRUAP_ChaosTurret5_Mat"
         }
     }
 }

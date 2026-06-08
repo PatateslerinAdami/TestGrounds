@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRU_Bird.blnd",
             "ChampionSkinName": "SRU_Bird",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_Bird.skn",
             "Skeleton": "SRU_Bird.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "SRU_Bird.dds"
         }
     }

@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "Sru_Antlermouse.blnd",
             "ChampionSkinName": "SruAntlermouse",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Antlermouse.skn",
             "Skeleton": "Sru_Antlermouse.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sru_Antlermouse_TX_CM.dds"
         }
     }

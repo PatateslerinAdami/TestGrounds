@@ -10,11 +10,11 @@
             "Animations": "maokai.blnd",
             "ChampionSkinID": 57003,
             "ChampionSkinName": "MaokaiSkin03",
-            "OverrideBoundingBox": "190 260 190",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "190.0000 260.0000 190.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Maokai_christmas.skn",
             "Skeleton": "Maokai_christmas.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Maokai_Skin03_TX_CM.dds"
         }
     }

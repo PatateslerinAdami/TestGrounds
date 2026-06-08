@@ -11,10 +11,10 @@
             "ChampionSkinID": 76002,
             "ChampionSkinName": "LeopardNidalee",
             "ExtraCharacterPreloads": "Nidalee_Cougar,Nidalee_Spear",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "nidalee2012.skn",
             "Skeleton": "nidalee2012.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "nidalee_Leopard_2012_TX_CM.dds"
         }
     }

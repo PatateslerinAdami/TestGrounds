@@ -10,7 +10,7 @@
             "Animations": "HeadhunterNidalee.blnd",
             "ChampionSkinID": 76006,
             "ChampionSkinName": "HeadhunterNidalee",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_Headhunter.skn",
             "Skeleton": "Nidalee_Headhunter.skl",
             "SkinScale": 1,

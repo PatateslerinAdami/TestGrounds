@@ -13,13 +13,13 @@
         "MeshSkin": {
             "Animations": "S4ConqueringWard.blnd",
             "ChampionSkinName": "S4ConqueringWard",
-            "ParallaxOffset": "0",
-            "SelfIllumination": "1.0",
+            "ParallaxOffset": 0,
+            "SelfIllumination": 1.0,
             "SimpleSkin": "SightWard_S4ConqueringWard.skn",
             "Skeleton": "SightWard_S4ConqueringWard.skl",
             "SkinScale": 1,
             "Texture": "Ward_NewSkins_TX_CM.dds",
-            "YOffset": -1.2
+            "YOffset": -1.2000000476837158
         }
     }
 }

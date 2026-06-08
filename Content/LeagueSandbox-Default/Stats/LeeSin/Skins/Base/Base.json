@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseBlindMonk.blnd",
-            "ChampionSkinID": "64000",
+            "ChampionSkinID": 64000,
             "ChampionSkinName": "BaseBlindMonk",
-            "SelfIllumination": 0.900000036,
+            "SelfIllumination": 0.9,
             "SimpleSkin": "LeeSin.skn",
             "Skeleton": "LeeSin.skl",
-            "SkinScale": 1.82,
+            "SkinScale": 1.8200000524520874,
             "Texture": "LeeSin_TX_CM.DDS"
         }
     }

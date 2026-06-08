@@ -10,10 +10,10 @@
             "Animations": "EliseLotusFlower.blnd",
             "ChampionSkinID": 60001,
             "ChampionSkinName": "EliseLotusFlower",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "EliseSpider_LotusFlower.skn",
             "Skeleton": "EliseSpider_LotusFlower.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "EliseSpider_LotusFlower_TX_CM.dds"
         }
     }

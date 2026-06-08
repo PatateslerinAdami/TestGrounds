@@ -10,10 +10,10 @@
             "Animations": "Alistar.blnd",
             "ChampionSkinID": 12003,
             "ChampionSkinName": "MatadorMinotaur",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Alistar_Matador.skn",
             "Skeleton": "Alistar_Matador.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "Alistar_Matador_TX_CM.dds"
         }
     }

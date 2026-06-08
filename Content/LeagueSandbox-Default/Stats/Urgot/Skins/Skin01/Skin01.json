@@ -10,7 +10,7 @@
             "Animations": "CrabUrgot.blnd",
             "ChampionSkinID": 6001,
             "ChampionSkinName": "CrabUrgot",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "urgot_crab.skn",
             "Skeleton": "urgot_crab.skl",
             "SkinScale": 1.6,

@@ -10,14 +10,12 @@
             "Animations": "ClassicTrundle.blnd",
             "ChampionSkinID": 48003,
             "ChampionSkinName": "ClassicTrundle",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Trundle_Classic.skn",
             "Skeleton": "Trundle_Classic.skl",
-            "SkinScale": "1.00",
-            "Texture": "Trundle_Classic.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.0,
+            "Texture": "Trundle_Classic.dds",
+            "UsesSkinVO": 1
         }
     }
 }

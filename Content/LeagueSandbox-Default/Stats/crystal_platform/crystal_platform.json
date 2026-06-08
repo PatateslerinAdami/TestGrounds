@@ -7,7 +7,7 @@
     },
     "Values": {
         "Data": {
-            "PathfindingCollisionRadius": "0",
+            "PathfindingCollisionRadius": 0,
             "Spell1": "OdinDisintegrate"
         },
         "IdleParticles": {

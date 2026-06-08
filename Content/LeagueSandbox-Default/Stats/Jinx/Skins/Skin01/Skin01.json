@@ -11,15 +11,13 @@
             "ChampionSkinID": 222001,
             "ChampionSkinName": "JinxSkin01",
             "ExtraCharacterPreloads": "JinxMine",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Jinx_Skin01.skn",
             "Skeleton": "Jinx_Skin01.skl",
-            "SkinScale": 1.03,
-            "Texture": "Jinx_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true",
-            "708066840": "Jinx_Skin01_Gramophone_Mat, Jinx_Skin01_Bottle_Mat"
+            "SkinScale": 1.0299999713897705,
+            "SubmeshesToHide": "Jinx_Skin01_Gramophone_Mat, Jinx_Skin01_Bottle_Mat",
+            "Texture": "Jinx_Skin01_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

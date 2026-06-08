@@ -12,12 +12,12 @@
             "ChampionSkinName": "GragasSkin07",
             "GlossTexture": "gragas_skin07_TX_GM.dds",
             "ReflectionMap": "gragas_skin07_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": "1.0",
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 1.0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gragas_Skin07.skn",
             "Skeleton": "Gragas_Skin07.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "gragas_skin07_TX_CM.dds"
         }
     }

@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "HA_AP_OrderTurret.blnd",
             "ChampionSkinName": "HA_AP_OrderTurret_Idle2",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_OrderTurret_Idle2.skn",
             "Skeleton": "HA_AP_OrderTurret_Idle2.skl",
-            "SkinScale": "750.0",
+            "SkinScale": 750.0,
             "Texture": "HA_AP_OrderTurret.dds"
         }
     }

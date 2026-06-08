@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseSona.blnd",
-            "ChampionSkinID": "37000",
+            "ChampionSkinID": 37000,
             "ChampionSkinName": "BaseSona",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sona.skn",
             "Skeleton": "Sona.skl",
-            "SkinScale": 1.30000007,
+            "SkinScale": 1.3,
             "Texture": "sona_base_TX_CM.dds"
         }
     }

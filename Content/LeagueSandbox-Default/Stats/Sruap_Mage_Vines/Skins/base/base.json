@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "Sruap_Mage_Vines.blnd",
             "ChampionSkinName": "SruapMageVines",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sruap_Mage_Vines.skn",
             "Skeleton": "Sruap_Mage_Vines.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sruap_Mage_Vines_TX_CM.dds"
         }
     }

@@ -10,7 +10,7 @@
             "Animations": "LunarRiven.blnd",
             "ChampionSkinID": 92005,
             "ChampionSkinName": "RivenSkin05",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "riven_skin05.skn",
             "Skeleton": "riven_skin05.skl",
             "SkinScale": 1.5,

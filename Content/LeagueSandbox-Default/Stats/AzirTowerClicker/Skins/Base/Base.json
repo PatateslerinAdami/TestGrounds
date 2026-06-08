@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "AzirTowerClicker.blnd",
-            "ChampionSkinID": "436000",
+            "ChampionSkinID": 436000,
             "ChampionSkinName": "AzirTowerClicker",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "AzirTowerClicker.skn",
             "Skeleton": "AzirTowerClicker.skl",
             "Texture": "AzirTowerClicker_Base_TX_CM.dds"

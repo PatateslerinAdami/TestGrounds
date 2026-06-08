@@ -10,10 +10,10 @@
             "Animations": "WinnerRyze.blnd",
             "ChampionSkinID": 13004,
             "ChampionSkinName": "WinnerRyze",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze_trophy.skn",
             "Skeleton": "Ryze_trophy.skl",
-            "SkinScale": 1.67,
+            "SkinScale": 1.6699999570846558,
             "Texture": "ryze_trophy_TX_CM.dds"
         }
     }

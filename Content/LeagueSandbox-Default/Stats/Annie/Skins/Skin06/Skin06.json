@@ -11,7 +11,7 @@
             "ChampionSkinID": 1006,
             "ChampionSkinName": "AnnieReverse",
             "ExtraCharacterPreloads": "AnnieTibbers",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "annie_reverse.skn",
             "Skeleton": "annie_reverse.skl",
             "SkinScale": 1,

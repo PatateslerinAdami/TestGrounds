@@ -10,10 +10,10 @@
             "Animations": "BaseJanna.blnd",
             "ChampionSkinID": 40003,
             "ChampionSkinName": "FrostqueenJanna",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Janna_frostqueen.skn",
             "Skeleton": "Janna_frostqueen.skl",
-            "SkinScale": 1.31,
+            "SkinScale": 1.309999942779541,
             "Texture": "janna_frostqueen_TX_CM.dds"
         }
     }

@@ -8,13 +8,13 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Veigar.blnd",
-            "ChampionSkinID": "45000",
+            "ChampionSkinID": 45000,
             "ChampionSkinName": "Veigar",
-            "OverrideBoundingBox": "80 100 80",
+            "OverrideBoundingBox": "80.0000 100.0000 80.0000",
             "SelfIllumination": 0.75,
             "SimpleSkin": "Veigar.skn",
             "Skeleton": "Veigar.skl",
-            "SkinScale": 1.80000007,
+            "SkinScale": 1.8,
             "Texture": "Veigar_turnaround_b.dds"
         }
     }

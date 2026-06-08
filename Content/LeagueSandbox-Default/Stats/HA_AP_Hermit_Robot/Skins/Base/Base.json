@@ -10,17 +10,17 @@
             "Animations": "HA_AP_Hermit_Robot.blnd",
             "ChampionSkinName": "HA_AP_Hermit_Robot",
             "GlossTexture": "HA_AP_Hermit_Robot_TX_GM.dds",
-            "ReflectionFresnel": 0.900000036,
+            "ReflectionFresnel": 0.9,
             "ReflectionFresnelBlue": 0.5,
             "ReflectionFresnelGreen": 0.8,
-            "ReflectionFresnelRed": 0.900000036,
+            "ReflectionFresnelRed": 0.9,
             "ReflectionMap": "HA_AP_Hermit_Robot_TX_RM.dds",
             "ReflectionOpacityDirect": 0.5,
-            "ReflectionOpacityGlancing": 0.7,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityGlancing": 0.7000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_Hermit_Robot.skn",
             "Skeleton": "HA_AP_Hermit_Robot.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "HA_AP_Hermit_Robot_TX_CM.dds"
         }
     }

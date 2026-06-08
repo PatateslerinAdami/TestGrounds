@@ -10,14 +10,12 @@
             "Animations": "SejuaniClassic.blnd",
             "ChampionSkinID": 113003,
             "ChampionSkinName": "SejuaniClassic",
-            "SelfIllumination": 0.55,
+            "SelfIllumination": 0.550000011920929,
             "SimpleSkin": "Sejuani_Classic.skn",
             "Skeleton": "Sejuani_Classic.skl",
-            "SkinScale": "1.00",
-            "Texture": "Sejuani_Classic_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.0,
+            "Texture": "Sejuani_Classic_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }
