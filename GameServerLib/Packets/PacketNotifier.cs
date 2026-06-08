@@ -23,6 +23,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
+using log4net;
 using LENet;
 using System;
 using System.Collections.Generic;
@@ -43,6 +44,12 @@ namespace PacketDefinitions420
     {
         private readonly PacketHandlerManager _packetHandlerManager;
         private readonly NavigationGrid _navGrid;
+        // TEST INSTRUMENTATION (movement live test). Logger + the set of champion netids that were
+        // queued into _heldMovementData this tick, so the batch flush can dump only champion wire
+        // packets (`[WIRE]`) for replay comparison without resolving netids via ObjectManager
+        // (which PacketNotifier has no handle to). Remove with the `[WIRE]` logs after the test.
+        private static readonly ILog _logger = LoggerProvider.GetLogger();
+        private readonly HashSet<uint> _heldChampionMovers = new HashSet<uint>();
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
         private Dictionary<int, List<ReplicationData>> _heldReplicationData = new Dictionary<int, List<ReplicationData>>();
         // Per-recipient batching for FX_Create_Group, flushed once per tick alongside
@@ -4756,6 +4763,19 @@ namespace PacketDefinitions420
         /// <param name="u">AttackableUnit that is moving.</param>
         /// <param name="userId">UserId to send the packet to. If not specified or zero, the packet is broadcasted to all players that have vision of the specified unit.</param>
         /// <param name="useTeleportID">Whether or not to teleport the unit to its current position in its path.</param>
+        // TEST INSTRUMENTATION: dump one outgoing movement entry in the exact fields our replay
+        // parser decodes (netid / header syncID / hasTp / tpId / nWp / WIRE waypoints / flag /
+        // recipient), so server output can be diffed against a .rlp.json. Wire coords are the
+        // compressed (centered) X,Y — same as the replay decode (×2 = world). Remove after the test.
+        private void LogWireMovement(string kind, uint netId, int syncId, bool hasTp, byte tpId,
+            List<CompressedWaypoint> wps, PacketFlags flag, int toUserId)
+        {
+            if (!_logger.IsDebugEnabled) return;
+            string pts = wps == null ? "" : string.Join(" ", wps.Select(w => $"({w.X},{w.Y})"));
+            _logger.Debug($"[WIRE] {kind} u={netId} sync={syncId} hasTp={hasTp} tpId={tpId} "
+                + $"nWp={(wps?.Count ?? 0)} flag={flag} to={toUserId} wp=[{pts}]");
+        }
+
         public void HoldMovementDataUntilWaypointGroupNotification(AttackableUnit u, int userId, bool useTeleportID = false)
         {
             var data = PacketExtensions.CreateMovementDataNormal(u, _navGrid, useTeleportID);
@@ -4766,6 +4786,12 @@ namespace PacketDefinitions420
                 _heldMovementData[userId] = list = new List<MovementDataNormal>();
             }
             list.Add(data);
+
+            // TEST: remember champion movers so the flush below can dump only champion wire packets.
+            if (u is Champion)
+            {
+                _heldChampionMovers.Add(u.NetId);
+            }
         }
 
         /// <summary>
@@ -4798,9 +4824,25 @@ namespace PacketDefinitions420
                     var flag = hasTeleport ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED;
                     _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
 
+                    // TEST: dump champion wire packets from this batch for replay comparison.
+                    if (_logger.IsDebugEnabled && _heldChampionMovers.Count > 0)
+                    {
+                        foreach (var m in list)
+                        {
+                            if (_heldChampionMovers.Contains(m.TeleportNetID))
+                            {
+                                LogWireMovement("flush", m.TeleportNetID, packet.SyncID, m.HasTeleportID,
+                                    m.TeleportID, m.Waypoints, flag, userId);
+                            }
+                        }
+                    }
+
                     list.Clear();
                 }
             }
+
+            // TEST: champion-mover set is per-tick; clear after the whole flush.
+            _heldChampionMovers.Clear();
         }
 
         /// <summary>
@@ -4874,6 +4916,13 @@ namespace PacketDefinitions420
             {
                 _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
             }
+
+            // TEST: champion single-unit wire packet (used for teleports / targeted resyncs).
+            if (_logger.IsDebugEnabled && u is Champion)
+            {
+                LogWireMovement("single", u.NetId, packet.SyncID, move.HasTeleportID, move.TeleportID,
+                    move.Waypoints, flag, userId);
+            }
         }
 
         /// <summary>
@@ -4896,6 +4945,13 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+
+            // TEST: champion dash wire packet (WaypointGroupWithSpeed / 0x64).
+            if (_logger.IsDebugEnabled && u is Champion)
+            {
+                LogWireMovement("dash", u.NetId, speedWpGroup.SyncID, md.HasTeleportID, md.TeleportID,
+                    md.Waypoints, PacketFlags.RELIABLE, -1);
+            }
         }
 
         /// <summary>
@@ -4956,6 +5012,15 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+
+            // TEST: champion dash-with-path wire packet (WaypointListHeroWithSpeed). Waypoints here
+            // are WORLD coords (not compressed) — divide by 2 to compare against wire units.
+            if (_logger.IsDebugEnabled && u is Champion)
+            {
+                string pts = string.Join(" ", u.Waypoints.Select(w => $"({w.X:F0},{w.Y:F0})"));
+                _logger.Debug($"[WIRE] dashpath u={u.NetId} sync={speedWpGroup.SyncID} "
+                    + $"nWp={u.Waypoints.Count} flag=RELIABLE to=-1 wpWorld=[{pts}]");
+            }
         }
 
         /// <summary>
