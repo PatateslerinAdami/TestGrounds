@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SRU_Murkwolf.blnd",
             "ChampionSkinName": "SRU_Murkwolf",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_Murkwolf.skn",
             "Skeleton": "SRU_Murkwolf.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "SRU_Murkwolf.dds"
         }
     }

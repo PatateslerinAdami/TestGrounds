@@ -10,10 +10,10 @@
             "Animations": "Sru_Gromp_Prop.blnd",
             "CastShadows": 1,
             "ChampionSkinName": "SruGrompProp",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Gromp_Prop.skn",
             "Skeleton": "Sru_Gromp_Prop.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sru_Gromp_Prop_TX_CM.dds"
         }
     }

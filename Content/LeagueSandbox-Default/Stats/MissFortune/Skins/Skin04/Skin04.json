@@ -10,14 +10,12 @@
             "Animations": "BaseMissFortune.blnd",
             "ChampionSkinID": 21004,
             "ChampionSkinName": "CandyCaneMissFortune",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "missfortune_candycane.skn",
             "Skeleton": "missfortune_candycane.skl",
-            "SkinScale": 1.2,
-            "Texture": "missfortune_candycane_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31"
+            "SkinScale": 1.2000000000000002,
+            "Texture": "missfortune_candycane_TX_CM.dds",
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

@@ -11,10 +11,10 @@
             "ChampionSkinID": 76004,
             "ChampionSkinName": "CleopatraNidalee",
             "ExtraCharacterPreloads": "Nidalee_Cougar,Nidalee_Spear",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_cleo.skn",
             "Skeleton": "Nidalee_cleo.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "nidalee_cleopatra_2012_TX_CM.dds"
         }
     }

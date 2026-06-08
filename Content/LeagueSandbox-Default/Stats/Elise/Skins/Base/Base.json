@@ -8,10 +8,10 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Elise.blnd",
-            "ChampionSkinID": "60000",
+            "ChampionSkinID": 60000,
             "ChampionSkinName": "Elise",
             "ExtraCharacterPreloads": "EliseSpider,EliseSpiderling",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Elise.skn",
             "Skeleton": "Elise.skl",
             "SkinScale": 1.25,

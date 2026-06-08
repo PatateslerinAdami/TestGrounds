@@ -10,10 +10,10 @@
             "Animations": "RocketTristana.blnd",
             "ChampionSkinID": 18006,
             "ChampionSkinName": "RocketTristana",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "tristana_Rocket.skn",
             "Skeleton": "tristana_Rocket.skl",
-            "SkinScale": 1.57,
+            "SkinScale": 1.5700000524520874,
             "Texture": "tristana_Rocket_TX_CM.dds"
         }
     }

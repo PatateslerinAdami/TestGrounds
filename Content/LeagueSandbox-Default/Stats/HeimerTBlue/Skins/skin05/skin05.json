@@ -9,25 +9,23 @@
         "MeshSkin": {
             "Animations": "HeimerTBlueBase.blnd",
             "ChampionSkinName": "HeimerTBlueSkin05",
+            "Fresnel": 0.2199999988079071,
+            "FresnelBlue": 0.4,
+            "FresnelGreen": 0.4,
+            "FresnelRed": 0.4,
             "GlossTexture": "HeimerTBlue_Skin05_TX_GM.dds",
             "ReflectionFresnel": 1,
             "ReflectionFresnelBlue": 5,
             "ReflectionFresnelGreen": 5,
             "ReflectionFresnelRed": 5,
             "ReflectionMap": "HeimerTBlue_Skin05_TX_RM.dds",
-            "ReflectionOpacityDirect": 0.6,
-            "ReflectionOpacityGlancing": 0.6,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 0.6000000000000001,
+            "ReflectionOpacityGlancing": 0.6000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HeimerTBlue_Skin05.skn",
             "Skeleton": "HeimerTBlue_Skin05.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "HeimerTBlue_Skin05_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "3400833179": 0.22,
-            "343518805": 0.4,
-            "3966094422": 0.4,
-            "455913160": 0.4
         }
     }
 }

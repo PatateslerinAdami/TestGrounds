@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "Sru_Crab.blnd",
             "ChampionSkinName": "SruCrab",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Crab.skn",
             "Skeleton": "Sru_Crab.skl",
             "SkinScale": 0.75,

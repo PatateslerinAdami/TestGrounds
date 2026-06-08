@@ -10,14 +10,15 @@
             "RuleConfigFile": "Sivir_Base.cac"
         },
         "MeshSkin": {
-            "ChampionSkinID": "15000",
+            "Animations": "BaseSivir.blnd",
+            "ChampionSkinID": 15000,
             "ChampionSkinName": "BaseSivir",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sivir.skn",
             "Skeleton": "Sivir.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "Sivir.dds",
-            "YOffset": "-0.2"
+            "YOffset": -0.2
         }
     }
 }

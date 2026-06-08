@@ -8,20 +8,18 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Yasuo.blnd",
-            "ChampionSkinID": "157000",
+            "BrushAlphaOverride": 0.5,
+            "ChampionSkinID": 157000,
             "ChampionSkinName": "Yasuo",
-            "OverrideBoundingBox": "230 180 230",
-            "SelfIllumination": 0.7,
+            "MaterialOverride1SubMesh": "Weapon_Trail",
+            "MaterialOverride1Texture": "Yasuo_Weapon_Trail_TX_CM.dds",
+            "OverrideBoundingBox": "230.0000 180.0000 230.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Yasuo.skn",
             "Skeleton": "Yasuo.skl",
-            "SkinScale": 0.93,
+            "SkinScale": 0.9300000071525574,
+            "SubmeshesToHide": "Yasuo_Instrument_Mat, Weapon_Trail",
             "Texture": "Yasuo_base_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1943617021": "Yasuo_Weapon_Trail_TX_CM.dds",
-            "2212039952": 0.5,
-            "3700722767": "Weapon_Trail",
-            "708066840": "Yasuo_Instrument_Mat, Weapon_Trail"
         }
     }
 }

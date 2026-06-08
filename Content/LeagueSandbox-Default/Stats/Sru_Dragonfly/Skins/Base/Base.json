@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "Sru_Dragonfly.blnd",
             "ChampionSkinName": "SruDragonfly",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sru_Dragonfly.skn",
             "Skeleton": "Sru_Dragonfly.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Sru_Dragonfly_TX_CM.dds"
         }
     }

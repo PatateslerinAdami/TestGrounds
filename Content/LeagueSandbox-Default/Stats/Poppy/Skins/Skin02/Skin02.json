@@ -14,10 +14,8 @@
             "SimpleSkin": "Poppy_lolli.skn",
             "Skeleton": "Poppy_lolli.skl",
             "SkinScale": 1,
-            "Texture": "poppy_lolli_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31"
+            "Texture": "poppy_lolli_TX_CM.dds",
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

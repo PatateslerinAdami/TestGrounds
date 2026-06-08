@@ -10,15 +10,13 @@
             "Animations": "QuinnSkin02.blnd",
             "ChampionSkinID": 133002,
             "ChampionSkinName": "QuinnSkin02",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "skin02.skn",
             "Skeleton": "skin02.skl",
-            "SkinScale": 1.30000007,
-            "Texture": "quinn_skin02_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "false",
-            "708066840": "Arrow"
+            "SkinScale": 1.3,
+            "SubmeshesToHide": "Arrow",
+            "Texture": "quinn_skin02_TX_CM.dds",
+            "UsesSkinVO": 0
         }
     }
 }

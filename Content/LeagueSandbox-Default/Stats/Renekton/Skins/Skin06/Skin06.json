@@ -14,15 +14,13 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 58006,
             "ChampionSkinName": "RenektonSkin06",
-            "OverrideBoundingBox": "125 200 125",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "125.0000 200.0000 125.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Renekton_Skin06.skn",
             "Skeleton": "Renekton_Skin06.skl",
-            "SkinScale": 1.56,
+            "SkinScale": 1.559999942779541,
+            "SubmeshesToHide": "Renekton_Skin06_Tower Renekton_Anim_Whistle",
             "Texture": "renekton_Skin06_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Renekton_Skin06_Tower Renekton_Anim_Whistle"
         }
     }
 }

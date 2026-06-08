@@ -10,10 +10,10 @@
             "Animations": "BattlecastUrgot.blnd",
             "ChampionSkinID": 6003,
             "ChampionSkinName": "BattlecastUrgot",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "urgot_battlecast.skn",
             "Skeleton": "urgot_battlecast.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "urgot_battlecast_TX_CM.dds"
         }
     }

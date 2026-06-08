@@ -10,7 +10,7 @@
             "Animations": "BaseRiven.blnd",
             "ChampionSkinID": 92002,
             "ChampionSkinName": "CrimsonRiven",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "riven_crimson.skn",
             "Skeleton": "riven_crimson.skl",
             "SkinScale": 1.5,

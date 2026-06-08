@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "HA_AP_Cutaway.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinName": "HA_AP_Cutaway",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_Cutaway.skn",
             "Skeleton": "HA_AP_Cutaway.skl",
-            "SkinScale": "1000.0",
+            "SkinScale": 1000.0,
             "Texture": "HA_AP_Cutaway.dds"
         }
     }

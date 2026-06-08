@@ -9,7 +9,7 @@
         "Data": {
             "BaseHP": 1,
             "NoHealthBar": 1,
-            "PerceptionBubbleRadius": "550",
+            "PerceptionBubbleRadius": 550,
             "Significance": 0.2
         },
         "Package": {

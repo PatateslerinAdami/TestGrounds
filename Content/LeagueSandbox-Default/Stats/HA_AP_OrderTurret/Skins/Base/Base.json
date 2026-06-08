@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "HA_AP_OrderTurret.blnd",
             "ChampionSkinName": "HA_AP_OrderTurret",
-            "SelfIllumination": 0.7,
+            "ParticleOverride_DeathParticle": "HA_AP_turret_explosion.troy",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_OrderTurret.skn",
             "Skeleton": "HA_AP_OrderTurret.skl",
-            "SkinScale": "750.0",
+            "SkinScale": 750.0,
             "Texture": "HA_AP_OrderTurret.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "4276189325": "HA_AP_turret_explosion.troy"
         }
     }
 }

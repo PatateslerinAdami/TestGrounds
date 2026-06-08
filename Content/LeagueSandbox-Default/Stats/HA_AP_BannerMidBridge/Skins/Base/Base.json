@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "HA_AP_BannerMidBridge.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinName": "HA_AP_BannerMidBridge",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "HA_AP_BannerMidBridge.skn",
             "Skeleton": "HA_AP_BannerMidBridge.skl",
             "SkinScale": 1,

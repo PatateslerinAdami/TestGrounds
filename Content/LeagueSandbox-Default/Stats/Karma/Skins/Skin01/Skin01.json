@@ -10,14 +10,12 @@
             "Animations": "SungoddessKarma.blnd",
             "ChampionSkinID": 43001,
             "ChampionSkinName": "SungoddessKarma",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Karma_sungoddess.skn",
             "Skeleton": "Karma_sungoddess.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
+            "SubmeshesToHide": "Karma_SunGoddes_Fans_Mat",
             "Texture": "karma_Sungodess_2012_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "708066840": "Karma_SunGoddes_Fans_Mat"
         }
     }
 }

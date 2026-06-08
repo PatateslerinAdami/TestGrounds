@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "SRU_BlueMini.blnd",
             "ChampionSkinName": "SRU_BlueMini",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_BlueMini.skn",
             "Skeleton": "SRU_BlueMini.skl",
             "SkinScale": 1.5,

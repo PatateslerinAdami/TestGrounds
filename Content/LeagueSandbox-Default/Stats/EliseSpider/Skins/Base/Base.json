@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Elise.blnd",
-            "ChampionSkinID": "60000",
+            "ChampionSkinID": 60000,
             "ChampionSkinName": "Elise",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Elise_Spider.skn",
             "Skeleton": "Elise_Spider.skl",
-            "SkinScale": 0.900000036,
+            "SkinScale": 0.9,
             "Texture": "EliseSpider_base_TX_CM.dds"
         }
     }

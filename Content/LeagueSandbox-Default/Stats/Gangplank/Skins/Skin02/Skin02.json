@@ -10,10 +10,10 @@
             "Animations": "Gangplank.blnd",
             "ChampionSkinID": 41002,
             "ChampionSkinName": "MinutemanPirate",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gangplank_minuteman.skn",
             "Skeleton": "Gangplank_minuteman.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "gangplank_minuteman_TX_CM.dds"
         }
     }

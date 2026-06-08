@@ -19,7 +19,7 @@
             "SelfIllumination": 0.8,
             "SimpleSkin": "AnnieTibbers_Panda.skn",
             "Skeleton": "AnnieTibbers_Panda.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "Tibbers_Panda_CM.dds"
         }
     }

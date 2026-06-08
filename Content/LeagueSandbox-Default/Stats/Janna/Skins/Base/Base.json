@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseJanna.blnd",
-            "ChampionSkinID": "40000",
+            "ChampionSkinID": 40000,
             "ChampionSkinName": "BaseJanna",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Janna.skn",
             "Skeleton": "Janna.skl",
-            "SkinScale": 1.31,
+            "SkinScale": 1.309999942779541,
             "Texture": "Janna_base_TX_CM.dds"
         }
     }

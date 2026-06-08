@@ -11,12 +11,12 @@
         },
         "MeshSkin": {
             "Animations": "RenektonBase.blnd",
-            "ChampionSkinID": "58000",
+            "ChampionSkinID": 58000,
             "ChampionSkinName": "Renekton_Base",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Renekton.skn",
             "Skeleton": "Renekton.skl",
-            "SkinScale": 1.56,
+            "SkinScale": 1.559999942779541,
             "Texture": "renekton_base_TX_CM.dds"
         }
     }

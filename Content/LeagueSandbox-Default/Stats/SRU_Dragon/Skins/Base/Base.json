@@ -10,7 +10,7 @@
             "Animations": "SRU_Dragon.blnd",
             "ChampionSkinName": "SRU_Dragon",
             "GlowFactor": 0.2,
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_Dragon.skn",
             "Skeleton": "SRU_Dragon.skl",
             "SkinScale": 1.25,

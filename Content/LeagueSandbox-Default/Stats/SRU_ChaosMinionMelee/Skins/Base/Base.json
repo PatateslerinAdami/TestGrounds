@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "Chaos_Minion_Melee.blnd",
             "ChampionSkinName": "Chaos_Minion_Melee",
-            "SelfIllumination": 0.6,
+            "MaxNumBlendWeights": 2,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Chaos_Minion_Melee.skn",
             "Skeleton": "Chaos_Minion_Melee.skl",
-            "SkinScale": 0.74,
+            "SkinScale": 0.7400000095367432,
             "Texture": "ChaosMinion_Melee_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2047148300": 2
         }
     }
 }

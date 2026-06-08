@@ -8,7 +8,7 @@
     "Values": {
         "MeshSkin": {
             "Animations": "CaitlynBase.blnd",
-            "ChampionSkinID": "51000",
+            "ChampionSkinID": 51000,
             "ChampionSkinName": "CaitlynBase",
             "EmissiveTexture": "Bowmaster_Diffuse_Cmask.dds",
             "SelfIllumination": 1,

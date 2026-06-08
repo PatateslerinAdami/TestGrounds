@@ -10,10 +10,10 @@
             "Animations": "MuayThaiBlindMonk.blnd",
             "ChampionSkinID": 64004,
             "ChampionSkinName": "MuayThaiBlindMonk",
-            "SelfIllumination": 0.900000036,
+            "SelfIllumination": 0.9,
             "SimpleSkin": "LeeSin_muaythai.skn",
             "Skeleton": "LeeSin_muayThai.skl",
-            "SkinScale": 1.82,
+            "SkinScale": 1.8200000524520874,
             "Texture": "LeeSin_muayThai_TX_CM.DDS"
         }
     }

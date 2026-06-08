@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "OdinCraneBase.blnd",
             "ChampionSkinName": "OdinCraneBase",
-            "SelfIllumination": 0.05,
+            "SelfIllumination": 0.05000000074505806,
             "SimpleSkin": "OdinCrane.skn",
             "Skeleton": "OdinCrane.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "mining_props_mechanical_machinery_TX_DM.dds"
         },
         "UNKNOWN_HASHES": {

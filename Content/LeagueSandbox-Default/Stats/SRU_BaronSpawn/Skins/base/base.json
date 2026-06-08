@@ -10,7 +10,7 @@
             "Animations": "SRU_BaronSpawn.blnd",
             "ChampionSkinName": "SRU_BaronSpawn",
             "GlowFactor": 0.2,
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRU_BaronSpawn.skn",
             "Skeleton": "SRU_BaronSpawn.skl",
             "SkinScale": 1,

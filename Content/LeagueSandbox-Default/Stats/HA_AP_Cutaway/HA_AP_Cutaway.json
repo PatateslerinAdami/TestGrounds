@@ -7,15 +7,15 @@
     },
     "Values": {
         "Data": {
-            "SelectionHeight": "600",
-            "SelectionRadius": "600"
+            "SelectionHeight": 600,
+            "SelectionRadius": 600
         },
         "IdleParticles": {
-            "NumberOfParticles": "0",
+            "NumberOfParticles": 0,
             "Particle1": ""
         },
         "MeshSkin": {
-            "CastShadows": "0"
+            "CastShadows": 0
         }
     }
 }

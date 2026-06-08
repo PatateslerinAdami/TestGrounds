@@ -10,10 +10,10 @@
             "Animations": "Cassiopeia_Death.blnd",
             "ChampionSkinID": 69004,
             "ChampionSkinName": "Cassiopeia_Death_LunarRevel",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Cassiopeia_Death_LunarRevel.skn",
             "Skeleton": "Cassiopeia_Death_LunarRevel.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "cassiopeia_death_lunar_TX_CM.dds"
         }
     }

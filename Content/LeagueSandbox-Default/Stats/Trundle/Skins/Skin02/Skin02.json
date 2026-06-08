@@ -10,10 +10,10 @@
             "Animations": "JunkyardTrundle.blnd",
             "ChampionSkinID": 48002,
             "ChampionSkinName": "JunkyardTrundle",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Trundle_junkyard.skn",
             "Skeleton": "Trundle_junkyard.skl",
-            "SkinScale": "1.00",
+            "SkinScale": 1.0,
             "Texture": "trundle_junkyard_TX_CM.dds"
         }
     }

@@ -10,15 +10,13 @@
             "Animations": "SilentNightSona.blnd",
             "ChampionSkinID": 37003,
             "ChampionSkinName": "SilentNightSona",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sona_silentnight.skn",
             "Skeleton": "Sona_silentnight.skl",
-            "SkinScale": 1.30000007,
-            "Texture": "sona_silentnight_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "1598226273": "2013-07-31",
-            "2625724482": "true"
+            "SkinScale": 1.3,
+            "Texture": "sona_silentnight_TX_CM.dds",
+            "UsesSkinVO": 1,
+            "vintageCutoffDate": "2013-07-31"
         }
     }
 }

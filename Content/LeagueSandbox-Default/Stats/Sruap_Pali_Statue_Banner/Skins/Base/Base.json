@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Sruap_Pali_Statue_Banner.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinName": "SruapPaliStatueBanner",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sruap_Pali_Statue_Banner.skn",
             "Skeleton": "Sruap_Pali_Statue_Banner.skl",
             "SkinScale": 1,

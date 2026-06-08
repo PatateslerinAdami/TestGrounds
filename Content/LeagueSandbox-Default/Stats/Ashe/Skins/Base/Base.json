@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Ashe.blnd",
-            "ChampionSkinID": "22000",
+            "ChampionSkinID": 22000,
             "ChampionSkinName": "Ashe",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ashe.skn",
             "Skeleton": "Ashe.skl",
             "SkinScale": 1.1,

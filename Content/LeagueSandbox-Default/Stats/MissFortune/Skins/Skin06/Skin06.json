@@ -10,10 +10,10 @@
             "Animations": "BaseMissFortune.blnd",
             "ChampionSkinID": 21006,
             "ChampionSkinName": "MafiaMissFortune",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "missfortune_mafia.skn",
             "Skeleton": "missfortune_mafia.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "missfortune_mafia_TX_CM.dds"
         }
     }

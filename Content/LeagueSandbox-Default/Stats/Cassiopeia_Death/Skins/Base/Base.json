@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Cassiopeia_Death.blnd",
-            "ChampionSkinID": "69000",
+            "ChampionSkinID": 69000,
             "ChampionSkinName": "Cassiopeia_Death",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Cassiopeia_Death.skn",
             "Skeleton": "Cassiopeia_Death.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "cassiopeia_stoned_TX_CM.dds"
         }
     }

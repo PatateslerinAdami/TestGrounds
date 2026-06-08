@@ -14,26 +14,24 @@
             "AttributeFlags": 1,
             "ChampionSkinID": 15006,
             "ChampionSkinName": "SivirSkin06",
+            "Fresnel": 0,
+            "FresnelBlue": 1,
+            "FresnelGreen": 1,
+            "FresnelRed": 1,
             "GlossTexture": "sivir_snowflake_TX_GM.dds",
-            "ReflectionFresnel": "1.0",
+            "ReflectionFresnel": 1.0,
             "ReflectionFresnelBlue": 1,
             "ReflectionFresnelGreen": 0.5,
-            "ReflectionFresnelRed": 0.3,
+            "ReflectionFresnelRed": 0.30000000000000004,
             "ReflectionMap": "sivir_snowflake_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
+            "ReflectionOpacityDirect": 1.0,
             "ReflectionOpacityGlancing": 0.5,
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sivir_Skin06.skn",
             "Skeleton": "Sivir_Skin06.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "sivir_snowflake_TX_CM.dds",
-            "YOffset": "-0.2"
-        },
-        "UNKNOWN_HASHES": {
-            "3400833179": "0",
-            "343518805": 1,
-            "3966094422": 1,
-            "455913160": 1
+            "YOffset": -0.2
         }
     }
 }

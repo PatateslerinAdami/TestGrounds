@@ -13,10 +13,10 @@
             "Animations": "Cassiopeia.blnd",
             "ChampionSkinID": 69003,
             "ChampionSkinName": "GreekCassiopeia",
-            "SelfIllumination": 0.6,
+            "SelfIllumination": 0.6000000000000001,
             "SimpleSkin": "Cassiopeia_greek.skn",
             "Skeleton": "Cassiopeia_greek.skl",
-            "SkinScale": 1.7,
+            "SkinScale": 1.7000000000000002,
             "Texture": "cassiopeia_greek_TX_CM.dds"
         }
     }

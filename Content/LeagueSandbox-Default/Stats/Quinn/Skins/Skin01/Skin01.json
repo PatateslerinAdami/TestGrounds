@@ -10,14 +10,12 @@
             "Animations": "PhoenixQuinn.blnd",
             "ChampionSkinID": 133001,
             "ChampionSkinName": "PhoenixQuinn",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Phoenix.skn",
             "Skeleton": "Phoenix.skl",
-            "SkinScale": 1.30000007,
-            "Texture": "Quinn_phoenix_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.3,
+            "Texture": "Quinn_phoenix_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

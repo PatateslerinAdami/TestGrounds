@@ -10,10 +10,10 @@
             "Animations": "rumble.blnd",
             "ChampionSkinID": 68001,
             "ChampionSkinName": "JungleRumble",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "rumble_jungle.skn",
             "Skeleton": "rumble_jungle.skl",
-            "SkinScale": 1.9,
+            "SkinScale": 1.9000000000000001,
             "Texture": "rumble_inthejungle_TX_CM.dds"
         }
     }

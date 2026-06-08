@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "HA_AP_Viking.blnd",
-            "CastShadows": "False",
+            "CastShadows": 0,
             "ChampionSkinName": "HA_AP_Viking",
-            "SelfIllumination": "1.0",
+            "SelfIllumination": 1.0,
             "SimpleSkin": "HA_AP_Viking.skn",
             "Skeleton": "HA_AP_Viking.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "HA_AP_Viking.dds"
         }
     }

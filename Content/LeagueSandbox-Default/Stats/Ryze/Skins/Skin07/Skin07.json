@@ -10,10 +10,10 @@
             "Animations": "VoidCrystalRyze.blnd",
             "ChampionSkinID": 13007,
             "ChampionSkinName": "VoidCrystalRyze",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze_voidcrystal.skn",
             "Skeleton": "Ryze_voidcrystal.skl",
-            "SkinScale": 1.67,
+            "SkinScale": 1.6699999570846558,
             "Texture": "ryze_voidcrystal_TX_CM.dds"
         }
     }

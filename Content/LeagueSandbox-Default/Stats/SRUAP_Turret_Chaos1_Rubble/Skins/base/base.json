@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "SRUAP_Turret_Chaos1_Rubble.blnd",
             "ChampionSkinName": "SRUAPTurretChaos1Rubble",
-            "SelfIllumination": 0.7,
+            "MaxNumBlendWeights": 2,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SRUAP_Turret_Chaos1_Rubble.skn",
             "Skeleton": "SRUAP_Turret_Chaos1_Rubble.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "SRUAP_Turret_Chaos1_Rubble_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2047148300": 2
         }
     }
 }

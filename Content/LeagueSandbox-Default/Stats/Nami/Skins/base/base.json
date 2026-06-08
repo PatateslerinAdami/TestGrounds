@@ -8,28 +8,26 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Nami.blnd",
-            "ChampionSkinID": "267000",
+            "ChampionSkinID": 267000,
             "ChampionSkinName": "Nami",
+            "Fresnel": 0.1,
+            "FresnelBlue": 0.30000000000000004,
+            "FresnelGreen": 0.30000000000000004,
+            "FresnelRed": 0.30000000000000004,
             "GlossTexture": "nami_base_TX_GM.dds",
-            "ReflectionFresnel": 0.3,
-            "ReflectionFresnelBlue": 0.7,
-            "ReflectionFresnelGreen": 0.7,
-            "ReflectionFresnelRed": 0.7,
+            "ReflectionFresnel": 0.30000000000000004,
+            "ReflectionFresnelBlue": 0.7000000000000001,
+            "ReflectionFresnelGreen": 0.7000000000000001,
+            "ReflectionFresnelRed": 0.7000000000000001,
             "ReflectionMap": "nami_base_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": "1.0",
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 1.0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nami.skn",
             "Skeleton": "Nami.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "Nami_base_TX_CM.dds",
-            "YOffset": -0.3
-        },
-        "UNKNOWN_HASHES": {
-            "3400833179": 0.1,
-            "343518805": 0.3,
-            "3966094422": 0.3,
-            "455913160": 0.3
+            "YOffset": -0.30000001192092896
         }
     }
 }

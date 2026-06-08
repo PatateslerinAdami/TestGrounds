@@ -8,16 +8,14 @@
     "Values": {
         "MeshSkin": {
             "Animations": "AatroxSkin01.blnd",
+            "BrushAlphaOverride": 0.5,
             "ChampionSkinID": 266001,
             "ChampionSkinName": "AatroxSkin01",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Aatrox_Skin01.skn",
             "Skeleton": "Aatrox_Skin01.skl",
-            "SkinScale": 1.09,
+            "SkinScale": 1.090000033378601,
             "Texture": "Aatrox_Skin01_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.5
         }
     }
 }

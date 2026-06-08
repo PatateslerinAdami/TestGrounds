@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "SightWardS3Champ.blnd",
             "ChampionSkinName": "SightWardS3Champ",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Champion_S3.skn",
             "Skeleton": "SightWard_Champion_S3.skl",
             "SkinScale": 0.8,

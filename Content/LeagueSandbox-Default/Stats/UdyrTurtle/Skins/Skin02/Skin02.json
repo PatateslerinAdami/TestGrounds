@@ -10,7 +10,7 @@
             "Animations": "PrimalUdyr.blnd",
             "ChampionSkinID": 77002,
             "ChampionSkinName": "PrimalUdyr",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Udyr_primal_turtle.skn",
             "Skeleton": "Udyr_primal_turtle.skl",
             "SkinScale": 1.1,

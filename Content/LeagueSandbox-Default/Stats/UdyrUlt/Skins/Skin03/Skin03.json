@@ -8,19 +8,17 @@
     "Values": {
         "MeshSkin": {
             "Animations": "SpiritUdyr.blnd",
+            "BrushAlphaOverride": 0.5,
             "ChampionSkinID": 77003,
             "ChampionSkinName": "SpiritUdyr",
-            "SelfIllumination": 0.7,
+            "IconAvatar": "Udyr_SpiritSummoner_Square.dds",
+            "ParticleOverride_ChampionKillDeathParticle": "Udyr_Spirit_Champ_Death_Bear.troy",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Udyr_spirit_ult.skn",
             "Skeleton": "Udyr_spirit_ult.skl",
             "SkinScale": 1.1,
-            "Texture": "udyr_spirit_bear_ult_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2212039952": 0.5,
-            "2625724482": "true",
-            "3294654406": "Udyr_Spirit_Champ_Death_Bear.troy",
-            "895532722": "Udyr_SpiritSummoner_Square.dds"
+            "Texture": "udyr_spirit_bear_ult_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

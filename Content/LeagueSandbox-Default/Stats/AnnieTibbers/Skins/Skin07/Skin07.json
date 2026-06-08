@@ -16,7 +16,7 @@
             "SelfIllumination": 0.8,
             "SimpleSkin": "tibbers_PET_frankenstein.skn",
             "Skeleton": "tibbers_PET_frankenstein.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "annie_tibbers_PET_frankenstein_TX_CM.dds"
         }
     }

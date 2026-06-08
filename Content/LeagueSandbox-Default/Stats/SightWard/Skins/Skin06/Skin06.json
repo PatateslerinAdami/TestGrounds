@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SightWardSnowMan.blnd",
             "ChampionSkinName": "SightWardSnowMan",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_snowMan.skn",
             "Skeleton": "SightWard_snowMan.skl",
-            "SkinScale": 1.4,
+            "SkinScale": 1.4000000000000001,
             "Texture": "SightWard_snowMan_TX_CM.dds"
         }
     }

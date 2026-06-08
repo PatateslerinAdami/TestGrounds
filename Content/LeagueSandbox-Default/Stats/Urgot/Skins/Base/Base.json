@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseUrgot.blnd",
-            "ChampionSkinID": "6000",
+            "ChampionSkinID": 6000,
             "ChampionSkinName": "BaseUrgot",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Urgot.skn",
             "Skeleton": "Urgot.skl",
             "SkinScale": 1.6,

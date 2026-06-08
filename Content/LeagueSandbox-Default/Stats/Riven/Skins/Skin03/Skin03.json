@@ -10,7 +10,7 @@
             "Animations": "BattlebunnyRiven.blnd",
             "ChampionSkinID": 92003,
             "ChampionSkinName": "BattlebunnyRiven",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "riven_battlebunny.skn",
             "Skeleton": "riven_battlebunny.skl",
             "SkinScale": 1.5,

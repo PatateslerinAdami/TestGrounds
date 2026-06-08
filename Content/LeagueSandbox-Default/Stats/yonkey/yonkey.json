@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "YonkeyBase.blnd",
             "ChampionSkinName": "YonkeyBase",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "yonkey.skn",
             "Skeleton": "yonkey.skl",
             "SkinScale": 6,

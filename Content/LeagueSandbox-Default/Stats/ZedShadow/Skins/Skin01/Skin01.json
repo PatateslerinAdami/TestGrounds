@@ -8,13 +8,13 @@
     "Values": {
         "MeshSkin": {
             "Animations": "ZedShadow.blnd",
-            "CastShadows": "0",
+            "CastShadows": 0,
             "ChampionSkinID": 84007,
             "ChampionSkinName": "ZedShadowStormNinja",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "ZedShadow_StormNinja.skn",
             "Skeleton": "ZedShadow_StormNinja.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "ZedShadow_stormNinja_TX_CM.DDS"
         }
     }

@@ -10,10 +10,10 @@
             "Animations": "Warhero.blnd",
             "ChampionSkinID": 40004,
             "ChampionSkinName": "Warhero",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Janna_Warhero.skn",
             "Skeleton": "Janna_Warhero.skl",
-            "SkinScale": 1.31,
+            "SkinScale": 1.309999942779541,
             "Texture": "janna_Warhero_TX_CM.dds"
         }
     }

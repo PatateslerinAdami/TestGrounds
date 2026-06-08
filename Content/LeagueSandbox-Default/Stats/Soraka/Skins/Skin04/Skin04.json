@@ -10,15 +10,13 @@
             "Animations": "SorakaSkin04.blnd",
             "ChampionSkinID": 16004,
             "ChampionSkinName": "SorakaSkin04",
-            "OverrideBoundingBox": "125 200 125",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "125.0000 200.0000 125.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "skin04_Soraka.skn",
             "Skeleton": "skin04_Soraka.skl",
-            "SkinScale": 1.27,
-            "Texture": "soraka_skin04_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2625724482": "true"
+            "SkinScale": 1.2699999809265137,
+            "Texture": "soraka_skin04_TX_CM.dds",
+            "UsesSkinVO": 1
         }
     }
 }

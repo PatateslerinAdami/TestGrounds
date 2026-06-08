@@ -10,10 +10,10 @@
             "Animations": "BaseSona.blnd",
             "ChampionSkinID": 37001,
             "ChampionSkinName": "MuseSona",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sona_muse.skn",
             "Skeleton": "Sona_muse.skl",
-            "SkinScale": 1.30000007,
+            "SkinScale": 1.3,
             "Texture": "sona_muse_TX_CM.dds"
         }
     }

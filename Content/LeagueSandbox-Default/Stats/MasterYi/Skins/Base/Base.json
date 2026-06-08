@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseMasterYi.blnd",
-            "ChampionSkinID": "11000",
+            "ChampionSkinID": 11000,
             "ChampionSkinName": "BaseMasterYi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "MasterYi.skn",
             "Skeleton": "MasterYi.skl",
-            "SkinScale": 1.55,
+            "SkinScale": 1.5499999523162842,
             "Texture": "MasterYi_2013_TX_CM.dds"
         }
     }

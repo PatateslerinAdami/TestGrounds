@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "MaokaiSproutlingBase.blnd",
             "ChampionSkinName": "MeshSkin2",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sapling_totem.skn",
             "Skeleton": "Sapling_totem.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "maokai_totem_TX_CM.dds"
         }
     }

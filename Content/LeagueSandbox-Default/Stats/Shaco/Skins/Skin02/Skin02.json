@@ -10,10 +10,10 @@
             "Animations": "BaseJester.blnd",
             "ChampionSkinID": 35002,
             "ChampionSkinName": "YellowJester",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "shaco_yellow.skn",
             "Skeleton": "shaco_yellow.skl",
-            "SkinScale": 1.85,
+            "SkinScale": 1.850000023841858,
             "Texture": "shaco_yellow_TX_CM.dds"
         }
     }

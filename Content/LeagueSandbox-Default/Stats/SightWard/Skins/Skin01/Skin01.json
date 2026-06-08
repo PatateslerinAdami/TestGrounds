@@ -9,13 +9,13 @@
         "MeshSkin": {
             "Animations": "SightWardBat.blnd",
             "ChampionSkinName": "SightWardBat",
-            "ParallaxOffset": "0",
-            "SelfIllumination": 0.7,
+            "ParallaxOffset": 0,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Bat.skn",
             "Skeleton": "SightWard_Bat.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "sightWard_bat_TX_CM.dds",
-            "YOffset": -3.8
+            "YOffset": -3.799999952316284
         }
     }
 }

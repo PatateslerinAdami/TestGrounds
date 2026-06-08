@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseRiven.blnd",
-            "ChampionSkinID": "92000",
+            "ChampionSkinID": 92000,
             "ChampionSkinName": "BaseRiven",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "riven.skn",
             "Skeleton": "riven.skl",
             "SkinScale": 1.5,

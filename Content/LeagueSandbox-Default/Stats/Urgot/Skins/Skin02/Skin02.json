@@ -10,7 +10,7 @@
             "Animations": "BaseUrgot.blnd",
             "ChampionSkinID": 6002,
             "ChampionSkinName": "ButcherUrgot",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "urgot_butcher.skn",
             "Skeleton": "urgot_butcher.skl",
             "SkinScale": 1.6,

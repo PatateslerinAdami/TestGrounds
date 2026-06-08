@@ -13,7 +13,7 @@
             "SelfIllumination": 0.8,
             "SimpleSkin": "AnnieTibbers_Goth.skn",
             "Skeleton": "AnnieTibbers_Goth.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "annietibbers_goth_bear_TX_CM.dds"
         }
     }

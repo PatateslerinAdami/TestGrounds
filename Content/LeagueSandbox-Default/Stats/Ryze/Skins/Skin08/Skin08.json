@@ -10,10 +10,10 @@
             "Animations": "pirateRyze.blnd",
             "ChampionSkinID": 13008,
             "ChampionSkinName": "pirateRyze",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ryze_pirate.skn",
             "Skeleton": "Ryze_pirate.skl",
-            "SkinScale": 1.67,
+            "SkinScale": 1.6699999570846558,
             "Texture": "ryze_pirate_TX_CM.dds"
         }
     }

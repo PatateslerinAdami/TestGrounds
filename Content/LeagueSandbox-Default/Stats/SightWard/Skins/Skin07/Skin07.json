@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "SightWardGingerBread.blnd",
             "ChampionSkinName": "SightWardGingerBread",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_gingerBread.skn",
             "Skeleton": "SightWard_gingerBread.skl",
-            "SkinScale": 1.17,
+            "SkinScale": 1.1699999570846558,
             "Texture": "SightWard_gingerBread_TX_CM.dds"
         }
     }

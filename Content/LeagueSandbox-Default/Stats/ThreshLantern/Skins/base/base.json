@@ -12,7 +12,7 @@
             "SelfIllumination": 0.75,
             "SimpleSkin": "ThreshLantern.skn",
             "Skeleton": "ThreshLantern.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "Thresh_Base_TX_CM.dds"
         }
     }

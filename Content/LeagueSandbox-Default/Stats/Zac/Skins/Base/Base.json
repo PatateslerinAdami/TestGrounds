@@ -8,36 +8,36 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Zac.blnd",
-            "ChampionSkinID": "154000",
+            "ChampionSkinID": 154000,
             "ChampionSkinName": "Zac",
+            "Fresnel": 0.2199999988079071,
+            "FresnelBlue": 0.07999999821186066,
+            "FresnelGreen": 0.30000000000000004,
+            "FresnelRed": 0.1,
             "GlossTexture": "Zac_base_TX_GM.dds",
-            "MaterialOverride0Submesh": "Zac_base_puddle_mat",
+            "MaterialOverride0SubMesh": "Zac_base_puddle_mat",
             "MaterialOverride0Texture": "zac_base_puddle_TX_CM.dds",
-            "OverrideBoundingBox": "115 260 115",
-            "ReflectionFresnel": 0.6,
-            "ReflectionFresnelBlue": 0.6,
-            "ReflectionFresnelGreen": 0.6,
-            "ReflectionFresnelRed": 0.6,
+            "MaterialOverride1GlossTexture": "zac_base_ult_TX_GM.dds",
+            "MaterialOverride1SubMesh": "Zac_base_ult_mat",
+            "MaterialOverride1Texture": "zac_base_ult_TX_CM.dds",
+            "OverrideBoundingBox": "115.0000 260.0000 115.0000",
+            "ReflectionFresnel": 0.6000000000000001,
+            "ReflectionFresnelBlue": 0.6000000000000001,
+            "ReflectionFresnelGreen": 0.6000000000000001,
+            "ReflectionFresnelRed": 0.6000000000000001,
             "ReflectionMap": "zac_base_TX_RM.dds",
             "ReflectionOpacityDirect": 0.5,
             "ReflectionOpacityGlancing": 0.4,
-            "SelfIllumination": "1.0",
+            "SelfIllumination": 1.0,
             "SimpleSkin": "zac.skn",
             "Skeleton": "zac.skl",
-            "SkinScale": 0.95,
-            "Texture": "zac_base_TX_CM.dds"
+            "SkinScale": 0.949999988079071,
+            "SubmeshesToHide": "Zac_base_tail_mat,Zac_base_puddle_mat,Zac_base_ult_mat",
+            "Texture": "zac_base_TX_CM.dds",
+            "TextureLow": "zac_base_low_TX_CM.dds"
         },
         "UNKNOWN_HASHES": {
-            "1943617021": "zac_base_ult_TX_CM.dds",
-            "2632864121": "zac_base_low_TX_CM.dds",
-            "3400833179": 0.22,
-            "343518805": 0.08,
-            "3644096975": "zac_base_ult_TX_GM.dds",
-            "3700722767": "Zac_base_ult_mat",
-            "3966094422": 0.1,
-            "424197818": 0.6,
-            "455913160": 0.3,
-            "708066840": "Zac_base_tail_mat,Zac_base_puddle_mat,Zac_base_ult_mat"
+            "424197818": 0.6000000000000001
         }
     }
 }

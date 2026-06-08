@@ -11,21 +11,19 @@
             "ChampionSkinID": 76006,
             "ChampionSkinName": "HeadhunterNidalee",
             "ExtraCharacterPreloads": "Nidalee_Cougar,Nidalee_Spear",
-            "ReflectionFresnel": 0.6,
+            "IsOpaque": 1,
+            "ReflectionFresnel": 0.6000000000000001,
             "ReflectionFresnelBlue": 1.6,
             "ReflectionFresnelGreen": 1.6,
             "ReflectionFresnelRed": 1.6,
             "ReflectionMap": "nidalee_headhunter_TX_RM.dds",
-            "ReflectionOpacityDirect": "1.0",
-            "ReflectionOpacityGlancing": 0.7,
-            "SelfIllumination": 0.7,
+            "ReflectionOpacityDirect": 1.0,
+            "ReflectionOpacityGlancing": 0.7000000000000001,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nidalee_headhunter.skn",
             "Skeleton": "Nidalee_headhunter.skl",
-            "SkinScale": 1.35,
+            "SkinScale": 1.350000023841858,
             "Texture": "Nidalee_headhunter_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "4118570059": 1
         }
     }
 }

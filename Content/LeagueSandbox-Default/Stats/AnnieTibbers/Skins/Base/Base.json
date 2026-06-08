@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "AnnieTibbers.blnd",
-            "ChampionSkinID": "1000",
+            "ChampionSkinID": 1000,
             "ChampionSkinName": "AnnieTibbers",
             "SelfIllumination": 0.8,
             "SimpleSkin": "AnnieTibbers.skn",
             "Skeleton": "AnnieTibbers.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "AnnieTibbers_CM.dds"
         }
     }

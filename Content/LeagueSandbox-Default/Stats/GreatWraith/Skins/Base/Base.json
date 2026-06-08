@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "Wraith.blnd",
             "ChampionSkinName": "Wraith",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Wraith.skn",
             "Skeleton": "Wraith.skl",
-            "SkinScale": "2.0",
+            "SkinScale": 2.0,
             "Texture": "GreatWraith_base_TX_CM.dds"
         }
     }

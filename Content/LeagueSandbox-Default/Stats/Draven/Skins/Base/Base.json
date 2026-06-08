@@ -8,9 +8,9 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Draven_Base.blnd",
-            "ChampionSkinID": "119000",
+            "ChampionSkinID": 119000,
             "ChampionSkinName": "Draven_Base",
-            "OverrideBoundingBox": "140 240 140",
+            "OverrideBoundingBox": "140.0000 240.0000 140.0000",
             "SelfIllumination": 1,
             "SimpleSkin": "Draven.skn",
             "Skeleton": "Draven.skl",

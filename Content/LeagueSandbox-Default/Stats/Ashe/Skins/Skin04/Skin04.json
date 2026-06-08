@@ -10,7 +10,7 @@
             "Animations": "QueenBowmaster.blnd",
             "ChampionSkinID": 22004,
             "ChampionSkinName": "QueenBowmaster",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Ashe_queen.skn",
             "Skeleton": "Ashe_queen.skl",
             "SkinScale": 1.1,

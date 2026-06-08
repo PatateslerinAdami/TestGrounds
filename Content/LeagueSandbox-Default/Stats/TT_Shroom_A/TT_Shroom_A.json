@@ -8,12 +8,12 @@
     "Values": {
         "Data": {
             "AssetCategory": "obj",
-            "PathfindingCollisionRadius": 44.2
+            "PathfindingCollisionRadius": 44.20000076293945
         },
         "MeshSkin": {
             "Animations": "TT_Shroom_ABase.blnd",
             "ChampionSkinName": "TT_Shroom_ABase",
-            "SelfIllumination": "0.5",
+            "SelfIllumination": 0.5,
             "SimpleSkin": "TT_Shroom_A.skn",
             "Skeleton": "TT_Shroom_A.skl",
             "SkinScale": 1,

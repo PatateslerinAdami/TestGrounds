@@ -10,10 +10,10 @@
             "Animations": "SecretAgentMissFortune.blnd",
             "ChampionSkinID": 21003,
             "ChampionSkinName": "SecretAgentMissFortune",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "missfortune_agent.skn",
             "Skeleton": "missfortune_agent.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "missfortune_agent_TX_CM.dds"
         }
     }

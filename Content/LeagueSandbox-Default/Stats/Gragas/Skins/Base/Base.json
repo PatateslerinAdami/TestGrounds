@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Gragas.blnd",
-            "ChampionSkinID": "79000",
+            "ChampionSkinID": 79000,
             "ChampionSkinName": "Gragas",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Gragas.skn",
             "Skeleton": "Gragas.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "gragas.dds"
         }
     }

@@ -10,10 +10,10 @@
             "Animations": "TristanaBase.blnd",
             "ChampionSkinID": 18003,
             "ChampionSkinName": "FirefighterTristana",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Tristana_firefighter.skn",
             "Skeleton": "Tristana_firefighter.skl",
-            "SkinScale": 1.57,
+            "SkinScale": 1.5700000524520874,
             "Texture": "Tristana_Firefighter_TX_CM.dds"
         }
     }

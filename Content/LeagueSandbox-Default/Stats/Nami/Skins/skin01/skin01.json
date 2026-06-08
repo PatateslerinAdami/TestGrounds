@@ -14,12 +14,12 @@
             "Animations": "NamiKoi.blnd",
             "ChampionSkinID": 267001,
             "ChampionSkinName": "NamiKoi",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Nami_Koi.skn",
             "Skeleton": "Nami_Koi.skl",
-            "SkinScale": 1.05,
+            "SkinScale": 1.0499999523162842,
             "Texture": "nami_koi_TX_CM.dds",
-            "YOffset": -0.3
+            "YOffset": -0.30000001192092896
         }
     }
 }

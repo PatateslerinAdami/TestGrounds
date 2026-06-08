@@ -9,10 +9,10 @@
         "MeshSkin": {
             "Animations": "MeshSkin4.blnd",
             "ChampionSkinName": "MeshSkin4",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Sapling_graveDigger.skn",
             "Skeleton": "Sapling_graveDigger.skl",
-            "SkinScale": 1.2,
+            "SkinScale": 1.2000000000000002,
             "Texture": "Maokai_graveDigger_TX_CM.dds"
         }
     }

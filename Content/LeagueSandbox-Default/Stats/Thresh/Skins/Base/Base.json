@@ -8,14 +8,14 @@
     "Values": {
         "MeshSkin": {
             "Animations": "Thresh.blnd",
-            "ChampionSkinID": "412000",
+            "ChampionSkinID": 412000,
             "ChampionSkinName": "Thresh",
             "ExtraCharacterPreloads": "ThreshLantern",
-            "OverrideBoundingBox": "160 280 160",
-            "SelfIllumination": 0.7,
+            "OverrideBoundingBox": "160.0000 280.0000 160.0000",
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Thresh.skn",
             "Skeleton": "Thresh.skl",
-            "SkinScale": 0.95,
+            "SkinScale": 0.949999988079071,
             "Texture": "Thresh_Base_TX_CM.dds"
         }
     }

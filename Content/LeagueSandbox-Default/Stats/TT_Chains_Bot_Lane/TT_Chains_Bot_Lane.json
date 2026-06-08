@@ -14,10 +14,10 @@
             "Animations": "TT_Chains_Bot_Lane.blnd",
             "ChampionSkinID": 987124,
             "ChampionSkinName": "TT_Chains_Bot_Lane",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "TT_Chains_Bot_Lane.skn",
             "Skeleton": "TT_Chains_Bot_Lane.skl",
-            "SkinScale": "1.0",
+            "SkinScale": 1.0,
             "Texture": "TT_Chains.dds"
         }
     }

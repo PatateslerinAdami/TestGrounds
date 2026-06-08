@@ -9,7 +9,7 @@
         "MeshSkin": {
             "Animations": "sightwardvalentine.blnd",
             "ChampionSkinName": "SightWardValentine",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Valentines.skn",
             "Skeleton": "SightWard_Valentines.skl",
             "SkinScale": 1,

@@ -9,14 +9,12 @@
         "MeshSkin": {
             "Animations": "Chaos_Minion_Caster.blnd",
             "ChampionSkinName": "Chaos_Minion_Caster",
-            "SelfIllumination": 0.7,
+            "MaxNumBlendWeights": 2,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "Chaos_Minion_Caster.skn",
             "Skeleton": "Chaos_Minion_Caster.skl",
-            "SkinScale": 0.87,
+            "SkinScale": 0.8700000047683716,
             "Texture": "Red_Caster_TX_CM.dds"
-        },
-        "UNKNOWN_HASHES": {
-            "2047148300": 2
         }
     }
 }

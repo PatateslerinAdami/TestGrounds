@@ -8,12 +8,12 @@
     "Values": {
         "MeshSkin": {
             "Animations": "BaseNasus.blnd",
-            "ChampionSkinID": "75000",
+            "ChampionSkinID": 75000,
             "ChampionSkinName": "BaseNasusUlt",
             "SelfIllumination": 0.5,
             "SimpleSkin": "Nasus.skn",
             "Skeleton": "Nasus.skl",
-            "SkinScale": 1.18,
+            "SkinScale": 1.1799999475479126,
             "Texture": "Nasus.dds"
         }
     }

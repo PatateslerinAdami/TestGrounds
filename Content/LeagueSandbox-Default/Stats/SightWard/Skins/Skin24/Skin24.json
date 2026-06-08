@@ -9,12 +9,12 @@
         "MeshSkin": {
             "Animations": "sightwardmecha.blnd",
             "ChampionSkinName": "SightWardMecha",
-            "SelfIllumination": 0.7,
+            "SelfIllumination": 0.7000000000000001,
             "SimpleSkin": "SightWard_Mecha.skn",
             "Skeleton": "SightWard_Mecha.skl",
-            "SkinScale": "0.9",
+            "SkinScale": 0.9,
             "Texture": "Sightward_Mecha_TX_CM.dds",
-            "YOffset": -1.8
+            "YOffset": -1.7999999523162842
         }
     }
 }
