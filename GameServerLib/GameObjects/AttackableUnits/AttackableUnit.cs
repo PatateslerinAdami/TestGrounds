@@ -411,9 +411,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                 // TEST LOG: a wedged unit forced an unplanned repath (stuck watchdog). Champions
                 // only — repeated [STUCK] lines for one champ = a real body-block/terrain wedge.
-                if (_logger.IsDebugEnabled && this is Champion)
+                if (MoveTestLog.Enabled && this is Champion)
                 {
-                    _logger.Debug($"[STUCK] {Model}#{NetId} repath#{_stuckRepathCount} success={unstuck} "
+                    MoveTestLog.Log($"[STUCK] {Model}#{NetId} repath#{_stuckRepathCount} success={unstuck} "
                         + $"pos=({Position.X:F0},{Position.Y:F0}) wp={Waypoints.Count} pathEnded={IsPathEnded()}");
                 }
 
@@ -1595,10 +1595,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         // TEST LOG: champion collision response. Event-gated (only fires when a
                         // response was actually produced this tick), so no per-tick spam. [C2C] =
                         // at least one champion collider; [COLL] = champion vs minions/structures.
-                        if (_logger.IsDebugEnabled && this is Champion)
+                        if (MoveTestLog.Enabled && this is Champion)
                         {
                             string champs = NearbyChampionLabel(nearby);
-                            _logger.Debug($"[{(champs != null ? "C2C" : "COLL")}] {Model}#{NetId} "
+                            MoveTestLog.Log($"[{(champs != null ? "C2C" : "COLL")}] {Model}#{NetId} "
                                 + $"{(hadHardColliders ? "HARD" : "avoid")} resp={response.Length():F1}u "
                                 + $"applied={pushed} dropped={pushDropped} pos=({Position.X:F0},{Position.Y:F0})"
                                 + (champs != null ? $" vs [{champs}]" : ""));
@@ -1621,9 +1621,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                             // TEST LOG: temp-ghost activation edge (champion started phasing through
                             // bodies after being wedged for TempGhostThreshold consecutive frames).
-                            if (_logger.IsDebugEnabled && this is Champion && !wasGhosted && IsTemporarilyGhosted)
+                            if (MoveTestLog.Enabled && this is Champion && !wasGhosted && IsTemporarilyGhosted)
                             {
-                                _logger.Debug($"[GHOST+] {Model}#{NetId} now phasing after {_stuckGhostFrames} "
+                                MoveTestLog.Log($"[GHOST+] {Model}#{NetId} now phasing after {_stuckGhostFrames} "
                                     + $"stuck frames pos=({Position.X:F0},{Position.Y:F0}) vs [{NearbyChampionLabel(nearby)}]");
                             }
 
@@ -1691,12 +1691,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         // TEST LOG: stationary separation (spawn / post-dash overlap). Throttled to
                         // meaningful pushes (>0.5u) and to champion-vs-champion so the smoothing tail
                         // doesn't log every tick.
-                        if (_logger.IsDebugEnabled && this is Champion && sepMag > 0.5f)
+                        if (MoveTestLog.Enabled && this is Champion && sepMag > 0.5f)
                         {
                             string champs = NearbyChampionLabel(nearby);
                             if (champs != null)
                             {
-                                _logger.Debug($"[SEP] {Model}#{NetId} stationary push={sepMag:F1}u "
+                                MoveTestLog.Log($"[SEP] {Model}#{NetId} stationary push={sepMag:F1}u "
                                     + $"applied={canApply} pos=({Position.X:F0},{Position.Y:F0}) vs [{champs}]");
                             }
                         }
