@@ -20,7 +20,6 @@ namespace Buffs
             BuffType    = BuffType.STUN,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks   = 1,
-            SpellFXOverrideSkins = ["NamiKoi"]
         };
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
