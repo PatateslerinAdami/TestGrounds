@@ -60,13 +60,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public float SetSpellDamageRatio { get; set; } = 0.0f;
         public float SpellDamageRatio { get; set; } = 0.0f;
 
-        // TODO: Verify if this can be removed.
-        public string[] SpellFXOverrideSkins { get; set; } = { "", "" };
-
         public int SpellToggleSlot { get; set; } = 0;
-
-        // TODO: Verify if this can be removed.
-        public string[] SpellVOOverrideSkins { get; set; } = { "" };
         
         //Determines whether the spell should activate effects like sheen
         public bool DoesntTriggerSpellCasts { get; set; } = true;

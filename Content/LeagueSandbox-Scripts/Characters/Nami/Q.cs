@@ -25,8 +25,6 @@ public class NamiQ : ISpellScript {
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = true,
         IsDeathRecapSource = true,
-        SpellFXOverrideSkins = ["NamiKoi"],
-        SpellVOOverrideSkins = ["NamiSkin02"]
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

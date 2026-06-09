@@ -28,7 +28,6 @@ public class JinxQ : ISpellScript {
         NotSingleTargetSpell = true,
         PersistsThroughDeath = true,
         IsNonDispellable = true,
-        SpellFXOverrideSkins = ["JinxSkin01"],
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

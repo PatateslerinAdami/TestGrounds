@@ -26,8 +26,6 @@ public class JinxW : ISpellScript {
         TriggersSpellCasts = true,
         IsDamagingSpell    = true,
         NotSingleTargetSpell = false,
-        SpellFXOverrideSkins = ["JinxSkin01"],
-        SpellVOOverrideSkins = ["JinxSkin01"],
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -86,7 +84,6 @@ public class JinxWMissile : ISpellScript {
         NotSingleTargetSpell = false,
         TriggersSpellCasts = true,
         IsDamagingSpell    = true,
-        SpellFXOverrideSkins = ["JinxSkin01"],
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
