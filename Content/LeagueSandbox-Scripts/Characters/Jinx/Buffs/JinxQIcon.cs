@@ -32,17 +32,17 @@ internal class JinxQIcon : IBuffGameScript {
         // Switch the Q HUD icon back to Pow-Pow (IconIndex 1 = InventoryIcon / Jinx_Q2.dds;
         _spell.ChangeSpellData(ChangeSlotSpellDataType.IconIndex, newIconIndex: 1);
         
-        // Return to Pow-Pow autos and base animation state set.
+        // Return to Pow-Pow autos and clear the full rocket-form slot swap (mirrors the set
+        // in JinxQ.OnActivate — empty value removes the override). Belt-and-suspenders with
+        // JinxQ.OnDeactivate so the minigun form never strands an R_ animation.
         _jinx.ResetAutoAttackSpell();
         _jinx.SetAnimStates(new Dictionary<string, string> {
-            { "idle1_base", "" },
-            { "idle2_base", "" },
-            { "idle3_base", "" },
-            { "idle1", "" },
-            { "run", "" },
-            { "run_base", "" },
-            { "attack1", "" },
-            { "attack2", "" }
+            { "RUN", "" }, { "RUN2", "" }, { "RUN_FAST", "" },
+            { "IDLE1", "" }, { "IDLE2", "" }, { "IDLE3", "" },
+            { "DEATH", "" }, { "ATTACK1", "" }, { "ATTACK2", "" },
+            { "SPELL1", "" }, { "SPELL2", "" }, { "SPELL3", "" },
+            { "SPELL3_RUN", "" }, { "SPELL4", "" },
+            { "TAUNT", "" }, { "JOKE", "" }, { "LAUGH", "" }
         });
         
         // Listen for valid basic attacks so we can move into ramp state.

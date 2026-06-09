@@ -52,6 +52,15 @@ namespace LeagueSandbox.GameServer
         private int _gridCols, _gridRows;
         private float _gridMinX, _gridMinY;
         private const float GRID_CELL_SIZE = 1000f;
+
+        // General per-tick spatial index of ALL AttackableUnits (same grid dims as the provider
+        // index), rebuilt once at the start of Update. Backs QueryUnitsInRange so per-tick mass
+        // range queries (e.g. the turret/control-ward RevealStealth scan) cost O(local) instead of
+        // GetUnitsInRange's O(N) full scan. Allocation-free across ticks (buckets cleared+refilled).
+        private List<AttackableUnit>[] _unitGridCells;
+        private bool _unitGridValid;
+        // Flip to true to cross-check every QueryUnitsInRange against a full scan (count) and log.
+        private const bool UNITGRID_PARALLEL_ASSERT = false;
         // Flip to true to cross-check every grid query against the legacy full scan and log any
         // divergence. Leave false in normal runs (the assert doubles vision work).
         private const bool VISION_PARALLEL_ASSERT = false;
@@ -121,6 +130,15 @@ namespace LeagueSandbox.GameServer
                 }
             }
 
+            // Build the unit spatial index before the per-object update loop so range queries made
+            // during it (e.g. Region.Update's RevealStealth scan) can use it. Positions are this
+            // tick's start (= last tick's final); QueryUnitsInRange distance-checks LIVE positions
+            // against a 1-cell-margin candidate set, so results stay exact despite mid-tick movement.
+            using (Profiler.Scope("Objects.RebuildUnitGrid"))
+            {
+                RebuildUnitGrid();
+            }
+
             // For all existing objects
             using (Profiler.Scope("Objects.Update"))
             {
@@ -155,25 +173,34 @@ namespace LeagueSandbox.GameServer
                 // down skips objects that didn't exist at the start of this tick.
                 oldObjectsCount = _objects.Count;
 
-                foreach (var obj in _objectsToAdd)
+                // Snapshot + clear BEFORE running any first-tick missile Update below: a
+                // missile's first move can spawn further objects (chain bounces, script
+                // sub-missiles) which re-enter AddObject and append to _objectsToAdd. Mutating
+                // the list while iterating it threw "Collection was modified" (Jinx W crash).
+                // Second-order spawns land in the now-empty list and are handled next tick.
+                var justAdded = _objectsToAdd.ToArray();
+                _objectsToAdd.Clear();
+
+                foreach (var obj in justAdded)
                 {
                     _objects.Add(obj.NetId, obj);
+                }
 
-                    // Missiles spawned mid-update (windup-end ForceCreateMissile / spawn
-                    // replication) are sent to clients THIS tick, so the client starts
-                    // simulating them immediately. But the object update loop already ran,
-                    // so without this their first server-side Move would be next tick —
-                    // leaving the server missile a full tick (Jinx W: ~110u @30Hz) behind
-                    // the client visual, which reads as "the missile flies out faster than
-                    // the server" and lands the hit after it visually passed. Give them
-                    // their first move now to stay in lockstep with the client.
+                // Missiles spawned mid-update (windup-end ForceCreateMissile / spawn
+                // replication) are sent to clients THIS tick, so the client starts
+                // simulating them immediately. But the object update loop already ran,
+                // so without this their first server-side Move would be next tick —
+                // leaving the server missile a full tick (Jinx W: ~110u @30Hz) behind
+                // the client visual, which reads as "the missile flies out faster than
+                // the server" and lands the hit after it visually passed. Give them
+                // their first move now to stay in lockstep with the client.
+                foreach (var obj in justAdded)
+                {
                     if (obj is SpellMissile spawnedMissile && !spawnedMissile.IsToRemove())
                     {
                         spawnedMissile.Update(diff);
                     }
                 }
-
-                _objectsToAdd.Clear();
             }
 
             var players = _game.PlayerManager.GetPlayers(includeBots: false);
@@ -630,6 +657,115 @@ namespace LeagueSandbox.GameServer
             }
 
             _providerIndexValid = true;
+        }
+
+        /// <summary>
+        /// Rebuilds the per-tick spatial index of all AttackableUnits (shares the provider grid's
+        /// cell dimensions). Cheap: O(units), buckets cleared and refilled (no reallocation).
+        /// </summary>
+        void RebuildUnitGrid()
+        {
+            EnsureVisionProviderIndex(); // sizes the shared grid dims from the map
+
+            if (_unitGridCells == null)
+            {
+                _unitGridCells = new List<AttackableUnit>[_gridCols * _gridRows];
+                for (int i = 0; i < _unitGridCells.Length; i++)
+                {
+                    _unitGridCells[i] = new List<AttackableUnit>();
+                }
+            }
+
+            for (int i = 0; i < _unitGridCells.Length; i++)
+            {
+                _unitGridCells[i].Clear();
+            }
+
+            foreach (var obj in _objects.Values)
+            {
+                if (obj is AttackableUnit u)
+                {
+                    Vector2 pos = u.Position;
+                    _unitGridCells[RowOf(pos.Y) * _gridCols + ColOf(pos.X)].Add(u);
+                }
+            }
+
+            _unitGridValid = true;
+        }
+
+        /// <summary>
+        /// Spatial-index-backed range query: fills <paramref name="result"/> with AttackableUnits
+        /// within <paramref name="range"/> of <paramref name="checkPos"/>. EXACT vs the full-scan
+        /// GetUnitsInRange — the grid only narrows candidates (built-time cell), and each candidate's
+        /// LIVE position is distance-checked. The cell range is widened by 1 cell so per-tick
+        /// movement (~16u, cell=1000) can't push an in-range unit out of the queried block. Use this
+        /// for per-tick mass queries; one-off/cast-time callers can keep GetUnitsInRange.
+        /// </summary>
+        public void QueryUnitsInRange(Vector2 checkPos, float range, bool onlyAlive, List<AttackableUnit> result)
+        {
+            result.Clear();
+            float r2 = range * range;
+
+            if (!_unitGridValid || _unitGridCells == null)
+            {
+                // Index not built yet this tick (rare/out-of-band) — fall back to a full scan.
+                foreach (var kv in _objects)
+                {
+                    if (kv.Value is AttackableUnit u
+                        && (!onlyAlive || !u.IsDead)
+                        && Vector2.DistanceSquared(checkPos, u.Position) <= r2)
+                    {
+                        result.Add(u);
+                    }
+                }
+                return;
+            }
+
+            int c0 = Math.Max(0, ColOf(checkPos.X - range) - 1);
+            int c1 = Math.Min(_gridCols - 1, ColOf(checkPos.X + range) + 1);
+            int r0 = Math.Max(0, RowOf(checkPos.Y - range) - 1);
+            int r1 = Math.Min(_gridRows - 1, RowOf(checkPos.Y + range) + 1);
+
+            for (int r = r0; r <= r1; r++)
+            {
+                int rowBase = r * _gridCols;
+                for (int c = c0; c <= c1; c++)
+                {
+                    var bucket = _unitGridCells[rowBase + c];
+                    for (int k = 0; k < bucket.Count; k++)
+                    {
+                        var u = bucket[k];
+                        if (onlyAlive && u.IsDead)
+                        {
+                            continue;
+                        }
+
+                        if (Vector2.DistanceSquared(checkPos, u.Position) <= r2)
+                        {
+                            result.Add(u);
+                        }
+                    }
+                }
+            }
+
+            if (UNITGRID_PARALLEL_ASSERT)
+            {
+                int scan = 0;
+                foreach (var kv in _objects)
+                {
+                    if (kv.Value is AttackableUnit u
+                        && (!onlyAlive || !u.IsDead)
+                        && Vector2.DistanceSquared(checkPos, u.Position) <= r2)
+                    {
+                        scan++;
+                    }
+                }
+
+                if (scan != result.Count)
+                {
+                    _logger.Warn($"[UNITGRID-ASSERT] grid={result.Count} scan={scan} pos={checkPos} range={range}");
+                }
+            }
         }
 
         bool UnitHasVisionOn(GameObject observer, GameObject tested, bool nearSighted = false)
