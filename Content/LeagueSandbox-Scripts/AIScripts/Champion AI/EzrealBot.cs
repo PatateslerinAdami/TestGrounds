@@ -1000,14 +1000,6 @@ namespace AIScripts
 
             foreach (var unit in units)
             {
-                // Diagnostic: why do destroyed turrets get through the filter?
-                _logger.Debug(
-                    $"[TurretScan] Model={unit.Model} Type={(unit is LaneTurret lt ? lt.Type.ToString() : unit.GetType().Name)} " +
-                    $"IsDead={unit.IsDead} HP={unit.Stats.CurrentHealth}/{unit.Stats.HealthPoints.Total} " +
-                    $"Targetable={(unit.Status & StatusFlags.Targetable) != 0} " +
-                    $"TargetableToTeam={unit.GetIsTargetableToTeam(EzrealInstance.Team)} " +
-                    $"InhibitorState={(unit is Inhibitor inh ? inh.InhibitorState.ToString() : "n/a")}");
-
                 if (unit is LaneTurret turret)
                 {
                     return turret;
