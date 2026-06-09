@@ -283,7 +283,9 @@ namespace MapScripts.Map10
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1700, nexusStats);
+                // sightRange 1350 = real Map10 ObjectCFG.cfg HQ_T1/T2 PerceptionBubbleRadius
+                // (verified; was an invented 1700). Intrinsic auto-vision, no RevealStealth.
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1350, nexusStats);
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
                 AddObject(nexus);
@@ -299,7 +301,9 @@ namespace MapScripts.Map10
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 0, inhibitorStats);
+                // sightRange 1350 = real Map10 ObjectCFG.cfg Barracks_T1/T2 PerceptionBubbleRadius
+                // (verified; was 0 = no vision, a bug). Intrinsic auto-vision, no RevealStealth.
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 1350, inhibitorStats);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;

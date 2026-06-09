@@ -301,7 +301,9 @@ namespace MapScripts.Map16
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1700, nexusStats);
+                // sightRange 1350 = SR default (no ObjectCFG.cfg ships for Map16 to verify against;
+                // this map mirrors the SR building template). Was an invented 1700.
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1350, nexusStats);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
@@ -318,7 +320,8 @@ namespace MapScripts.Map16
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 0, inhibitorStats);
+                // sightRange 1350 = SR default (no Map16 ObjectCFG.cfg to verify); was 0 = no vision (bug).
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 1350, inhibitorStats);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;

@@ -17,6 +17,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     /// </summary>
     public class BaseTurret : ObjAIBase
     {
+        // Turrets don't auto-provide vision; like Riot, a turret's sight is an explicit
+        // perception-bubble Region (added in the turret char script). Avoids double-providing
+        // and keeps the radius/flags in one place. NOTE: until a turret char script adds that
+        // Region, the turret grants no team vision.
+        public override bool AutoProvidesVision => false;
+
         /// <summary>
         /// Current lane this turret belongs to.
         /// </summary>

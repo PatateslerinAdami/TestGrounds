@@ -7,7 +7,9 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
+using log4net;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -35,7 +37,24 @@ namespace LeagueSandbox.GameServer
         private Dictionary<uint, BaseTurret> _turrets;
         private Dictionary<uint, Inhibitor> _inhibitors;
         private Dictionary<uint, SpellMissile> _missiles;
-        private Dictionary<TeamId, List<GameObject>> _visionProviders;
+        private FrozenDictionary<TeamId, HashSet<GameObject>> _visionProviders;
+
+        // Per-team uniform spatial index of vision providers, rebuilt once per tick in
+        // RebuildVisionProviderIndex. Replaces the O(objects × providers) full scan that
+        // TeamHasVisionOn used to do (the #1 server hotspot at ~0.5 ms/tick). Allocation-free
+        // across ticks: the bucket lists are cleared and refilled, never reallocated. A query
+        // only visits providers in the cells overlapping the tested object's max-vision-radius
+        // box; UnitHasVisionOn then does the exact distance + LOS test, so decisions are identical.
+        private static readonly ILog _logger = LoggerProvider.GetLogger();
+        private Dictionary<TeamId, List<GameObject>[]> _providerCells;
+        private Dictionary<TeamId, float> _providerMaxRadius;
+        private bool _providerIndexValid;
+        private int _gridCols, _gridRows;
+        private float _gridMinX, _gridMinY;
+        private const float GRID_CELL_SIZE = 1000f;
+        // Flip to true to cross-check every grid query against the legacy full scan and log any
+        // divergence. Leave false in normal runs (the assert doubles vision work).
+        private const bool VISION_PARALLEL_ASSERT = false;
 
         private bool _currentlyInUpdate = false;
 
@@ -74,11 +93,7 @@ namespace LeagueSandbox.GameServer
             _inhibitors = new Dictionary<uint, Inhibitor>();
             _champions = new Dictionary<uint, Champion>();
             _missiles = new Dictionary<uint, SpellMissile>();
-            _visionProviders = new Dictionary<TeamId, List<GameObject>>();
-            foreach (var team in Teams)
-            {
-                _visionProviders.Add(team, new List<GameObject>());
-            }
+            _visionProviders = Teams.ToDictionary(team => team, _ => new HashSet<GameObject>()).ToFrozenDictionary();
         }
 
         /// <summary>
@@ -88,6 +103,10 @@ namespace LeagueSandbox.GameServer
         public void Update(float diff)
         {
             _currentlyInUpdate = true;
+            // The provider index is rebuilt below in VisionAndLateUpdate. Any TeamHasVisionOn
+            // call before that (e.g. out-of-band SpawnObject during scripts) falls back to the
+            // legacy scan via this flag, so it never reads a stale index.
+            _providerIndexValid = false;
 
             _timeSinceFullSync += diff;
             if (_timeSinceFullSync >= FULL_SYNC_INTERVAL_MS)
@@ -159,23 +178,47 @@ namespace LeagueSandbox.GameServer
 
             var players = _game.PlayerManager.GetPlayers(includeBots: false);
 
+            using (Profiler.Scope("vision:RebuildIndex"))
+            {
+                RebuildVisionProviderIndex();
+            }
+
             using (Profiler.Scope("Objects.VisionAndLateUpdate"))
             {
                 int i = 0;
                 foreach (GameObject obj in _objects.Values)
                 {
-                    UpdateTeamsVision(obj);
+                    // Phase split so a trace shows where the per-object cost goes:
+                    // TeamsVision = team visibility recompute (loops vision providers, may raycast),
+                    // LateUpdate  = obj.LateUpdate, SpawnAndSync = per-player sync/replication,
+                    // OnAfterSync = post-sync bookkeeping. The raycast itself is scoped separately
+                    // inside UnitHasVisionOn as "vision:raycast" so raycast cost can be subtracted
+                    // from the provider-iteration + distance-cull cost (TeamsVision minus raycast).
+                    using (Profiler.Scope("vision:TeamsVision"))
+                    {
+                        UpdateTeamsVision(obj);
+                    }
+
                     if (i++ < oldObjectsCount)
                     {
-                        obj.LateUpdate(diff);
+                        using (Profiler.Scope("vision:LateUpdate"))
+                        {
+                            obj.LateUpdate(diff);
+                        }
                     }
 
-                    foreach (var kv in players)
+                    using (Profiler.Scope("vision:SpawnAndSync"))
                     {
-                        UpdateVisionSpawnAndSync(obj, kv);
+                        foreach (var kv in players)
+                        {
+                            UpdateVisionSpawnAndSync(obj, kv);
+                        }
                     }
 
-                    obj.OnAfterSync();
+                    using (Profiler.Scope("vision:OnAfterSync"))
+                    {
+                        obj.OnAfterSync();
+                    }
                 }
             }
 
@@ -379,37 +422,86 @@ namespace LeagueSandbox.GameServer
                 return true;
             }
 
+            // Globally-revealed units (e.g. Jinx W's RevealSpecificUnit) are visible regardless of
+            // which vision providers happen to be nearby. This test depends only on the tested unit,
+            // not on any provider, so it must live here — the grid path only visits spatially-near
+            // providers and would otherwise miss a revealed unit with no provider in range (e.g. a
+            // long-range Jinx W hit far from the caster). UnitHasVisionOn keeps the same check for
+            // the direct (nearSighted) call path.
+            if (o is AttackableUnit revealedUnit
+                && revealedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit))
+            {
+                return true;
+            }
+
+            bool useGrid = _providerIndexValid && _providerCells != null;
+            bool result = useGrid ? TeamHasVisionOnGrid(team, o) : TeamHasVisionOnLegacy(team, o);
+
+            if (VISION_PARALLEL_ASSERT && useGrid)
+            {
+                bool legacy = TeamHasVisionOnLegacy(team, o);
+                if (legacy != result)
+                {
+                    _logger.Warn($"[VISION-ASSERT] grid={result} legacy={legacy} team={team} netId={o.NetId} type={o.GetType().Name}");
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Spatial-index path: only visits providers in the grid cells overlapping the tested
+        /// object's max-vision-radius box. The cell box is a superset of every provider within
+        /// maxRadius (a provider can only see <paramref name="o"/> if it is within its own
+        /// VisionRadius, which is &lt;= maxRadius), so UnitHasVisionOn still makes the exact call.
+        /// </summary>
+        bool TeamHasVisionOnGrid(TeamId team, GameObject o)
+        {
+            float maxR = _providerMaxRadius[team];
+            if (maxR <= 0f)
+            {
+                return false;
+            }
+
+            var cells = _providerCells[team];
+            Vector2 pos = o.Position;
+            int c0 = ColOf(pos.X - maxR), c1 = ColOf(pos.X + maxR);
+            int r0 = RowOf(pos.Y - maxR), r1 = RowOf(pos.Y + maxR);
+
+            for (int r = r0; r <= r1; r++)
+            {
+                int rowBase = r * _gridCols;
+                for (int c = c0; c <= c1; c++)
+                {
+                    var bucket = cells[rowBase + c];
+                    for (int k = 0; k < bucket.Count; k++)
+                    {
+                        var p = bucket[k];
+                        if (!IsViableVisionProvider(p, team))
+                        {
+                            continue;
+                        }
+
+                        if (UnitHasVisionOn(p, o))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Original full-scan path. Kept as the correctness reference for VISION_PARALLEL_ASSERT
+        /// and as the fallback used whenever the per-tick index is not yet valid.
+        /// </summary>
+        bool TeamHasVisionOnLegacy(TeamId team, GameObject o)
+        {
             foreach (var p in _visionProviders[team])
             {
-                if (p == null || p.IsToRemove())
-                {
-                    continue;
-                }
-
-                // Dead units should never provide vision.
-                if (p is AttackableUnit observerUnit && observerUnit.IsDead)
-                {
-                    continue;
-                }
-
-                // Regions bound to dead units should not provide vision either.
-                if (p is Region providerRegion
-                    && providerRegion.CollisionUnit is AttackableUnit regionOwner
-                    && regionOwner.IsDead)
-                {
-                    continue;
-                }
-
-                // Enemy turrets should not provide vision for your team.
-                if (p is BaseTurret && p.Team != team)
-                {
-                    continue;
-                }
-
-                // Enemy lane minions should not provide vision for your team.
-                if (p is Minion laneMinion
-                    && laneMinion.Team != team
-                    && laneMinion.Team != TeamId.TEAM_NEUTRAL)
+                if (!IsViableVisionProvider(p, team))
                 {
                     continue;
                 }
@@ -421,6 +513,123 @@ namespace LeagueSandbox.GameServer
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Per-provider gating shared by the grid and legacy paths so they make identical
+        /// decisions. Does NOT include the distance / line-of-sight test — that stays in
+        /// <see cref="UnitHasVisionOn"/>.
+        /// </summary>
+        static bool IsViableVisionProvider(GameObject p, TeamId team)
+        {
+            if (p == null || p.IsToRemove())
+            {
+                return false;
+            }
+
+            // Dead units should never provide vision.
+            if (p is AttackableUnit observerUnit && observerUnit.IsDead)
+            {
+                return false;
+            }
+
+            // Regions bound to dead units should not provide vision either.
+            if (p is Region providerRegion
+                && providerRegion.CollisionUnit is AttackableUnit regionOwner
+                && regionOwner.IsDead)
+            {
+                return false;
+            }
+
+            // Enemy turrets should not provide vision for your team.
+            if (p is BaseTurret && p.Team != team)
+            {
+                return false;
+            }
+
+            // Enemy lane minions should not provide vision for your team.
+            if (p is Minion laneMinion
+                && laneMinion.Team != team
+                && laneMinion.Team != TeamId.TEAM_NEUTRAL)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Lazily sizes the per-team provider grid from the map bounds (the NavigationGrid is
+        /// loaded by the time the first tick runs).
+        /// </summary>
+        void EnsureVisionProviderIndex()
+        {
+            if (_providerCells != null)
+            {
+                return;
+            }
+
+            var nav = _game.Map.NavigationGrid;
+            _gridMinX = nav.MinGridPosition.X;
+            _gridMinY = nav.MinGridPosition.Z;
+            _gridCols = Math.Max(1, (int)Math.Ceiling(nav.MapWidth / GRID_CELL_SIZE));
+            _gridRows = Math.Max(1, (int)Math.Ceiling(nav.MapHeight / GRID_CELL_SIZE));
+
+            _providerCells = new Dictionary<TeamId, List<GameObject>[]>();
+            _providerMaxRadius = new Dictionary<TeamId, float>();
+            foreach (var team in Teams)
+            {
+                var cells = new List<GameObject>[_gridCols * _gridRows];
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    cells[i] = new List<GameObject>();
+                }
+
+                _providerCells[team] = cells;
+                _providerMaxRadius[team] = 0f;
+            }
+        }
+
+        int ColOf(float x) => Math.Clamp((int)((x - _gridMinX) / GRID_CELL_SIZE), 0, _gridCols - 1);
+        int RowOf(float y) => Math.Clamp((int)((y - _gridMinY) / GRID_CELL_SIZE), 0, _gridRows - 1);
+
+        /// <summary>
+        /// Rebuilds the per-team provider index for this tick. Clears and refills the bucket
+        /// lists (no reallocation) and recomputes the per-team max vision radius used to size
+        /// queries. Cheap: O(total providers) ~ a few hundred inserts per tick.
+        /// </summary>
+        void RebuildVisionProviderIndex()
+        {
+            EnsureVisionProviderIndex();
+
+            foreach (var team in Teams)
+            {
+                var cells = _providerCells[team];
+                for (int i = 0; i < cells.Length; i++)
+                {
+                    cells[i].Clear();
+                }
+
+                float maxR = 0f;
+                foreach (var p in _visionProviders[team])
+                {
+                    if (p == null)
+                    {
+                        continue;
+                    }
+
+                    Vector2 pos = p.Position;
+                    cells[RowOf(pos.Y) * _gridCols + ColOf(pos.X)].Add(p);
+                    if (p.VisionRadius > maxR)
+                    {
+                        maxR = p.VisionRadius;
+                    }
+                }
+
+                _providerMaxRadius[team] = maxR;
+            }
+
+            _providerIndexValid = true;
         }
 
         bool UnitHasVisionOn(GameObject observer, GameObject tested, bool nearSighted = false)
@@ -504,7 +713,14 @@ namespace LeagueSandbox.GameServer
                 return true;
             }
 
-            return !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
+            // Scoped on its own: this LOS raycast is the suspected vision hotspot. In a trace,
+            // sum("vision:raycast") = total time in LOS raycasts; the parent vision scope minus
+            // this is the provider-iteration + distance-cull overhead. Constant name (no string
+            // interpolation) so the per-call cost stays negligible even at hundreds of calls/tick.
+            using (Profiler.Scope("vision:raycast"))
+            {
+                return !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
+            }
         }
 
         /// <summary>

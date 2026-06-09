@@ -316,7 +316,10 @@ namespace MapScripts.Map1
                 // air one-sidedly toward (-X,-Z) past the visible building (purple: toward the left
                 // nexus turret; blue: toward the fountain).
                 position += new Vector2(37f, 13f);
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 319, 1700, nexusStats, 353);
+                // sightRange 1350 = real Map1 ObjectCFG.cfg HQ_T1/T2 PerceptionBubbleRadius
+                // (verified; the prior 1700 was invented). Vision is provided intrinsically via
+                // ObjBuilding auto-vision; no RevealStealth (structures grant sight, don't reveal).
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 319, 1350, nexusStats, 353);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
@@ -348,7 +351,10 @@ namespace MapScripts.Map1
                 // recommended attack point and stood 10u out of range forever (2026-06-07).
                 int inhibFootprint = teamId == TeamId.TEAM_BLUE ? 187 : 214;
                 int inhibCollisionRadius = teamId == TeamId.TEAM_BLUE ? 169 : 194;
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, inhibCollisionRadius, 0, inhibitorStats, inhibFootprint);
+                // sightRange 1350 = real Map1 ObjectCFG.cfg Barracks_T1/T2 PerceptionBubbleRadius
+                // (verified; was 0 = no vision, a bug — inhibitors DO grant sight). Intrinsic
+                // auto-vision via ObjBuilding; no RevealStealth.
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, inhibCollisionRadius, 1350, inhibitorStats, inhibFootprint);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;

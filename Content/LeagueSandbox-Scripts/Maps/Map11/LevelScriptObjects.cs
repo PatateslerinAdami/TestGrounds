@@ -386,7 +386,8 @@ namespace MapScripts.Map11
             inhibitorStats.HealthPoints.BaseValue = GlobalData.BarrackVariables.MaxHP;
             inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
             inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
-            InhibitorList[team][laneID] = CreateInhibitor(name, model, position, team, laneID, 214, 0, inhibitorStats);
+            // sightRange 1350 = real map11 ObjectCFG.cfg Barracks PerceptionBubbleRadius (was 0).
+            InhibitorList[team][laneID] = CreateInhibitor(name, model, position, team, laneID, 214, 1350, inhibitorStats);
         }
 
         public static void CreateNex(string name, string model, Vector2 position, TeamId team)
@@ -395,7 +396,8 @@ namespace MapScripts.Map11
             nexusStats.HealthPoints.BaseValue = 5500.0f;
             nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-            NexusList.Add(CreateNexus(name, model, position, team, 353, 1700, nexusStats));
+            // sightRange 1350 = real map11 ObjectCFG.cfg HQ PerceptionBubbleRadius (was 1700).
+            NexusList.Add(CreateNexus(name, model, position, team, 353, 1350, nexusStats));
         }
 
         static void LoadProtection()
