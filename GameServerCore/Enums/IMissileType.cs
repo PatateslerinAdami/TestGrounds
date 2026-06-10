@@ -27,7 +27,7 @@
         /// unconditional; with both velocities 0 it sits at a fixed offset / attaches to the center.
         /// S4 confirms the structure — mRotateRadius/mRotatePhase, polar MISREP direction params —
         /// but its UpdateCircleMissile body is still a decomp stub). cSpellCircleMissile
-        /// mirrors this faithfully since 2026-06-07: unconditional polar motion, zero
+        /// mirrors this faithfully: unconditional polar motion, zero
         /// velocities = fixed offset / attachment (the old straight-line fallback was removed —
         /// straight missiles belong on Arc/SpellLineMissile). Mirrors client CastType
         /// CircleMissile (4).
