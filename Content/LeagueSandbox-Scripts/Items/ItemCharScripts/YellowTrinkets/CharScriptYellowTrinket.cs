@@ -30,7 +30,7 @@ public class CharScriptYellowTrinket : ICharScript {
         _isDying            = false;
         _owner.SetStatus(StatusFlags.Ghosted, true);
         _owner.SetCollisionRadius(0.0f);
-        _bubbleRegion = AddPosPerceptionBubble(_owner.Position, 900f, _owner.Stats.ManaPoints.Total, _owner.Team);
+        _bubbleRegion = AddUnitPerceptionBubble(_owner, 900f, _owner.Stats.ManaPoints.Total, _owner.Team);
         _particle = AddParticleTarget(owner, owner, "Global_Trinket_MiniYellow", owner, -1f);
         ApiEventManager.OnDeath.AddListener(this, owner, OnOwnerDeath);
     }

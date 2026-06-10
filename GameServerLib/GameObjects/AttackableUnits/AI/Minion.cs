@@ -18,6 +18,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Whether or not this minion is considered a ward.
         /// </summary>
         public bool IsWard { get; protected set; }
+
+        // Wards don't auto-provide vision; their sight comes solely from the explicit
+        // perception-bubble Region created by the ward script (which also carries reveal-stealth
+        // for control/vision wards). Avoids double-providing alongside that Region.
+        public override bool AutoProvidesVision => !IsWard;
         /// <summary>
         /// Whether or not this minion is a LaneMinion.
         /// </summary>

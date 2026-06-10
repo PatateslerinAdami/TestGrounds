@@ -904,6 +904,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CastInfo.Owner.SetCastSpell(this);
                 }
+
+                // Casting a real ability interrupts an in-progress auto-attack windup
+                // (League: abilities cancel the AA windup before its damage point). The
+                // player-path Cast already does this via AutoAttackSpell.CastCancelCheck()
+                // (which cancels once GetCastSpell() != null); the API/forced path used by
+                // sub-casts like JinxWMissile (cast from JinxW.OnSpellPostCast) was missing
+                // it, so the AA and the new cast BOTH sat in STATE_CASTING with IsAttacking
+                // stuck true: the client kept the AA animation track locked (Jinx's W stance
+                // never played, stayed in rocket stance), the missile cast-frame fired early
+                // (client showed the missile before the server windup ended), and the attack
+                // pipeline ping-ponged (windup restarting + instantly cancelling, no attacks
+                // until a form swap). Mirror the player path here.
+                CastInfo.Owner.AutoAttackSpell?.CastCancelCheck();
+
                 if (Script.ScriptMetadata.TriggersSpellCasts || SpellData.ChannelDuration[CastInfo.SpellLevel] > 0 || Script.ScriptMetadata.ChannelDuration > 0)
                 {
                     if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
@@ -1038,6 +1052,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (CastInfo.IsAutoAttack && !IsBasicAttackSlotSpell())
                 {
                     _game.PacketNotifier.NotifyNPC_CastSpellAns(this);
+                }
+
+                // [WINDUP-DIAG] A spell whose data/script demands a windup (OverrideCastTime
+                // or ScriptMetadata.CastTime) but that is about to fire instantly. Captures
+                // the full decision state so the "Jinx W sometimes fires with no cast time
+                // after a few autoattacks" repro can be pinned. Remove once diagnosed.
+                bool wantsWindup = SpellData.OverrideCastTime > 0 || Script.ScriptMetadata.CastTime > 0;
+                bool willBeInstant = CastInfo.DesignerCastTime <= 0
+                    || (!CastInfo.UseAttackCastDelay && SpellData.Flags.HasFlag(SpellDataFlags.InstantCast));
+                if (wantsWindup && willBeInstant)
+                {
+                    _logger.Debug($"[WINDUP-DIAG] {SpellName} fires INSTANT despite wanting windup: " +
+                        $"DesignerCastTime={CastInfo.DesignerCastTime:F3} OverrideCastTime={SpellData.OverrideCastTime:F3} " +
+                        $"ScriptCastTime={Script.ScriptMetadata.CastTime:F3} IsAutoAttack={CastInfo.IsAutoAttack} " +
+                        $"UseAttackCastTime={CastInfo.UseAttackCastTime} UseAttackCastDelay={CastInfo.UseAttackCastDelay} " +
+                        $"InstantCastFlag={SpellData.Flags.HasFlag(SpellDataFlags.InstantCast)} State={State} slot={CastInfo.SpellSlot} ASmod={CastInfo.AttackSpeedModifier:F3}");
                 }
 
                 if (CastInfo.DesignerCastTime > 0)

@@ -63,6 +63,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private SpellQueueEntry _queuedSpellCast;
         private readonly Random _random = new Random();
         private readonly List<Spell> _autoAttackOverrideSpells = new List<Spell>();
+        // Reused scratch buffer for the per-tick spell update so we don't allocate a new List every
+        // tick per unit (see SpellsUpdate). The defensive copy is still needed because a spell's
+        // Update can add/remove entries in Spells.
+        private readonly List<Spell> _spellUpdateBuffer = new List<Spell>();
         private readonly Dictionary<Spell, float> _autoAttackOverrideWeights = new Dictionary<Spell, float>();
         private Spell _autoAttackOverrideCritSpell;
         protected ItemManager _itemManager;
@@ -1986,8 +1990,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             using (Profiler.Scope("ObjAI.SpellsUpdate"))
             {
-                // bit of a hack
-                foreach (var s in new List<Spell>(Spells.Values))
+                // Snapshot into a reused buffer (allocation-free) instead of `new List<Spell>` per
+                // tick — same defensive copy (a spell's Update can mutate Spells), no GC churn.
+                _spellUpdateBuffer.Clear();
+                _spellUpdateBuffer.AddRange(Spells.Values);
+                foreach (var s in _spellUpdateBuffer)
                 {
                     s.Update(diff);
                 }

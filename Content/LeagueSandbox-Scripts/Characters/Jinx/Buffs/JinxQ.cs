@@ -44,14 +44,23 @@ internal class JinxQ : IBuffGameScript {
         
         // Set correct animation states for Jinx with Fishbones
         _jinx.SetAnimStates(new Dictionary<string, string> {
-            { "idle1_base", "R_idle1_BASE" },
-            { "idle2_base", "R_idle2_BASE" },
-            { "idle3_base", "R_idle3_BASE" },
-            { "idle1", "R_idle1" },
-            { "run", "R_Run" },
-            { "run_base", "R_Run_BASE" },
-            { "attack1", "R_Attack1" },
-            { "attack2", "R_Attack2" }
+            { "RUN", "R_RUN" },
+            { "RUN2", "R_RUN2" },
+            { "RUN_FAST", "R_RUN_FAST" },
+            { "IDLE1", "R_IDLE1" },
+            { "IDLE2", "R_IDLE2" },
+            { "IDLE3", "R_IDLE3" },
+            { "DEATH", "R_DEATH" },
+            { "ATTACK1", "R_ATTACK1" },
+            { "ATTACK2", "R_ATTACK2" },
+            { "SPELL1", "R_SPELL1" },
+            { "SPELL2", "R_SPELL2" },
+            { "SPELL3", "R_SPELL3" },
+            { "SPELL3_RUN", "R_SPELL3_RUN" },
+            { "SPELL4", "R_SPELL4" },
+            { "TAUNT", "R_TAUNT" },
+            { "JOKE", "R_JOKE" },
+            { "LAUGH", "R_LAUGH" }
         });
 
         // Q rank range bonus: +75 then +25 per additional rank.

@@ -21,4 +21,5 @@ public class ChaosTurretGiantBasicAttack : ISpellScript {
             Type = MissileType.Target
         },
     };
+
 }

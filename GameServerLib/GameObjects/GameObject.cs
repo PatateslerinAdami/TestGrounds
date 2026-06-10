@@ -100,6 +100,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         public virtual bool SpawnShouldBeHidden => false;
 
         /// <summary>
+        /// Whether this object auto-registers as a team vision provider on spawn / team change.
+        /// Wards opt out (see <see cref="Minion.IsWard"/>): a ward's vision comes solely from an
+        /// explicit perception-bubble Region, so the per-ward radius and reveal-stealth live in one
+        /// place. This matches Riot, where a ward's vision IS its networked region (bound to the
+        /// ward unit) rather than the unit's intrinsic perception — and avoids double-providing.
+        /// </summary>
+        public virtual bool AutoProvidesVision => true;
+
+        /// <summary>
         /// Instantiation of an object which represents the base class for all objects in League of Legends.
         /// </summary>
         public GameObject(Game game, Vector2 position, float collisionRadius = 40f, float pathingRadius = 40f, float visionRadius = 0f, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL)
@@ -138,7 +147,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         public virtual void OnAdded()
         {
             _game.Map.CollisionHandler.AddObject(this);
-            _game.ObjectManager.AddVisionProvider(this, Team);
+            if (AutoProvidesVision)
+            {
+                _game.ObjectManager.AddVisionProvider(this, Team);
+            }
         }
 
         /// <summary>
@@ -360,7 +372,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         {
             _game.ObjectManager.RemoveVisionProvider(this, Team);
             Team = team;
-            _game.ObjectManager.AddVisionProvider(this, Team);
+            if (AutoProvidesVision)
+            {
+                _game.ObjectManager.AddVisionProvider(this, Team);
+            }
             if (_game.IsRunning)
             {
                 _game.PacketNotifier.NotifySetTeam(this as AttackableUnit);

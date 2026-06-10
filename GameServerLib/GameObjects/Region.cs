@@ -1,5 +1,6 @@
 using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects
@@ -12,6 +13,8 @@ namespace LeagueSandbox.GameServer.GameObjects
     {
         // Function Vars
         private float _currentTime;
+        // Reused buffer for the per-tick RevealStealth scan (avoids allocating per query).
+        private readonly List<AttackableUnit> _revealScanBuffer = new List<AttackableUnit>();
 
         public int Type { get; }
         public GameObject CollisionUnit { get; }
@@ -206,8 +209,11 @@ namespace LeagueSandbox.GameServer.GameObjects
                     revealTeam = collisionUnit.Team;
                 }
 
-                var units = _game.ObjectManager.GetUnitsInRange(Position, VisionRadius, true);
-                foreach (var unit in units)
+                // Grid-backed query (O(local), exact via live distance-check) instead of the O(N)
+                // GetUnitsInRange full scan — this runs every tick per RevealStealth region (turrets,
+                // control wards), so the full scan was the #2 server hotspot.
+                _game.ObjectManager.QueryUnitsInRange(Position, VisionRadius, true, _revealScanBuffer);
+                foreach (var unit in _revealScanBuffer)
                 {
                     if (unit == null || unit.IsDead || unit == CollisionUnit)
                     {
