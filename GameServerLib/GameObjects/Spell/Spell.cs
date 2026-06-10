@@ -1756,6 +1756,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 var level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.Cooldown.Length - 1));
                 var cd = SpellData.Cooldown[level];
+
+                // AutoCooldownByLevel override: when a script sets a per-rank value > 0 it
+                // overrides the inibin SpellData.Cooldown for that level (default {0,...} = no
+                // override -> use SpellData.Cooldown). This lets us
+                // tune cooldowns per spell in the script without editing inibin data. CDR (below) still applies.
+                var autoCd = Script?.ScriptMetadata?.AutoCooldownByLevel;
+                if (autoCd != null && autoCd.Length > 0)
+                {
+                    var autoLevel = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(autoCd.Length - 1));
+                    if (autoCd[autoLevel] > 0)
+                    {
+                        cd = autoCd[autoLevel];
+                    }
+                }
+
                 if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
                 {
                     cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;

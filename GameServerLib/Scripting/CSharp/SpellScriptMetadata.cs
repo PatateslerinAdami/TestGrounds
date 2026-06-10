@@ -11,6 +11,9 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public string AutoAuraBuffName { get; set; } = "";
         // TODO: Replace string with empty event class.
         public string AutoBuffActivateEvent { get; set; } = "";
+        /// <summary>
+        //Optional per rank cooldown override. This is affected by cdr
+        /// </summary>
         public float[] AutoCooldownByLevel { get; set; } = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
         public string AutoItemActivateEffect { get; set; } = "";
         /// <summary>
@@ -28,11 +31,12 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// <c>CastSpellAns.targetPosition = landing</c> (the replay-empirical match). Note this is
         /// purely a wire-shape concern; the actual post-blink position-sync runs through a separate
         /// <c>WaypointGroup</c> with <c>HasTeleportID=true</c> packet (= server-side
-        /// <c>NotifyTeleport</c>, broadcast to all teammates with vision, see
-        /// <c>project_blink_spell_position_sync.md</c>). Both are needed for full fidelity.</para>
+        /// <c>NotifyTeleport</c>, broadcast to all teammates with vision).
+        /// Both are needed for full fidelity.</para>
         /// </summary>
+        /// TODO: Move this somewhere else
         public bool OverrideTargetPositionInScript { get; set; } = false;
-        public float[] AutoTargetDamageByLevel { get; set; } = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        
         public float CastTime { get; set; } = 0.0f;
         public bool CastingBreaksStealth { get; set; } = false;
         /// <summary>
@@ -45,6 +49,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         // TODO: Find a use for this.
         public bool IsDamagingSpell { get; set; } = false;
         public bool IsDeathRecapSource { get; set; } = false;
+        
         public bool IsDebugMode { get; set; } = false;
         public bool IsPetDurationBuff { get; set; } = false;
         public bool IsNonDispellable { get; set; } = false;
@@ -61,9 +66,6 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public float SpellDamageRatio { get; set; } = 0.0f;
 
         public int SpellToggleSlot { get; set; } = 0;
-        
-        //Determines whether the spell should activate effects like sheen
-        public bool DoesntTriggerSpellCasts { get; set; } = true;
 
         /// <summary>
         /// Determines whether or not the spell stops movement and triggers spell casts (and post).
