@@ -63,6 +63,29 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Kills a unit using the legacy NPC_Die_Broadcast (op 0x9E) packet instead of the
+        /// 4.18+ S2C_NPC_Die_MapView (op 0x126) that AttackableUnit.Die() emits. Use this
+        /// when a script needs the unit's NetId to remain resolvable on the client for a
+        /// brief window after death (e.g. for an FX packet that references it via
+        /// TargetNetID). Replay-verified pattern from Xerath Q chain anchors — Riot kills
+        /// the chain ~60ms before the beam packet, and the client retains the dead NetIds
+        /// in its object table just long enough for the .troy to resolve them. The newer
+        /// S2C_NPC_Die_MapView path purges the NetId immediately, breaking that pattern.
+        /// </summary>
+        public static void KillUnitLegacyBroadcast(AttackableUnit unit)
+        {
+            var data = new GameServerLib.GameObjects.AttackableUnits.DeathData
+            {
+                Unit = unit,
+                Killer = unit,
+                DamageType = DamageType.DAMAGE_TYPE_TRUE,
+                DamageSource = DamageSource.DAMAGE_SOURCE_INTERNALRAW,
+            };
+            _game.PacketNotifier.NotifyNPC_Die_Broadcast(data);
+            unit.SetToRemove();
+        }
+
+        /// <summary>
         /// Logs the given string to the server console as info.
         /// </summary>
         /// <param name="format">String to print.</param>
@@ -768,11 +791,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, keywordNetIDOverride);
         }
 
         /// <summary>
@@ -847,12 +871,17 @@ namespace LeagueSandbox.GameServer.API
             ObjAIBase visibilityOwner = null,
             bool isVisible = true,
             bool aiPaused = true,
-            bool useSpells = true
+            bool useSpells = true,
+            byte spawnBitfieldExtra = 0
         )
         {
             var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable,
                 isWard, visibilityOwner, enableScripts: useSpells);
             m.Stats.IsTargetableToTeam = targetingFlags;
+            // Set the extra-bitfield byte BEFORE AddObject — AddObject synchronously broadcasts
+            // the spawn packet via the visibility pipeline, so any setter called after returns
+            // here would only mutate server state and never reach the wire.
+            m.SpawnBitfieldExtra = spawnBitfieldExtra;
             _game.ObjectManager.AddObject(m);
             if (owner != null)
             {
@@ -861,6 +890,38 @@ namespace LeagueSandbox.GameServer.API
 
             m.PauseAI(aiPaused);
             return m;
+        }
+
+        /// <summary>
+        /// Spawns a <see cref="Marker"/> — a lightweight position-only entity broadcast
+        /// via <c>SpawnMarkerS2C</c> (packet id 0x100). No model, no animation, no
+        /// minimap presence. Use as an anchor NetID for particle <c>BindNetID</c> /
+        /// <c>TargetNetID</c> fields (e.g. beam endpoints). Replay-verified pattern:
+        /// Vel'Koz R uses 4 of these for the beam's endpoint anchor.
+        /// </summary>
+        /// <param name="position">World position (X, Y=height, Z). Y is preserved for
+        /// <see cref="Marker.GetHeight"/> rather than being recomputed from terrain.</param>
+        /// <param name="visibilitySize">Visibility radius in world units (replay default 100).</param>
+        /// <param name="team">Team the marker is associated with. <see cref="TeamId.TEAM_NEUTRAL"/>
+        /// makes it globally visible (subject to FoW).</param>
+        public static Marker AddMarker(Vector2 position, float visibilitySize = 100f, TeamId team = TeamId.TEAM_NEUTRAL)
+        {
+            var marker = new Marker(_game, position, visibilitySize, netNodeId: 0x40, team: team);
+            _game.ObjectManager.AddObject(marker);
+            // Client's obj_AI_Marker::Create hardcodes the team to TEAM_NEUTRAL. To make
+            // FX particles bound to the marker render correctly, broadcast the actual team
+            // immediately after the spawn — Riot does this (a6db3774 replay, t=510997
+            // sequence: SpawnMarkerS2C → S2C_UnitChangeTeam → S2C_MoveMarker → FX_Create_Group).
+            if (team != TeamId.TEAM_NEUTRAL)
+            {
+                _game.PacketNotifier.NotifySetTeam((GameObject)marker);
+            }
+            // OnEnterVisibilityClient + OnEnterLocalVisibilityClient initialize the marker
+            // as a fully-formed obj_AI_Base on the client. Without these the marker is
+            // half-spawned and FX particles using BindNetID=marker fail to render.
+            // Replay-verified Riot pattern.
+            _game.PacketNotifier.NotifyMarkerVisibilityInit(marker);
+            return marker;
         }
 
         /// <summary>
@@ -2071,7 +2132,7 @@ namespace LeagueSandbox.GameServer.API
         public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, Vector2 pos, Vector2 endPos,
             bool fireWithoutCasting, Vector2 overrideCastPos, List<CastTarget> targets = null,
             bool isForceCastingOrChanneling = false, int overrideForceLevel = -1, bool updateAutoAttackTimer = false,
-            bool useAutoAttackSpell = false, CastInfo inheritVariablesFrom = null)
+            bool useAutoAttackSpell = false, CastInfo inheritVariablesFrom = null, bool isContinuation = false)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -2139,20 +2200,20 @@ namespace LeagueSandbox.GameServer.API
                 castInfo.Variables = inheritVariablesFrom.Variables;
             }
 
-            spell.Cast(castInfo, !fireWithoutCasting);
+            spell.Cast(castInfo, !fireWithoutCasting, isContinuation);
         }
 
         public static void SpellCast(ObjAIBase caster, int slot, SpellSlotType slotType, bool fireWithoutCasting,
             AttackableUnit target, Vector2 overrideCastPos, bool isForceCastingOrChanneling = false,
             int overrideForceLevel = -1, bool updateAutoAttackTimer = false, bool useAutoAttackSpell = false,
-            CastInfo inheritVariablesFrom = null)
+            CastInfo inheritVariablesFrom = null, bool isContinuation = false)
         {
             CastTarget castTarget = new CastTarget(target,
                 CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit));
 
             SpellCast(caster, slot, slotType, target.Position, target.Position, fireWithoutCasting, overrideCastPos,
                 new List<CastTarget> { castTarget }, isForceCastingOrChanneling, overrideForceLevel,
-                updateAutoAttackTimer, useAutoAttackSpell, inheritVariablesFrom);
+                updateAutoAttackTimer, useAutoAttackSpell, inheritVariablesFrom, isContinuation);
         }
 
         public static void SpellCastItem(ObjAIBase caster, string itemSpellName, bool fireWithoutCasting,
@@ -2548,6 +2609,82 @@ namespace LeagueSandbox.GameServer.API
 
             return spell.CreateCustomMissile(start, end, parameters, isForceCastingOrChannel, isOverrideCastPosition,
                 customHeightOffset, target);
+        }
+
+        /// <summary>
+        /// Unified charge-fire trigger. Replay-verified Riot patterns — both styles always emit
+        /// the parent channel-end signal (<c>NPC_CastSpellAns(parent slot, SAME NetIDs as
+        /// charge-start, Unknown1=true)</c>) to clear the client charge bar. The
+        /// <paramref name="fireWithoutCasting"/> flag picks which sub-action accompanies it:
+        /// <list type="bullet">
+        ///   <item><b><c>fireWithoutCasting = true</c></b> (default, Missile-style, Varus Q
+        ///   pattern): bypasses sub-spell Cast pipeline, spawns the missile directly via
+        ///   <see cref="Spell.CreateReplicatedMissile"/> which broadcasts <c>MissileReplication</c>.
+        ///   Sub-spell's OnSpellPreCast/Cast/PostCast hooks DO NOT fire. Use when the sub-spell
+        ///   is just a missile (no per-cast setup needed besides on-hit damage).</item>
+        ///   <item><b><c>fireWithoutCasting = false</c></b> (Sector/effect-style, Xerath Q
+        ///   pattern): runs full <see cref="SpellCast"/> on the sub-spell. Emits
+        ///   <c>NPC_CastSpellAns(sub-slot, NEW NetIDs, Unknown1=false)</c> AND triggers the
+        ///   sub-script's OnSpellPreCast/Cast/PostCast hooks (sector creation, particles, anim,
+        ///   status flags). NO <c>MissileReplication</c>. Use when the sub-spell needs its own
+        ///   cast-pipeline logic.</item>
+        /// </list>
+        /// </summary>
+        /// <param name="parameters">Optional, only used when <paramref name="fireWithoutCasting"/>
+        /// is true (missile-style). If null, falls back to sub-spell's
+        /// <c>ScriptMetadata.MissileParameters</c>.</param>
+        /// <returns>The spawned missile when <paramref name="fireWithoutCasting"/> is true,
+        /// otherwise null (sector-style doesn't return a missile).</returns>
+        public static SpellMissile SpellCastCharge(Spell chargeSpell, int subSlot,
+            SpellSlotType subSlotType, Vector2 start, Vector2 targetPos,
+            bool fireWithoutCasting = true, MissileParameters parameters = null)
+        {
+            var caster = chargeSpell.CastInfo.Owner;
+            SpellMissile missile = null;
+
+            if (fireWithoutCasting)
+            {
+                // Missile-style — resolve sub-spell, spawn via CreateReplicatedMissile.
+                int resolvedSlot = ConvertAPISlot(subSlotType, subSlot);
+                if (resolvedSlot < 0 || !caster.Spells.ContainsKey((short)resolvedSlot))
+                {
+                    LogDebug($"SpellCastCharge: invalid sub-slot {subSlot} of type {subSlotType} on {caster.Name}");
+                }
+                else
+                {
+                    var subSpell = caster.Spells[(short)resolvedSlot];
+                    if (subSpell != null)
+                    {
+                        var effectiveParams = parameters ?? subSpell.Script?.ScriptMetadata?.MissileParameters;
+                        if (effectiveParams != null)
+                        {
+                            missile = subSpell.CreateReplicatedMissile(start, targetPos, effectiveParams,
+                                isForceCastingOrChannel: true);
+                        }
+                        else
+                        {
+                            LogDebug($"SpellCastCharge: no MissileParameters for missile-style on sub-spell '{subSpell.SpellName}'");
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Sector/effect-style — full SpellCast pipeline. Sub-script's OnSpellPreCast etc.
+                // hooks run. Wire emits NPC_CastSpellAns(sub-slot, new NetIDs, Unknown1=false).
+                SpellCast(caster, subSlot, subSlotType, start, targetPos,
+                    fireWithoutCasting: false, overrideCastPos: Vector2.Zero);
+            }
+
+            // Always: parent channel-end signal NPC_CastSpellAns(parent-slot, SAME NetIDs as
+            // charge-start, Unknown1=true). Tells the client to exit charge state and clear
+            // the charge HUD. Without this packet the client keeps the HUD bar visible
+            // indefinitely — empirically verified 2026-05-17 (collapsing into the sub-spell
+            // packet via isContinuation didn't fire the parent's exit-charge handler).
+            var targetPos3D = new Vector3(targetPos.X, caster.GetHeight(), targetPos.Y);
+            chargeSpell.NotifyChargeFireCastSpellAns(targetPos3D);
+
+            return missile;
         }
 
         public static Vector2 GetClosestTerrainExit(Vector2 location, float distanceThreshold = 0)

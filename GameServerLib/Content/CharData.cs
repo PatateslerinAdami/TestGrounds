@@ -36,8 +36,25 @@ namespace LeagueSandbox.GameServer.Content
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
+        /// <summary>
+        /// JSON field present in many character stats files but VERIFIED 2026-05-10 to be
+        /// unread by the S4 client (literal "Chasing" doesn't appear anywhere in S4 decomp,
+        /// and `CharacterData::FillCharacterRecordFromIniFromMyMembers` uses literal-string
+        /// ReadCFG_S/I/B for every field it reads — would surface this one if consumed).
+        /// Loaded here for forward-compat / completeness but DELIBERATELY not wired into
+        /// gameplay — wiring it server-side would diverge from client expectations. See
+        /// memory `project_chardata_chasing_postattack_loaded.md`.
+        /// </summary>
+        public float ChasingAttackRangePercent { get; private set; } = 0.95f;
+        /// <summary>
+        /// JSON field present in many character stats files but VERIFIED 2026-05-10 to be
+        /// unread by the S4 client (same verification trail as <see cref="ChasingAttackRangePercent"/>).
+        /// Loaded for forward-compat, NOT wired into gameplay.
+        /// </summary>
+        public float PostAttackMoveDelay { get; private set; } = 0.0f;
         // S4 default 1.0 (CharacterData.cpp:966) the slot 0 catches the whole roll unless
-        // the data explicitly lowers it (alternating champs use 0.5).
+        // the data explicitly lowers it (alternating champs use 0.5). Keep 1.0 (current
+        // branch's verified value) over experimental's stale 0.5.
         public float BaseAttackProbability { get; private set; } = 1.0f;
         public float BaseDamage { get; private set; } = 10.0f;
         public float BaseHp { get; private set; } = 100.0f;
@@ -117,6 +134,8 @@ namespace LeagueSandbox.GameServer.Content
             AttackRange = file.GetFloat("Data", "AttackRange", AttackRange);
             AttackSpeedPerLevel = file.GetFloat("Data", "AttackSpeedPerLevel", AttackSpeedPerLevel);
             AttackTotalTime = file.GetFloat("Data", "AttackTotalTime", AttackTotalTime);
+            ChasingAttackRangePercent = file.GetFloat("Data", "ChasingAttackRangePercent", ChasingAttackRangePercent);
+            PostAttackMoveDelay = file.GetFloat("Data", "PostAttackMoveDelay", PostAttackMoveDelay);
 
             BaseAttackProbability = file.GetFloat("Data", "BaseAttack_Probability", BaseAttackProbability);
             BaseDamage = file.GetFloat("Data", "BaseDamage", BaseDamage);

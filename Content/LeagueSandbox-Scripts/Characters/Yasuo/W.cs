@@ -51,6 +51,11 @@ namespace Spells
 
         public void OnSpellPostCast(Spell spell)
         {
+            // TODO(sub-missile-replay-audit): Yasuo W (and other script-spawned sub-missiles)
+            // have been silently invisible since commit 67354ff1 (2026-05-10) added the
+            // primary-missile shortcut in ConstructSpawnPacket. Postponed pending replay
+            // verification of the correct wire pattern. See memory note
+            // [[deferred-sub-missile-replication]] for context.
             var m = CreateCustomMissile(_owner, "YasuoWMovingWallMisVis", _owner.Position, _owner.Position + dir * 800f, new MissileParameters { Type = MissileType.Arc }, customHeightOffset: -50f);
             AddParticleTarget(_owner, m, "Yasuo_Base_W_windwall4", m, lifetime: 3.75f);
 

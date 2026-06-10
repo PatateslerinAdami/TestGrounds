@@ -32,6 +32,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public bool IsTargetable { get; protected set; }
         /// <summary>
+        /// Extra raw bits to OR into the SpawnMinionS2C bitfield byte (bits 0x20 and 0x40
+        /// observed in Riot's TestCubeRender10Vision spawn packets, purpose unconfirmed —
+        /// tracked here so callers can opt in for wire-fidelity testing).
+        /// </summary>
+        public byte SpawnBitfieldExtra { get; set; }
+        /// <summary>
         /// Only unit which is allowed to see this minion.
         /// </summary>
         public ObjAIBase VisibilityOwner { get; }

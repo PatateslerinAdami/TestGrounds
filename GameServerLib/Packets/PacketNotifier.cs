@@ -41,6 +41,8 @@ namespace PacketDefinitions420
     /// </summary>
     public class PacketNotifier
     {
+        private static log4net.ILog _logger = LeagueSandbox.GameServer.Logging.LoggerProvider.GetLogger();
+
         private readonly PacketHandlerManager _packetHandlerManager;
         private readonly NavigationGrid _navGrid;
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
@@ -205,7 +207,14 @@ namespace PacketDefinitions420
             {
                 shields = a.GetCombinedShieldValues();
                 charStackData.SkinName = a.Model;
-                NotifyFaceDirection(a, a.Direction, true);
+                // Skip the no-op spawn-time face-direction broadcast — Riot's replay does
+                // not include a FaceDirection(0,0,0) packet for freshly-spawned units that
+                // haven't been oriented yet (e.g. hidden TestCubeRender anchor minions).
+                // Only broadcast when the unit has a non-zero facing.
+                if (a.Direction != Vector3.Zero)
+                {
+                    NotifyFaceDirection(a, a.Direction, true);
+                }
                 if (a is ObjAIBase obj)
                 {
                     charStackData.SkinID = (uint)obj.SkinID;
@@ -293,8 +302,24 @@ namespace PacketDefinitions420
 
             var position = particle.GetPosition3D();
 
+            // ownerPos semantic (S1 EffectManagerHelper_Client + S4 Ghidra Effect.cpp:1377):
+            // when targetObj exists AND is invisible to the recipient, the client calls
+            // targetObj.SetPosition(ownerPos). So ownerPos must be the world position of
+            // the bound/target entity, NOT the caster. Priority:
+            //   1. targetObj.Position — the entity whose position might need force-syncing
+            //   2. bindObj.Position — emitter parent's position when no target
+            //   3. caster.Position — fallback for un-attached FX
+            // Riot replay-faithful for Vel'Koz R _beam: opos = marker pos (targetObj).
             var ownerPos = position;
-            if (particle.Caster != null)
+            if (particle.TargetObject != null)
+            {
+                ownerPos = particle.TargetObject.GetPosition3D();
+            }
+            else if (particle.BindObject != null)
+            {
+                ownerPos = particle.BindObject.GetPosition3D();
+            }
+            else if (particle.Caster != null)
             {
                 ownerPos = particle.Caster.GetPosition3D();
             }
@@ -317,11 +342,18 @@ namespace PacketDefinitions420
             {
                 higherValue = higherValue + particle.OverrideTargetHeight;
             }
+            // KeywordNetID: replay-verified (Xerath replay 1050f59b, all 117 beam packets +
+            // tar packets) Riot always sets this to the caster's NetId. Acts as a back-pointer
+            // to the spell-caster for client-side particle bookkeeping. Fall back to 0 when
+            // there's no caster (e.g. global/level FX). Some Vel'Koz R FX explicitly write 0
+            // even with a caster present — opt-in via KeywordNetIDOverride.
+            uint keywordNetID = particle.KeywordNetIDOverride ?? (particle.Caster?.NetId ?? 0);
+
             var fxData1 = new FXCreateData
             {
                 NetAssignedNetID = particle.NetId,
                 CasterNetID = 0,
-                KeywordNetID = 0, // Not sure what this is
+                KeywordNetID = keywordNetID,
 
                 PositionX = (short)((position.X - _navGrid.MapWidth / 2) / 2),
                 PositionY = higherValue,
@@ -424,6 +456,8 @@ namespace PacketDefinitions420
                 IsLaneMinion = minion.IsLaneMinion,
                 IsBot = minion.IsBot,
                 IsTargetable = minion.IsTargetable,
+                UnknownBit5 = (minion.SpawnBitfieldExtra & 0x20) != 0,
+                UnknownBit6 = (minion.SpawnBitfieldExtra & 0x40) != 0,
 
                 IsTargetableToTeamSpellFlags = (uint)minion.Stats.IsTargetableToTeam,
                 VisibilitySize = minion.VisionRadius,
@@ -704,6 +738,36 @@ namespace PacketDefinitions420
             };
         }
 
+        SpawnMarkerS2C ConstructSpawnMarkerPacket(Marker marker)
+        {
+            return new SpawnMarkerS2C
+            {
+                NetID = marker.NetId,
+                NetNodeID = marker.NetNodeID,
+                Position = new Vector3(marker.Position.X, marker.GetHeight(), marker.Position.Y),
+                VisibilitySize = marker.VisibilitySize,
+            };
+        }
+
+        /// <summary>
+        /// Broadcasts <c>S2C_MoveMarker</c> (packet 0x114) so clients interpolate the marker
+        /// from <paramref name="position"/> to <paramref name="goal"/>. Replay-verified for
+        /// Vel'Koz R: sender = marker.NetId, sent every ~100ms during the channel with
+        /// Speed=1033, FaceGoalPosition=true.
+        /// </summary>
+        public void NotifyS2C_MoveMarker(Marker marker, Vector2 position, Vector2 goal, float speed, bool faceGoal)
+        {
+            var pkt = new S2C_MoveMarker
+            {
+                SenderNetID = marker.NetId,
+                Position = position,
+                Goal = goal,
+                Speed = speed,
+                FaceGoalPosition = faceGoal,
+            };
+            _packetHandlerManager.BroadcastPacket(pkt.GetBytes(), Channel.CHL_S2C);
+        }
+
         GamePacket ConstructSpawnPacket(GameObject o, TeamId viewingTeam, float gameTime = 0)
         {
             switch (o)
@@ -731,6 +795,8 @@ namespace PacketDefinitions420
                     return ConstructSpawnLevelPropPacket(prop);
                 case Region region:
                     return ConstructAddRegionPacket(region);
+                case Marker marker:
+                    return ConstructSpawnMarkerPacket(marker);
 
                 case LaneTurret turret:
                     return ConstructCreateTurretPacket(turret);
@@ -1056,19 +1122,18 @@ namespace PacketDefinitions420
         {
             var targetPos = MovementVector.ToCenteredScaledCoordinates(target.Position, _navGrid);
 
-            // TODO: Remove attacker, target, and futureProjNetId parameters and replace with CastInfo
+            // ExtraTime: client decodes `(byte - 128) / 100.0` per S1 obj_ai_base_client.cpp:15689,
+            // range [-1.28, +1.27] s. Negative `CurrentDelayTime` matches Riot's replay range
+            // [-0.14, 0] s — non-zero on RefreshCurrentTarget mid-windup (target swap during AA).
+            // TODO: Remove attacker/target/futureProjNetId parameters and replace with CastInfo.
             var basicAttackData = new BasicAttackData
             {
                 TargetNetID = target.NetId,
-                ExtraTime = attacker.AutoAttackSpell.CastInfo.ExtraCastTime, // TODO: Verify, maybe related to CastInfo.ExtraCastTime?
+                ExtraTime = -attacker.AutoAttackSpell.CurrentDelayTime,
                 MissileNextID = futureProjNetId,
                 AttackSlot = attacker.AutoAttackSpell.CastInfo.SpellSlot,
                 TargetPosition = new Vector3(targetPos.X, _navGrid.GetHeightAtLocation(targetPos), targetPos.Y)
             };
-
-            // Based on DesignerCastTime. Always negative. Value range from replays: [-0.14, 0].
-            // TODO: Find out what should go here.
-            basicAttackData.ExtraTime = -attacker.AutoAttackSpell.CurrentDelayTime;
 
             var basicAttackPacket = new Basic_Attack
             {
@@ -1089,25 +1154,26 @@ namespace PacketDefinitions420
         {
             var targetPos = MovementVector.ToCenteredScaledCoordinates(target.Position, _navGrid);
 
-            // TODO: Remove attacker, target, and futureProjNetId parameters and replace with CastInfo
+            // See NotifyBasic_Attack for ExtraTime encoding details.
+            // TODO: Remove attacker/target/futureProjNetId parameters and replace with CastInfo.
             var basicAttackData = new BasicAttackData
             {
                 TargetNetID = target.NetId,
-                ExtraTime = attacker.AutoAttackSpell.CastInfo.ExtraCastTime, // TODO: Verify, maybe related to CastInfo.ExtraCastTime?
+                ExtraTime = -attacker.AutoAttackSpell.CurrentDelayTime,
                 MissileNextID = futureProjNetId,
                 AttackSlot = attacker.AutoAttackSpell.CastInfo.SpellSlot,
                 TargetPosition = new Vector3(targetPos.X, target.GetHeight(), targetPos.Y)
             };
 
-            // Based on DesignerCastTime. Always negative. Value range from replays: [-0.14, 0].
-            // TODO: Find out what should go here.
-            basicAttackData.ExtraTime = -attacker.AutoAttackSpell.CurrentDelayTime;
-
+            // Position = attacker's own position (verified against S1 obj_ai_base_client.cpp:15871).
+            // Client force-snaps via SetPosition when it differs from the unit's current
+            // position by >400 units — used as the sync mechanism for enemy-perspective
+            // blink spells (Katarina E etc.) where no separate WaypointGroup is broadcast.
             var basicAttackPacket = new Basic_Attack_Pos
             {
                 SenderNetID = attacker.NetId,
                 Attack = basicAttackData,
-                Position = attacker.Position // TODO: Verify
+                Position = attacker.Position
             };
             _packetHandlerManager.BroadcastPacketVision(attacker, basicAttackPacket.GetBytes(), Channel.CHL_S2C);
         }
@@ -2483,7 +2549,7 @@ namespace PacketDefinitions420
         /// Sends a packet to all players with vision of the owner of the specified spell detailing that a spell has been cast.
         /// </summary>
         /// <param name="s">Spell being cast.</param>
-        public void NotifyNPC_CastSpellAns(Spell s)
+        public void NotifyNPC_CastSpellAns(Spell s, bool isContinuationFromExistingCast = false)
         {
             // Attack-speed scaling happens at the SOURCE now: the AA block in Spell.Cast
             // divides DesignerCastTime AND DesignerTotalTime by AttackSpeedModifier when the
@@ -2555,8 +2621,15 @@ namespace PacketDefinitions420
             {
                 SenderNetID = s.CastInfo.Owner.NetId,
                 CasterPositionSyncID = Environment.TickCount,
-                // TODO: Find what this is (if false, causes CasterPositionSyncID to be used)
-                Unknown1 = false,
+                // bitfield bit 0 ("Unknown1" in our wire-name): client-side packet-routing flag.
+                // S4 decomp (obj_AI_Base_PImpl_Int.cpp:2987) shows the client routes through a
+                // DIFFERENT path when bit 0 = 1 — Spell::SpellbookRouter::ChooseSpellbook +
+                // matching SpellNetID lookup, used for "continuation casts" of an already-active
+                // spell instance (e.g. charge-fire). Default false for fresh casts.
+                // Replay-verified Varus Q: charge-start CastSpellAns has bit=0, fire CastSpellAns
+                // has bit=1 — needed for the client to recognize the second packet as the same
+                // SpellInstanceClient that's already in charge state.
+                Unknown1 = isContinuationFromExistingCast,
                 CastInfo = castInfo
             };
             _packetHandlerManager.BroadcastPacketVision(s.CastInfo.Owner, castAnsPacket.GetBytes(), Channel.CHL_S2C);
@@ -4137,6 +4210,55 @@ namespace PacketDefinitions420
                 TeamID = (uint)unit.Team // TODO: Verify if TeamID is actually supposed to be a uint
             };
             _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Generic GameObject overload — primarily for <see cref="Marker"/> which isn't an
+        /// AttackableUnit but still needs its team broadcast. Riot sends this packet right
+        /// after <c>SpawnMarkerS2C</c> because the client's <c>obj_AI_Marker::Create</c>
+        /// hard-codes the team to TEAM_NEUTRAL; without this fix-up, FX particles bound to
+        /// the marker fail to render because of a team-mismatch in the client's bind logic.
+        /// Verified via replay <c>a6db377480ec58191544ec468219dbf6.lrf</c> t=510997.
+        /// </summary>
+        public void NotifySetTeam(GameObject obj)
+        {
+            var p = new S2C_UnitChangeTeam
+            {
+                SenderNetID = obj.NetId,
+                UnitNetID = obj.NetId,
+                TeamID = (uint)obj.Team
+            };
+            _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
+        }
+
+
+        /// <summary>
+        /// Sends the visibility-initialization packets that <c>obj_AI_Marker</c> needs to
+        /// be a valid FX bind target on the client. Without these, particles bound to a
+        /// marker via <c>BindNetID</c> fail to render (the marker's AttackableUnit state
+        /// stays uninitialized so <c>AiBaseAttachment</c> can't query it correctly).
+        /// Replay-verified (a6db3774, t=511030): Riot sends OnEnterVisibilityClient with
+        /// LookAtPosition=(1,0,0) and OnEnterLocalVisibilityClient with MaxHealth=Health=1.0.
+        /// </summary>
+        public void NotifyMarkerVisibilityInit(Marker marker)
+        {
+            var enterVis = new OnEnterVisibilityClient
+            {
+                SenderNetID = marker.NetId,
+                LookAtNetID = 0,
+                LookAtType = 0,
+                LookAtPosition = new Vector3(1.0f, 0f, 0f),
+                IsHero = false,
+                MovementData = new MovementDataNone(),
+            };
+            var enterLocal = new OnEnterLocalVisibilityClient
+            {
+                SenderNetID = marker.NetId,
+                MaxHealth = 1.0f,
+                Health = 1.0f,
+            };
+            _packetHandlerManager.BroadcastPacket(enterVis.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacket(enterLocal.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>

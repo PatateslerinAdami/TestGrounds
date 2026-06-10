@@ -49,6 +49,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <summary>
         /// Position this object is spawned at.
         /// </summary>
+        /// <summary>
+        /// When set (non-null), overrides the wire's <c>KeywordNetID</c> field at
+        /// packet-build time. Default behavior writes <c>KeywordNetID = Caster.NetId</c>
+        /// when <see cref="Caster"/> is set. Some replay-verified FX (Vel'Koz R's
+        /// <c>beam_end</c>) write KeywordNetID = 0 even with a caster present.
+        /// Use <c>0</c> to force the wire field to 0 explicitly.
+        /// </summary>
+        public uint? KeywordNetIDOverride { get; set; }
+
         public Vector2 StartPosition { get; private set; }
 
         /// <summary>
@@ -147,7 +156,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
             Caster = caster;
@@ -171,6 +181,12 @@ namespace LeagueSandbox.GameServer.GameObjects
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
             OverrideTargetHeight = overrideTargetHeight;
+
+            // KeywordNetIDOverride MUST be set before AddObject below — the FX_Create_Group
+            // packet is built synchronously inside AddObject (via Sync → ConstructSpawnPacket)
+            // and cached into the per-recipient batch. Setting via property after
+            // construction has no effect on the cached packet.
+            KeywordNetIDOverride = keywordNetIDOverride;
 
             if (bindObj != null)
             {

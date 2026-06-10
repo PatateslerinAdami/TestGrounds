@@ -24,6 +24,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            unit.SetStatus(StatusFlags.Stunned, true);
             float knockupDuration = buff.Variables.GetFloat("KnockupTime", 0.5f);
 
             float desiredHeight = 8.0f;

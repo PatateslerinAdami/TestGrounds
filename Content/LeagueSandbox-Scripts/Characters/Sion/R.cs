@@ -19,7 +19,8 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            ChannelDuration = 8.0f,
+            // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
+            // SionR.json ChannelDuration = 8.0 (SpellTargeter blocks have no RangeGrowthDuration).
             TriggersSpellCasts = true,
             AutoFaceDirection = true
         };
@@ -49,7 +50,7 @@ namespace Spells
             _spell = spell;
         }
 
-        public void OnSpellChannel(Spell spell)
+        public void OnSpellChargeStart(Spell spell)
         {
             b = AddBuff("SionR", 8f, 1, spell, _owner, _owner);
             _isCharging = true;
@@ -80,7 +81,7 @@ namespace Spells
             _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);
         }
 
-        public void OnUpdate(float diff)
+        public void OnSpellChargeTick(Spell spell, float diff)
         {
             if (!_isCharging || _owner == null || _owner.IsDead) return;
 
@@ -150,6 +151,9 @@ namespace Spells
 
                 if (collided)
                 {
+                    // Collision-triggered slam — clear charge HUD; impact lands at Sion's
+                    // current position (where the collision happened, no leap).
+                    spell.FireCharge(_owner.Position);
                     StopCharge(true);
                     return;
                 }
@@ -164,13 +168,17 @@ namespace Spells
             }
         }
 
-        public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
+        public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
         {
             StopCharge(false);
         }
 
-        public void OnSpellPostChannel(Spell spell)
+        public void OnSpellChargeFire(Spell spell)
         {
+            // Recast or duration timeout — both trigger the slam after a 300u leap forward.
+            // Clear charge HUD; impact lands at the leap endpoint.
+            Vector2 dir2D = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
+            spell.FireCharge(_owner.Position + dir2D * 300f);
             StopCharge(false);
         }
 

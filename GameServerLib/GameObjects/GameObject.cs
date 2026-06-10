@@ -203,7 +203,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Mostly used for packets.
         /// </summary>
         /// <returns>Vector3 position.</returns>
-        public Vector3 GetPosition3D()
+        public virtual Vector3 GetPosition3D()
         {
             return new Vector3(Position.X, GetHeight(), Position.Y);
         }

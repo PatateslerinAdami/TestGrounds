@@ -69,6 +69,37 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         public void Insert(int index, Vector2 waypoint) => _waypoints.Insert(index, waypoint);
 
         /// <summary>
+        /// Ensures the path begins at <paramref name="startPos"/>. Safe convenience for
+        /// manual path construction:
+        /// <list type="bullet">
+        /// <item>Empty path → becomes <c>[startPos]</c>.</item>
+        /// <item>Path's first waypoint is already at <paramref name="startPos"/> (within
+        /// <paramref name="epsilon"/>) → no-op.</item>
+        /// <item>Otherwise → prepends <paramref name="startPos"/> as <c>Waypoints[0]</c>.</item>
+        /// </list>
+        ///
+        /// Mirrors S4 <c>NavigationPath::InsertStartPosition</c> (NavigationPath.cpp:1899).
+        /// Use after manual path construction (HandleMove fallback, RefreshWaypoints, dash
+        /// setup) to guarantee the path satisfies the Count &gt; 1 invariant <c>SetWaypoints</c>
+        /// requires when the unit needs to walk somewhere — addresses the recurring
+        /// "Count==1 SetWaypoints reject → unit can't move" bug class documented in the
+        /// stuck-around-terrain memory entry.
+        /// </summary>
+        public void InsertStartPosition(Vector2 startPos, float epsilon = 1f)
+        {
+            if (_waypoints.Count == 0)
+            {
+                _waypoints.Add(startPos);
+                return;
+            }
+            if (Vector2.DistanceSquared(_waypoints[0], startPos) < epsilon * epsilon)
+            {
+                return;
+            }
+            _waypoints.Insert(0, startPos);
+        }
+
+        /// <summary>
         /// Replaces a waypoint at the given index. Use this instead of an indexer setter so
         /// any future invariant checks (or re-publish hooks) live in one place.
         /// </summary>
@@ -312,6 +343,156 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         public Vector2 GetLastEndPosition()
         {
             return _waypoints.Count == 0 ? Vector2.Zero : _waypoints[_waypoints.Count - 1];
+        }
+
+        /// <summary>
+        /// Goal-side / general path-trim post-processing. Mirrors S4
+        /// <c>NavigationMesh::TrimNavigationPath</c> (NavigationMesh.cpp:2683): drops
+        /// waypoints that don't add meaningful path length, in two passes:
+        ///
+        /// <list type="bullet">
+        /// <item>Co-location dedup: removes waypoints within <paramref name="coLocationEpsilon"/>
+        /// distance of their immediate neighbor (cell-snap stairsteps).</item>
+        /// <item>String-pulling (only when <paramref name="grid"/> supplied): removes intermediate
+        /// waypoint <c>i+1</c> when <c>i</c> has direct line-of-sight to <c>i+2</c>. Iterates
+        /// until stable or <paramref name="maxIterations"/> reached.</item>
+        /// </list>
+        ///
+        /// Useful as post-process after A* produces extra cell-snap waypoints, after manual
+        /// path mutations (Replace, Insert), or whenever a path needs cleanup before being
+        /// shipped over the wire.
+        /// </summary>
+        public void TrimRedundantWaypoints(
+            NavigationGrid grid = null,
+            float radius = 0f,
+            float coLocationEpsilon = 0.5f,
+            int maxIterations = 100)
+        {
+            // Pass 1: co-location dedup. Walk forward, drop waypoints within epsilon of their
+            // predecessor.
+            float epsilonSq = coLocationEpsilon * coLocationEpsilon;
+            int i = 0;
+            while (i + 1 < _waypoints.Count)
+            {
+                if (Vector2.DistanceSquared(_waypoints[i], _waypoints[i + 1]) < epsilonSq)
+                {
+                    _waypoints.RemoveAt(i + 1);
+                }
+                else
+                {
+                    i++;
+                }
+            }
+
+            if (grid == null) return;
+
+            // Pass 2: string-pulling. Iterate until no more shortcuts found or cap hit.
+            // Each inner pass walks the path forward once and drops any redundant middle.
+            for (int iter = 0; iter < maxIterations; iter++)
+            {
+                bool changed = false;
+                int j = 0;
+                while (j + 2 < _waypoints.Count)
+                {
+                    // CastCircle returns TRUE on blocked (= LOS broken). Falsey = LOS clear.
+                    // `translate` defaults to true — waypoints are world-coords; CastCircle
+                    // does the world-to-grid translation for us.
+                    if (!grid.CastCircle(_waypoints[j], _waypoints[j + 2], radius))
+                    {
+                        _waypoints.RemoveAt(j + 1);
+                        changed = true;
+                    }
+                    else
+                    {
+                        j++;
+                    }
+                }
+                if (!changed) break;
+            }
+        }
+
+        /// <summary>
+        /// Walks the path from <paramref name="startPoint"/> for up to
+        /// <paramref name="maxDistance"/> world-units. Returns the position the unit ends
+        /// up at — either where it collides with <paramref name="otherUnitPos"/>'s
+        /// hit-circle (radius <paramref name="otherUnitCollisionRadius"/>), or the
+        /// projected end-of-walk position if no collision occurs within travel budget.
+        ///
+        /// Mirrors S4 NavigationPath::GetCollisionPosition (NavigationPath.cpp:876).
+        /// Use case: predict the landing of a forced movement (knockback, dash) when the
+        /// unit may collide with another unit mid-flight.
+        ///
+        /// If <paramref name="otherUnitCollisionRadius"/> is &lt;= 0 the collision check is
+        /// skipped — the function returns purely the projected end of walk.
+        /// </summary>
+        /// <param name="startPoint">Position the walker starts from. Need not be on a waypoint.</param>
+        /// <param name="maxDistance">Maximum travel distance.</param>
+        /// <param name="otherUnitPos">Position of the unit to test collision against.</param>
+        /// <param name="otherUnitCollisionRadius">Hit-circle radius of <paramref name="otherUnitPos"/>.</param>
+        /// <returns>Collision-entry point if collision, else the position after walking <paramref name="maxDistance"/> along the path, else the path's last waypoint if path is shorter than <paramref name="maxDistance"/>.</returns>
+        public Vector2 GetCollisionPosition(
+            Vector2 startPoint,
+            float maxDistance,
+            Vector2 otherUnitPos,
+            float otherUnitCollisionRadius)
+        {
+            if (_waypoints.Count == 0 || maxDistance <= 0f)
+            {
+                return startPoint;
+            }
+
+            float radiusSq = otherUnitCollisionRadius > 0f
+                ? otherUnitCollisionRadius * otherUnitCollisionRadius
+                : 0f;
+            bool checkCollision = radiusSq > 0f;
+
+            float remaining = maxDistance;
+            Vector2 segStart = startPoint;
+
+            for (int i = 0; i < _waypoints.Count; i++)
+            {
+                Vector2 segEnd = _waypoints[i];
+                Vector2 seg = segEnd - segStart;
+                float segLen = seg.Length();
+                if (segLen < 1e-5f)
+                {
+                    segStart = segEnd;
+                    continue;
+                }
+                Vector2 segDir = seg / segLen;
+                float walkOnSeg = MathF.Min(segLen, remaining);
+
+                // Collision check (only if the walked portion of this segment passes near
+                // otherUnit). Project otherUnit onto the segment, clamp to walked range,
+                // then test if the resulting closest point is within the unit's radius.
+                if (checkCollision)
+                {
+                    float t = Vector2.Dot(otherUnitPos - segStart, segDir);
+                    if (t >= 0f && t <= walkOnSeg)
+                    {
+                        Vector2 closestOnSeg = segStart + segDir * t;
+                        float perpDistSq = Vector2.DistanceSquared(otherUnitPos, closestOnSeg);
+                        if (perpDistSq <= radiusSq)
+                        {
+                            // Walker enters the circle. Entry point is the closest-on-seg
+                            // position back-tracked by sqrt(radius² - perp²) along segDir.
+                            float backtrack = MathF.Sqrt(radiusSq - perpDistSq);
+                            float entryT = MathF.Max(0f, t - backtrack);
+                            return segStart + segDir * entryT;
+                        }
+                    }
+                }
+
+                if (segLen >= remaining)
+                {
+                    return segStart + segDir * remaining;
+                }
+                remaining -= segLen;
+                segStart = segEnd;
+            }
+
+            // Walked entire path without exhausting distance budget — return path end
+            return _waypoints[_waypoints.Count - 1];
         }
 
         // IEnumerable / IReadOnlyList
