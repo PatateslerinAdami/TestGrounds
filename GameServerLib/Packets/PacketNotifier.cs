@@ -1513,14 +1513,21 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacketTeam(team, misPacket.GetBytes(), Channel.CHL_S2C);
         }
         /// <summary>
-        /// Sends a packet to either all players with vision of a target, or the specified player.
-        /// The packet displays the specified message of the specified type as floating text over a target.
+        /// Sends a DisplayFloatingText packet (id 0x19) showing the floating text described by
+        /// <paramref name="floatTextData"/> over its target — to all players with vision, to one
+        /// team, or to a single player.
+        /// <para>The text's FloatTextType selects a CLIENT-side animation/style profile
+        /// (GamePermanent.cfg [FloatingText]). The packet "Param" (FloatingTextData.Param) is the
+        /// integer the client substitutes for the "@IntParam1@" token in the (localized) message
+        /// (mac decomp: Tooltip::Replace) — e.g. Ascension "game_Asc_points_text" = "+@IntParam1@ Points",
+        /// or the Nexus-health modes "@IntParam1@ Your Nexus Health". For messages without that token
+        /// (CC/immunity popups, plain text), Param is ignored — pass 0. It is NOT a source NetID.</para>
+        /// <para>Note: standard SR/ARAM gameplay never sends 0x19 (Riot uses NPC_MessageToClient/0x18
+        /// + client-side CC popups); 0x19 is for mode-specific float text.</para>
         /// </summary>
-        /// <param name="target">Target to display on.</param>
-        /// <param name="message">Message to display.</param>
-        /// <param name="textType">Type of text to display. Refer to FloatTextType</param>
-        /// <param name="userId">User to send to. 0 = sends to all in vision.</param>
-        /// <param name="param">Optional parameters for the text. Untested, function unknown.</param>
+        /// <param name="floatTextData">Target, message, FloatTextType and Param for the floating text.</param>
+        /// <param name="team">If non-zero, broadcast only to this team; otherwise to everyone with vision of the target.</param>
+        /// <param name="userId">If 0 or greater, send only to that player; otherwise broadcast (per team).</param>
         public void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             var textPacket = new DisplayFloatingText
@@ -1545,6 +1552,55 @@ namespace PacketDefinitions420
             else
             {
                 _packetHandlerManager.SendPacket(userId, textPacket.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
+        /// Sends an NPC_MessageToClient_Broadcast (id 0x18) — the packet Riot 4.20 actually uses for
+        /// script/buff popup / floating text (verified against replays, e.g. Pantheon's
+        /// "game_lua_Aegis_Block"), NOT DisplayFloatingText/0x19. The client looks up
+        /// <paramref name="message"/> as a localization key and animates it per
+        /// <paramref name="floatTextType"/> (client-side profile in GamePermanent.cfg [FloatingText]).
+        /// </summary>
+        /// <param name="target">Unit the text floats over (packet SenderNetID).</param>
+        /// <param name="message">Localization key (e.g. "game_lua_Aegis_Block") or literal text.</param>
+        /// <param name="floatTextType">Animation/style profile (see <see cref="FloatTextType"/>).</param>
+        /// <param name="bubbleDelay">Seconds before the text shows; Riot replays consistently use 2.0.</param>
+        /// <param name="isError">Marks the message as an error.</param>
+        /// <param name="colorIndex">Color index for the message.</param>
+        /// <param name="slotNumber">Spell slot the message relates to (0 if none).</param>
+        /// <param name="team">If non-zero, broadcast only to this team; else to everyone with vision of the target.</param>
+        /// <param name="userId">If 0 or greater, send only to that player; else broadcast (per team).</param>
+        public void NotifyPopupMessage(GameObject target, string message,
+            FloatTextType floatTextType = FloatTextType.Invulnerable, float bubbleDelay = 2.0f,
+            bool isError = false, byte colorIndex = 0, int slotNumber = 0,
+            TeamId team = 0, int userId = -1)
+        {
+            var popupPacket = new NPC_MessageToClient_Broadcast
+            {
+                SenderNetID = target.NetId,
+                BubbleDelay = bubbleDelay,
+                SlotNumber = slotNumber,
+                IsError = isError,
+                ColorIndex = colorIndex,
+                FloatTextType = (uint)floatTextType,
+                Message = message
+            };
+
+            if (userId < 0)
+            {
+                if (team != 0)
+                {
+                    _packetHandlerManager.BroadcastPacketTeam(team, popupPacket.GetBytes(), Channel.CHL_S2C);
+                }
+                else
+                {
+                    _packetHandlerManager.BroadcastPacketVision(target, popupPacket.GetBytes(), Channel.CHL_S2C);
+                }
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, popupPacket.GetBytes(), Channel.CHL_S2C);
             }
         }
 

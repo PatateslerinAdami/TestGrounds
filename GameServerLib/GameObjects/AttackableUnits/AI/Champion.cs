@@ -574,8 +574,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (notifyText)
             {
-                //TODO: Figure out what "Params" is exactly
-                _game.PacketNotifier.NotifyDisplayFloatingText(new FloatingTextData(this, $"+{(int)points} Points", FloatTextType.Score, 1073741833), Team);
+                // Ascension/Dominion points callout: the loc key "game_Asc_points_text" localizes to
+                // "+@IntParam1@ Points", and Param fills the "@IntParam1@" token with the points value
+                // (mac decomp: Tooltip::Replace). Bugfix: was a hardcoded English "+N Points" string with
+                // a meaningless NetID-shaped Param (1073741833).
+                _game.PacketNotifier.NotifyDisplayFloatingText(new FloatingTextData(this, "game_Asc_points_text", FloatTextType.Score, (int)points), Team);
             }
 
             ApiEventManager.OnIncrementChampionScore.Publish(scoreData.Owner, scoreData);

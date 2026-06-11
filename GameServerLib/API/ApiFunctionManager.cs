@@ -630,6 +630,34 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Broadcasts a popup / floating-text message over a unit — sends NPC_MessageToClient_Broadcast
+        /// (0x18), the packet Riot 4.20 uses for script float text (e.g. "game_lua_Aegis_Block" for
+        /// Pantheon's Aegis block). The client looks up <paramref name="message"/> as a localization
+        /// key and animates it per <paramref name="floatTextType"/>.
+        /// </summary>
+        /// <param name="target">Unit the text floats over.</param>
+        /// <param name="message">Localization key (e.g. "game_lua_Aegis_Block") or literal text.</param>
+        /// <param name="floatTextType">Animation/style profile (see <see cref="FloatTextType"/>).</param>
+        /// <param name="bubbleDelay">Seconds before the text shows; Riot uses 2.0.</param>
+        /// <param name="isError">Marks the message as an error.</param>
+        /// <param name="colorIndex">Color index for the message.</param>
+        /// <param name="slotNumber">Spell slot the message relates to (0 if none).</param>
+        /// <param name="team">If non-zero, only this team; else everyone with vision of the target.</param>
+        /// <param name="userId">If 0 or greater, only that player; else broadcast (per team).</param>
+        public static void AddPopupMessage(GameObject target, string message,
+            FloatTextType floatTextType = FloatTextType.Invulnerable, float bubbleDelay = 2.0f,
+            bool isError = false, byte colorIndex = 0, int slotNumber = 0,
+            TeamId team = 0, int userId = -1)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyPopupMessage(target, message, floatTextType, bubbleDelay, isError, colorIndex, slotNumber, team, userId);
+        }
+
+        /// <summary>
         /// Checks whether the target uses the specified PAR type.
         /// </summary>
         /// <param name="target">Unit to query.</param>
@@ -2458,7 +2486,7 @@ namespace LeagueSandbox.GameServer.API
             target.FadeIn(ID);
         }
 
-        public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
+        public static void DisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
         }

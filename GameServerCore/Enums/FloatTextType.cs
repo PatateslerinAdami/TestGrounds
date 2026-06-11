@@ -1,5 +1,12 @@
 ﻿namespace GameServerCore.Enums
 {
+    /// <summary>
+    /// Floating-text type — matches the 4.20 mac decomp FloatingText::FloatTextTypeEnum (0..28).
+    /// Each value selects a CLIENT-side animation/style profile defined in GamePermanent.cfg
+    /// [FloatingText] (initial velocity, ContinualForce/gravity, decay, FollowSource, shrink, …).
+    /// The Enemy* variants are normally chosen client-side (= the local viewer is the target taking
+    /// damage), not set explicitly by the server.
+    /// </summary>
     public enum FloatTextType
     {
         Invulnerable = 0x0,

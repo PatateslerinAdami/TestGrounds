@@ -48,9 +48,7 @@ public class CharScriptPantheon : ICharScript
             {
                 RemoveBuff(_pantheon, "Pantheon_AegisShieldVisual");
             }
-
-            FloatingTextData ftd = new FloatingTextData(_pantheon, "Blocked!", FloatTextType.Dodge, 1073741833);
-            NotifyDisplayFloatingText(ftd, TeamId.TEAM_UNKNOWN);
+            AddPopupMessage(_pantheon, "game_lua_Aegis_Block", FloatTextType.Invulnerable);
         }
         else if (_pantheon.HasBuff("Pantheon_AegisShield") && data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
         {
@@ -61,10 +59,7 @@ public class CharScriptPantheon : ICharScript
             {
                 RemoveBuff(_pantheon, "Pantheon_AegisShieldVisual");
             }
-
-            FloatingTextData ftdTarget =
-                new FloatingTextData(_pantheon, "Blocked!", FloatTextType.Invulnerable, 1073741833);
-            NotifyDisplayFloatingText(ftdTarget, TeamId.TEAM_UNKNOWN);
+            AddPopupMessage(_pantheon, "game_lua_Aegis_Block", FloatTextType.Invulnerable);
         }
     }
 }

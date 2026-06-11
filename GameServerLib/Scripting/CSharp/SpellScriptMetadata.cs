@@ -46,6 +46,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public bool CooldownIsAffectedByCDR { get; set; } = true;
         public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
         public bool DoesntBreakShields { get; set; } = false;
+        
         // TODO: Find a use for this.
         public bool IsDamagingSpell { get; set; } = false;
         public bool IsDeathRecapSource { get; set; } = false;
@@ -55,14 +56,18 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public bool IsNonDispellable { get; set; } = false;
         public MissileParameters MissileParameters { get; set; } = null;
         public bool NotSingleTargetSpell { get; set; } = false;
+        
         // Never appears below 2?
         public int OnPreDamagePriority { get; set; } = 0;
         public bool OverrideCooldownCheck { get; set; } = false;
+        
         public bool PermeatesThroughDeath { get; set; } = false;
         public bool PersistsThroughDeath { get; set; } = false;
-        public string PopupMessage1 { get; set; } = "";
+
         public SectorParameters SectorParameters { get; set; } = null;
+        
         public float SetSpellDamageRatio { get; set; } = 0.0f;
+        
         public float SpellDamageRatio { get; set; } = 0.0f;
 
         public int SpellToggleSlot { get; set; } = 0;
