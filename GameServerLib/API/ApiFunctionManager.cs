@@ -2142,6 +2142,154 @@ namespace LeagueSandbox.GameServer.API
                 maxTravelTime, consideredAsCC, movementName, caster, movementOrdersType);
         }
 
+        // ===================================================================================
+        // Consolidated forced-movement verb set (docs/FORCED_MOVEMENT_REWRITE_PLAN.md P3).
+        // Five clear verbs over the two engine primitives (line-path = DashToLocation, follow-unit-path
+        // = DashToTarget). Replay-verified (2026-06-15): Riot wires knockback, knockup, dash and
+        // follow-dash ALL via the engine force-move (0x64 WaypointGroupWithSpeed) with gravity — the
+        // flat SetPosition-lerp BBKnockback is vestigial for SR, so KnockBack is a force-move too.
+        // ===================================================================================
+
+        /// <summary>
+        /// Knocks <paramref name="target"/> away from (or, with a negative <paramref name="distance"/>,
+        /// toward = pulls) <paramref name="source"/> over <paramref name="duration"/> seconds. Engine
+        /// force-move (the replay-verified knockback wire), flat by default; pass <paramref name="height"/>
+        /// &gt; 0 for the small vertical pop most Riot knockbacks carry (grav ~5–20 in replays).
+        /// </summary>
+        /// <param name="target">Unit being displaced.</param>
+        /// <param name="source">Unit the displacement is measured from (the knocker / pull anchor).</param>
+        /// <param name="distance">Units to travel. Positive = away from source (knockback), negative = toward source (pull).</param>
+        /// <param name="duration">Seconds the displacement should take (drives speed = abs(distance)/duration).</param>
+        /// <param name="height">Peak arc height; 0 = flat. gravity = height / duration².</param>
+        /// <param name="animation">Optional dash animation (internal name).</param>
+        /// <param name="keepFacing">Keep the unit's current facing (true) vs face the movement direction.</param>
+        /// <param name="orders">What happens to the unit's order when the displacement ends.</param>
+        /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        public static void KnockBack(AttackableUnit target, AttackableUnit source, float distance, float duration,
+            float height = 0f, string animation = "", bool keepFacing = true,
+            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string movementName = "")
+        {
+            if (target == null || source == null || duration <= 0f)
+            {
+                return;
+            }
+
+            var dir = target.Position - source.Position;
+            if (dir == Vector2.Zero)
+            {
+                dir = new Vector2(0, 1);
+            }
+            dir = Vector2.Normalize(dir);
+
+            // Negative distance points back toward the source (pull); positive points away (knockback).
+            var endPos = target.Position + dir * distance;
+            float speed = MathF.Abs(distance) / duration;
+            float gravity = height > 0f ? height / (duration * duration) : 0f;
+
+            target.DashToLocation(endPos, speed, animation, gravity, keepFacing, true, movementName, source,
+                movementType: ForceMovementType.FURTHEST_WITHIN_RANGE, movementOrdersType: orders);
+        }
+
+        /// <summary>
+        /// Knocks <paramref name="target"/> up (vertical arc) over <paramref name="duration"/> seconds,
+        /// reaching <paramref name="height"/> at the apex. Displacement only — the airborne CC marker is
+        /// the caller's named buff (knockups are triggered from inside a buff's OnActivate). Encapsulates
+        /// the speed = horizDist/duration + gravity = height/duration² math every knockup script duplicates.
+        /// </summary>
+        /// <param name="target">Unit being knocked up.</param>
+        /// <param name="height">Peak arc height at the apex.</param>
+        /// <param name="duration">Seconds airborne.</param>
+        /// <param name="destination">Optional landing position (e.g. a knock-up-and-toward). Default = in place.</param>
+        /// <param name="animation">Optional animation (internal name).</param>
+        /// <param name="orders">What happens to the unit's order when the knockup ends.</param>
+        /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        public static void KnockUp(AttackableUnit target, float height, float duration, Vector2 destination = default,
+            string animation = "", ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
+            string movementName = "")
+        {
+            if (target == null || duration <= 0f)
+            {
+                return;
+            }
+
+            var dest = destination == default ? target.Position : destination;
+
+            // DashMove ends instantly when the path distance is 0, so an in-place knockup needs a tiny
+            // horizontal nudge; the visible vertical arc comes from gravity, not this offset (matches
+            // YasuoKnockup's +2f / Alistar Pulverize's small dir nudge).
+            float horizDist = Vector2.Distance(target.Position, dest);
+            if (horizDist < 2f)
+            {
+                dest = target.Position + new Vector2(2f, 0f);
+                horizDist = 2f;
+            }
+
+            float speed = horizDist / duration;
+            float gravity = height / (duration * duration);
+
+            target.DashToLocation(dest, speed, animation, gravity, true, true, movementName, target,
+                movementType: ForceMovementType.FURTHEST_WITHIN_RANGE, movementOrdersType: orders);
+        }
+
+        /// <summary>
+        /// Self-dash / leap of <paramref name="unit"/> to <paramref name="dest"/>. Engine line-path.
+        /// <paramref name="gravity"/> &gt; 0 makes it an arc (a knockup-style hop WITHOUT the CC buff).
+        /// </summary>
+        /// <param name="unit">Unit performing the dash.</param>
+        /// <param name="dest">Destination (used when resolve = FURTHEST_WITHIN_RANGE / FIRST_WALL_HIT).</param>
+        /// <param name="speed">Dash speed in units/second.</param>
+        /// <param name="gravity">Arc gravity; 0 = flat ground dash.</param>
+        /// <param name="resolve">Destination-resolution mode (ForceMovementType).</param>
+        /// <param name="keepFacing">Keep current facing vs face the movement direction.</param>
+        /// <param name="ignoreTerrain">Skip the terrain-exit clamp (e.g. blink-style dashes).</param>
+        /// <param name="orders">What happens to the unit's order when the dash ends.</param>
+        /// <param name="animation">Optional animation (internal name).</param>
+        /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        public static void Dash(AttackableUnit unit, Vector2 dest, float speed, float gravity = 0f,
+            ForceMovementType resolve = ForceMovementType.FURTHEST_WITHIN_RANGE, bool keepFacing = false,
+            bool ignoreTerrain = false, ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
+            string animation = "", string movementName = "")
+        {
+            if (unit == null || speed <= 0f)
+            {
+                return;
+            }
+
+            unit.DashToLocation(dest, speed, animation, gravity, keepFacing, true, movementName, unit,
+                ignoreTerrain, movementType: resolve, movementOrdersType: orders);
+        }
+
+        /// <summary>
+        /// Dash of <paramref name="unit"/> that follows a (possibly moving) <paramref name="target"/>,
+        /// re-targeting each tick. Engine follow-unit-path (the real "dash to moving unit" — Lee Sin Q2,
+        /// Skarner R). <paramref name="backDistance"/> stops short of/behind the target;
+        /// <paramref name="travelTime"/> &gt; 0 gives fixed-time arrival.
+        /// </summary>
+        /// <param name="unit">Unit performing the dash.</param>
+        /// <param name="target">Unit to follow.</param>
+        /// <param name="speed">Dash speed in units/second.</param>
+        /// <param name="backDistance">Distance to stop short of (positive) / behind (negative) the target.</param>
+        /// <param name="travelTime">Max seconds to follow before stopping (0 = until reached / max distance).</param>
+        /// <param name="followMaxDistance">Max distance to follow before giving up (0 = unlimited).</param>
+        /// <param name="gravity">Arc gravity; 0 = flat.</param>
+        /// <param name="keepFacing">Keep current facing vs face the movement direction.</param>
+        /// <param name="orders">What happens to the unit's order when the dash ends.</param>
+        /// <param name="animation">Optional animation (internal name).</param>
+        /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        public static void DashToUnit(ObjAIBase unit, AttackableUnit target, float speed, float backDistance = 0f,
+            float travelTime = 0f, float followMaxDistance = 0f, float gravity = 0f, bool keepFacing = false,
+            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string animation = "",
+            string movementName = "")
+        {
+            if (unit == null || target == null || speed <= 0f)
+            {
+                return;
+            }
+
+            unit.DashToTarget(target, speed, animation, gravity, keepFacing, followMaxDistance, backDistance,
+                travelTime, true, movementName, unit, orders);
+        }
+
         /// <summary>
         /// Forces the given object to perform the given animation.
         /// </summary>
