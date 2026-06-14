@@ -27,9 +27,8 @@ public class AkaliShadowSwipe : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        var unitsInRange = GetUnitsInRange(_akali, _akali.Position, 300f, true,
-                        SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
-                        SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=325, was hardcoded 300).
+        var unitsInRange = GetUnitsHitBySpell(spell);
 
         foreach (var unit in unitsInRange) {
             SlashTarget(unit);

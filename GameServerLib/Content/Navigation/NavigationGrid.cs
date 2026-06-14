@@ -1735,6 +1735,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // Uses SampledHeights to get the height of a given location on the Navigation Grid
             // This is the method the game uses to get height data
 
+            // Clamp to grid bounds first: a query just OUTSIDE the navgrid (e.g. a missile/trail
+            // endpoint near the map edge, or a long skillshot projected past the playable area)
+            // must return the NEAREST EDGE height, never 0. Returning 0 dropped the missile/FX to
+            // map-floor level — the "Vel'Koz W trail lands under the map" symptom. The S4 client
+            // never floors to 0 either: SpellLineMissile::UpdateHeight skips the terrain-follow on
+            // invalid cells and clamps the missile to >= terrain+offset (NavigationGrid.cpp).
+            location.X = Math.Clamp(location.X, MinGridPosition.X, MaxGridPosition.X);
+            location.Y = Math.Clamp(location.Y, MinGridPosition.Z, MaxGridPosition.Z);
+
             if (location.X >= MinGridPosition.X && location.Y >= MinGridPosition.Z &&
                 location.X <= MaxGridPosition.X && location.Y <= MaxGridPosition.Z)
             {
@@ -2050,63 +2059,191 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// <returns>True/False.</returns>
         public bool IsAnythingBetween(GameObject a, GameObject b, bool checkVision = false)
         {
-            var d = Vector2.Normalize(b.Position - a.Position);
+            if (!checkVision)
+            {
+                // Pathing LOS: single terrain ray with each unit's footprint trimmed off its end.
+                // CastRay returns true when it stopped early (blocked) -> "something between".
+                var d = Vector2.Normalize(b.Position - a.Position);
+                Vector2 origin = a.Position + d * a.PathfindingRadius;
+                Vector2 destination = b.Position - d * b.PathfindingRadius;
+                return CastRay(origin, destination, true, false);
+            }
 
-            Vector2 origin = a.Position + d * a.PathfindingRadius;
-            Vector2 destination = b.Position - d * b.PathfindingRadius;
+            // Vision LOS: faithful port of S4 NavGrid::LineOfSightTest (see VisionLineOfSightClear).
+            // "Anything between" is the negation of "line of sight is clear". Radii are the BODY
+            // (GameplayCollisionRadius = our CollisionRadius), not the pathing footprint: the S4
+            // vision caller CircleRegion::CanSeeCircle(targetPos, targetRadius, ...) tests sight of
+            // the target's collision circle (Ghidra s4 decomp ai/CircleRegion.cpp:18, DWARF proto).
+            return !VisionLineOfSightClear(a.Position, b.Position, a.CollisionRadius, b.CollisionRadius);
+        }
 
-            if (!CastRay(origin, destination, !checkVision, checkVision))
+        /// <summary>
+        /// Faithful port of S4 <c>NavGrid::LineOfSightTest</c> (NavigationGrid.cpp:1876-1934).
+        /// Returns true when <paramref name="srcPos"/> has unobstructed vision of
+        /// <paramref name="targetPos"/>. Casts the center ray plus two perpendicular target-edge
+        /// rays (the target is seen if ANY point of its body is, mismatch A), with grass-group
+        /// endpoint mismatch gating (mismatch C).
+        ///
+        /// RADII (decomp-grounded): the S4 vision caller is <c>CircleRegion::CanSeeCircle</c>
+        /// (Ghidra s4 decomp ai/CircleRegion.cpp:18) — a perception Region (observer) testing
+        /// sight of the target's collision circle. So <paramref name="srcRadius"/> /
+        /// <paramref name="targetRadius"/> are the BODY radius (GameplayCollisionRadius =
+        /// our CollisionRadius), not the pathing footprint. The grass-group majority radius
+        /// reuses the same per-side radius (CanSeeCircle feeds the region radius into
+        /// IsWallOfGrass for srcInGrass).
+        /// </summary>
+        public bool VisionLineOfSightClear(Vector2 srcPos, Vector2 targetPos, float srcRadius, float targetRadius)
+        {
+            byte srcGroup = GetNearestGrassGroup(srcPos, srcRadius);
+            bool srcInGrass = srcGroup != 0;
+            byte targetGroup = GetNearestGrassGroup(targetPos, targetRadius);
+            bool targetInGrass = targetGroup != 0;
+
+            // Endpoint grass-group mismatch (LineOfSightTest:1885-1893): different brush groups
+            // occlude unless the target sits in open ground while the observer is in a brush.
+            if (EndpointGrassBlocks(srcGroup, targetGroup, targetInGrass))
             {
                 return false;
             }
 
-            // S4 NavGrid::LineOfSightTest (NavigationGrid.cpp:1876): when the center ray fails,
-            // two alternate rays are cast at the points of the TARGET's circle perpendicular to
-            // the main ray — the target is visible if ANY point of its body is. Vision only;
-            // the walkable variant keeps single-ray behavior.
-            if (checkVision && b.PathfindingRadius > 0f)
-            {
-                Vector2 perp = new Vector2(-d.Y, d.X) * b.PathfindingRadius;
-                if (!CastRay(origin, b.Position + perp, false, true)
-                    || !CastRay(origin, b.Position - perp, false, true))
-                {
-                    return false;
-                }
-            }
-
-            // Brush-edge fallback when the observer is in a brush, the radius-offset on origin
-            // (line 1830) can nudge the ray-start out of the brush by a few units. Re-test LOS
-            // from nearby brush cells of the SAME group so the observer doesn't lose vision just
-            // because their pushed-forward origin landed in open ground.
-            //
-            // Group filter: only consider cells of the observer's own brush group. Without it,
-            // an observer in brush A would "borrow" vision from a touching brush B and erroneously
-            // see into brush B from outside it.
-            if (!checkVision)
+            if (LineOfSightVisionRay(srcPos, targetPos, srcRadius, srcInGrass, srcGroup))
             {
                 return true;
             }
 
-            byte aGroup = (CellGrassGroups != null)
-                ? GetGrassGroupAtNavCell(TranslateToNavGrid(a.Position))
-                : (byte)0;
-            if (aGroup == 0)
+            // Two perpendicular target-edge rays. Riot's altRayTargetPosition is
+            // targetPos + perp(mainRay), then GetClosestPointToPos(targetPos, targetRadius) clamps
+            // it onto the target's circle -> targetPos + normalize(perp) * targetRadius.
+            Vector2 mainRay = targetPos - srcPos;
+            Vector2 perp = new Vector2(-mainRay.Y, mainRay.X);
+            float perpLen = perp.Length();
+            if (perpLen < 0.0001f || targetRadius <= 0f)
             {
-                // Observer not in any brush -> no edge-snap problem to fix.
+                return false;
+            }
+            perp = perp / perpLen * targetRadius;
+
+            for (int s = 0; s < 2; s++)
+            {
+                float sign = s == 0 ? 1f : -1f;
+                Vector2 altTarget = targetPos + perp * sign;
+                if (targetInGrass)
+                {
+                    byte altGroup = GetNearestGrassGroup(altTarget, targetRadius);
+                    if (EndpointGrassBlocks(srcGroup, altGroup, true))
+                    {
+                        return false;
+                    }
+                }
+                if (LineOfSightVisionRay(srcPos, altTarget, srcRadius, srcInGrass, srcGroup))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Endpoint grass-group occlusion rule (LineOfSightTest:1887-1892). Returns true when the
+        /// differing groups block vision: a real target brush (group != 0) always blocks across a
+        /// boundary, and an observer outside any brush (group 0) can't see a target in a brush.
+        /// </summary>
+        private static bool EndpointGrassBlocks(byte srcGroup, byte targetGroup, bool targetInGrass)
+        {
+            if (!targetInGrass || targetGroup == srcGroup)
+            {
+                return false;
+            }
+            return targetGroup != 0 || srcGroup == 0;
+        }
+
+        /// <summary>
+        /// Per-ray vision walk — faithful port of <c>NavGrid::LineOfSightTestInner</c>
+        /// (NavigationGrid.cpp:1702-1869). Returns true when the ray is unobstructed.
+        ///
+        /// (B) The walk starts <paramref name="srcRadius"/> ahead of <paramref name="srcPos"/> so
+        /// the observer's own footprint can't block, and the first vision-blocking cell is forgiven
+        /// (pLastCell) — a later distinct blocker fails. (C) For an in-grass observer, a grass cell
+        /// of a different group blocks; for an outside observer, ANY grass cell blocks. (D) We keep
+        /// the Bresenham cell traversal instead of Riot's half-cell oversampling — Bresenham hits
+        /// every crossed cell, a superset of Riot's samples.
+        ///
+        /// NOTE: Riot's in-ray <c>testSrcInGrass</c> / grassCheckRadius bookkeeping is provably dead
+        /// for the return value (it only sets a variable that never gates a block), so it is omitted.
+        /// </summary>
+        private bool LineOfSightVisionRay(Vector2 srcPos, Vector2 endPos, float srcRadius, bool srcInGrass, byte srcGroup)
+        {
+            Vector2 delta = endPos - srcPos;
+            float len = delta.Length();
+            if (len < 0.0001f)
+            {
+                return true;
+            }
+            Vector2 dir = delta / len;
+
+            // (B) Skip the observer's own footprint. If the offset overshoots the target, the
+            // observer's radius spans the whole gap -> trivially visible (LineOfSightTestInner:1716).
+            Vector2 offsetStart = srcPos + dir * srcRadius;
+            if (Vector2.Dot(dir, endPos - offsetStart) <= 0f)
+            {
                 return true;
             }
 
-            foreach (var cell in GetAllCellsInRange(a.Position, Math.Max(25.0f, a.PathfindingRadius)))
+            var navStart = TranslateToNavGrid(offsetStart);
+            var navEnd = TranslateToNavGrid(endPos);
+
+            bool firstCell = true;
+            NavigationGridCell forgivenBlocker = null;
+
+            foreach (var cell in GetAllCellsInLine(navStart, navEnd))
             {
-                if (cell == null || cell.ID < 0 || cell.ID >= CellGrassGroups.Length) continue;
-                if (CellGrassGroups[cell.ID] != aGroup) continue;
-                if (!CastRay(TranslateFromNavGrid(cell.GetCenter()), destination, false, true))
+                if (cell == null)
                 {
+                    continue;
+                }
+
+                bool blocksVision = !IsVisible(cell);
+                bool isGrass = cell.HasFlag(NavigationGridCellFlags.HAS_GRASS);
+
+                if (!srcInGrass && isGrass)
+                {
+                    // Outside observer can't see into a brush.
                     return false;
                 }
+
+                if (srcInGrass && isGrass && CellGrassGroupId(cell) != srcGroup)
+                {
+                    // Cross-brush vision is occluded.
+                    return false;
+                }
+
+                if (blocksVision)
+                {
+                    if (firstCell)
+                    {
+                        forgivenBlocker = cell;
+                    }
+                    else if (cell != forgivenBlocker)
+                    {
+                        return false;
+                    }
+                }
+
+                firstCell = false;
             }
 
             return true;
+        }
+
+        // Brush group of a cell. 0 = outside any brush.
+        private byte CellGrassGroupId(NavigationGridCell cell)
+        {
+            if (CellGrassGroups == null || cell == null || cell.ID < 0 || cell.ID >= CellGrassGroups.Length)
+            {
+                return 0;
+            }
+            return CellGrassGroups[cell.ID];
         }
 
         /// <summary>

@@ -26,6 +26,7 @@ internal class JinxQ : IBuffGameScript {
     private          Buff      _buff;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
@@ -94,6 +95,9 @@ internal class JinxQ : IBuffGameScript {
 
         // Fishbones mana cost per Rocket.
         _jinx.Stats.CurrentMana -= 20f;
+        // Rocket impact FX — Riot spawns this server-side on every hit (replay: Jinx_Q_Rocket_tar.troy via
+        // FX_Create_Group, 220/221 hits). AA-override hit FX lives in the script (OnHitUnit), not the engine
+        // HitEffect path, which is gated off for auto-attacks (matches Kayle/Ashe/Jax/Malphite convention).
         AddParticleTarget(_jinx, data.Target, "Jinx_Q_Rocket_tar.troy", data.Target);
 
         // Splash damage around the primary target.

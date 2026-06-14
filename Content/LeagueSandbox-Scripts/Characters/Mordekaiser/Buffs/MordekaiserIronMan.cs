@@ -12,11 +12,12 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 
 namespace Buffs;
 
-internal class MorderkaiserIronMan : IBuffGameScript {
+internal class MordekaiserIronMan : IBuffGameScript {
     private ObjAIBase _mordekaiser;
     private float     _delayTimer = 0f;
     private float      _decayTimer = 0f;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         MaxStacks   = 1

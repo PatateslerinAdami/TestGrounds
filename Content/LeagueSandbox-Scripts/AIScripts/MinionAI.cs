@@ -24,7 +24,7 @@ namespace AIScripts
         {
             if (!minion.IsDead)
             {
-                if (minion.MovementParameters != null || minion.IsAIPaused())
+                if (minion.IsForceMoved || minion.IsAIPaused())
                 {
                     return;
                 }

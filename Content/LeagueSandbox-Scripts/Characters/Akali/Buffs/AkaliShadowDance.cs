@@ -15,6 +15,7 @@ public class AkaliShadowDance : IBuffGameScript {
     private int   _lastDisplayedAmmo = -1;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.STACKS_AND_RENEWS,
         MaxStacks   = 3

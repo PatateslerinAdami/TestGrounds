@@ -203,7 +203,17 @@ namespace LeaguePackets.Game
 
             writer.WriteBool(IsHero);
 
-            writer.WriteMovementDataWithHeader(MovementData);
+            // Markers (Vel'Koz R endpoint etc.) must omit MovementData entirely: the body has to
+            // end at IsHero so the client's ReadBody hits `BytesLeft < 5` and never reads movement.
+            // Riot's marker OnEnterVisibilityClient is exactly 30 body bytes (no MovementData,
+            // replay a6db3774 t=511030). If we append a MovementDataNone header (5 bytes), the
+            // client reads it, initializes the marker as a movable actor, and registers it into
+            // the collision grid (gActorGrid) — which makes minions path/collide around it
+            // client-side even though the server never treats the marker as a collider.
+            if (MovementData != null)
+            {
+                writer.WriteMovementDataWithHeader(MovementData);
+            }
         }
     }
 }

@@ -20,6 +20,7 @@ public class IreliaHitenStyle : IBuffGameScript {
     private Particle  _passiveGlow, _passive;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.HEAL,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

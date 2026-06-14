@@ -206,7 +206,9 @@ namespace PacketDefinitions420
             if (o is AttackableUnit a)
             {
                 shields = a.GetCombinedShieldValues();
-                charStackData.SkinName = a.Model;
+                // Base layer = the unit's base skin (NOT a.Model, which is the resolved TOP and is
+                // re-sent below as its own override layer for a mid-transform unit).
+                charStackData.SkinName = a.CharacterDataStack.BaseSkinName;
                 // Skip the no-op spawn-time face-direction broadcast — Riot's replay does
                 // not include a FaceDirection(0,0,0) packet for freshly-spawned units that
                 // haven't been oriented yet (e.g. hidden TestCubeRender anchor minions).
@@ -217,7 +219,8 @@ namespace PacketDefinitions420
                 }
                 if (a is ObjAIBase obj)
                 {
-                    charStackData.SkinID = (uint)obj.SkinID;
+                    // Base skinID (the spawn skinID); obj.SkinID may have been mutated to a top layer.
+                    charStackData.SkinID = a.CharacterDataStack.BaseSkinID;
                     if (obj.Inventory != null)
                     {
                         foreach (var item in obj.Inventory.GetAllItems(true, true))
@@ -251,11 +254,20 @@ namespace PacketDefinitions420
                         packets.Add(BuildBuffAdd2(buff));
                     }
                 }
-
-                // TODO: if (a.IsDashing), requires SpeedParams, add it to AttackableUnit so it can be accessed outside of initialization
             }
 
             charStackDataList.Add(charStackData);
+
+            // Append the unit's active model/skin override layers (transform / evolving-skin /
+            // Orianna-ball state) so a viewer acquiring vision mid-transform rebuilds the same
+            // CharacterDataStack — and a subsequent PopCharacterData(id) resolves correctly for them.
+            if (o is AttackableUnit au)
+            {
+                foreach (var layer in au.CharacterDataStack.Layers)
+                {
+                    charStackDataList.Add(layer);
+                }
+            }
 
             // Replay shows Riot uses a 1-waypoint MovementDataNormal at the unit's current
             // position for stationary units on vision-acquire — not MovementDataStop (Type=3),
@@ -575,13 +587,16 @@ namespace PacketDefinitions420
             {
                 m.CastInfo.Targets.ForEach(t =>
                 {
+                    // Skip the empty placeholder target (Unit == null). Spell.cs adds a
+                    // CastTarget(null, HIT_Normal) whenever a cast resolves with zero targets
+                    // (so server-side CastInfo.Targets[0] is always safe to read), but on the
+                    // wire that placeholder serializes as a UnitNetID=0 target — and Riot sends
+                    // ZERO targets for a position skillshot's missile (replay c0896952: Vel'Koz W
+                    // missile CastInfo targetCount=0; ours was 1×netid0, making the packet 5 bytes
+                    // longer and the client treat the skillshot as if it carried a target).
                     if (t.Unit != null)
                     {
                         castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = t.Unit.NetId, HitResult = (byte)t.HitResult });
-                    }
-                    else
-                    {
-                        castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = 0, HitResult = (byte)t.HitResult });
                     }
                 });
             }
@@ -662,7 +677,25 @@ namespace PacketDefinitions420
                 // held" as the flicker re-fired. Interpolating launchY→endY by XZ progress keeps the
                 // height continuous no matter how often the packet repeats. At t=0 (progress 0) this
                 // equals launchY, so initial/sub-missile spawns are unchanged. (2026-06-07)
-                Position = new Vector3(m.Position.X, MissileCurrentArcHeight(m, launchXZ, xzDistance, launchY, endTerrainY + heightAugment), m.Position.Y),
+                // MissileFollowsTerrainHeight (JSON flag): the missile hugs the ground contour
+                // instead of flying a straight launch->end line. Vel'Koz W's rift sets this — on
+                // flat ground the linear interpolation matches the floor, but cast across a slope
+                // or over a wall the straight line diverges from terrain and the trail clips into
+                // / floats over the ground (direction-dependent). When set, replicate the actual
+                // terrain height at the missile's current XZ (the missile's own GetPosition3D
+                // already resolves this). Was parsed but never consumed before.
+                Position = new Vector3(
+                    m.Position.X,
+                    (m.SpellOrigin?.SpellData.MissileFollowsTerrainHeight ?? false)
+                        // Terrain@current + the EFFECTIVE augment (heightAugment already honors
+                        // HeightAugmentOverride). Must NOT use GetPosition3D() — that adds the raw
+                        // JSON MissileTargetHeightAugment (100) and ignores the override, which
+                        // pushed Position.Y to terrain+100 while Start/End/Velocity stayed at
+                        // terrain (augment 0). The resulting 100u inconsistency breaks the
+                        // client's height anchor (StartPoint.Y vs Position.Y).
+                        ? _navGrid.GetHeightAtLocation(m.Position) + heightAugment
+                        : MissileCurrentArcHeight(m, launchXZ, xzDistance, launchY, endTerrainY + heightAugment),
+                    m.Position.Y),
                 // Riot: CasterPosition = the LAUNCH position at ground level (terrain@launch,
                 // no augment) — NOT the owner's position (that one goes into UnitPosition).
                 // Self-cast missiles can't tell the two apart (why the Varus forensics missed
@@ -742,6 +775,10 @@ namespace PacketDefinitions420
         {
             return new SpawnMarkerS2C
             {
+                // Riot's SpawnMarkerS2C carries SenderNetID = the marker's own NetID (replay
+                // a6db3774: header `fe 26 12 00 40 …`). We previously left SenderNetID = 0, which
+                // is the one byte-level divergence from Riot in the minimal marker packet set.
+                SenderNetID = marker.NetId,
                 NetID = marker.NetId,
                 NetNodeID = marker.NetNodeID,
                 Position = new Vector3(marker.Position.X, marker.GetHeight(), marker.Position.Y),
@@ -892,6 +929,21 @@ namespace PacketDefinitions420
                 StringBuffer = name
             };
             _packetHandlerManager.SendPacket(userId, debugObjPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// PKT_UpdateGoldRedirectTarget (0x7): tells clients that <paramref name="unit"/>'s gold/credit
+        /// now redirects to <paramref name="target"/> (0 = none). Used by autonomous pets (redirect to
+        /// the summoner) and gold-share items (Relic Shield / Spoils of War).
+        /// </summary>
+        public void NotifyUpdateGoldRedirectTarget(ObjAIBase unit, AttackableUnit target)
+        {
+            var packet = new UpdateGoldRedirectTarget
+            {
+                SenderNetID = unit.NetId,
+                TargetNetID = target?.NetId ?? 0u
+            };
+            _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         public void NotifyS2C_SetFadeOut_Push(GameObject o, float value, float time, int userId)
@@ -1208,12 +1260,13 @@ namespace PacketDefinitions420
                 SpellCharges = (byte)itemInstance.SpellCharges
             };
 
-            //TODO find out what bitfield does, currently unknown
             var buyItemPacket = new BuyItemAns
             {
                 SenderNetID = gameObject.NetId,
                 Item = itemData,
-                Bitfield = 0 //TODO: find out what this does, currently unknown
+                // The byte's only flag is the item-purchase callout (mac decomp ITEMCALLOUT, bit 6).
+                // Off here = no purchase announcement, preserving prior behavior (was Bitfield = 0).
+                ItemCallout = false
             };
 
             _packetHandlerManager.BroadcastPacketVision(gameObject, buyItemPacket.GetBytes(), Channel.CHL_S2C);
@@ -1237,6 +1290,84 @@ namespace PacketDefinitions420
                 }
             };
 
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Tells the owning client whether its champion may shop (S2C_SetShopEnabled). Enabled is the
+        /// master gate (blocks buy + sell); ForceEnabled bypasses the near-a-shop location test.
+        /// </summary>
+        public void NotifySetShopEnabled(Champion champion)
+        {
+            var packet = new S2C_SetShopEnabled
+            {
+                SenderNetID = champion.NetId,
+                Enabled = champion.Shop.Enabled,
+                ForceEnabled = champion.Shop.ForceEnabled
+            };
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Tells the owning client the current undo-stack size (S2C_SetUndoEnabled). The client enables
+        /// the undo button iff the size is greater than zero.
+        /// </summary>
+        public void NotifySetUndoEnabled(Champion champion, int undoStackSize)
+        {
+            var packet = new S2C_SetUndoEnabled
+            {
+                SenderNetID = champion.NetId,
+                UndoStackSize = (byte)Math.Min(undoStackSize, byte.MaxValue)
+            };
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Force-closes the store screen on all clients (S2C_CloseShop). Sent once at game end.
+        /// Header-only, SenderNetID 0 (matches the replay).
+        /// </summary>
+        public void NotifyCloseShop()
+        {
+            var packet = new S2C_CloseShop { SenderNetID = 0 };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Tells the owning client to substitute one shop item for another (S2C_ShopItemSubstitutionSet):
+        /// the shop displays/sells <paramref name="substitutionItemId"/> wherever
+        /// <paramref name="originalItemId"/> would appear (e.g. Culinary Master swaps Health Potion 2003
+        /// for the Biscuit 2010).
+        /// </summary>
+        public void NotifySetShopItemSubstitution(Champion champion, int originalItemId, int substitutionItemId)
+        {
+            var packet = new S2C_ShopItemSubstitutionSet
+            {
+                SenderNetID = champion.NetId,
+                OriginalItemID = (uint)originalItemId,
+                ReplacementItemID = (uint)substitutionItemId
+            };
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Re-syncs the owning client's full inventory in one packet (S2C_SetInventory_MapView). Used by
+        /// the shop undo path instead of replaying per-item Buy/RemoveItemAns. Item cooldown arrays are
+        /// left at 0 — cooldown state is driven separately. Covers the 10 visible inventory slots.
+        /// </summary>
+        public void NotifySetInventory(Champion champion)
+        {
+            var packet = new S2C_SetInventory_MapView { SenderNetID = champion.NetId };
+            for (byte slot = 0; slot < packet.Items.Length; slot++)
+            {
+                var item = champion.Inventory.GetItem(slot);
+                packet.Items[slot] = new LeaguePackets.Game.Common.ItemData
+                {
+                    ItemID = item != null ? (uint)item.ItemData.ItemId : 0u,
+                    Slot = slot,
+                    ItemsInSlot = GetItemsInSlotForDisplay(champion, item),
+                    SpellCharges = item != null ? (byte)item.SpellCharges : (byte)0
+                };
+            }
             _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
 
@@ -1741,6 +1872,25 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Tells clients to change a missile's speed by <paramref name="speedDelta"/> after
+        /// <paramref name="delay"/> seconds (delay 0 = immediately). Mirrors Riot S2C_ChangeMissileSpeed
+        /// (0x10D): SenderNetID = the MISSILE, body { Speed=delta, Delay }. Replay-verified on Jinx R —
+        /// sent on the SAME tick as ForceCreateMissile with {Speed=+500, Delay=0.75} (the rocket's
+        /// "+speed after ~1350u" boost). Broadcast to all (mirrors ForceCreateMissile's reach so every
+        /// client that spawned the missile also gets the schedule); a client with no such missile drops it.
+        /// </summary>
+        public void NotifyS2C_ChangeMissileSpeed(SpellMissile missile, float speedDelta, float delay)
+        {
+            var packet = new S2C_ChangeMissileSpeed
+            {
+                SenderNetID = missile.NetId,
+                Speed = speedDelta,
+                Delay = delay
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends a packet to, optionally, a specified player, all players with vision of the particle, or all players (given the particle is set as globally visible).
         /// </summary>
         /// <param name="particle">Particle to network.</param>
@@ -2180,6 +2330,94 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Pushes one model/skin override layer onto a unit's CharacterDataStack on the client
+        /// (S2C_ChangeCharacterData). The <paramref name="data"/> carries the layer ID used later by
+        /// <see cref="NotifyS2C_PopCharacterData"/> to remove exactly this layer. Driven by the
+        /// server-side <see cref="GameObjects.AttackableUnits.CharacterDataStack"/>.
+        /// </summary>
+        public void NotifyS2C_ChangeCharacterData(AttackableUnit obj, CharacterStackData data, int userId = -1)
+        {
+            var packet = new S2C_ChangeCharacterData
+            {
+                SenderNetID = obj.NetId,
+                Data = data
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(obj, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
+        /// Removes one CharacterDataStack layer (by id) from a unit on the client
+        /// (S2C_PopCharacterData → CharacterDataStack::PopSpecific), reverting the model/skin to the
+        /// layer beneath. Used by transforms (revert), the Orianna ball and evolving-skin upgrades.
+        /// </summary>
+        public void NotifyS2C_PopCharacterData(AttackableUnit obj, uint id, int userId = -1)
+        {
+            var packet = new S2C_PopCharacterData
+            {
+                SenderNetID = obj.NetId,
+                PopID = id
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(obj, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
+        /// Clears every CharacterDataStack layer on a unit on the client (S2C_PopAllCharacterData →
+        /// CharacterDataStack::PopAll), reverting it to its base skin. (Not observed in 4.20 replays —
+        /// Riot pops per-layer — but it is a valid client operation.)
+        /// </summary>
+        public void NotifyS2C_PopAllCharacterData(AttackableUnit obj, int userId = -1)
+        {
+            var packet = new S2C_PopAllCharacterData
+            {
+                SenderNetID = obj.NetId
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(obj, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
+        /// Tells clients to preload a skin's assets (S2C_PreloadCharacterData). Broadcast (not
+        /// vision-gated) in the 4.17 client, so the model is ready before a later ChangeCharacterData.
+        /// </summary>
+        public void NotifyS2C_PreloadCharacterData(AttackableUnit obj, string skinName, int skinID = -1, int userId = -1)
+        {
+            var packet = new S2C_PreloadCharacterData
+            {
+                SenderNetID = obj.NetId,
+                SkinName = skinName,
+                SkinID = skinID
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
         /// Sends a packet to the specified player detailing that the specified debug object's radius has changed.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
@@ -2267,13 +2505,19 @@ namespace PacketDefinitions420
                 Gravity = 0, // TODO: Implement gravity for AttackableUnits.
                 RateOfTurn = 1.0f, // TODO: Implement TurnRate.
                 Duration = unit.MovementParameters.FollowTravelTime,
-                MovementPropertyFlags = 0 // TODO: Implement MovementPropertyFlags.
+                MovementPropertyFlags = 0 // Reserved/unused bitfield in 4.17 (decomp never reads it); always 0.
             };
 
             var replication = new MovementDriverReplication
             {
                 SenderNetID = unit.NetId,
-                MovementTypeID = 0, // TODO: Find out these values and place in GameServerCore.Enums.MovementTypeID
+                // Verified in mac decomp 4.17 (MovementParamType): for the attached homing data this
+                // SHOULD be TargetHoming(1) — Riot's TargetHomingMovement::ToNetworkPacket sets BOTH
+                // movementTypeID=1 and the inner mParamType=1. We currently emit None(0), which makes
+                // the client's Factory::CreateObject(0) build no driver and ignore the homing data
+                // below. Left as None to avoid changing runtime behavior — flipping it to TargetHoming
+                // belongs to the deferred forced-movement rewrite (docs/FORCED_MOVEMENT_REWRITE_PLAN.md).
+                MovementTypeID = MovementParamType.None,
                 Position = unit.GetPosition3D(),
                 Velocity = new Vector3(to.X * unit.MovementParameters.PathSpeedOverride, 0, to.Y * unit.MovementParameters.PathSpeedOverride),
                 MovementDriverHomingData = hd
@@ -4224,7 +4468,12 @@ namespace PacketDefinitions420
         {
             var p = new S2C_UnitChangeTeam
             {
-                SenderNetID = obj.NetId,
+                // Riot's marker UnitChangeTeam uses SenderNetID=0, UnitNetID=marker (replay
+                // a6db3774: `d7 00 00 00 00 <marker> <team>`). We previously sent SenderNetID=
+                // the marker's own NetID, which routes the packet to the marker's per-object
+                // client handler and may re-register it into the actor-collision grid (= live
+                // marker collides). SenderNetID=0 matches Riot and avoids that per-object path.
+                SenderNetID = 0,
                 UnitNetID = obj.NetId,
                 TeamID = (uint)obj.Team
             };
@@ -4240,6 +4489,33 @@ namespace PacketDefinitions420
         /// Replay-verified (a6db3774, t=511030): Riot sends OnEnterVisibilityClient with
         /// LookAtPosition=(1,0,0) and OnEnterLocalVisibilityClient with MaxHealth=Health=1.0.
         /// </summary>
+        /// <summary>
+        /// Despawns a <see cref="Marker"/> on the client via NPC_Die_Broadcast (op 0x9E), exactly
+        /// as Riot does at the end of a marker's life (replay a6db3774: every R marker gets one
+        /// 0x9E at R-end). Markers are <c>obj_AI_Base</c> on the client and live in the client
+        /// actor-collision grid; SetToRemove only drops the SERVER-side state, so without this the
+        /// client keeps the marker forever as an invisible collider and minions path around the
+        /// accumulated dead markers. DeathData mirrors Riot's observed values (KillerNetID = the
+        /// marker itself, DamageType=2, DamageSource=1, DeathDuration≈0 → immediate removal).
+        /// </summary>
+        public void NotifyMarkerDeath(Marker marker)
+        {
+            var die = new NPC_Die_Broadcast
+            {
+                SenderNetID = marker.NetId,
+                DeathData = new LeaguePackets.Game.Common.DeathData
+                {
+                    BecomeZombie = false,
+                    DieType = 0,
+                    KillerNetID = marker.NetId,
+                    DamageType = 2,
+                    DamageSource = 1,
+                    DeathDuration = 0f,
+                }
+            };
+            _packetHandlerManager.BroadcastPacket(die.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifyMarkerVisibilityInit(Marker marker)
         {
             var enterVis = new OnEnterVisibilityClient
@@ -4249,7 +4525,12 @@ namespace PacketDefinitions420
                 LookAtType = 0,
                 LookAtPosition = new Vector3(1.0f, 0f, 0f),
                 IsHero = false,
-                MovementData = new MovementDataNone(),
+                // Omit MovementData: Riot's marker 0xBA is 30 body bytes with NO movement block
+                // (replay a6db3774). Appending MovementDataNone makes the client read it and
+                // register the marker into the client collision grid (gActorGrid), which is why
+                // minions visibly path around the marker even though the server never collides
+                // with it. null => OnEnterVisibilityClient.WriteBody skips the movement header.
+                MovementData = null,
             };
             var enterLocal = new OnEnterLocalVisibilityClient
             {
@@ -4738,9 +5019,19 @@ namespace PacketDefinitions420
         /// </summary>
         void NotifyEnterTeamVision(GameObject obj, TeamId team, int userId = -1, GamePacket spawnPacket = null)
         {
-            if (obj is Particle particleObj && !IsParticleVisibleToRecipient(particleObj, team, userId))
+            if (obj is Particle particleObj)
             {
-                return;
+                if (!IsParticleVisibleToRecipient(particleObj, team, userId))
+                {
+                    return;
+                }
+
+                // One-shot FX (Riot's SendIfOnScreenOrDiscard): shown only to recipients who
+                // could see it at creation — no fog-of-war re-entry resend.
+                if (particleObj.SendIfOnScreenOrDiscard)
+                {
+                    return;
+                }
             }
 
             if (obj is AttackableUnit u)
@@ -4842,17 +5133,52 @@ namespace PacketDefinitions420
             foreach (var kv in _heldFXGroupsByUser)
             {
                 if (kv.Value.Count == 0) continue;
-                var packet = new FX_Create_Group { FXCreateGroup = new List<FXCreateGroupData>(kv.Value) };
+                var packet = new FX_Create_Group { FXCreateGroup = CoalesceAdjacentFXGroups(kv.Value) };
                 _packetHandlerManager.SendPacket(kv.Key, packet.GetBytes(), Channel.CHL_S2C);
                 kv.Value.Clear();
             }
             foreach (var kv in _heldFXGroupsByTeam)
             {
                 if (kv.Value.Count == 0) continue;
-                var packet = new FX_Create_Group { FXCreateGroup = new List<FXCreateGroupData>(kv.Value) };
+                var packet = new FX_Create_Group { FXCreateGroup = CoalesceAdjacentFXGroups(kv.Value) };
                 _packetHandlerManager.BroadcastPacketTeam(kv.Key, packet.GetBytes(), Channel.CHL_S2C);
                 kv.Value.Clear();
             }
+        }
+
+        // Collapse runs of adjacent FXCreateGroupData that share the same header (effect, flags,
+        // bones, package) into a single group holding all their FXCreateData instances. Riot emits
+        // a multi-instance group when the same effect is spawned several times in one tick — e.g.
+        // Vel'Koz W's rift detonation is ONE group with 7 FXCreateData (replay c0896952), not 7
+        // single-instance groups. Our per-call AddParticle pipeline produces one group each; the
+        // FXCreateData entries already match Riot byte-for-byte (NetAssignedNetID sequential,
+        // shared caster), so merging the headers makes the whole packet byte-identical. Adjacent-
+        // only (order-preserving): a same-tick burst is created consecutively so it queues
+        // consecutively; we never reorder unrelated FX.
+        private static List<FXCreateGroupData> CoalesceAdjacentFXGroups(List<FXCreateGroupData> groups)
+        {
+            var result = new List<FXCreateGroupData>();
+            FXCreateGroupData run = null;
+            foreach (var g in groups)
+            {
+                if (run != null
+                    && run.EffectNameHash == g.EffectNameHash
+                    && run.Flags == g.Flags
+                    && run.TargetBoneNameHash == g.TargetBoneNameHash
+                    && run.BoneNameHash == g.BoneNameHash
+                    && run.PackageHash == g.PackageHash)
+                {
+                    // Append this group's instances onto the run leader (a fresh, queue-owned
+                    // object — safe to mutate; the follower group is then dropped).
+                    run.FXCreateData.AddRange(g.FXCreateData);
+                }
+                else
+                {
+                    run = g;
+                    result.Add(run);
+                }
+            }
+            return result;
         }
 
         void NotifyLeaveTeamVision(GameObject obj, TeamId team, int userId = -1)

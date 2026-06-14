@@ -24,6 +24,7 @@ public class Focus : IBuffGameScript {
     private float     _combatTimer = 0f;
     private float     _stackTimer = 1000f;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.STACKS_AND_RENEWS,
         MaxStacks   = MaxFocusStacks

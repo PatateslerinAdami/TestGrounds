@@ -12,6 +12,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 {
     public class HandleMove : PacketHandlerBase<MovementRequest>
     {
+        private static readonly log4net.ILog _logger = LeagueSandbox.GameServer.Logging.LoggerProvider.GetLogger();
         private readonly Game _game;
         private readonly PlayerManager _playerManager;
 
@@ -44,22 +45,72 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 var pet = champion.GetPet();
                 NavigationPath waypoints;
 
+                // Pet control: the client addresses the commanded unit via the packet header
+                // (SenderNetID). Most orders carry the champion's id, but when the player controls
+                // their pet (the in-client "control pet" key / R), the client sends normal orders
+                // (MoveTo / AttackTo / Stop / Hold) with SenderNetID = the PET. Without this the order
+                // fell through to the champion (it moved Annie, not Tibbers). Remap those soft orders
+                // to the pet-command equivalents and route them to the pet's brain — the same path the
+                // explicit pet-command (PetHard*) orders already use. The pet then paths itself.
+                if (pet != null && req.SenderNetID == pet.NetId)
+                {
+                    OrderType petOrder = req.OrderType switch
+                    {
+                        OrderType.MoveTo or OrderType.AttackMove => OrderType.PetHardMove,
+                        OrderType.AttackTo => OrderType.PetHardAttack,
+                        OrderType.Stop => OrderType.PetHardStop,
+                        _ => req.OrderType
+                    };
+                    pet.IssueOrder(petOrder, u, req.Position);
+                    return true;
+                }
+
                 switch (req.OrderType)
                 {
                     case OrderType.MoveTo:
                     case OrderType.AttackTo:
                     case OrderType.AttackMove:
                     case OrderType.Use:
+                    // Attack-terrain orders carry a ground position like a move; the AI's
+                    // RefreshWaypoints already treats AttackTerrainOnce/Sustained as walk-to-coord
+                    // states (ObjAIBase: targetPos = Waypoints.Last). Route them through the same
+                    // path-building so they aren't silently dropped (was: no case → no-op).
+                    case OrderType.AttackTerrainOnce:
+                    case OrderType.AttackTerrainSustained:
                         if (req.Waypoints == null || req.Waypoints.Count == 0)
                         {
                             return false;
                         }
 
+                        // Attack-move with a target already in acquisition range → attack it
+                        // immediately, no walking toward the click first (Riot Hero.lua OnOrder
+                        // ATTACKMOVE → FindTargetInAcR → SetStateAndCloseToTarget). No click
+                        // destination is stored here, so there's no resume-to-point after the kill —
+                        // the engine only AssignTargetPosInPos when NO target is found at order time.
+                        if (req.OrderType == OrderType.AttackMove && u == null)
+                        {
+                            var acquired = champion.AcquireAttackMoveTarget();
+                            if (acquired != null)
+                            {
+                                champion.AttackMoveDestination = System.Numerics.Vector2.Zero;
+                                champion.UpdateMoveOrder(OrderType.AttackTo, true);
+                                champion.SetTargetUnit(acquired);
+                                break;
+                            }
+                        }
 
                         if (u != null)
                         {
+                            // Ordered onto a specific unit → no a-move-to-point destination to resume.
+                            champion.AttackMoveDestination = System.Numerics.Vector2.Zero;
                             champion.UpdateMoveOrder(req.OrderType, true);
                             champion.SetTargetUnit(u);
+                            // A fresh attack order must re-path toward the target NOW, not finish the
+                            // previous MoveTo path first. The chase re-path throttle would otherwise
+                            // suppress the recompute (no path-end / no drift / same target NetID when
+                            // re-attacking), so the champion kept walking the old waypoint while the
+                            // target was out of range. Invalidate the throttle to force the recompute.
+                            champion.ForceChaseRepath();
                         }
                         else
                         {
@@ -100,7 +151,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
                             for(int i = 0; i < waypoints.Count - 1; i++)
                             {
-                                if(nav.CastCircle(waypoints[i], waypoints[i + 1], champion.PathfindingRadius, true))
+                                // CELL-BASED validation (radius 0), matching how the client computed
+                                // this path and how GetPath / PathingHandler.UpdatePaths validate:
+                                // the navgrid cells are pre-inflated (unit footprints baked in), so a
+                                // radius-aware sweep here would re-flag wall-hugging client paths the
+                                // client (and Riot) walk straight — producing a spurious A* detour
+                                // (n>=3 wire shape, visible arc near walls) where Riot keeps the
+                                // straight 2-point path. Only re-A* on genuine cell-level terrain block.
+                                if(nav.CastCircle(waypoints[i], waypoints[i + 1], 0f, true))
                                 {
                                     var ithWaypoint = waypoints[i];
                                     var lastWaypoint = waypoints[waypoints.Count - 1];
@@ -267,52 +325,78 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                     champion.LastMoveOrderBroadcastTime = _game.GameTime;
                                 }
                                 champion.SetTargetUnit(null);
+
+                                // Attack-move to a ground point: remember the destination so the champion
+                                // resumes walking to it after killing/losing a target acquired along the way.
+                                // Any other order (plain move) clears it.
+                                champion.AttackMoveDestination = req.OrderType == OrderType.AttackMove
+                                    ? waypoints[waypoints.Count - 1]
+                                    : System.Numerics.Vector2.Zero;
                             }
                         }
                         break;
                     case OrderType.PetHardAttack:
                     case OrderType.PetHardMove:
                     case OrderType.PetHardReturn:
-                        if (pet != null)
-                        {
-                            waypoints = nav.GetPath(pet.Position, req.Position, pet.PathfindingRadius, pet.UsesFastPath);
-                            if (waypoints == null)
-                            {
-                                // Stuck-recovery (mirrors champion path above): pet may be on a
-                                // dynamic-blocker cell. Snap to nearest walkable, retry path, and
-                                // hard-snap pet position if successful.
-                                var snappedFrom = nav.GetClosestTerrainExit(pet.Position, 0f);
-                                if (snappedFrom != pet.Position)
-                                {
-                                    waypoints = nav.GetPath(snappedFrom, req.Position, pet.PathfindingRadius, pet.UsesFastPath);
-                                    if (waypoints != null)
-                                    {
-                                        pet.SetPosition(snappedFrom, repath: false);
-                                    }
-                                }
-                                if (waypoints == null)
-                                {
-                                    return false;
-                                }
-                            }
-                            pet.UpdateMoveOrder(req.OrderType, true);
-                            pet.SetWaypoints(waypoints);
-                            pet.SetTargetUnit(u, true);
-                        }
+                    case OrderType.PetHardStop:
+                        // Pet-hard commands are owned by the pet's brain (PetAI.OnOrder), reached via
+                        // pet.IssueOrder below — it sets the pet state and does its OWN pathing
+                        // (SetStateAndCloseToTarget / SetStateAndMove / Stand). No engine pre-pathing
+                        // here: the old pre-build dropped the order (`return false`) when the click
+                        // point was unpathable, which broke PetHardReturn (carries no position).
                         break;
+                    case OrderType.Hold:
+                    {
+                        // Hold (player 'H'): KEEP current target, clear movement path, no chase, no
+                        // new auto-acquire. H = Stop+Hold on the wire and the Hold packet carries no
+                        // target (req.TargetNetID=0, verified), so restore the target the leading Stop
+                        // just cleared. UpdateMoveOrder(Hold) then clears the path (StopMovement) but
+                        // keeps the target; the AI's auto-promote + idle-acquire guards keep it from
+                        // chasing/acquiring. Net: keep attacking an in-range target, don't follow it.
+                        var holdTarget = u ?? champion.ConsumeRecentStopClearedTarget(250f);
+                        if (holdTarget != null)
+                        {
+                            champion.SetTargetUnit(holdTarget, true);
+                        }
+                        champion.UpdateMoveOrder(OrderType.Hold, true);
+                        break;
+                    }
                     case OrderType.Taunt:
                         champion.UpdateMoveOrder(req.OrderType);
                         return true;
                     case OrderType.Stop:
+                        champion.AttackMoveDestination = System.Numerics.Vector2.Zero;
+                        // Remember the target in case this Stop is the leading half of a Hold-key
+                        // press (client sends Stop+Hold); the trailing Hold restores it. A standalone
+                        // Stop (S key) never gets a trailing Hold, so the remembered target expires.
+                        champion.NoteStopClearedTarget(champion.TargetUnit);
                         champion.SetTargetUnit(null,true);
                         champion.UpdateMoveOrder(req.OrderType, true);
                         break;
-                    case OrderType.PetHardStop:
-                        if (pet != null)
-                        {
-                            pet.UpdateMoveOrder(req.OrderType, true);
-                        }
+                    default:
+                        // Catch unhandled order types instead of silently dropping them (the bug
+                        // that hid the missing Hold/AttackTerrain handling). If this logs in-game,
+                        // the client emits an order we don't dispatch yet — add a case for it.
+                        _logger.Debug($"[HandleMove] unhandled OrderType {req.OrderType} (netid {champion.NetId})");
                         break;
+                }
+
+                // Order/State split (Phase 1, docs/AI_ORDER_STATE_SPLIT_PLAN.md): mirror the champion's
+                // OWN order into _aiState via HeroAI.OnOrder, parallel to the MoveOrder set in the cases
+                // above. Label-only — no behaviour change (the brain still reads MoveOrder this phase).
+                // Pet-hard orders command the pet, not the champion, so they are excluded.
+                if (req.OrderType != OrderType.PetHardAttack && req.OrderType != OrderType.PetHardMove
+                    && req.OrderType != OrderType.PetHardReturn && req.OrderType != OrderType.PetHardStop)
+                {
+                    champion.IssueOrder(req.OrderType, u, req.Position);
+                }
+                else if (pet != null)
+                {
+                    // Pet-hard commands target the PET's brain, not the champion's. Route them to the
+                    // pet's OnOrder so the (new) PetAI BaseAIScript can translate them into pet states.
+                    // The legacy IAIScript Pet.cs is not a BaseAIScript, so IssueOrder is a no-op for it
+                    // (it keeps using its OnUnitUpdateMoveOrder listener) — behaviour-neutral until P-B.
+                    pet.IssueOrder(req.OrderType, u, req.Position);
                 }
             }
 

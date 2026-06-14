@@ -16,6 +16,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            PersistsThroughDeath = true,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             BuffType = BuffType.KNOCKUP,
             IsHidden = false,

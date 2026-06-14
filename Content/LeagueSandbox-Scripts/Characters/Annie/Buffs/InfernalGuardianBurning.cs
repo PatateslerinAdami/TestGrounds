@@ -56,7 +56,7 @@ internal class InfernalGuardianBurning : IBuffGameScript {
         var totalDamage = 35.0f + ap;
         foreach (var enemy in enemiesInRange) {
             enemy.TakeDamage(_pet.Owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL,
-                             DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+                             DamageSource.DAMAGE_SOURCE_PET, false);
         }
 
         _timer = 0f;

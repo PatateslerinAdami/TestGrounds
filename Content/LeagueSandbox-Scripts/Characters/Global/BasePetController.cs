@@ -37,14 +37,18 @@ namespace Spells
                 //This particle get's displayed globably
                 AddParticle(owner, null, "cursor_moveto", start);
 
-                //TODO: Instead of baking AI here, make a general Pet AI script and set it as the default AI for Pet class.
+                // Route the pet command through the pet's brain (PetAI.OnOrder) instead of poking its
+                // MoveOrder/waypoints directly. Setting MoveOrder + SetWaypoints here bypassed the AI's
+                // _aiState, so the AI's 0.15s timers (running on a stale IDLE state) immediately
+                // overrode the move with their auto-return/acquire — the "pet only moves while I spam
+                // the control" bug. IssueOrder makes the AI set AI_PET_HARDMOVE/HARDATTACK, which its
+                // timers respect (hard states neither auto-return nor re-acquire).
                 var unitsInRange =
                     EnumerateValidUnitsInRange(spell.CastInfo.Owner, end, 100.0f, true, SpellDataFlags.AffectEnemies)
                         .ToList();
                 if (unitsInRange.Count > 0)
                 {
-                    Pet.UpdateMoveOrder(OrderType.PetHardAttack);
-                    Pet.SetTargetUnit(unitsInRange[0]);
+                    Pet.IssueOrder(OrderType.PetHardAttack, unitsInRange[0], end);
                     for (int i = 0; i < unitsInRange.Count; i++)
                     {
                         spell.CastInfo.SetTarget(unitsInRange[i], i);
@@ -52,9 +56,7 @@ namespace Spells
                 }
                 else
                 {
-                    Pet.SetTargetUnit(null, true);
-                    Pet.UpdateMoveOrder(OrderType.PetHardMove);
-                    Pet.SetWaypoints(GetPath(Pet.Position, end, Pet.PathfindingRadius));
+                    Pet.IssueOrder(OrderType.PetHardMove, null, end);
                 }
             }
         }

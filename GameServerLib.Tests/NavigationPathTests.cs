@@ -241,12 +241,17 @@ public class NavigationPathTests
 
     // === Identity ===
 
+    // S4 IsPathTheSame uses a 10-unit box tolerance + a near-unit (50-unit) prefix skip on both
+    // paths. unitPos is placed FAR from the waypoints in most cases so the prefix skip is a no-op
+    // and the pairwise compare is exercised directly.
+    private static readonly Vector2 FarFromWaypoints = new Vector2(10000, 10000);
+
     [Fact]
     public void IsPathTheSame_Identical_True()
     {
         var a = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 10) });
         var b = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 10) });
-        Assert.True(a.IsPathTheSame(b));
+        Assert.True(a.IsPathTheSame(b, FarFromWaypoints));
     }
 
     [Fact]
@@ -254,31 +259,46 @@ public class NavigationPathTests
     {
         var a = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 10) });
         var b = new NavigationPath(new[] { new Vector2(0, 0) });
-        Assert.False(a.IsPathTheSame(b));
+        Assert.False(a.IsPathTheSame(b, FarFromWaypoints));
     }
 
     [Fact]
-    public void IsPathTheSame_OneOff_False()
+    public void IsPathTheSame_BeyondTolerance_False()
     {
+        // Second waypoint differs by 20 units (> 10-unit box tolerance) -> not the same.
         var a = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 10) });
-        var b = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 11) });
-        Assert.False(a.IsPathTheSame(b));
+        var b = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 30) });
+        Assert.False(a.IsPathTheSame(b, FarFromWaypoints));
     }
 
     [Fact]
-    public void IsPathTheSame_WithinEpsilon_True()
+    public void IsPathTheSame_WithinTolerance_True()
     {
+        // Sub-10-unit per-waypoint drift is deliberately treated as the same path (client literal).
         var a = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10, 10) });
         var b = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(10.3f, 10.3f) });
-        Assert.True(a.IsPathTheSame(b, epsilon: 1f));
-        Assert.False(a.IsPathTheSame(b, epsilon: 0.1f));
+        Assert.True(a.IsPathTheSame(b, FarFromWaypoints));
+
+        var c = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(25, 25) });
+        Assert.False(a.IsPathTheSame(c, FarFromWaypoints));
+    }
+
+    [Fact]
+    public void IsPathTheSame_DiffersOnlyInReachedPrefix_True()
+    {
+        // The unit sits at (5,5). Both paths' first waypoints are within the 50-unit prefix box,
+        // so the differing early waypoints are skipped; the matching tails make them "the same".
+        var unit = new Vector2(5, 5);
+        var a = new NavigationPath(new[] { new Vector2(0, 0), new Vector2(500, 500) });
+        var b = new NavigationPath(new[] { new Vector2(20, 20), new Vector2(500, 500) });
+        Assert.True(a.IsPathTheSame(b, unit));
     }
 
     [Fact]
     public void IsPathTheSame_Null_False()
     {
         var a = new NavigationPath();
-        Assert.False(a.IsPathTheSame(null));
+        Assert.False(a.IsPathTheSame(null, FarFromWaypoints));
     }
 
     [Fact]

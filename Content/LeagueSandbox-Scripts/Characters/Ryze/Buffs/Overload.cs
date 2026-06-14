@@ -10,6 +10,7 @@ namespace Buffs;
 
 internal class Overload : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1,

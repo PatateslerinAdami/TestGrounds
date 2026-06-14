@@ -14,7 +14,6 @@ namespace Spells;
 
 public class Incinerate : ISpellScript {
     private ObjAIBase _annie;
-    private Vector2   _direction;
     private bool      _shouldStun = false;
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts   = true,
@@ -28,10 +27,6 @@ public class Incinerate : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _shouldStun = false;
-    }
-
-    public void OnSpellCast(Spell spell) {
-        _direction = new Vector2(_annie.Direction.X, _annie.Direction.Z);
     }
 
     public void OnSpellPostCast(Spell spell) {
@@ -48,9 +43,9 @@ public class Incinerate : ISpellScript {
             }
         }
         
-        var enemiesInRange = GetUnitsInCone(_annie, _annie.Position, _direction, 650f, 85f, true,
-                                                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                                 SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        // Cone + target flags from SpellData (Incinerate: 24.76° half, 625u, LockConeToPlayer=1,
+        // AffectEnemies|Neutral|Minions|Heroes) instead of the hardcoded 650u / 85° + manual flags.
+        var enemiesInRange = GetUnitsHitBySpell(spell);
         
         foreach (var enemy in enemiesInRange) {
             

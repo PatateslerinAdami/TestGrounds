@@ -337,15 +337,21 @@ namespace LeagueSandbox.GameServer.Content
         (
             float attackSpeedMod,
             float attackDelayOffsetPercent,
-            float attackMinimumDelay = float.NaN,
-            float attackMaximumDelay = float.NaN
+            float maxAttackSpeedOverride = 0f,
+            float minAttackSpeedOverride = 0f
         )
         {
             var gcd = GlobalData.GlobalCharacterDataConstants;
-            if (float.IsNaN(attackMinimumDelay)) attackMinimumDelay = gcd.AttackMinDelay;
-            if (float.IsNaN(attackMaximumDelay)) attackMaximumDelay = gcd.AttackMaxDelay;
+            // Per-unit AS cap overrides (Riot Spell::ComputeCharacterAttackDelay, SpellMath.cpp:48-74):
+            // a MAX attack-speed override lowers the delay floor (1/maxAS); a MIN attack-speed override
+            // raises the delay ceiling (1/minAS). <= ~0 = no override → use the global gcd default.
+            float minDelay = maxAttackSpeedOverride > 0.00001f ? 1.0f / maxAttackSpeedOverride : gcd.AttackMinDelay;
+            float maxDelay = minAttackSpeedOverride > 0.00001f ? 1.0f / minAttackSpeedOverride : gcd.AttackMaxDelay;
             float result = ((attackDelayOffsetPercent + 1.0f) * gcd.AttackDelay) / attackSpeedMod;
-            return System.Math.Clamp(result, attackMinimumDelay, attackMaximumDelay);
+            // Client clamp order: max check, then min (robust even if minDelay > maxDelay).
+            if (result > maxDelay) result = maxDelay;
+            if (minDelay > result) result = minDelay;
+            return result;
         }
 
         public float GetCharacterAttackCastDelay
@@ -354,14 +360,20 @@ namespace LeagueSandbox.GameServer.Content
             float attackDelayOffsetPercent,
             float attackDelayCastOffsetPercent,
             float attackDelayCastOffsetPercentAttackSpeedRatio,
-            float attackMinimumDelay = float.NaN,
-            float attackMaximumDelay = float.NaN
+            float maxAttackSpeedOverride = 0f,
+            float minAttackSpeedOverride = 0f
         )
         {
-            float castPercent = System.Math.Min(GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + attackDelayCastOffsetPercent, 0.0f);
-            float percentDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, attackMinimumDelay, attackMaximumDelay) * castPercent;
-            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayCastOffsetPercent, attackMinimumDelay, attackMaximumDelay);
-            float result = (((attackDelay * castPercent) - percentDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + percentDelay;
+            // Mirrors client Spell::ComputeCharacterAttackCastDelayInternal (SpellMath.cpp:80-96).
+            // castPercent is clamped to >= 0 (client: `if (castPercent < 0) castPercent = 0`).
+            float castPercent = System.Math.Max(GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + attackDelayCastOffsetPercent, 0.0f);
+            // Both the unscaled and AS-scaled cycle use the DELAY offset, not the cast offset; the
+            // per-unit AS cap overrides thread through to each clamp (see GetCharacterAttackDelay).
+            float originalCastDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, maxAttackSpeedOverride, minAttackSpeedOverride) * castPercent;
+            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayOffsetPercent, maxAttackSpeedOverride, minAttackSpeedOverride);
+            // Lerp(originalCastDelay, castPercent*attackDelay, ratio): ratio=1 => fully AS-scaled
+            // windup (castPercent*attackDelay); ratio<1 (Kalista/Thresh) => windup scales partially.
+            float result = (((attackDelay * castPercent) - originalCastDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + originalCastDelay;
             return System.Math.Min(result, attackDelay);
         }
 

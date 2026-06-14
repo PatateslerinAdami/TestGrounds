@@ -36,6 +36,7 @@ public class TrundlePainShred : IBuffGameScript {
     private Queue<float>   _pendingMagicResistBonus;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

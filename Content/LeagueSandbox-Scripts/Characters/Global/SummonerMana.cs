@@ -12,7 +12,9 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            // TODO
+            NotSingleTargetSpell = true,
+            TriggersSpellCasts = false,
+            CastingBreaksStealth = true
         };
 
         private const float PERCENT_MAX_MANA_HEAL = 0.40f;

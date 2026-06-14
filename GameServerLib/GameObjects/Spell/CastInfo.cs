@@ -21,6 +21,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public uint MissileNetID { get; set; }
         public Vector3 TargetPosition { get; set; }
         public Vector3 TargetPositionEnd { get; set; }
+        // Raw aim/click position (Riot SpellCastInfo::CursorPos, 0x38) — the UNCLAMPED point the
+        // player pointed at, kept distinct from TargetPosition (= Riot TargetPos, the position the
+        // cast actually uses, which may be range-clamped or snapped onto a target unit). NOT on the
+        // wire: the decomp's ToNetworkData serializes only TargetPos + TargetPosDragEnd, never
+        // CursorPos, so this is server-internal. Riot uses it e.g. in PostponedSpell::Postpone
+        // (AIBase.cpp:394, mTargetPos = ci.CursorPos) so a move-to-cast retry re-aims at the
+        // original click, not the clamped point. Captured once at cast entry before TargetPosition
+        // gets overwritten by fakePos/target-snap.
+        public Vector3 CursorPos { get; set; }
 
         public List<CastTarget> Targets { get; set; }
 
@@ -84,7 +93,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// <param name="target">Unit to add.</param>
         public void AddTarget(AttackableUnit target)
         {
-            Targets.Add(new CastTarget(target, CastTarget.GetHitResult(target, IsAutoAttack, Owner.IsNextAutoCrit)));
+            Targets.Add(new CastTarget(target, CastTarget.GetHitResult(target, IsAutoAttack, Owner.IsNextAutoCrit, Owner.IsNextAutoMiss, Owner.IsNextAutoDodged)));
         }
 
         /// <summary>
@@ -117,7 +126,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
-            Targets[index] = new CastTarget(target, CastTarget.GetHitResult(target, IsAutoAttack, Owner.IsNextAutoCrit));
+            Targets[index] = new CastTarget(target, CastTarget.GetHitResult(target, IsAutoAttack, Owner.IsNextAutoCrit, Owner.IsNextAutoMiss, Owner.IsNextAutoDodged));
         }
         public CastInfo Clone()
         {

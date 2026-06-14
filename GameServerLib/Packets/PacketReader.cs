@@ -39,6 +39,22 @@ namespace PacketDefinitions420
             return new SellItemRequest(rq.Slot, rq.Sell);
         }
 
+        [PacketType(GamePacketID.C2S_OnShopOpened)]
+        public static OnShopOpenedRequest ReadOnShopOpenedRequest(byte[] data)
+        {
+            var rq = new C2S_OnShopOpened();
+            rq.Read(data);
+            return new OnShopOpenedRequest();
+        }
+
+        [PacketType(GamePacketID.C2S_UndoItemReq)]
+        public static UndoItemRequest ReadUndoItemRequest(byte[] data)
+        {
+            var rq = new C2S_UndoItemReq();
+            rq.Read(data);
+            return new UndoItemRequest();
+        }
+
         [PacketType(GamePacketID.ResumePacket)]
         public static UnpauseRequest ReadUnpauseRequest(byte[] data)
         {
@@ -168,7 +184,7 @@ namespace PacketDefinitions420
             {
                 return null;
             }
-            return new MovementRequest((OrderType)rq.OrderType, rq.Position, rq.TargetNetID, rq.MovementData.TeleportNetID, rq.MovementData.HasTeleportID, rq.MovementData.Waypoints.ConvertAll(WaypointToVector2));
+            return new MovementRequest((OrderType)rq.OrderType, rq.Position, rq.TargetNetID, rq.MovementData.TeleportNetID, rq.MovementData.HasTeleportID, rq.MovementData.Waypoints.ConvertAll(WaypointToVector2), rq.SenderNetID);
         }
 
         [PacketType(GamePacketID.Waypoint_Acc)]

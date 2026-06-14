@@ -29,6 +29,7 @@ public class AkaliTwinDisciplines : IBuffGameScript {
     private ObjAIBase _akali;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.DAMAGE,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

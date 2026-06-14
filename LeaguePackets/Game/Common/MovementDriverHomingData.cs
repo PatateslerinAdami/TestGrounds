@@ -13,7 +13,11 @@ namespace LeaguePackets.Game.Common
         public float Gravity { get; set; }
         public float RateOfTurn { get; set; }
         public float Duration { get; set; }
-        //TODO: enum flags or bitfield
+        // Reserved bitfield (mac decomp 4.17 TargetHomingMovementParam.mMovementPropertyFlags, uint32):
+        // it is only init-to-0, copied param->driver and driver->packet, and NEVER read — the homing
+        // logic (CalcVelocityModifier) ignores it and no code sets a non-zero value. No enum/bit
+        // meanings are defined in this patch, so it stays a raw uint (kept a flags shape per the name;
+        // don't invent bit values). Likely used by a later patch / a driver type absent in 4.17.
         public uint MovementPropertyFlags { get; set; }
     }
 

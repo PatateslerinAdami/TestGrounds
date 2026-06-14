@@ -15,10 +15,11 @@ internal class FrozenHeartAura : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.RENEW_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
+        PersistsThroughDeath = true
     };
 
-    public StatsModifier StatsModifier { get; } = new();
+    public StatsModifier StatsModifier { get; } = new();        
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         StatsModifier.AttackSpeed.PercentBonus -= 0.15f;

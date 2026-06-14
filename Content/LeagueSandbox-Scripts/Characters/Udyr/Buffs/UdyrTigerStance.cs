@@ -20,6 +20,7 @@ public class UdyrTigerStance : IBuffGameScript {
     private Particle  _particle1, _particle2, _particle3;
     private bool _firstHit = true;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

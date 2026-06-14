@@ -390,9 +390,10 @@ namespace LeagueSandbox.GameServer.Handlers
             if (0.36f * travel * travel <= beelineSq)
             {
                 // Close-walk scan: first waypoint within max(radii sum − closingModifier, 15).
-                // closingModifier = ar_ClosingAttackRangeModifier = 300 on Map1 (Constants.var:16)
-                // → the subtraction goes negative and the 15u floor binds.
-                const float ClosingAttackRangeModifier = 300f;
+                // closingModifier = ar_ClosingAttackRangeModifier (Constants.var:16, default 300 on
+                // Map1) → the subtraction goes negative and the 15u floor binds. Sourced from
+                // GlobalData so a config/map override is honoured instead of a magic number.
+                float ClosingAttackRangeModifier = LeagueSandbox.GameServer.Content.GlobalData.AttackRangeVariables.ClosingAttackRangeModifier;
                 float closeRange = Math.Max(closeRadius - ClosingAttackRangeModifier, 15f);
                 float closeRangeSq = closeRange * closeRange;
                 int closeIdx = 1;

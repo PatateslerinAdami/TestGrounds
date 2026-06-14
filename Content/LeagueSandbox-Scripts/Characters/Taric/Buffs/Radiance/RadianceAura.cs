@@ -11,7 +11,8 @@ namespace Buffs;
 internal class RadianceAura : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,
-        BuffAddType = BuffAddType.REPLACE_EXISTING
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        PersistsThroughDeath = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

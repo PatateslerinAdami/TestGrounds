@@ -12,7 +12,11 @@ namespace LeagueSandbox.GameServer.Content
         public string PassiveLuaName { get; set; } = "";
         public string PassiveNameStr { get; set; } = "";
 
-        //TODO: Extend into handling several passives, when we decide on a format for that case.
+        // Single passive is sufficient: patch 4.20 stores exactly one passive per champion.
+        // Verified by hashing every char-stat .json key (ihash "Data*Passive{i}{field}", 65599 algo)
+        // against the UNKNOWN_HASHES sections of all 173 champions — no Passive2..6 field (Name/
+        // LuaName/AbilityName/Desc/Range) exists in the 4.20 data. Riot's S1 engine loop-parsed a
+        // Passives[] array (bipedmodel.cpp), but only index 1 is ever populated in this era.
     }
 
     public class CharData
@@ -100,6 +104,15 @@ namespace LeagueSandbox.GameServer.Content
 
         public string[] SpellNames { get; private set; } = new string[4];
         public string[] ExtraSpells { get; private set; } = new string[16];
+
+        // Form-changer (Elise/Jayce/Nidalee/Shyvana/Udyr) alternate-form data. The inibin keys are a
+        // 4.20-era addition absent from every hash→name dictionary, so they have no recoverable field
+        // name and are read directly by their raw inibin key hash (see ContentFile.GetStringByHash).
+        // AlternateFormSpells = the alternate form's Q/W/E/R; empty for stance/reuse forms (Shyvana,
+        // Udyr) that don't carry a 4-slot alternate spellbook. AlternateCharacterName = the alternate
+        // form's character/model (EliseSpider, JayceCannon, Nidalee_Cougar, ShyvanaDragon, UdyrPhoenix).
+        public string[] AlternateFormSpells { get; private set; } = new string[4];
+        public string AlternateCharacterName { get; private set; } = "";
         public int[] MaxLevels { get; private set; } = { 5, 5, 5, 3 };
 
         public int[][] SpellsUpLevels { get; private set; } =
@@ -205,6 +218,15 @@ namespace LeagueSandbox.GameServer.Content
                 ExtraSpells[i] = file.GetString("Data", $"ExtraSpell{i + 1}", "");
             }
 
+            // Alternate-form spells live under four consecutive inibin key hashes (2074622752..2074622755
+            // = alt-form Spell1..4); the alternate character/model is hash 3309724546. These have no
+            // known field name (see AlternateFormSpells declaration), so they are read by raw hash.
+            for (var i = 0; i < 4; i++)
+            {
+                AlternateFormSpells[i] = file.GetStringByHash(2074622752u + (uint)i, "");
+            }
+            AlternateCharacterName = file.GetStringByHash(3309724546u, "");
+
             for (var i = 0; i < 4; i++)
             {
                 var defaultLevels = SpellsUpLevels[i];
@@ -213,6 +235,13 @@ namespace LeagueSandbox.GameServer.Content
             }
 
             PassiveData.PassiveLuaName = file.GetString("Data", "Passive1LuaName", "");
+
+            // PassiveLevels[i] = the champion level at which passive rank i+1 unlocks
+            // (Passive1Level1..6 in the data, e.g. 1/4/7/10/13/16). Absent keys stay 0.
+            for (var i = 0; i < PassiveData.PassiveLevels.Length; i++)
+            {
+                PassiveData.PassiveLevels[i] = file.GetInt("Data", $"Passive1Level{i + 1}", 0);
+            }
 
             MaxLevels = file.GetIntArray("Data", "MaxLevels", MaxLevels);
 

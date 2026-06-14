@@ -48,9 +48,11 @@ public class AatroxR : ISpellScript {
         //AddParticle(_aatrox, _aatrox, "Aatrox_Base_R_Aura_Self", _aatrox.Position);
         
 
-        var enemiesInRange = GetUnitsInRange(_aatrox, _aatrox.Position, 550, true,
-                                             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                             SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        // Radius from SelfAOE CastRadius (550). The spell's own affect flags are Friends|Heroes
+        // (the transform/aura aspect), so override to the enemy set for the activation damage.
+        var enemiesInRange = GetUnitsHitBySpell(spell,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
         foreach (var enemy in enemiesInRange) {
             AddParticleTarget(_aatrox, enemy, _phitname, enemy);
             enemy.TakeDamage(_aatrox, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,

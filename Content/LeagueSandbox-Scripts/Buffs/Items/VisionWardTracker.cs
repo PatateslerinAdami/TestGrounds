@@ -21,7 +21,8 @@ internal class VisionWardTracker : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
+        PersistsThroughDeath = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

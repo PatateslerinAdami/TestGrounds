@@ -43,12 +43,25 @@ public class JaxEvasion : IBuffGameScript {
         _spell         = ownerspell;
         _step          = 0;
         _periodicTicker.Reset();
-        _attacksDodged = 1f;
+        // Bonus fraction for the recast: 0 at start, +0.2 per dodged attack, capped at +100% (5 dodges)
+        // by Math.Min(1f, ...) in E.cs. Must start at 0 so a recast with no dodges adds +0%.
+        _attacksDodged = 0f;
         SealSpellSlot(_jax, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerspell.SetCooldown(0f);
+        // Grant 100% dodge for the duration (Riot's mDodge=1.0 via JaxEvasion). Basic attacks against Jax
+        // now resolve as HIT_Dodge engine-side (0 damage + client "Dodge!" text), instead of post-hoc
+        // zeroing the damage. Each dodged attack fires OnDodge → we build Counter Strike's recast damage.
+        StatsModifier.Dodge.FlatBonus = 1.0f;
+        _jax.AddStatModifier(StatsModifier);
+        ApiEventManager.OnDodge.AddListener(this, _jax, OnJaxDodge);
         ApiEventManager.OnPreTakeDamage.AddListener(this, _jax, OnPreTakeDamage);
         _p1 = AddParticleTarget(_jax, _jax, "JaxDodger", _jax, 1.6f);
         _p2 = AddParticleTarget(_jax, _jax, "CounterStrike_ready", _jax, 1.9f);
+    }
+
+    private void OnJaxDodge(AttackableUnit dodger, AttackableUnit attacker) {
+        _attacksDodged += 0.2f;
+        AddParticleTarget(_jax, _jax, "CounterStrike_dodged", _jax);
     }
     
     public void OnUpdate(float diff) {
@@ -66,12 +79,8 @@ public class JaxEvasion : IBuffGameScript {
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         switch (data.DamageSource) {
-            case DamageSource.DAMAGE_SOURCE_ATTACK or DamageSource.DAMAGE_SOURCE_PROC:
-                data.DamageResultType     = DamageResultType.RESULT_DODGE;
-                data.PostMitigationDamage = 0f;
-                AddParticleTarget(_jax, _jax, "CounterStrike_dodged", _jax);
-                _attacksDodged += 0.2f;
-                break;
+            // Basic attacks (and their on-hit procs) are dodged engine-side now: a dodged/missed attack no
+            // longer fires OnHitUnit, so no PROC leaks here to negate. Only the AoE reduction remains.
             case DamageSource.DAMAGE_SOURCE_SPELLAOE:
                 data.PostMitigationDamage -= data.PostMitigationDamage * 0.25f;
                 AddParticleTarget(_jax, _jax, "CounterStrike_dodged", _jax);
@@ -81,9 +90,13 @@ public class JaxEvasion : IBuffGameScript {
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
         ApiEventManager.RemoveAllListenersForOwner(this);
+        // NOTE: do NOT RemoveStatModifier here — Buff.DeactivateBuff auto-removes the script's StatsModifier
+        // (Buff.cs:190). Removing it manually too was a double-remove → Dodge.FlatBonus went to -1.0, so the
+        // next E cast's AddStatModifier only netted back to 0 (dodge worked once, then never again).
         RemoveParticle(_p1);
         RemoveParticle(_p2);
-        spell.CastInfo.Variables.Set("attacksDodge", _attacksDodged);
+        // Key MUST match E.cs's GetFloat("attacksDodged") — was "attacksDodge" (typo) so the recast read 0.
+        spell.CastInfo.Variables.Set("attacksDodged", _attacksDodged);
         SpellCast(_jax, 3, SpellSlotType.ExtraSlots, true, _jax, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
         spell.SetCooldown(spell.CastInfo.Cooldown, false);
     }

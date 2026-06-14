@@ -35,15 +35,30 @@ namespace Buffs
             _owner = buff.SourceUnit;
             AddParticleTarget(_owner, unit, "LOC_fear", unit, buff.Duration, bone: "head");
 
-            unit.SetStatus(StatusFlags.Feared, true);
+            // Feared is DERIVED from BuffType.FEAR (AttackableUnit.RecomputeBuffEffects) — overlap-safe.
 
-            if (RandomDirection)
+            // Record the CC source + flavour on the unit so an AI-driven crowd-control component can
+            // drive the movement (Riot's model: buff = flag, AI = movement). RandomDirection = wander
+            // (AI_FEARED) vs flee straight away from the source.
+            if (unit is ObjAIBase cc)
             {
-                MoveRandomly();
-            }
-            else
-            {
-                Flee();
+                cc.CrowdControlSource = _owner;
+                cc.CrowdControlWander = RandomDirection;
+
+                // Migration bridge: only fall back to buff-driven movement for units WITHOUT an AI
+                // crowd-control driver (e.g. a player champion still on EmptyAIScript). Units with
+                // the CrowdControlComponent (minions today) get their movement from the AI layer.
+                if (!cc.AICrowdControlActive)
+                {
+                    if (RandomDirection)
+                    {
+                        MoveRandomly();
+                    }
+                    else
+                    {
+                        Flee();
+                    }
+                }
             }
 
             ApplyAssistMarker(unit, _owner, 10.0f);
@@ -55,7 +70,10 @@ namespace Buffs
         {
             if (_particle != null) _particle.SetToRemove();
 
-            unit.SetStatus(StatusFlags.Feared, false);
+            if (unit is ObjAIBase cc)
+            {
+                cc.CrowdControlSource = null;
+            }
             unit.StopMovement();
         }
 
@@ -65,6 +83,10 @@ namespace Buffs
 
             if (_unit is ObjAIBase ai)
             {
+                // AI-driven units have the CrowdControlComponent re-issuing the wander/flee; the buff
+                // only kept driving here for the legacy (non-AI-driven) path.
+                if (ai.AICrowdControlActive) return;
+
                 if (RandomDirection)
                 {
                     if (ai.IsPathEnded())

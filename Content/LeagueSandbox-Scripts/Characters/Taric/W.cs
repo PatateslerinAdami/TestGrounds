@@ -49,9 +49,8 @@ public class Shatter : ISpellScript {
         var damage = 40f + 40f * (_spell.CastInfo.SpellLevel - 1) + preCastArmor * 0.2f;
         var armorReduction = 5f + 5f * (_spell.CastInfo.SpellLevel - 1) + preCastArmor * 0.05f;
         AddParticleTarget(_taric, _taric, "Shatter_nova", _taric);
-        var enemies = GetUnitsInRange(_taric, _taric.Position, 375f, true,
-                                      SpellDataFlags.AffectEnemies| SpellDataFlags.AffectHeroes |
-                                      SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=400, was hardcoded 375).
+        var enemies = GetUnitsHitBySpell(_spell);
         foreach (var enemy in  enemies) {
             var variables = new BuffVariables();
             variables.Set("armorReduction", armorReduction);

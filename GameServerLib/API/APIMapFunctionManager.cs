@@ -351,7 +351,10 @@ namespace LeagueSandbox.GameServer.API
             {
                 _game.PacketNotifier.NotifyS2C_SetGreyscaleEnabledWhenDead(false);
             }
- 
+
+            // Force the store screen closed on all clients now that the game is over (S2C_CloseShop).
+            _game.PacketNotifier.NotifyCloseShop();
+
             var players = _game.PlayerManager.GetPlayers(false);
             foreach (var player in players)
             {
@@ -402,13 +405,21 @@ namespace LeagueSandbox.GameServer.API
         /// <returns></returns>
         public static int GetPlayerAverageLevel()
         {
-            float average = 0;
             var players = _game.PlayerManager.GetPlayers(true);
+            if (players.Count == 0)
+            {
+                return 0;
+            }
+            // Sum first, then divide once: dividing each term by Count inline is integer
+            // division (byte/int), which floors every champion's level to 0 below level Count.
+            // Jungle camp scaling (NeutralMinionSpawn.SpawnCamp -> MonsterDataTable) reads this,
+            // so the floored average must match Riot's spawn-time average champion level.
+            float sum = 0;
             foreach (var player in players)
             {
-                average += player.Champion.Stats.Level / players.Count;
+                sum += player.Champion.Stats.Level;
             }
-            return (int)average;
+            return (int)(sum / players.Count);
         }
  
         public static void NotifyGameScore(TeamId team, float score)

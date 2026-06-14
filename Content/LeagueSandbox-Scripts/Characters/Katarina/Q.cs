@@ -68,13 +68,13 @@ public class KatarinaQ : ISpellScript
         var ap = _katarina.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
         
-        switch (_katarina.SkinID)
+        /*switch (_katarina.SkinID)
         {
             case 9: AddParticleTarget(_katarina, target, "Katarina_Skin09_Q_tar", target); break;
             case 7: AddParticleTarget(_katarina, target, "katarina_XMas_bouncingBlades_tar", target); break;
             case 6: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar_sand", target); break;
             default: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar", target); break;
-        }
+        }*/
 
         dmg -= dmg * (0.1f * (missile.HitCount - 1));
         target.TakeDamage(_katarina, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
@@ -85,7 +85,7 @@ public class KatarinaQ : ISpellScript
         // applied. Our codebase has no shield-consume logic yet (see project_spell_shield_
         // system_deferred memory), so this is currently wire-fidelity only.
         AddBuff("KatarinaQMarkSpellShieldCheck", 0.25f, 1, spell, target, _katarina);
-        AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
+        //AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
     }
 
     private void OnStatsUpdate(AttackableUnit unit, float diff)

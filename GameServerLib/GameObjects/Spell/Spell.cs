@@ -58,15 +58,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public float CurrentChannelDuration { get; protected set; }
 
         /// <summary>
-        /// Accumulator (ms) for paced <see cref="OnSpellChargeTick"/> publishing when
-        /// <see cref="SpellData.ChargeUpdateInterval"/> &gt; 0. Riot's JSON sets this to
-        /// 0.1s on the steerable charge spells (Sion R, Vel'Koz R) — replay-verified
-        /// that MoveMarker / FaceDirection updates fire at ~100ms intervals during the
-        /// channel. Reset on charge start; spells with interval=0 fire every server tick
-        /// (unchanged from the original behavior).
-        /// </summary>
-        private float _chargeTickAccumulator;
-        /// <summary>
         /// Time until the same spell can be cast again. Usually only applicable to auto attack spells.
         /// </summary>
         public float CurrentDelayTime { get; protected set; }
@@ -351,14 +342,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
 
                 // Regular auto attacks can lose their target due to untargetability and distance.
-                // ar_StopAttackRangeModifier = 100 (LEVELS/*/Constants.var:62, all maps) — the
+                // ar_StopAttackRangeModifier (LEVELS/*/Constants.var:62, default 100) — the
                 // slack behind the Lua AI API `TargetInCancelAttackRange`; mirrors the twin
-                // check in ObjAIBase.UpdateTarget. Edge-to-edge RESOLVED: both collision radii
-                // MUST be included — engage range is edge-to-edge (S4 GetClosestAttackPoint:
-                // range + both radii), so a center-to-center cancel range would undercut the
-                // engage range for large-radius targets (Baron/Cho radius alone can exceed
-                // the slack) and cancel windups on targets that are still attackable.
-                float cancelBuffer = 100.0f;
+                // check in ObjAIBase.UpdateTarget (both sourced from GlobalData, not hardcoded).
+                // Edge-to-edge RESOLVED: both collision radii MUST be included — engage range is
+                // edge-to-edge (S4 GetClosestAttackPoint: range + both radii), so a center-to-center
+                // cancel range would undercut the engage range for large-radius targets (Baron/Cho
+                // radius alone can exceed the slack) and cancel windups on still-attackable targets.
+                float cancelBuffer = GlobalData.AttackRangeVariables.StopAttackRangeModifier;
                 float maxCancelRange = CastInfo.Owner.Stats.Range.Total + spellTarget.CollisionRadius + CastInfo.Owner.CollisionRadius + cancelBuffer;
                 if (CastInfo.IsAutoAttack
                 && (spellTarget != CastInfo.Owner.TargetUnit
@@ -438,6 +429,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             CastInfo.TargetPosition = new Vector3(start.X, _game.Map.NavigationGrid.GetHeightAtLocation(start), start.Y);
             CastInfo.TargetPositionEnd = new Vector3(end.X, _game.Map.NavigationGrid.GetHeightAtLocation(end), end.Y);
+            // CursorPos = the raw aim point at cast time (Riot SpellCastInfo::CursorPos). Captured
+            // here from the unmodified click before any later fakePos / target-snap overwrites
+            // TargetPosition, so it preserves where the player actually pointed.
+            CastInfo.CursorPos = CastInfo.TargetPosition;
 
             CastInfo.Targets.Clear();
 
@@ -458,8 +453,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // per champion (= AttackDelayCastPercent sum), tt shrinking with live AS.
             if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime))
             {
-                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
-                CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
+                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio, CastInfo.Owner.MaxAttackSpeedOverride, CastInfo.Owner.MinAttackSpeedOverride);
+                CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.MaxAttackSpeedOverride, CastInfo.Owner.MinAttackSpeedOverride);
                 CastInfo.UseAttackCastDelay = true;
             }
             else
@@ -509,7 +504,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.AmmoRechargeTime = CurrentAmmoCooldown;
 
             // TODO: Account for multiple targets
-            CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit)));
+            CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.IsNextAutoMiss, CastInfo.Owner.IsNextAutoDodged)));
 
             // TODO: implement check for IsForceCastingOrChannel and IsOverrideCastPosition
             if (SpellData.CastType == (int)CastType.CAST_TargetMissile
@@ -678,7 +673,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // cast frames too slowly at high attack speed.
                 float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
                 float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
-                CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
+                // Windup = client Spell::ComputeCharacterAttackCastDelay: a Lerp between the unscaled
+                // and AS-scaled cast time governed by the per-slot AttackSpeedRatio. ratio=1 (Talon,
+                // Jinx — replay-verified) collapses to autoAttackTotalTime * castPercent (the old
+                // formula, unchanged); ratio<1 (Thresh, Kalista) keeps the windup partially unscaled
+                // so it doesn't shrink too far at high attack speed.
+                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(
+                    attackSpeedMod,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayOffsetPercent,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercentAttackSpeedRatio,
+                    CastInfo.Owner.MaxAttackSpeedOverride,
+                    CastInfo.Owner.MinAttackSpeedOverride);
 
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
@@ -853,8 +859,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // per champion (= AttackDelayCastPercent sum), tt shrinking with live AS.
             if (!CastInfo.IsAutoAttack && (SpellData.ConsideredAsAutoAttack || SpellData.UseAutoattackCastTime))
             {
-                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio);
-                CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
+                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercent, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayCastOffsetPercentAttackSpeedRatio, CastInfo.Owner.MaxAttackSpeedOverride, CastInfo.Owner.MinAttackSpeedOverride);
+                CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(CastInfo.AttackSpeedModifier, CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent, CastInfo.Owner.MaxAttackSpeedOverride, CastInfo.Owner.MinAttackSpeedOverride);
                 CastInfo.UseAttackCastDelay = true;
             }
             else
@@ -1010,7 +1016,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // cast frames too slowly at high attack speed.
                 float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
                 float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
-                CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
+                // Windup = client Spell::ComputeCharacterAttackCastDelay: a Lerp between the unscaled
+                // and AS-scaled cast time governed by the per-slot AttackSpeedRatio. ratio=1 (Talon,
+                // Jinx — replay-verified) collapses to autoAttackTotalTime * castPercent (the old
+                // formula, unchanged); ratio<1 (Thresh, Kalista) keeps the windup partially unscaled
+                // so it doesn't shrink too far at high attack speed.
+                CastInfo.DesignerCastTime = SpellData.GetCharacterAttackCastDelay(
+                    attackSpeedMod,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayOffsetPercent,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent,
+                    CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercentAttackSpeedRatio,
+                    CastInfo.Owner.MaxAttackSpeedOverride,
+                    CastInfo.Owner.MinAttackSpeedOverride);
 
                 // TODO: Verify if this should be affected by cast variable.
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
@@ -1144,6 +1161,29 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             return true;
         }
 
+        // True while Channel() has applied the engine channel/charge action-lock (CanCast/CanAttack
+        // always, CanMove when !CanMoveWhileChanneling). Guards ReleaseChannelStatusLock so the
+        // ref-counted disable-holds are released exactly once, on whichever channel-end path fires.
+        private bool _channelStatusLockApplied;
+
+        // Releases the holds applied in Channel(). Idempotent (guarded), so it can be called from
+        // every channel-end path (StopChanneling / FinishChanneling / ExpireCharge) without
+        // double-releasing. CanMove is only released when it was held (mirror the apply condition).
+        private void ReleaseChannelStatusLock()
+        {
+            if (!_channelStatusLockApplied)
+            {
+                return;
+            }
+            _channelStatusLockApplied = false;
+            CastInfo.Owner.SetStatus(StatusFlags.CanCast, true);
+            CastInfo.Owner.SetStatus(StatusFlags.CanAttack, true);
+            if (!SpellData.CanMoveWhileChanneling)
+            {
+                CastInfo.Owner.SetStatus(StatusFlags.CanMove, true);
+            }
+        }
+
         public void Channel()
         {
             State = SpellState.STATE_CHANNELING;
@@ -1157,16 +1197,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.SetChannelSpell(this);
             }
 
+            // Engine channel/charge action-lock, applied from SpellData. Capability bits are
+            // ref-counted disable-holds, so this adds its OWN hold (released in
+            // ReleaseChannelStatusLock on every channel-end path) and never clobbers concurrent CC
+            // like a stun. You can never attack or cast OTHER spells during a channel/charge; the
+            // charge spell's own recast is exempt because it arrives via the charge-update packet
+            // (UpdateCharge), not the CanCast-gated cast pipeline. CanMoveWhileChanneling=0 also
+            // disables movement (StopMovement + CanMove hold); =1 leaves movement enabled.
+            CastInfo.Owner.SetStatus(StatusFlags.CanCast, false);
+            CastInfo.Owner.SetStatus(StatusFlags.CanAttack, false);
             if (!SpellData.CanMoveWhileChanneling)
             {
                 CastInfo.Owner.StopMovement();
+                CastInfo.Owner.SetStatus(StatusFlags.CanMove, false);
             }
+            _channelStatusLockApplied = true;
 
             // Route to charge or channel events. IsChargeSpell covers JSON UseChargeChanneling=1
             // AND script-side ScriptMetadata.ChargeDuration > 0.
             if (IsChargeSpell)
             {
-                _chargeTickAccumulator = 0f;
                 ApiEventManager.OnSpellChargeStart.Publish(this);
                 if (State == SpellState.STATE_CHANNELING)
                 {
@@ -1283,6 +1333,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void StopChanneling(ChannelingStopCondition condition, ChannelingStopSource reason)
         {
+            ReleaseChannelStatusLock();
             if (condition == ChannelingStopCondition.Cancel)
             {
                 // S4 replay: NPC_InstantStop_Attack (0x34) is the wire signal for channel-cancel
@@ -1438,8 +1489,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
                         ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
                     }
-                    else if (CastInfo.Owner.TargetUnit != null)
+                    else if (CastInfo.Owner.TargetUnit != null && CastInfo.Owner.MoveOrder != OrderType.Hold)
                     {
+                        // Preserve a player Hold (H): after an auto-attack while holding, the unit must
+                        // stay in Hold (stand + attack in range), NOT be promoted to AttackTo (chase).
                         CastInfo.Owner.UpdateMoveOrder(OrderType.AttackTo, true);
                     }
                 }
@@ -1453,6 +1506,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         {
                             CastInfo.Owner.UpdateMoveOrder(OrderType.MoveTo, true);
                             ApiFunctionManager.NotifyWaypointGroup(CastInfo.Owner);
+                        }
+                        else if (CastInfo.Owner.TargetUnit != null && CastInfo.Owner.MoveOrder != OrderType.Hold)
+                        {
+                            // After an auto-attack (or any targeted, non-walking cast) keep the
+                            // order as AttackTo so the unit re-engages/chases the target when it
+                            // leaves range — mirroring the InstantCast branch above and Riot's
+                            // persistent AI_HARDATTACK. Previously this fell through to Hold, which
+                            // (with the Hold-aware auto-promote guard in RefreshWaypoints) trapped the
+                            // unit in Hold after the first in-range attack so it never chased again.
+                            // EXCEPT a player Hold (H): keep Hold so a held unit attacks in place but
+                            // never chases (the H = "don't move but fight" command).
+                            CastInfo.Owner.UpdateMoveOrder(OrderType.AttackTo, true);
                         }
                         else
                         {
@@ -1477,6 +1542,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void FinishChanneling()
         {
+            ReleaseChannelStatusLock();
             State = SpellState.STATE_COOLDOWN;
 
             if (CastInfo.Owner.ChannelSpell == this)
@@ -1538,6 +1604,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// </summary>
         public void ExpireCharge()
         {
+            ReleaseChannelStatusLock();
             State = SpellState.STATE_COOLDOWN;
 
             if (CastInfo.Owner.ChannelSpell == this)
@@ -1794,6 +1861,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (p.HasClientCastInfo)
             {
                 _game.PacketNotifier.NotifyForceCreateMissile(p);
+
+                // A ForceCreate'd missile spawns from the client's spellbook entry at the spell's base
+                // MissileSpeed; a scheduled speed boost (Jinx R: +500 after 0.75s) lives only in the
+                // MissileReplication's TimedSpeedDelta fields, which this path does NOT send. So push it
+                // explicitly via S2C_ChangeMissileSpeed on the SAME tick — exactly what Riot does
+                // (replay: ForceCreateMissile + S2C_ChangeMissileSpeed{+500, 0.75} same tick). The
+                // vision-acquire (MissileReplication) path already carries TimedSpeedDelta, so it's
+                // covered there and must NOT be double-sent.
+                if (p.TimedSpeedDelta != 0f)
+                {
+                    _game.PacketNotifier.NotifyS2C_ChangeMissileSpeed(p, p.TimedSpeedDelta, p.TimedSpeedDeltaTime);
+                }
             }
 
             return p;
@@ -2415,6 +2494,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
+            // forceStop means the channel ends right after the script handler below (recast/fire).
+            // Release the engine action-lock NOW (idempotent) so a fire handler that casts its
+            // payload inside OnSpellChargeUpdate isn't blocked by the channel's own CanCast=false.
+            // (Payloads cast in OnSpellChargeFire are already safe — FinishChanneling/ExpireCharge
+            // release before publishing that event.)
+            if (forceStop)
+            {
+                ReleaseChannelStatusLock();
+            }
+
             CastInfo.TargetPosition = position;
             CastInfo.TargetPositionEnd = position;
 
@@ -2612,14 +2701,25 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             if (!HasEmptyScript)
             {
-                try
+                // PersistsThroughDeath: a spell's per-tick script logic (OnUpdate) stops once its
+                // caster dies, UNLESS the spell is flagged to persist (DoT zones, traps, thrown
+                // projectiles — Riot has ~hundreds). Source mirrors Riot's accessor: either the
+                // SpellData flag (kSpellFlagPersistThroughDeath = 0x8) or the script-level property
+                // (e.g. Tormented Soil sets only the latter — its JSON flag bit is unset).
+                bool ownerDead = CastInfo?.Owner is { IsDead: true };
+                bool persists = Script.ScriptMetadata.PersistsThroughDeath
+                                || SpellData.Flags.HasFlag(SpellDataFlags.PersistThroughDeath);
+                if (!ownerDead || persists)
                 {
-                    using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnUpdate", "scripts");
-                    Script.OnUpdate(diff);
-                }
-                catch(Exception e)
-                {
-                    _logger.Error(null, e);
+                    try
+                    {
+                        using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnUpdate", "scripts");
+                        Script.OnUpdate(diff);
+                    }
+                    catch(Exception e)
+                    {
+                        _logger.Error(null, e);
+                    }
                 }
             }
 
@@ -2678,25 +2778,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         {
                             if (IsChargeSpell)
                             {
-                                // Riot-canonical paced cadence: SpellData.ChargeUpdateInterval (seconds)
-                                // drives how often OnSpellChargeTick publishes. Replay-verified on Sion R
-                                // and Vel'Koz R (both ChargeUpdateInterval=0.1) — MoveMarker / FaceDirection
-                                // packets fire at ~100ms intervals during the channel. Spells without the
-                                // field (defaults to 0) publish every server tick, preserving prior behavior.
-                                float intervalMs = SpellData.ChargeUpdateInterval * 1000f;
-                                if (intervalMs <= 0f)
-                                {
-                                    ApiEventManager.OnSpellChargeTick.Publish(this, diff);
-                                }
-                                else
-                                {
-                                    _chargeTickAccumulator += diff;
-                                    if (_chargeTickAccumulator >= intervalMs)
-                                    {
-                                        ApiEventManager.OnSpellChargeTick.Publish(this, _chargeTickAccumulator);
-                                        _chargeTickAccumulator = 0f;
-                                    }
-                                }
+                                // OnSpellChargeTick fires every server tick (like a normal Update);
+                                // scripts pace their own logic off `diff` (e.g. a damage PeriodicTicker
+                                // for Vel'Koz R, a charge-time accumulator for Sion Q/R). It is NOT gated
+                                // by ChargeUpdateInterval — that field is the CLIENT's charge-update SEND
+                                // cadence and already paces OnSpellChargeUpdate (where steering lives).
+                                // Pacing the server tick to it too was only needed when steering ran in
+                                // the tick; now steering is in OnSpellChargeUpdate, so the tick ticks free.
+                                ApiEventManager.OnSpellChargeTick.Publish(this, diff);
                             }
                             else
                             {

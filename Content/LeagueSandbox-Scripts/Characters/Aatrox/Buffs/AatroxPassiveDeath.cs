@@ -28,6 +28,7 @@ public class AatroxPassiveDeath : IBuffGameScript {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1,
+        PersistsThroughDeath = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

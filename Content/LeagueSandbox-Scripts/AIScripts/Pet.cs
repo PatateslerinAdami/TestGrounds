@@ -1,500 +1,352 @@
-using GameServerCore.Enums;
-using LeagueSandbox.GameServer.API;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
-using GameServerCore.Scripting.CSharp;
-using System.Linq;
-using GameServerCore;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using EnginePet = LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Pet;
 
 namespace AIScripts
 {
-    public class Pet : IAIScript
+    // Controllable pet brain — faithful port of Riot's Pet.lua (4.20), rebuilt on BaseAIScript so the
+    // pet joins the uniform Order/State model: the script owns SELECTION + state, the engine EXECUTES
+    // (chase the set target + auto-attack). Replaces the old half-implemented IAIScript Pet.cs (which
+    // set states but never actually pathed — every transition was a "TODO: Move to X").
+    //
+    // Two timers (0.15s each), exactly as Pet.lua:
+    //   TimerScanDistance  — leash maintenance: teleport to owner when very far, return when far + idle,
+    //                        stop when arrived / owner stopped.
+    //   TimerFindEnemies   — acquire/attack: from a non-attacking state grab the nearest enemy in
+    //                        acquisition range and switch to the matching *_ATTACKING state; recover when
+    //                        the current attack target is lost (the engine drops dead/invisible targets,
+    //                        so OnTargetLost is folded into this poll).
+    // Hard commands (PetHard*) are the explicit player pet commands and lock out the soft auto-behavior
+    // until cleared. Fear/Taunt/Charm movement is driven by the shared CrowdControlComponent; CC-end
+    // resets the pet to AI_PET_IDLE. The PetCommandParticle visual is deferred (P-D).
+    public class Pet : BaseAIScript
     {
-        public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData();
+        private const float FAR_MOVEMENT_DISTANCE = 1000.0f;
+        private const float DEFAULT_RETURN_RADIUS = 200.0f;
 
-        internal const float FAR_MOVEMENT_DISTANCE = 1000.0f;
-        internal const float TELEPORT_DISTANCE = 2000.0f;
-        internal const float FEAR_WANDER_DISTANCE = 500.0f;
-        internal const int PET_COMMAND_BUFF_TYPE = 0;
-        internal const float DETECT_RANGE = 475.0f;
-        float _timerScan;
-        float _timerScanThreshold = 0.15f;
-        float _timerFindEnemies;
-        float _timerFindEnemiesThreshold = 0.15f;
-        float _timerFeared;
-        float _timerFearedThreshold = 1.0f;
-        Minion minion;
+        // ---- Subclass hooks (UncontrollablePet / YorickPHPet override these) ----
+        // The summoner the pet belongs to. Controllable: the spawning champion (Minion.Owner).
+        protected virtual ObjAIBase ResolveOwner() => (Owner as Minion)?.Owner;
+        // Autonomous pets actively walk back to the owner once they drift past ActiveFollowDistance
+        // (UncontrollablePet.lua). Controllable pets do not — they only RETURN from idle when far.
+        protected virtual bool ActivelyFollowsOwner => false;
+        protected virtual float ActiveFollowDistance => 800.0f;
+        // Teleport-to-owner threshold (Pet.lua 2000; YorickPHPet 2500).
+        protected virtual float TeleportDistance => 2000.0f;
 
-        public void OnActivate(ObjAIBase owner)
+        protected override void OnActivateBehavior()
         {
-            minion = owner as Minion;
+            // The pet brain owns combat selection — the engine must not also auto-acquire for it.
+            Owner.ScriptOwnsCombatSelection = true;
 
-            ApiEventManager.OnUnitUpdateMoveOrder.AddListener(this, owner, OnOrder, false);
-            ApiEventManager.OnTargetLost.AddListener(this, owner, OnTargetLost, false);
+            NetSetState(AIState.AI_PET_IDLE);
+            InitTimer("TimerScanDistance", 0.15f, true, TimerScanDistance);
+            InitTimer("TimerFindEnemies", 0.15f, true, TimerFindEnemies);
+
+            // Crowd control is component-driven (auto-attached); resume normal behavior when it ends.
+            Subscribe(AIEvent.OnFearEnd, _ => NetSetState(AIState.AI_PET_IDLE));
+            Subscribe(AIEvent.OnFleeEnd, _ => NetSetState(AIState.AI_PET_IDLE));
+            Subscribe(AIEvent.OnTauntEnd, _ => NetSetState(AIState.AI_PET_IDLE));
+            Subscribe(AIEvent.OnCharmEnd, _ => NetSetState(AIState.AI_PET_IDLE));
         }
 
-        public bool OnOrder(ObjAIBase ai, OrderType order)
+        // ---- Pet.lua OnOrder: translate the player's pet command into a pet state ----
+        public override void OnOrder(OrderType order, AttackableUnit target, Vector2 pos)
         {
-            AttackableUnit target = ai.TargetUnit;
-            AIState state = ai.GetAIState();
-
-            if (state == AIState.AI_HALTED)
+            AIState state = CurrentState;
+            if (state == AIState.AI_HALTED || IsCcState(state))
             {
-                return true;
-            }
-
-            if (state == AIState.AI_TAUNTED || state == AIState.AI_FEARED)
-            {
-                return true;
-            }
-
-            if ((state == AIState.AI_PET_HARDATTACK
-                 || state == AIState.AI_PET_HARDMOVE
-                 || state == AIState.AI_PET_HARDIDLE
-                 || state == AIState.AI_PET_HARDIDLE_ATTACKING
-                 || state == AIState.AI_PET_HARDRETURN
-                 || state == AIState.AI_PET_HARDSTOP)
-                &&
-                (order == OrderType.AttackTo
-                 || order == OrderType.MoveTo
-                 || order == OrderType.AttackMove
-                 || order == OrderType.Stop))
-            {
-                return true;
-            }
-
-            if (ai is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Pet pet)
-            {
-                ObjAIBase owner = pet.Owner;
-                if (owner == null)
-                {
-                    pet.Die(CreateDeathData(false, 0, pet, pet, DamageType.DAMAGE_TYPE_TRUE,
-                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-                    return false;
-                }
-
-                if (order == OrderType.MoveTo)
-                {
-                    if (Vector2.DistanceSquared(ai.Position, ai.Waypoints.Last()) >
-                        FAR_MOVEMENT_DISTANCE * FAR_MOVEMENT_DISTANCE
-                        || state == AIState.AI_PET_HOLDPOSITION || state == AIState.AI_PET_HOLDPOSITION_ATTACKING)
-                    {
-                        ai.SetAIState(AIState.AI_PET_MOVE);
-                        // TODO: Move to owner.
-                        RemoveBuff(ai, "PetCommandParticle");
-                    }
-
-                    return true;
-                }
-
-                if (order == OrderType.AttackMove)
-                {
-                    ai.SetAIState(AIState.AI_PET_ATTACKMOVE);
-                    // TODO: Move to owner.
-                    RemoveBuff(ai, "PetCommandParticle");
-                    return true;
-                }
-
-                if (order == OrderType.PetHardReturn)
-                {
-                    ai.SetAIState(AIState.AI_PET_HARDRETURN);
-                    // TODO: Move to owner.
-                    // TODO: source & target may be backwards
-                    AddBuff("PetCommandParticle", 45.0f, 1, null, ai, owner);
-                    return true;
-                }
-            }
-
-            if (order == OrderType.AttackTo)
-            {
-                if (target == null)
-                {
-                    return false;
-                }
-
-                // TODO: Disable attacking
-                ai.SetAIState(AIState.AI_PET_ATTACK);
-                // TODO: Move to target.
-                RemoveBuff(ai, "PetCommandParticle");
-                return true;
-            }
-
-            if (order == OrderType.Stop)
-            {
-                RemoveBuff(ai, "PetCommandParticle");
-                return true;
-            }
-
-            if (order == OrderType.PetHardStop)
-            {
-                // TODO: Disable attacking
-                ai.SetAIState(AIState.AI_PET_HARDSTOP);
-                // TODO: May not cause correct behavior.
-                // The correct behavior is "moving" towards our current position.
-                ai.StopMovement();
-                RemoveBuff(ai, "PetCommandParticle");
-                return true;
-            }
-
-            if (order == OrderType.PetHardAttack)
-            {
-                if (target == null)
-                {
-                    return false;
-                }
-
-                // TODO: Disable attacking
-                ai.SetAIState(AIState.AI_PET_HARDATTACK);
-                // TODO: Move to target.
-                if (target is ObjAIBase targetAI)
-                {
-                    // TODO: source & target may be backwards
-                    AddBuff("PetCommandParticle", 45.0f, 1, null, ai, targetAI);
-                }
-
-                return true;
-            }
-
-            if (order == OrderType.PetHardMove)
-            {
-                ai.SetAIState(AIState.AI_PET_HARDMOVE);
-                // TODO: Move to given position.
-                AddBuff("PetCommandParticle", 45.0f, 1, null, ai, ai);
-                return true;
-            }
-
-            if (order == OrderType.Hold)
-            {
-                RemoveBuff(ai, "PetCommandParticle");
-                ai.SetAIState(AIState.AI_PET_HOLDPOSITION);
-                // TODO: May not cause correct behavior.
-                // The correct behavior is "moving" towards our current position.
-                ai.StopMovement();
-                return true;
-            }
-
-            PrintChat("BAD ORDER " + order + ", HOW DID YOU EVEN SEND THIS?");
-            return false;
-        }
-
-        public void OnTargetLost(AttackableUnit lostTarget)
-        {
-            if (minion != null)
-            {
-                AIState state = minion.GetAIState();
-                ObjAIBase owner = minion.Owner;
-
-                if (state == AIState.AI_HALTED)
-                {
-                    return;
-                }
-
-                if (state == AIState.AI_PET_MOVE
-                    || state == AIState.AI_PET_HARDMOVE
-                    || state == AIState.AI_PET_HARDRETURN
-                    || state == AIState.AI_FEARED
-                    || state == AIState.AI_PET_HARDSTOP)
-                {
-                    return;
-                }
-
-                AttackableUnit newTarget = GetTargetInAttackRange();
-                if (newTarget == null)
-                {
-                    if (owner == null)
-                    {
-                        minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
-                            DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-                        return;
-                    }
-
-                    if (state == AIState.AI_PET_HARDIDLE_ATTACKING)
-                    {
-                        //NotifySetState(AIState.AI_PET_HARDIDLE);
-                        return;
-                    }
-                    else if (state == AIState.AI_PET_HOLDPOSITION_ATTACKING)
-                    {
-                        //NotifySetState(AI_PET_HOLDPOSITION);
-                        return;
-                    }
-                    else if (state == AIState.AI_PET_RETURN_ATTACKING)
-                    {
-                        minion.SetAIState(AIState.AI_PET_RETURN);
-                        // TODO: Move to owner
-                        return;
-                    }
-                    else if (state == AIState.AI_PET_ATTACKMOVE_ATTACKING)
-                    {
-                        minion.SetAIState(AIState.AI_PET_ATTACKMOVE);
-                        // TODO: Move to owner
-                        return;
-                    }
-                }
-                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK ||
-                         state == AIState.AI_TAUNTED)
-                {
-                    minion.SetAIState(AIState.AI_PET_ATTACK);
-                    // TODO: Move to newTarget
-                    return;
-                }
-                else if (state == AIState.AI_PET_HARDATTACK || state == AIState.AI_PET_ATTACK ||
-                         state == AIState.AI_TAUNTED)
-                {
-                    minion.SetAIState(AIState.AI_PET_ATTACK);
-                    // TODO: Move to newTarget
-                    return;
-                }
-                else if (state == AIState.AI_PET_HARDIDLE_ATTACKING)
-                {
-                    //NotifySetState(AIState.AI_PET_HARDIDLE_ATTACKING);
-                    minion.SetTargetUnit(newTarget);
-                    return;
-                }
-                else if (state == AIState.AI_PET_HOLDPOSITION_ATTACKING)
-                {
-                    //NotifySetState(AIState.AI_PET_HOLDPOSITION_ATTACKING);
-                    minion.SetTargetUnit(newTarget);
-                    return;
-                }
-                else if (state == AIState.AI_PET_RETURN_ATTACKING)
-                {
-                    minion.SetAIState(AIState.AI_PET_RETURN_ATTACKING);
-                    // TODO: Move to newTarget
-                    return;
-                }
-                else if (state == AIState.AI_PET_ATTACKMOVE_ATTACKING)
-                {
-                    minion.SetAIState(AIState.AI_PET_ATTACKMOVE_ATTACKING);
-                    // TODO: Move to newTarget
-                    return;
-                }
-
-                //NotifySetState(AIState.AI_PET_IDLE);
                 return;
             }
+
+            // A hard command in progress ignores soft orders until cleared by another hard command.
+            if (IsHardState(state)
+                && (order == OrderType.AttackTo || order == OrderType.MoveTo
+                    || order == OrderType.AttackMove || order == OrderType.Stop))
+            {
+                return;
+            }
+
+            ObjAIBase owner = OwnerOrDie();
+            if (owner == null)
+            {
+                return;
+            }
+
+            switch (order)
+            {
+                // Soft orders (only reach the pet if the owner's orders are forwarded — see plan).
+                case OrderType.AttackTo:
+                    if (target == null) return;
+                    Engage(AIState.AI_PET_ATTACK, target);
+                    break;
+                case OrderType.MoveTo:
+                    if (Vector2.DistanceSquared(Owner.Position, pos) > FAR_MOVEMENT_DISTANCE * FAR_MOVEMENT_DISTANCE
+                        || state == AIState.AI_PET_HOLDPOSITION || state == AIState.AI_PET_HOLDPOSITION_ATTACKING)
+                    {
+                        Follow(AIState.AI_PET_MOVE, owner);
+                    }
+                    break;
+                case OrderType.AttackMove:
+                    Follow(AIState.AI_PET_ATTACKMOVE, owner);
+                    break;
+                case OrderType.Stop:
+                    // Soft stop just clears the command indicator (cosmetic; deferred).
+                    break;
+                case OrderType.Hold:
+                    Stand(AIState.AI_PET_HOLDPOSITION);
+                    break;
+
+                // Hard pet commands (these reach the pet via HandleMove → pet.IssueOrder).
+                case OrderType.PetHardStop:
+                    Stand(AIState.AI_PET_HARDSTOP);
+                    break;
+                case OrderType.PetHardAttack:
+                    if (target == null) return;
+                    Engage(AIState.AI_PET_HARDATTACK, target);
+                    break;
+                case OrderType.PetHardMove:
+                    MoveToPoint(AIState.AI_PET_HARDMOVE, pos);
+                    break;
+                case OrderType.PetHardReturn:
+                    Follow(AIState.AI_PET_HARDRETURN, owner);
+                    break;
+            }
         }
 
-        public void OnUpdate(float diff)
+        // ---- Pet.lua TimerScanDistance: leash / return / arrival maintenance ----
+        private void TimerScanDistance()
         {
-            if (!minion.IsDead)
+            AIState state = CurrentState;
+            if (state == AIState.AI_HALTED || IsCcState(state))
             {
-                if (minion.MovementParameters != null || minion.IsAIPaused())
+                return;
+            }
+
+            ObjAIBase owner = OwnerOrDie();
+            if (owner == null)
+            {
+                return;
+            }
+
+            float distToOwner = Vector2.Distance(Owner.Position, owner.Position);
+
+            // Too far → teleport back to the owner and idle.
+            if (distToOwner > TeleportDistance)
+            {
+                TeleportTo(Owner, owner.Position.X, owner.Position.Y);
+                Stand(AIState.AI_PET_IDLE);
+                return;
+            }
+
+            // Autonomous pets (UncontrollablePet.lua) actively walk to the owner once they drift past
+            // the follow distance, regardless of what they were doing (leash). The owner position is
+            // always known server-side, so the >vision "blind move to last-known" branch collapses to
+            // the same path-to-owner. Controllable pets skip this (ActivelyFollowsOwner = false).
+            if (ActivelyFollowsOwner && state != AIState.AI_PET_MOVE && distToOwner > ActiveFollowDistance)
+            {
+                Follow(AIState.AI_PET_MOVE, owner);
+                return;
+            }
+
+            bool noEnemiesNearby = FindTargetInAcR() == null;
+
+            // Idle and drifted past the return radius with nothing to fight → walk back to the owner.
+            if (state == AIState.AI_PET_IDLE && distToOwner > ReturnRadius() && noEnemiesNearby)
+            {
+                Follow(AIState.AI_PET_RETURN, owner);
+                return;
+            }
+
+            // Arrived back at the owner → idle.
+            if ((state == AIState.AI_PET_RETURN || state == AIState.AI_PET_HARDRETURN
+                 || state == AIState.AI_PET_MOVE)
+                && distToOwner <= ReturnRadius())
+            {
+                Stand(AIState.AI_PET_IDLE);
+                return;
+            }
+
+            // Owner stopped while we were following (and no enemy for attack-move) → idle.
+            if (!OwnerIsMoving(owner)
+                && (state == AIState.AI_PET_MOVE
+                    || (state == AIState.AI_PET_ATTACKMOVE && noEnemiesNearby)))
+            {
+                Stand(AIState.AI_PET_IDLE);
+                return;
+            }
+
+            // Still returning / following the owner: the engine can't chase an ally, so re-path to the
+            // owner's CURRENT position whenever we reach the (now stale) point we were walking to. This
+            // tracks a moving owner without spamming a path every tick.
+            if ((state == AIState.AI_PET_RETURN || state == AIState.AI_PET_HARDRETURN
+                 || state == AIState.AI_PET_MOVE || state == AIState.AI_PET_ATTACKMOVE)
+                && Owner.IsPathEnded())
+            {
+                Follow(state, owner);
+                return;
+            }
+
+            // Reached a hard-move destination → hard idle.
+            if (Owner.IsPathEnded() && state == AIState.AI_PET_HARDMOVE)
+            {
+                Stand(AIState.AI_PET_HARDIDLE);
+                return;
+            }
+
+            if (state == AIState.AI_PET_SPAWNING)
+            {
+                NetSetState(AIState.AI_PET_IDLE);
+            }
+        }
+
+        // ---- Pet.lua TimerFindEnemies (+ OnTargetLost): acquire enemies / recover lost target ----
+        private void TimerFindEnemies()
+        {
+            AIState state = CurrentState;
+            if (state == AIState.AI_HALTED || IsCcState(state))
+            {
+                return;
+            }
+
+            if (OwnerOrDie() == null)
+            {
+                return;
+            }
+
+            // Moving states do not acquire.
+            if (state == AIState.AI_PET_MOVE || state == AIState.AI_PET_HARDMOVE
+                || state == AIState.AI_PET_HARDSTOP)
+            {
+                return;
+            }
+
+            // Non-attacking states: pick up the nearest enemy in acquisition range and engage it.
+            if (state == AIState.AI_PET_IDLE || state == AIState.AI_PET_RETURN
+                || state == AIState.AI_PET_ATTACKMOVE || state == AIState.AI_PET_HARDIDLE
+                || state == AIState.AI_PET_HOLDPOSITION)
+            {
+                AttackableUnit newTarget = FindTargetInAcR();
+                if (newTarget == null)
                 {
                     return;
                 }
 
-                _timerScan += diff;
-                if (_timerScan / 1000f >= _timerScanThreshold)
+                switch (state)
                 {
-                    TimerScan();
+                    case AIState.AI_PET_IDLE: Engage(AIState.AI_PET_ATTACK, newTarget); break;
+                    case AIState.AI_PET_RETURN: Engage(AIState.AI_PET_RETURN_ATTACKING, newTarget); break;
+                    case AIState.AI_PET_ATTACKMOVE: Engage(AIState.AI_PET_ATTACKMOVE_ATTACKING, newTarget); break;
+                    // Hard-idle / hold attack IN PLACE (no chase).
+                    case AIState.AI_PET_HARDIDLE: SetTargetNoChase(AIState.AI_PET_HARDIDLE_ATTACKING, newTarget); break;
+                    case AIState.AI_PET_HOLDPOSITION: SetTargetNoChase(AIState.AI_PET_HOLDPOSITION_ATTACKING, newTarget); break;
                 }
+                return;
+            }
 
-                _timerFindEnemies += diff;
-                if (_timerFindEnemies / 1000f >= _timerFindEnemiesThreshold)
+            // Attacking states: the engine drops a dead/invisible target (TargetUnit == null). Recover
+            // here (Pet.lua OnTargetLost): re-acquire if another enemy is in range, else fall back to
+            // the matching non-attacking state.
+            if (Owner.TargetUnit == null && IsAttackingState(state))
+            {
+                AttackableUnit newTarget = FindTargetInAcR();
+                if (newTarget != null)
                 {
-                    TimerFindEnemies();
+                    switch (state)
+                    {
+                        case AIState.AI_PET_ATTACK:
+                        case AIState.AI_PET_HARDATTACK:
+                            Engage(AIState.AI_PET_ATTACK, newTarget); break;
+                        case AIState.AI_PET_RETURN_ATTACKING:
+                            Engage(AIState.AI_PET_RETURN_ATTACKING, newTarget); break;
+                        case AIState.AI_PET_ATTACKMOVE_ATTACKING:
+                            Engage(AIState.AI_PET_ATTACKMOVE_ATTACKING, newTarget); break;
+                        case AIState.AI_PET_HARDIDLE_ATTACKING:
+                            SetTargetNoChase(AIState.AI_PET_HARDIDLE_ATTACKING, newTarget); break;
+                        case AIState.AI_PET_HOLDPOSITION_ATTACKING:
+                            SetTargetNoChase(AIState.AI_PET_HOLDPOSITION_ATTACKING, newTarget); break;
+                    }
                 }
-
-                _timerFeared += diff;
-                if (_timerFeared / 1000f >= _timerFearedThreshold)
+                else
                 {
+                    ObjAIBase owner = OwnerOrDie();
+                    switch (state)
+                    {
+                        case AIState.AI_PET_HARDIDLE_ATTACKING: Stand(AIState.AI_PET_HARDIDLE); break;
+                        case AIState.AI_PET_HOLDPOSITION_ATTACKING: Stand(AIState.AI_PET_HOLDPOSITION); break;
+                        case AIState.AI_PET_RETURN_ATTACKING:
+                            if (owner != null) Follow(AIState.AI_PET_RETURN, owner); break;
+                        case AIState.AI_PET_ATTACKMOVE_ATTACKING:
+                            if (owner != null) Follow(AIState.AI_PET_ATTACKMOVE, owner); break;
+                        default: Stand(AIState.AI_PET_IDLE); break; // ATTACK / HARDATTACK
+                    }
                 }
             }
         }
 
-        public void TimerScan()
+        // ---- helpers ----
+
+        // Chase + attack an enemy (sets target + AttackTo; the engine chases and auto-attacks).
+        // Only valid for ENEMY targets — the engine's chase runs inside its `Team != Team` gate.
+        private void Engage(AIState state, AttackableUnit enemy) => SetStateAndCloseToTarget(state, enemy);
+
+        // Follow / return to a friendly unit (the owner). The engine only chases ENEMY targets, so an
+        // ally is followed by explicitly pathing to its CURRENT position (re-issued by TimerScanDistance
+        // as the owner moves). Clears any combat target so the pet does not attack while relocating.
+        private void Follow(AIState state, AttackableUnit owner)
         {
-            if (minion != null)
-            {
-                AIState state = minion.GetAIState();
-
-                if (state == AIState.AI_HALTED)
-                {
-                    return;
-                }
-
-                ObjAIBase owner = minion.Owner;
-                if (owner == null)
-                {
-                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
-                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-                }
-
-                Vector2 myEdge =
-                    Extensions.GetClosestCircleEdgePoint(owner.Position, minion.Position, minion.CollisionRadius);
-                Vector2 ownerEdge =
-                    Extensions.GetClosestCircleEdgePoint(minion.Position, owner.Position, owner.CollisionRadius);
-                float distToOwner = Vector2.Distance(myEdge, ownerEdge);
-
-                if (distToOwner > TELEPORT_DISTANCE)
-                {
-                    TeleportTo(minion, ownerEdge.X, ownerEdge.Y);
-                    RemoveBuff(minion, "PetCommandParticle");
-                    //NotifySetState(AIState.AI_PET_IDLE);
-                    return;
-                }
-
-                bool noEnemiesNearby = GetTargetInAttackRange() == null;
-
-                if (noEnemiesNearby && state == AIState.AI_PET_IDLE && distToOwner > GetPetReturnRadius(minion))
-                {
-                    minion.SetAIState(AIState.AI_PET_RETURN);
-                    // TODO: Move to owner
-                    return;
-                }
-
-                if ((state == AIState.AI_PET_RETURN || state == AIState.AI_PET_HARDRETURN) &&
-                    distToOwner <= GetPetReturnRadius(minion))
-                {
-                    //NotifySetState(AIState.AI_PET_IDLE);
-                    return;
-                }
-
-                if (minion.IsPathEnded() && state == AIState.AI_PET_HARDMOVE)
-                {
-                    //NotifySetState(AIState.AI_PET_HARDIDLE);
-                    return;
-                }
-            }
+            Owner.SetTargetUnit(null);
+            SetStateAndMove(state, owner.Position);
         }
 
-        public void TimerFindEnemies()
+        // Walk to a fixed ground point (hard-move): clear the combat target so it does not keep
+        // attacking, then path there.
+        private void MoveToPoint(AIState state, Vector2 pos)
         {
-            if (minion != null)
-            {
-                AIState state = minion.GetAIState();
-
-                if (state == AIState.AI_HALTED)
-                {
-                    return;
-                }
-
-                ObjAIBase owner = minion.Owner;
-                if (owner == null)
-                {
-                    minion.Die(CreateDeathData(false, 0, minion, minion, DamageType.DAMAGE_TYPE_TRUE,
-                        DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-                }
-
-                if (state == AIState.AI_PET_MOVE
-                    || state == AIState.AI_PET_HARDMOVE
-                    || state == AIState.AI_PET_HARDSTOP)
-                {
-                    return;
-                }
-
-                if (state == AIState.AI_PET_IDLE
-                    || state == AIState.AI_PET_RETURN
-                    || state == AIState.AI_PET_ATTACKMOVE
-                    || state == AIState.AI_PET_HARDIDLE
-                    || state == AIState.AI_PET_HOLDPOSITION)
-                {
-                    AttackableUnit newTarget = GetTargetInAttackRange();
-
-                    if (newTarget == null)
-                    {
-                        minion.CancelAutoAttack(false, true);
-                        return;
-                    }
-
-                    if (state != AIState.AI_PET_HARDATTACK
-                        && state != AIState.AI_PET_HARDMOVE
-                        && state != AIState.AI_PET_HARDIDLE
-                        && state != AIState.AI_PET_HARDIDLE_ATTACKING
-                        && state != AIState.AI_PET_HARDRETURN)
-                    {
-                        RemoveBuff(minion, "PetCommandParticle");
-                    }
-
-                    if (state == AIState.AI_PET_IDLE)
-                    {
-                        minion.SetAIState(AIState.AI_PET_ATTACK);
-                        // TODO: Move to newTarget
-                    }
-                    else if (state == AIState.AI_PET_RETURN)
-                    {
-                        minion.SetAIState(AIState.AI_PET_RETURN_ATTACKING);
-                        // TODO: Move to newTarget
-                    }
-                    else if (state == AIState.AI_PET_ATTACKMOVE)
-                    {
-                        minion.SetAIState(AIState.AI_PET_ATTACKMOVE_ATTACKING);
-                        // TODO: Move to newTarget
-                    }
-                    else if (state == AIState.AI_PET_HARDIDLE)
-                    {
-                        //NotifySetState(AIState.AI_PET_HARDIDLE_ATTACKING);
-                        minion.SetTargetUnit(newTarget);
-                    }
-                }
-                //if (state == AIState.AI_PET_ATTACK
-                //    || state == AIState.AI_PET_HARDATTACK
-                //    || state == AIState.AI_PET_RETURN_ATTACKING
-                //    || state == AIState.AI_PET_ATTACKMOVE_ATTACKING
-                //    || state == AIState.AI_PET_HARDIDLE_ATTACKING
-                //    || state == AIState.AI_PET_HOLDPOSITION_ATTACKING
-                //    || state == AIState.AI_TAUNTED)
-                //{
-                //    if (TargetInAttackRange())
-                //    {
-                //        // TODO: Enable attacking
-                //    }
-                //    else if (!TargetInCancelAttackRange())
-                //    {
-                //        // TODO: Disable attacking
-                //    }
-                //    return;
-                //}
-            }
+            Owner.SetTargetUnit(null);
+            SetStateAndMove(state, pos);
         }
 
-        private AttackableUnit GetTargetInAttackRange()
+        // Stand still at the current position in `state`: drop the chase target and stop moving.
+        private void Stand(AIState state)
         {
-            AttackableUnit nextTarget = null;
-            var nextTargetPriority = 14;
-            var nearestObjects = GetUnitsInRange(
-                minion,
-                minion.Position,
-                minion.Stats.Range.Total,
-                true,
-                SpellDataFlags.AffectEnemies
-                | SpellDataFlags.AffectNeutral
-                | SpellDataFlags.AffectMinions
-                | SpellDataFlags.AffectHeroes
-                | SpellDataFlags.AffectTurrets
-            );
-            //Find target closest to max attack range.
-            foreach (var it in nearestObjects.OrderBy(x =>
-                         Vector2.DistanceSquared(minion.Position, x.Position) -
-                         (minion.Stats.Range.Total * minion.Stats.Range.Total)))
-            {
-                if (!(it is AttackableUnit u)
-                    || u.IsDead
-                    || u.Team == minion.Team
-                    || Vector2.DistanceSquared(minion.Position, u.Position) > DETECT_RANGE * DETECT_RANGE
-                    || !u.IsVisibleByTeam(minion.Team)
-                    || !u.Status.HasFlag(StatusFlags.Targetable)
-                    || UnitIsProtectionActive(u))
-                {
-                    continue;
-                }
-
-                // get the priority.
-                var priority = (int)minion.ClassifyTarget(u);
-                // if the priority is lower than the target we checked previously
-                if (priority < nextTargetPriority)
-                {
-                    // make it a potential target.
-                    nextTarget = u;
-                    nextTargetPriority = priority;
-                }
-            }
-
-            return nextTarget;
+            Owner.SetTargetUnit(null);
+            Owner.StopMovement();
+            NetSetState(state);
         }
+
+        private float ReturnRadius() => (Owner as EnginePet)?.GetReturnRadius() ?? DEFAULT_RETURN_RADIUS;
+
+        private static bool OwnerIsMoving(ObjAIBase owner) => !owner.IsPathEnded();
+
+        // The pet's owner (summoner). null (owner gone) → kill the pet, mirroring Pet.lua's GetOwner-nil.
+        private ObjAIBase OwnerOrDie()
+        {
+            ObjAIBase owner = ResolveOwner();
+            if (owner == null)
+            {
+                Owner.Die(CreateDeathData(false, 0, Owner, Owner, DamageType.DAMAGE_TYPE_TRUE,
+                    DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
+            }
+            return owner;
+        }
+
+        private static bool IsCcState(AIState s)
+            => s == AIState.AI_TAUNTED || s == AIState.AI_FEARED
+               || s == AIState.AI_CHARMED || s == AIState.AI_FLEEING;
+
+        private static bool IsHardState(AIState s)
+            => s == AIState.AI_PET_HARDATTACK || s == AIState.AI_PET_HARDMOVE
+               || s == AIState.AI_PET_HARDIDLE || s == AIState.AI_PET_HARDIDLE_ATTACKING
+               || s == AIState.AI_PET_HARDRETURN || s == AIState.AI_PET_HARDSTOP;
+
+        private static bool IsAttackingState(AIState s)
+            => s == AIState.AI_PET_ATTACK || s == AIState.AI_PET_HARDATTACK
+               || s == AIState.AI_PET_RETURN_ATTACKING || s == AIState.AI_PET_ATTACKMOVE_ATTACKING
+               || s == AIState.AI_PET_HARDIDLE_ATTACKING || s == AIState.AI_PET_HOLDPOSITION_ATTACKING;
     }
 }

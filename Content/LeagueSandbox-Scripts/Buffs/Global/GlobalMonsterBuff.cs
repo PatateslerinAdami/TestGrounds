@@ -1,4 +1,4 @@
-﻿using GameServerCore.Scripting.CSharp;
+using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
@@ -7,6 +7,10 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 
 namespace Buffs
 {
+    // Pre-S5 (S1-S3) additive jungle camp scaling buff (healthPerMinute etc.). NOT used in
+    // patch 4.20: jungle scaling on every map is driven by the per-map MonsterDataTable
+    // (baseStat x multiplier[averageChampionLevel]) applied in NeutralMinionSpawn.SpawnCamp.
+    // Kept as a stub in case a genuine pre-S5 map ever needs the old time-based model.
     internal class GlobalMonsterBuff : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
@@ -25,16 +29,6 @@ namespace Buffs
 
         public void OnUpdate(float diff)
         {
-            //if (owner != null)
-            //{
-            //    var hpPercent = (owner.Stats.HealthPoints.Total - owner.Stats.CurrentHealth) / owner.Stats.HealthPoints.Total;
-            //    if (hpPercent >= 0.995f)
-            //    {
-            //        // TODO:
-            //        // Increase health, physical damage, gold reward, and exp reward every 60 seconds
-            //        // Based on camp life time (gameTime - spawnTime)
-            //    }
-            //}
         }
     }
 }

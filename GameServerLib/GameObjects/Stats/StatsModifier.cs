@@ -25,6 +25,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public StatModifier MagicResist { get; } = new StatModifier();
         public StatModifier ManaPoints { get; } = new StatModifier();
         public StatModifier ManaRegeneration { get; } = new StatModifier();
+        public StatModifier MissChance { get; } = new StatModifier();
+        public StatModifier Dodge { get; } = new StatModifier();
         public StatModifier MoveSpeed { get; } = new StatModifier();
         public StatModifier Range { get; } = new StatModifier();
         public StatModifier Size { get; } = new StatModifier();

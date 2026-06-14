@@ -13,6 +13,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            PersistsThroughDeath = true,
             BuffType = BuffType.COUNTER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 100

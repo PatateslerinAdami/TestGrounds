@@ -32,7 +32,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateBool(Stats.IsLifestealImmune, 1, 4); //IsLifestealImmune
             UpdateFloat(Stats.AttackDamage.BaseValue, 1, 5); //mBaseAttackDamage
             UpdateFloat(Stats.AbilityPower.BaseValue, 1, 6); //mBaseAbilityDamage
-            // UpdateFloat(Stats.DodgeChance, 1, 7); //mDodge
+            UpdateFloat(Stats.Dodge.Total, 1, 7); //mDodge
             UpdateFloat(Stats.CriticalChance.Total, 1, 8); //mCrit
             UpdateFloat(Stats.Armor.Total, 1, 9); //mArmor
             UpdateFloat(Stats.MagicResist.Total, 1, 10); //mSpellBlock

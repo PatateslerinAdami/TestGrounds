@@ -12,7 +12,11 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         
         public bool IsNonDispellable { get; set; } = false; //this is important for things like cleanse or self cc's that should not be removed
         
-        public bool PersistsThroughDeath { get; set; } = true;
+        // Riot default is false (LuaScriptBaseBuff::mPersistsThroughDeath(false)): a buff is
+        // removed when its holder dies UNLESS it opts in. Buffs that must survive death — revives
+        // (Guardian Angel, Morde COTG) and persist-across-respawn passives (Caitlyn headshot,
+        // Wukong/Shyvana passives, mushroom managers) — must set this to true explicitly.
+        public bool PersistsThroughDeath { get; set; } = false;
         
         public bool PermeatesThroughDeath { get; set; } = false;
 
@@ -21,11 +25,5 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public int OnPreDamagePriority { get; set; } = 0;
 
         public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
-
-        public string[] SpellFXOverrideSkins { get; set; } = { "", "" };
-        
-        public string[] SpellVOOverrideSkins { get; set; } = { "" };
-        
-
     }
 }

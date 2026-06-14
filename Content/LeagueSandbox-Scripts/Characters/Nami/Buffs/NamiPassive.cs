@@ -22,6 +22,7 @@ internal class NamiPassive : IBuffGameScript {
     private float          _tickTime;
     private int            _decayStepsApplied;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.HASTE,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1

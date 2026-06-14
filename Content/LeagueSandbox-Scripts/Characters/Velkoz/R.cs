@@ -18,7 +18,7 @@ namespace Spells
         {
             // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
             // VelkozR.json ChannelDuration = 2.6 (no SpellTargeter block in this JSON).
-            TriggersSpellCasts = false,
+            TriggersSpellCasts = true,
             IsDamagingSpell = true,
             AutoFaceDirection = false
         };
@@ -35,8 +35,6 @@ namespace Spells
         private Particle _lensbeamL;
         private Particle _lensbeamR;
 
-        private float _currentAngle;
-        private float _targetAngle;
         private PeriodicTicker _damageTicker;
 
         // Beam line dimensions (units). Range matches SpellData.CastRange (1550).
@@ -44,6 +42,19 @@ namespace Spells
         // tune against in-game feel if needed.
         private const float BeamRange = 1550f;
         private const float BeamHalfWidth = 80f;
+
+        // Marker glide speed (MoveMarker Speed field). Replay a6db3774: constant 1033.3333 u/s.
+        private const float BeamGlideSpeed = 1033.3333f;
+
+        // Gradual-sweep cap: the MoveMarker GOAL advances at most this far per client charge-update,
+        // so the beam turns gradually (wiki: "direction updates gradually — moving the cursor from
+        // one side to the other will not make him rotate instantly"). Replay a6db3774: goal step is
+        // capped at ~104u PER PACKET regardless of cadence (104u steps occur even on 44ms intervals,
+        // so it's a fixed per-update step, not a u/s rate) = BeamGlideSpeed × ChargeUpdateInterval(0.1).
+        private const float BeamSweepStepPerUpdate = BeamGlideSpeed * 0.1f; // ~103.3u
+
+        // Capped sweep goal (advanced toward the raw cursor by <= BeamSweepStepPerUpdate each update).
+        private Vector2 _steerGoal;
 
         // Damage ticks every 250ms; Vel'Koz R (4.x) totals 10 ticks over the 2.5s
         // active-beam window (post-windup), for 500/700/900 (+0.8 AP) total damage.
@@ -66,19 +77,16 @@ namespace Spells
         {
             _end = end;
             FaceDirection(end, owner,true);
+            AddBuff("VelkozR", 2.85f, 1, spell, _owner, _owner);
         }
 
         public void OnSpellChargeStart(Spell spell)
         {
             _damageTicker.Reset();
 
-            // Caster is already turned toward the cast direction by OnSpellPreCast's
-            // FaceDirection call. _owner.Direction is the authoritative source for the
-            // beam's initial heading — `spell.CastInfo.TargetPosition` isn't reliable at
-            // this stage of the pipeline (was empty/stale at OnSpellChargeStart time).
-            Vector2 dir = new Vector2(_owner.Direction.X, _owner.Direction.Z);
-            _currentAngle = (float)Math.Atan2(dir.Y, dir.X);
-            _targetAngle = _currentAngle;
+            // Marker steering (MoveTo + FaceDirection) runs per client charge-update in
+            // OnSpellChargeUpdate (Riot-faithful cadence). OnSpellChargeStart only spawns the
+            // marker; the caster is already aimed by OnSpellPreCast's FaceDirection call.
 
             // Spawn the marker at the press-time click target (captured by OnSpellPreCast
             // into _end). Riot's wire-side target was the cursor direction projected to
@@ -91,48 +99,13 @@ namespace Spells
             // marker's spawn Y to caster's terrain, causing a Y mismatch when caster
             // and click target are at different terrain heights.
             _laserTarget = AddMarker(_end, team: _owner.Team);
+            _steerGoal = _laserTarget.Position; // sweep goal starts at the spawn endpoint
 
-            // Wake-up MoveMarker so the client's per-frame obj_AI_Marker::Update can
-            // compute Direction via DoFaceDirection. Decomp (AIMarker.cpp:102-136):
-            //
-            //   if (maxMovement >= dist) ArriveAtGoalPos();   // no DoFaceDirection!
-            //   else { Position += dir*maxMovement; if (mFaceGoalPos) DoFaceDirection(dir); }
-            //
-            // maxMovement = deltaTime * speed = 0.033s * 1033 ≈ 34u at 30Hz.
-            // A small offset (e.g. 5u) is less than one tick of movement, so the client
-            // ArriveAtGoalPos's immediately and DoFaceDirection NEVER fires — the marker
-            // sits at (0,0,0) direction and beam_end (BindDirection-flag) inherits that
-            // zero orientation, failing to render.
-            //
-            // Aim the wake-up goal at the full beam range from caster so dist > maxMovement
-            // for many frames; DoFaceDirection fires on the first Update tick, locking
-            // the marker's Direction to the cast direction before beam_end binds.
-            _laserTarget.MoveTo(_owner.Position + dir * BeamRange);
-
-            // Wake-up MoveMarker and first damage tick fire on the first OnSpellChargeTick
-            // (handled via _firstTickFired). Thematically: a laser is instant — no 250ms
-            // grace period before the first damage. Riot's replay matches: SpawnMarkerS2C
-            // followed by S2C_MoveMarker ~30ms later (effectively the first tick).
-
-            // VelkozR.json has CanMoveWhileChanneling=0 — caster is rooted for the
-            // duration. Also block casting/attacking to match the channel-lock pattern.
-            _owner.StopMovement();
-            _owner.SetStatus(StatusFlags.CanMove, false);
-            _owner.SetStatus(StatusFlags.Rooted, true);
-            _owner.SetStatus(StatusFlags.CanCast, false);
-            _owner.SetStatus(StatusFlags.CanAttack, false);
-
-            // Spell4_Cast is the 4.x ultimate-channel animation for Vel'Koz. It loops for
-            // the channel duration; the natural transition handles end-of-spell.
-            PlayAnimation(_owner, "Spell4_Cast");
-
-            // Replay-verified: VelkozR buff applies ~292ms after the press packet,
-            // matching the Spell4_Cast wind-up animation. Lifetime shortened so it
-            // expires at the same wall-clock moment as the rest of the spell.
-            _owner.RegisterTimer(new GameScriptTimer(0.29f, () =>
-            {
-                AddBuff("VelkozR", 2.31f, 1, spell, _owner, _owner);
-            }));
+            // Movement/cast/attack lock is now applied by the engine channel pipeline from
+            // SpellData (Spell.Channel: CanCast/CanAttack always off during a channel/charge,
+            // CanMove off because VelkozR.json CanMoveWhileChanneling=0), and released on every
+            // channel-end path. No manual SetStatus/StopMovement needed here, and the charge
+            // recast still works (it routes through UpdateCharge, not the CanCast-gated cast path).
 
             _eye = AddParticleTarget(_owner, _owner, "velkoz_base_r_beam_eye.troy", _owner, lifetime: 2.6f, bone: "Buffbone_Cstm_EyeBall", targetBone: "Buffbone_Cstm_EyeBallTarget");
             _lens = AddParticle(_owner, _owner, "velkoz_base_r_lens.troy", _owner.Position, lifetime: 2.6f, bone: "Buffbone_Cstm_EyeBallTarget");
@@ -167,46 +140,51 @@ namespace Spells
 
         public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
-            Vector2 targetDir = Vector2.Normalize(new Vector2(position.X, position.Z) - _owner.Position);
-            _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);
+            // Marker steering runs HERE — once per client charge-update packet, which IS Riot's
+            // MoveMarker cadence (the client heartbeats SpellChargeUpdateReq ~every
+            // ChargeUpdateInterval; replay a6db3774: ~100ms avg, irregular 56-139ms). Driving it
+            // per packet (not a regular server tick) matches that cadence and avoids the tick
+            // stutter. Two replay-verified pieces make it look like Riot:
+            //   1) GRADUAL sweep: the goal advances toward the cursor by at most
+            //      BeamSweepStepPerUpdate (~104u/packet) — so a fast cursor flick turns the beam
+            //      gradually, not instantly (wiki: "direction updates gradually").
+            //   2) The marker glides to that goal at Speed=1033, FaceGoal=true.
+            if (_laserTarget == null)
+            {
+                return;
+            }
+            Vector2 dir = Vector2.Normalize(new Vector2(position.X, position.Z) - _owner.Position);
+            if (float.IsNaN(dir.X) || float.IsNaN(dir.Y))
+            {
+                return;
+            }
+            Vector2 desired = _owner.Position + dir * BeamRange;
+            Vector2 toDesired = desired - _steerGoal;
+            float dd = toDesired.Length();
+            _steerGoal = (dd > BeamSweepStepPerUpdate)
+                ? _steerGoal + toDesired / dd * BeamSweepStepPerUpdate
+                : desired;
+            // Re-project onto the full-range arc so the endpoint stays at 1550 (a capped linear
+            // step would otherwise pull the goal slightly inward).
+            Vector2 fromOwner = _steerGoal - _owner.Position;
+            if (fromOwner.LengthSquared() > float.Epsilon)
+            {
+                _steerGoal = _owner.Position + Vector2.Normalize(fromOwner) * BeamRange;
+            }
+            _laserTarget.MoveTo(_steerGoal, BeamGlideSpeed);
+
+            // Face the CAPPED sweep direction (not the raw cursor), lerped over 0.1s (replay:
+            // S2C_FaceDirection DoLerp=1, LerpTime=0.100) — so Velkoz turns gradually with the beam.
+            Vector2 faceDir = Vector2.Normalize(_steerGoal - _owner.Position);
+            _owner.FaceDirection(new Vector3(faceDir.X, 0, faceDir.Y), isInstant: false, turnTime: 0.1f);
         }
 
         public void OnSpellChargeTick(Spell spell, float diff)
         {
-            // --- Steering (unchanged): rotate _currentAngle toward cursor at turn rate.
-            float angleDiff = _targetAngle - _currentAngle;
-            while (angleDiff > Math.PI) angleDiff -= (float)(2 * Math.PI);
-            while (angleDiff < -Math.PI) angleDiff += (float)(2 * Math.PI);
-
-            if (Math.Abs(angleDiff) > 0.001f)
-            {
-                float turnRate = 0.8f;
-                float step = turnRate * (diff / 1000f);
-
-                if (Math.Abs(angleDiff) <= step)
-                {
-                    _currentAngle = _targetAngle;
-                }
-                else
-                {
-                    _currentAngle += Math.Sign(angleDiff) * step;
-                }
-
-                while (_currentAngle > Math.PI) _currentAngle -= (float)(2 * Math.PI);
-                while (_currentAngle < -Math.PI) _currentAngle += (float)(2 * Math.PI);
-
-                Vector2 newDir = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
-
-                // Steer the beam: rotate the caster's bone AND move the endpoint marker.
-                // The beam particle binds to both ends (caster bone start + marker end),
-                // so both need to update each tick. Replay-verified for Vel'Koz R:
-                // S2C_MoveMarker packets at ~100ms intervals, Speed=1033, FaceGoal=true.
-                _owner.FaceDirection(new Vector3(newDir.X, 0, newDir.Y), true);
-                _laserTarget.MoveTo(_owner.Position + newDir * BeamRange);
-            }
-
-            // --- Damage ticks: laser is instantaneous — first damage tick fires on the
-            // first OnSpellChargeTick (no 250ms grace), then every DamageTickIntervalMs.
+            // Server-authoritative DAMAGE only (steering moved to OnSpellChargeUpdate so it
+            // tracks the client's input cadence). Laser is instantaneous — first tick fires
+            // immediately, then every DamageTickIntervalMs. Damage follows the gliding marker
+            // position (see ApplyBeamDamage), independent of client packet timing.
             var ticks = _damageTicker.ConsumeTicks(diff, DamageTickIntervalMs, fireImmediately: true);
             for (var i = 0; i < ticks; i++)
             {
@@ -216,7 +194,10 @@ namespace Spells
 
         private void ApplyBeamDamage(Spell spell)
         {
-            Vector2 dir = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
+            // Beam follows the GLIDING marker position (the visible beam), not the raw input —
+            // so damage lands where the laser actually is mid-steer.
+            Vector2 dir = _laserTarget.Position - _owner.Position;
+            dir = dir.LengthSquared() > float.Epsilon ? Vector2.Normalize(dir) : new Vector2(1, 0);
             Vector2 beamEnd = _owner.Position + dir * BeamRange;
 
             var hits = GetUnitsInPolygon(_owner, _owner.Position, beamEnd - _owner.Position,
@@ -262,8 +243,9 @@ namespace Spells
 
         private void Cleanup()
         {
+            // Status restore (CanMove/CanCast/CanAttack) is handled by the engine channel
+            // pipeline (Spell.ReleaseChannelStatusLock) on channel-end — not here anymore.
             _owner.RemoveBuffsWithName("VelkozR");
-            RestoreStatus();
             RemoveParticles();
             RemoveMarker();
         }
@@ -275,14 +257,6 @@ namespace Spells
                 _laserTarget.SetToRemove();
                 _laserTarget = null;
             }
-        }
-
-        private void RestoreStatus()
-        {
-            _owner.SetStatus(StatusFlags.CanMove, true);
-            _owner.SetStatus(StatusFlags.Rooted, false);
-            _owner.SetStatus(StatusFlags.CanCast, true);
-            _owner.SetStatus(StatusFlags.CanAttack, true);
         }
 
         private void RemoveParticles()

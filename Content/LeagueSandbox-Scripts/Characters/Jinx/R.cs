@@ -30,13 +30,16 @@ public class JinxR : ISpellScript
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
-            // Replay-verified rocket boost (7 R MISREPs, d756cd43 + 66987596): spawn packet
-            // carries Speed=1700 + TimedSpeedDelta=+500 + TimedSpeedDeltaTime=0.75 → the
-            // CLIENT applies the boost natively at 0.75s; post-boost vision-acquire packets
-            // show Speed=2200/FLT_MAX. The old post-spawn SetSpeed(2200) only changed the
-            // server — the client kept flying 1700, so on global casts the server rocket
-            // arrived early and DestroyClientMissile killed the client rocket mid-flight
-            // ("missile particle disappears, only flames remain").
+            // Rocket "+speed after ~1350u" boost: base 1700, +500 → 2200 at 1350/1700 ≈ 0.75s.
+            // Declared here as a scheduled one-shot delta; the engine drives all three sides from it:
+            //   - SERVER speed boosts at 0.75s (SpellMissile.UpdateTimedSpeedChange) — keeps the server
+            //     rocket in lockstep with the client (the OLD post-spawn SetSpeed(2200) boosted the
+            //     server immediately while the client flew 1700 → server arrived early, DestroyClientMissile
+            //     killed the client rocket mid-flight: "particle disappears, only flames remain").
+            //   - SPAWN viewers (ForceCreateMissile path): Spell.cs sends S2C_ChangeMissileSpeed{+500, 0.75}
+            //     on the same tick as ForceCreate — exactly Riot's wire (replay d756cd43/66987596).
+            //   - VISION-ACQUIRE viewers (MissileReplication path): TimedSpeedDelta/-Time ride the MISREP
+            //     (PacketNotifier.cs:723-725, with remaining-time decay; post-boost shows Speed=2200/FLT_MAX).
             TimedSpeedDelta = 500f,
             TimedSpeedDeltaTime = 0.75f,
         },

@@ -24,6 +24,7 @@ namespace Buffs
         ObjAIBase Fiora;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            PersistsThroughDeath = true,
             BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING
         };

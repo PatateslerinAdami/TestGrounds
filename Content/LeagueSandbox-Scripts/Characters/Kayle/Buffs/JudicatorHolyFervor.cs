@@ -17,6 +17,7 @@ internal class JudicatorHolyFervor : IBuffGameScript {
     private Spell     _spell;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

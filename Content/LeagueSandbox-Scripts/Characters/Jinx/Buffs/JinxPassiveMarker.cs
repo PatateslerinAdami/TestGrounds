@@ -18,6 +18,7 @@ internal class JinxPassiveMarker : IBuffGameScript {
     private Spell _spell;
     private Buff _buff;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.RENEW_EXISTING
     };

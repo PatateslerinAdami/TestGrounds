@@ -32,6 +32,7 @@ public class TalentReaper : IBuffGameScript
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
+            PersistsThroughDeath = true,
         BuffType = BuffType.COUNTER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 2,

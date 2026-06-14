@@ -15,7 +15,8 @@ internal class MordekaiserCOTGRevive : IBuffGameScript {
     private ObjAIBase _mordekaiser;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.INTERNAL,
-        BuffAddType = BuffAddType.RENEW_EXISTING
+        BuffAddType = BuffAddType.RENEW_EXISTING,
+        PersistsThroughDeath = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

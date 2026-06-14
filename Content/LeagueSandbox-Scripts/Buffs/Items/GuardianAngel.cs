@@ -17,7 +17,8 @@ internal class GuardianAngel : IBuffGameScript
     {
         BuffType = BuffType.INTERNAL,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks = 1
+        MaxStacks = 1,
+        PersistsThroughDeath = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();

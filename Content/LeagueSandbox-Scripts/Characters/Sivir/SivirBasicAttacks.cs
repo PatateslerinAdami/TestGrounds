@@ -30,6 +30,25 @@ public class SivirBasicAttack2 : ISpellScript {
     };
 }
 
+public class SivirBasicAttack3 : ISpellScript {
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        IsDamagingSpell      = true,
+        MissileParameters = new MissileParameters() {
+            Type = MissileType.Target
+        },
+    };
+}
+public class SivirBasicAttack4 : ISpellScript {
+
+    public SpellScriptMetadata ScriptMetadata => new() {
+        IsDamagingSpell      = true,
+        MissileParameters = new MissileParameters() {
+            Type = MissileType.Target
+        },
+    };
+}
+
 public class SivirCritAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {

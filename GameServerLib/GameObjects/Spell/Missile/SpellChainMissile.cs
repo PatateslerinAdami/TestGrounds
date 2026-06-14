@@ -70,6 +70,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 _game.PacketNotifier.NotifyS2C_ChainMissileSync(this);
             }
 
+            // Mid-flight target death (e.g. the Q target is killed by another of Katarina's spells before
+            // the dagger lands): Riot does NOT destroy the chain missile — it bounces on from the dying
+            // target, exactly like reaching an already-invalid target on arrival. Replay-verified: 0
+            // DestroyClientMissile across 367 Katarina Q-family missiles in a full match. Base SpellMissile
+            // would instead SetToRemove WITHOUT bouncing AND send a destroy, so intercept it here: suppress
+            // the destroy (on-arrival-style removal) and continue the chain. The dead target is NOT counted
+            // as a hit (mirrors CheckFlagsForUnit's invalid-target branch).
+            if (!IsToRemove() && HasTarget()
+                && (TargetUnit.IsDead || !TargetUnit.Status.HasFlag(StatusFlags.Targetable)))
+            {
+                SuppressDestroyNotify = true;
+                BounceToNextTarget();
+                SetToRemove();
+                return;
+            }
+
             base.Update(diff);
 
             // No hit-cap check here: S4 caps BOUNCING (in the bounce advance), never the
@@ -103,6 +119,30 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (SpellOrigin != null)
             {
                 SpellOrigin.ApplyEffects(TargetUnit, this);
+            }
+
+            // Per-hit impact FX from the spell JSON — Riot sends an FX_Create_Group on EVERY chain hit
+            // (replay: katarina_bouncingBlades_tar / DarkWind_tar per bounce). The engine's ApplyEffects
+            // HitEffect path only fires for EMPTY-script spells (Spell.cs gates on HasEmptyScript), so
+            // scripted chains (Katarina Q, Fiddle E, …) showed no hit FX — and only on the initial hit if
+            // the script spawned it manually. Spawn it here so the initial hit AND every bounce render it,
+            // read straight from the JSON (with HitBone when set). AA-bound chains (Sivir W) keep the
+            // client-automatic AA hit FX path instead, and empty-script chains are already covered by
+            // ApplyEffects — gate both out to avoid a double spawn.
+            if (TargetUnit != null
+                && !SpellOrigin.CastInfo.IsAutoAttack
+                && !SpellOrigin.HasEmptyScript
+                && SpellOrigin.SpellData.HaveHitEffect
+                && !string.IsNullOrEmpty(SpellOrigin.SpellData.HitEffectName))
+            {
+                if (SpellOrigin.SpellData.HaveHitBone)
+                {
+                    API.ApiFunctionManager.AddParticleTarget(CastInfo.Owner, null, SpellOrigin.SpellData.HitEffectName, TargetUnit, targetBone: SpellOrigin.SpellData.HitBoneName, lifetime: 1.0f);
+                }
+                else
+                {
+                    API.ApiFunctionManager.AddParticleTarget(CastInfo.Owner, null, SpellOrigin.SpellData.HitEffectName, TargetUnit, lifetime: 1.0f);
+                }
             }
 
             // Attack-bound chains (Sivir W): only the FIRST hit is the real auto attack
@@ -171,7 +211,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // (Parameters.BounceSelection — see its docs for the replay evidence).
             var candidates = new List<AttackableUnit>();
 
-            var units = _game.ObjectManager.GetUnitsInRange(Position, searchRadius, true);
+            // Search around the HIT TARGET's position, not the missile's. On arrival these coincide, but on
+            // a MID-FLIGHT target death the missile is still between caster and target while the other
+            // enemies cluster around the (now-dead) target — searching the missile's mid-flight position
+            // would find nothing and silently end the chain. The next segment also launches from the
+            // target's position (below), so this keeps search + launch consistent.
+            var searchCenter = TargetUnit != null ? TargetUnit.Position : Position;
+            var units = _game.ObjectManager.GetUnitsInRange(searchCenter, searchRadius, true);
 
             foreach (var unit in units)
             {

@@ -47,6 +47,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public int HealthBonus { get; protected set; }
         public int InitialLevel { get; protected set; }
 
+        /// <summary>
+        /// Roam state shared by minion-family AIs (mirrors S4 MinionRoamState
+        /// {kInactive, kHostile, kRunInFear}). Gates target acquisition: a unit only aggros while
+        /// <see cref="MinionRoamState.Hostile"/>, never while <see cref="MinionRoamState.Inactive"/>
+        /// (dormant) or <see cref="MinionRoamState.RunInFear"/> (fleeing CC).
+        /// Who drives it differs per subtype: <see cref="LaneMinion"/> is engine-managed (proximity
+        /// wake via <c>UpdateRoamState</c>, AI only reads); jungle <see cref="Monster"/> is AI-driven
+        /// (the Leashed AI flips it on damage/leash). <see cref="Behavior.CrowdControlComponent"/> sets
+        /// RunInFear/Hostile on fear-flee for any minion.
+        /// </summary>
+        public MinionRoamState RoamState { get; set; }
+
         public Minion(
             Game game,
             ObjAIBase owner,

@@ -106,8 +106,17 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public FXFlags Flags { get; }
 
-        public override bool IsAffectedByFoW => true;
+        // Riot's BBSpellEffectCreate FOWTeam: a real team => the FX is fog-of-war gated (only
+        // shown to recipients with vision of it); TEAM_NEUTRAL => not gated (always shown).
+        // We model that as this toggle. Defaults true (every particle was FoW-gated before).
+        private readonly bool _affectedByFoW;
+        public override bool IsAffectedByFoW => _affectedByFoW;
         public override bool SpawnShouldBeHidden => true;
+        // Riot's BBSpellEffectCreate SendIfOnScreenOrDiscard: when true the FX is a one-shot —
+        // sent only to recipients who can see it AT CREATION; no later fog-of-war re-entry
+        // resend (if you weren't looking, you missed it). False (default) = persistent: the
+        // engine resends the create whenever the particle re-enters a team's vision.
+        public bool SendIfOnScreenOrDiscard { get; }
         public bool isInfinite = false;
         public bool IgnoreCasterVisibility { get; }
         public float OverrideTargetHeight { get; }
@@ -117,9 +126,14 @@ namespace LeagueSandbox.GameServer.GameObjects
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
+            bool sendIfOnScreenOrDiscard = false)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
+            _affectedByFoW = affectedByFoW;
+            SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
+            VisionRadius = fowVisionRadius;
             Caster = caster;
             BindObject = bindObj;
             TargetObject = target;
@@ -135,6 +149,10 @@ namespace LeagueSandbox.GameServer.GameObjects
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
             OverrideTargetHeight = overrideTargetHeight;
+
+            // Must be set before AddObject — the FX_Create_Group packet is built synchronously
+            // there (see the targetPos ctor for the full explanation).
+            KeywordNetIDOverride = keywordNetIDOverride;
 
             if (bindObj != null)
             {
@@ -157,9 +175,13 @@ namespace LeagueSandbox.GameServer.GameObjects
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint? keywordNetIDOverride = null)
+            uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
+            bool sendIfOnScreenOrDiscard = false)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
+            _affectedByFoW = affectedByFoW;
+            SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
+            VisionRadius = fowVisionRadius;
             Caster = caster;
 
             BindObject = bindObj;
@@ -208,9 +230,14 @@ namespace LeagueSandbox.GameServer.GameObjects
             Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null,
+            uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
+            bool sendIfOnScreenOrDiscard = false)
             : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
+            _affectedByFoW = affectedByFoW;
+            SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
+            VisionRadius = fowVisionRadius;
             Caster = caster;
 
             BindObject = null;
@@ -228,6 +255,10 @@ namespace LeagueSandbox.GameServer.GameObjects
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
             OverrideTargetHeight = overrideTargetHeight;
+
+            // Must be set before AddObject — the FX_Create_Group packet is built synchronously
+            // there (see the targetPos ctor for the full explanation).
+            KeywordNetIDOverride = keywordNetIDOverride;
 
             if (caster != null)
             {
@@ -295,6 +326,17 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public override void Update(float diff)
         {
+            // A bound particle's server-side Position is only set once at spawn, so its fog-of-war
+            // visibility (TeamHasVisionOn uses Position) is evaluated at the cast location forever.
+            // For an FX attached to a roaming unit that means the FX can wrongly leave/enter a team's
+            // vision based on the stale spawn point rather than the unit it's attached to. Keep Position
+            // on the bind target so FoW tracks the unit. Vision-only — the client attaches via BindNetID,
+            // and Position is a plain field (no movement replication), so this changes nothing visual.
+            if (BindObject != null && !BindObject.IsToRemove())
+            {
+                Position = BindObject.Position;
+            }
+
             _currentTime += diff / 1000.0f;
             if (_currentTime >= Lifetime && Lifetime >= 0 && !isInfinite)
             {

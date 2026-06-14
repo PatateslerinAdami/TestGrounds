@@ -23,6 +23,7 @@ public class UdyrPhoenixStance : IBuffGameScript {
     private int       _attackCount = 0;
     private bool _isFirstCast = true;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

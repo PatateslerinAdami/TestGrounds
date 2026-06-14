@@ -61,7 +61,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         TeamId team = TeamId.TEAM_BLUE,
                         Stats stats = null,
                         string AIScript = "")
-            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats, AIScript)
+            // Default player champions to the minimal HeroAI so they run the shared
+            // CrowdControlComponent (AI-driven fear/flee, Riot's uniform model). Bots that were given
+            // a specific AI script keep it. See AIScripts/HeroAI.cs, project_cc_model_architecture.
+            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats,
+                string.IsNullOrEmpty(AIScript) ? "HeroAI" : AIScript)
         {
             //TODO: Champion.ClientInfo?
             ClientId = clientInfo.ClientId;
@@ -270,6 +274,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.Update(diff);
 
+            // Shop upkeep: clears the undo stack once the champion leaves the fountain (see Shop.OnUpdate).
+            Shop.OnUpdate(diff);
+
             if (Stats.IsGeneratingGold && Stats.GoldPerGoldTick.Total > 0)
             {
                 _goldTimer -= diff;
@@ -339,6 +346,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _game.PacketNotifier.NotifyHeroReincarnateAlive(this, parToRestore);
             Stats.CurrentHealth = Stats.HealthPoints.Total;
             IsDead = false;
+            // Back at the fountain and alive: drop the dead-state force-enable (normal location gate).
+            Shop.SetShopState(true, false);
             RespawnTimer = -1;
             SetDashingState(false, MoveStopReason.HeroReincarnate);
             ApiEventManager.OnResurrect.Publish(this);
@@ -437,6 +446,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override void Die(DeathData data)
         {
             IsDead = true;
+            // Dead champions may still shop (recall-less fountain shopping): force-enable the shop so
+            // the location gate is bypassed. Re-disabled on respawn. See docs/SHOP_PACKETS_PLAN.md.
+            Shop.SetShopState(true, true);
             RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
                 ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
                 : 100.0f;

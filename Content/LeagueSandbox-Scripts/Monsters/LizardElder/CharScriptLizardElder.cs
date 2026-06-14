@@ -8,7 +8,6 @@ namespace CharScripts;
 
 internal class CharScriptLizardElder : ICharScript {
     public void OnActivate(ObjAIBase owner, Spell spell) {
-        AddBuff("GlobalMonsterBuff",        25000.0f, 1, spell, owner, owner, true);
         AddBuff("BlessingoftheLizardElder", 25000.0f, 1, owner.AutoAttackSpell,  owner, owner, true);
     }
 

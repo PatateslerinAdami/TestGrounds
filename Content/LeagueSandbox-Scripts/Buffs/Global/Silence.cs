@@ -17,11 +17,11 @@ internal class Silence : IBuffGameScript {
 
     public StatsModifier StatsModifier { get; } = new();
 
+    // Silenced is DERIVED from BuffType.SILENCE (AttackableUnit.RecomputeBuffEffects) — overlap-safe,
+    // no manual SetStatusEffect needed.
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        buff.SetStatusEffect(StatusFlags.Silenced, true);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        buff.SetStatusEffect(StatusFlags.Silenced, false);
     }
 }

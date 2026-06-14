@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Numerics;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
@@ -8,140 +6,102 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class Flee : IBuffGameScript {
-    private const float FleeMoveSpeedPenalty = 0.9f;
-    private const float FleeDistance = 900f;
-    private const float StuckRepathDelayMilliseconds = 250f;
-    private const float StuckDistanceThreshold = 8f;
-
-    private ObjAIBase _owner;
-    private AttackableUnit _unit;
-    private Particle _fleeParticle;
-    private float _stuckTimer;
-    private Vector2 _lastPosition;
-
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.FLEE,
+// Flee = Riot AI_FLEEING: the unit runs directly away from the source. Same buff-as-flag / AI-as-mover
+// model as Fear: the buff raises the Feared status flag and records the source + flee flavour on the
+// unit; the shared CrowdControlComponent drives the run-away movement. The buff only drives movement
+// itself as a legacy fallback for units without an AI crowd-control driver (e.g. a player champion
+// still on EmptyAIScript). Differs from Fear (RandomDirection=false) only by BuffType + particle.
+internal class Flee : IBuffGameScript
+{
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.FLEE,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
 
-    public StatsModifier StatsModifier { get; } = new();
+    public StatsModifier StatsModifier { get; private set; } = new();
 
-    private bool IsMovementOverriddenByHardCc() {
-        if (_unit == null) {
-            return false;
-        }
+    // Optional move-speed change while fleeing (fraction, e.g. 0.3 = -30%). Default 0 = no slow.
+    public float slowPercent = 0f;
 
-        return _unit.Status.HasFlag(StatusFlags.Stunned)
-               || _unit.Status.HasFlag(StatusFlags.Rooted)
-               || _unit.Status.HasFlag(StatusFlags.Netted)
-               || _unit.HasBuffType(BuffType.KNOCKUP)
-               || _unit.MovementParameters != null;
-    }
+    private const float LegacyFleeDistance = 1000f;
 
-    private void ForceFleeMovement() {
-        if (_unit == null || _owner == null || _unit.IsDead) {
-            return;
-        }
+    private AttackableUnit _unit;
+    private ObjAIBase _owner;
+    private Particle _particle;
 
-        if (IsMovementOverriddenByHardCc()) {
-            return;
-        }
-
-        if (_unit is ObjAIBase aiUnit) {
-            if (aiUnit.IsAttacking) {
-                aiUnit.CancelAutoAttack(true, true);
-            }
-
-            aiUnit.SetTargetUnit(null, true);
-            aiUnit.UpdateMoveOrder(OrderType.MoveTo, false);
-        }
-
-        var fleeVector = _unit.Position - _owner.Position;
-        if (fleeVector.LengthSquared() <= float.Epsilon) {
-            fleeVector = new Vector2(_unit.Direction.X, _unit.Direction.Z);
-        }
-
-        if (fleeVector.LengthSquared() <= float.Epsilon) {
-            fleeVector = new Vector2(1f, 0f);
-        }
-
-        var fleeDirection = Vector2.Normalize(fleeVector);
-        var fleeTarget = _unit.Position + fleeDirection * FleeDistance;
-        var fleePath = GetPath(_unit.Position, fleeTarget, _unit.PathfindingRadius);
-
-        if (fleePath != null && fleePath.Count > 1) {
-            _unit.SetWaypoints(fleePath);
-        } else {
-            _unit.SetWaypoints(new List<Vector2> {
-                _unit.Position,
-                fleeTarget
-            });
-        }
-    }
-
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         _unit = unit;
-        _owner = ownerSpell?.CastInfo.Owner ?? buff.SourceUnit;
-        _stuckTimer = 0f;
-        _lastPosition = unit.Position;
+        _owner = buff.SourceUnit;
+        _particle = AddParticleTarget(_owner ?? unit, unit, "Global_Fear.troy", unit, buff.Duration);
 
-        var particleOwner = ownerSpell?.CastInfo.Owner ?? buff.SourceUnit ?? unit;
-        _fleeParticle = AddParticleTarget(particleOwner, unit, "Global_Fear.troy", unit, buff.Duration);
+        // Feared is DERIVED from BuffType.FLEE (AttackableUnit.RecomputeBuffEffects) — overlap-safe.
 
-        StatsModifier.MoveSpeed.PercentBonus -= FleeMoveSpeedPenalty;
-        _unit.AddStatModifier(StatsModifier);
+        // Record the CC source + flee flavour (never wander) so the AI-driven CrowdControlComponent
+        // drives the run-away movement (Riot AI_FLEEING).
+        if (unit is ObjAIBase cc)
+        {
+            cc.CrowdControlSource = _owner;
+            cc.CrowdControlWander = false;
 
-        buff.SetStatusEffect(StatusFlags.Feared, true);
-        ApplyAssistMarker(buff.SourceUnit, unit, 10.0f);
+            // Migration bridge: only drive the movement here for units WITHOUT an AI crowd-control
+            // driver. Units with the CrowdControlComponent (minions today) get it from the AI layer.
+            if (!cc.AICrowdControlActive)
+            {
+                DriveFlee();
+            }
+        }
 
-        ForceFleeMovement();
+        ApplyAssistMarker(unit, _owner, 10.0f);
+        StatsModifier.MoveSpeed.PercentBonus = -slowPercent;
+        unit.AddStatModifier(StatsModifier);
     }
 
-    public void OnUpdate(float diff) {
-        if (_unit == null || _owner == null || _unit.IsDead) {
-            return;
-        }
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        if (_particle != null) _particle.SetToRemove();
 
-        if (IsMovementOverriddenByHardCc()) {
-            _stuckTimer = 0f;
-            _lastPosition = _unit.Position;
-            return;
+        if (unit is ObjAIBase cc)
+        {
+            cc.CrowdControlSource = null;
         }
-
-        if (_unit.IsPathEnded()) {
-            ForceFleeMovement();
-            _stuckTimer = 0f;
-            _lastPosition = _unit.Position;
-            return;
-        }
-
-        var distanceMovedSquared = Vector2.DistanceSquared(_unit.Position, _lastPosition);
-        if (distanceMovedSquared > StuckDistanceThreshold * StuckDistanceThreshold) {
-            _lastPosition = _unit.Position;
-            _stuckTimer = 0f;
-            return;
-        }
-
-        _stuckTimer += diff;
-        if (_stuckTimer < StuckRepathDelayMilliseconds) {
-            return;
-        }
-
-        _stuckTimer = 0f;
-        _lastPosition = _unit.Position;
-        ForceFleeMovement();
+        unit.StopMovement();
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        if (!IsMovementOverriddenByHardCc()) {
-            unit.StopMovement();
-        }
+    public void OnUpdate(float diff)
+    {
+        if (_unit == null || _unit.IsDead) return;
 
-        RemoveParticle(_fleeParticle);
+        if (_unit is ObjAIBase ai)
+        {
+            // AI-driven units have the CrowdControlComponent re-issuing the flee; the buff only keeps
+            // driving here for the legacy (non-AI-driven) path.
+            if (ai.AICrowdControlActive) return;
+
+            if (ai.IsPathEnded())
+            {
+                DriveFlee();
+            }
+        }
+    }
+
+    private void DriveFlee()
+    {
+        if (_unit is ObjAIBase ai && _owner != null)
+        {
+            var dir = Vector2.Normalize(_unit.Position - _owner.Position);
+            if (float.IsNaN(dir.X) || float.IsNaN(dir.Y)) dir = new Vector2(1, 0);
+
+            var targetPos = _unit.Position + dir * LegacyFleeDistance;
+            var path = GetPath(_unit.Position, targetPos);
+            ai.SetWaypoints(path);
+            ai.UpdateMoveOrder(OrderType.MoveTo);
+        }
     }
 }

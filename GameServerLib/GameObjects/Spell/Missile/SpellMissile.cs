@@ -311,11 +311,39 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             return _moveSpeed;
         }
         
-        //TODO: Find out if this causes issues with replication?
         /// <summary>
-        ///     Sets the server-side speed that this Projectile moves at in units/sec.
+        ///     Sets the server-side speed that this Projectile moves at in units/sec. SERVER-ONLY /
+        ///     SILENT — does NOT tell the client, so changing it mid-flight desyncs the client missile
+        ///     (it keeps its own speed). Use <see cref="ChangeSpeed"/> for a client-mirrored change.
+        ///     The engine's timed boost (UpdateTimedSpeedChange) uses this intentionally: the client
+        ///     already got the schedule at spawn (S2C_ChangeMissileSpeed / MissileReplication.TimedSpeedDelta),
+        ///     so applying the server side silently keeps the two in lockstep without a second packet.
         /// </summary>
         public void SetSpeed(float speed) { _moveSpeed = speed; }
+
+        /// <summary>
+        ///     Script-driven runtime speed change that STAYS IN SYNC with the client: adjusts the server
+        ///     speed by <paramref name="speedDelta"/> and sends S2C_ChangeMissileSpeed (0x10D) so the client
+        ///     mirrors it. <paramref name="delay"/> 0 = apply immediately on both sides; > 0 = scheduled
+        ///     (server applies it via UpdateTimedSpeedChange, client after the same delay). Use for missiles
+        ///     whose speed changes mid-flight beyond the one-shot spawn boost — e.g. a continuous ramp
+        ///     (Gnar Q boomerang) called per <c>OnSpellMissileUpdate</c>. OPT-IN: only fires when a script
+        ///     calls it, so no missile emits the packet automatically.
+        /// </summary>
+        public void ChangeSpeed(float speedDelta, float delay = 0f)
+        {
+            if (delay <= 0f)
+            {
+                SetSpeed(GetSpeed() + speedDelta);
+            }
+            else
+            {
+                TimedSpeedDelta = speedDelta;
+                TimedSpeedDeltaTime = _timeSinceCreation / 1000f + delay;
+                TimedSpeedChangeApplied = false;
+            }
+            _game.PacketNotifier.NotifyS2C_ChangeMissileSpeed(this, speedDelta, delay);
+        }
 
         /// <summary>
         /// Gets the time since this projectile was created.
@@ -463,6 +491,40 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (CastInfo.Owner is ObjAIBase ai && SpellOrigin.CastInfo.IsAutoAttack)
             {
                 ai.AutoAttackHit(TargetUnit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
+            }
+
+            // AA missiles home to a tracked unit, so the CLIENT removes the missile (and plays the
+            // impact hit-FX) the instant its own copy reaches that unit. A server DestroyClientMissile
+            // travels at the same speed and lands ~simultaneously — usually a frame EARLY — which yanks
+            // the client missile before its arrival frame, so the impact FX never plays (intermittent,
+            // worse on short/fast shots). Suppress the destroy on an AA on-arrival hit and let the client
+            // self-infer arrival (mirrors SpellLineMissile's client-inferable max-range suppression).
+            // Mid-flight cancels (target died/untargetable) go through SpellMissile.Update's else-branch
+            // and KEEP the destroy — the client can't infer a non-arrival removal.
+            //
+            // This base CheckFlagsForUnit runs ONLY for MissileType.Target (homing) missiles — Line/Arc/Circle
+            // and Chain missiles override it. Replay destroy-RATE (destroyed / force-created) across 28 games
+            // splits homing missiles cleanly: champion basic attacks 1.6% (681646 missiles), and point-click
+            // target SPELLS ~0% (KatarinaQ 0/406, MissFortuneRicochetShot 0/403, BlindingDart 0/167, AlphaStrike,
+            // PantheonQ, VayneCondemn, AkaliMota 2/350 = blocks/cancels, …). So Riot does NOT send an on-hit
+            // destroy for ANY homing target missile: the client plays the impact FX and removes the missile when
+            // its own copy reaches the tracked unit. A server destroy travelling at the same speed lands a frame
+            // early and yanks the missile before its arrival frame → the FX never plays (verified in-game on AAs;
+            // the same race applies to point-click spells). So suppress on EVERY on-arrival hit here.
+            // Mid-flight cancels (target died / went untargetable — Fizz E, Vlad pool) go through Update's
+            // else-branch and KEEP the destroy (the client cannot infer a non-arrival removal).
+            //
+            // EXCEPTION — AA-OVERRIDE spells (IsAutoAttack=true but cast via CastSpellAns, i.e. slot < 64:
+            // JinxQAttack/-Crit): Riot destroys these 100% (608/608), unlike the 1.6%/~0% above, so the client
+            // does NOT self-remove that spawn and relies on the destroy (suppressing it risks a lingering rocket).
+            // Their hit-FX is a separate, currently-unwired concern (Jinx_Q_Rocket_tar never fires: JSON
+            // HaveHitEffect=0, the Spell.cs:266 HitEffect path is gated off for auto-attacks AND needs an empty
+            // script, and ApplyEffects' IsAutoAttack branch never calls NotifyS2C_LineMissileHitList) — NOT
+            // something this destroy controls. So send the destroy for AA-overrides; suppress for everything else.
+            if (!(CastInfo.IsAutoAttack
+                  && CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots))
+            {
+                SuppressDestroyNotify = true;
             }
 
             SetToRemove();

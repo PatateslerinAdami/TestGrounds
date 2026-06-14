@@ -71,9 +71,8 @@ public class JaxCounterStrikeAttack : ISpellScript {
         var attacksDodged = spell.CastInfo.Variables.GetFloat("attacksDodged");
         PlayAnimation(_jax, "Spell3b", 0.5f);
         AddParticleTarget(_jax, _jax, "Counterstrike_cas", _jax, 1.5f);
-        var enemiesInRange = GetUnitsInRange(_jax, _jax.Position, 375f, true,
-                                             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                             SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=300, was hardcoded 375).
+        var enemiesInRange = GetUnitsHitBySpell(spell);
         var ad  = _jax.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
         var dmg = 50f + 25f * (_jax.GetSpell("JaxCounterStrike").CastInfo.SpellLevel - 1) + ad;
         dmg += dmg * Math.Min(1f, attacksDodged);

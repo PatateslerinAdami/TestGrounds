@@ -18,7 +18,6 @@ public class MordekaiserSyphonOfDestruction : ISpellScript
 {
     private ObjAIBase _mordekaiser;
     private Spell _spell;
-    private Vector2 _direction;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
@@ -38,24 +37,12 @@ public class MordekaiserSyphonOfDestruction : ISpellScript
             Math.Max(1, owner.Stats.CurrentHealth - (24f + 12 * (_spell.CastInfo.SpellLevel - 1)));
     }
 
-    public void OnSpellCast(Spell spell)
-    {
-        _direction = new Vector2(_mordekaiser.Direction.X, _mordekaiser.Direction.Z);
-    }
-
     public void OnSpellPostCast(Spell spell)
     {
-        var enemiesInRange = GetUnitsInCone(
-            _mordekaiser,
-            _mordekaiser.Position,
-            _direction,
-            775,
-            80f,
-            true,
-            SpellDataFlags.AffectEnemies
-            | SpellDataFlags.AffectHeroes
-            | SpellDataFlags.AffectMinions
-            | SpellDataFlags.AffectNeutral);
+        // Cone geometry + target flags now come from SpellData (Cone, CastConeAngle=25 half,
+        // CastConeDistance=650, LockConeToPlayer=1, AffectEnemies|Neutral|Minions|Heroes) via
+        // GetUnitsHitBySpell — replaces the hardcoded 775u / 80° full-cone + manual flags.
+        var enemiesInRange = GetUnitsHitBySpell(spell);
 
         if (enemiesInRange.Count != 0) AddBuff("MordekaiserSyphonParticle", 1f, 1, _spell, _mordekaiser, _mordekaiser);
         foreach (var unit in enemiesInRange)

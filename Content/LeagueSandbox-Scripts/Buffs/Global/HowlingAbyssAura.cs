@@ -13,7 +13,8 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.REPLACE_EXISTING
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            PersistsThroughDeath = true
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();

@@ -52,6 +52,19 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat MagicPenetration { get; }
         public Stat ManaPoints { get; }
         public Stat ManaRegeneration { get; }
+        /// <summary>
+        /// Chance [0..1] that this unit's auto attacks miss (rolled per attack in
+        /// <see cref="ObjAIBase.RollAutoAttackMiss"/>). Raised to 1.0 by Blind.
+        /// Mirrors Riot's miss-chance stat (script API IncFlatMissChanceMod/GetMissChance).
+        /// </summary>
+        public Stat MissChance { get; }
+        /// <summary>
+        /// Chance [0..1] that this unit DODGES an incoming auto attack (rolled per attack against the
+        /// attacker in <see cref="ObjAIBase.RollDodge"/>). Target-side counterpart of <see cref="MissChance"/>.
+        /// Mirrors Riot's mDodge stat (script API IncFlatDodgeMod). Removed as a general stat after S1;
+        /// in 4.20 only set to 1.0 by abilities like Jax E (Counter Strike / JaxEvasion buff). Defaults to 0.
+        /// </summary>
+        public Stat Dodge { get; }
         public Stat MoveSpeed { get; }
         public Stat Range { get; }
         public Stat Size { get; }
@@ -130,6 +143,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             MagicPenetration = new Stat();
             ManaPoints = new Stat();
             ManaRegeneration = new Stat();
+            MissChance = new Stat();
+            Dodge = new Stat();
             MoveSpeed = new Stat();
             Range = new Stat();
             Size = new Stat(1.0f, 0, 0, 0, 0);
@@ -189,6 +204,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             AddPenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.ApplyStatModifier(modifier.ManaPoints);
             ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
+            MissChance.ApplyStatModifier(modifier.MissChance);
+            Dodge.ApplyStatModifier(modifier.Dodge);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
@@ -231,6 +248,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             RemovePenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.RemoveStatModifier(modifier.ManaPoints);
             ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
+            MissChance.RemoveStatModifier(modifier.MissChance);
+            Dodge.RemoveStatModifier(modifier.Dodge);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {

@@ -10,7 +10,8 @@ namespace Buffs
 {
     internal class YasuoRAvailableTest : IBuffGameScript
     {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.INTERNAL, IsHidden = true };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData {
+            PersistsThroughDeath = true, BuffType = BuffType.INTERNAL, IsHidden = true };
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }

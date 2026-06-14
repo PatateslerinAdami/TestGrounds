@@ -26,7 +26,13 @@ namespace Spells
             AddParticleTarget(_owner, _owner, "Riven_Base_W_Cast.troy", _owner);
             AddParticleTarget(_owner, _owner, "exile_W_weapon_cas.troy", _owner, bone: "weapon");
 
-            var units = GetUnitsInRange(_owner, _owner.Position, 250, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+            // Riven's 4.20 data is corrupt (affect flags are Friends|Heroes; CastRadius=250 doesn't
+            // match the stable 300/360 effect radius from the wiki/patch history). So override both:
+            // enemy flags + radius 300 (centered; our GetUnitsInRange is center-to-center).
+            var units = GetUnitsHitBySpell(spell,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral,
+                overrideRadius: 300f);
 
             float baseDmg = 25f + (30f * spell.CastInfo.SpellLevel);
             float bonusAD = _owner.Stats.AttackDamage.FlatBonus * 1.0f;

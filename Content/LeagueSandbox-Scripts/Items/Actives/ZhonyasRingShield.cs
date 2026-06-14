@@ -29,6 +29,7 @@ namespace Buffs
             unit.StopMovement();
             unit.PauseAnimation(true);
             unit.SetStatus(StatusFlags.Stunned, true);
+            unit.SetStatus(StatusFlags.Invulnerable, true);
             unit.SetStatus(StatusFlags.Targetable, false);
 
         }
@@ -36,10 +37,8 @@ namespace Buffs
         {
             unit.PauseAnimation(false);
             unit.SetStatus(StatusFlags.Stunned, false);
+            unit.SetStatus(StatusFlags.Invulnerable, false);
             unit.SetStatus(StatusFlags.Targetable, true);
-        }
-        public void OnUpdate(float diff)
-        {
         }
     }
 }

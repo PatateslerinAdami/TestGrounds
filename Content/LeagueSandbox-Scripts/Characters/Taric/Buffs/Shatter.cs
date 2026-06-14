@@ -16,7 +16,8 @@ internal class Shatter : IBuffGameScript {
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SHRED,
-        BuffAddType = BuffAddType.REPLACE_EXISTING
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        PersistsThroughDeath = true
     };
 
     public StatsModifier StatsModifier { get; } = new();

@@ -15,11 +15,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             HitResult = hitResult;
         }
 
-        public static HitResult GetHitResult(AttackableUnit unit, bool isAutoAttack, bool isNextAutoCrit)
+        public static HitResult GetHitResult(AttackableUnit unit, bool isAutoAttack, bool isNextAutoCrit, bool isNextAutoMiss = false, bool isNextAutoDodged = false)
         {
             if (isAutoAttack)
             {
-                // TODO: Implement Dodge and Miss
+                // Miss takes precedence over crit: a blinded "crit" still misses.
+                if (isNextAutoMiss)
+                {
+                    return HitResult.HIT_Miss;
+                }
+                // Dodge (target evaded) — like miss, suppresses the attack; takes precedence over crit.
+                if (isNextAutoDodged)
+                {
+                    return HitResult.HIT_Dodge;
+                }
                 if (isNextAutoCrit && unit is not LaneTurret)
                 {
                     return HitResult.HIT_Critical;

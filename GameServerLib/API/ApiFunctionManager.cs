@@ -86,6 +86,71 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Pushes a model/skin override layer onto a unit (transform / object-data swap / evolving
+        /// skin) and returns the layer id. Pass that id to <see cref="PopCharacterData"/> to revert
+        /// exactly this layer; other layers and the base skin are untouched. The unit's server-side
+        /// <c>Model</c>/<c>SkinID</c> follow the resolved top of the stack.
+        /// </summary>
+        /// <param name="unit">Unit to transform.</param>
+        /// <param name="skinName">Internally named model/skin to display (e.g. "EliseSpider").</param>
+        /// <param name="skinID">Skin index, or -1 to keep the unit's current skinID.</param>
+        /// <param name="overrideSpells">Take the spellbook from this layer (Nidalee/Elise alt form).</param>
+        /// <param name="modelOnly">Change the model only, leave the spellbook untouched.</param>
+        /// <param name="replaceCharacterPackage">Replace the entire character package (rare).</param>
+        /// <returns>The layer id, for a later <see cref="PopCharacterData"/>.</returns>
+        public static uint PushCharacterData(AttackableUnit unit, string skinName, int skinID = -1,
+            bool overrideSpells = false, bool modelOnly = false, bool replaceCharacterPackage = false)
+        {
+            return unit.CharacterDataStack.Push(skinName, skinID, overrideSpells, modelOnly, replaceCharacterPackage);
+        }
+
+        /// <summary>
+        /// Removes the model/skin override layer with the given id (from <see cref="PushCharacterData"/>),
+        /// reverting the unit to the layer beneath (or its base skin).
+        /// </summary>
+        public static void PopCharacterData(AttackableUnit unit, uint id)
+        {
+            unit.CharacterDataStack.PopSpecific(id);
+        }
+
+        /// <summary>Removes the topmost model/skin override layer from a unit (revert last transform).</summary>
+        public static void PopCharacterData(AttackableUnit unit)
+        {
+            unit.CharacterDataStack.Pop();
+        }
+
+        /// <summary>Clears all model/skin override layers from a unit, reverting it to its base skin.</summary>
+        public static void PopAllCharacterData(AttackableUnit unit)
+        {
+            unit.CharacterDataStack.PopAll();
+        }
+
+        /// <summary>
+        /// Asks clients to preload a skin's assets so a later <see cref="PushCharacterData"/> swaps
+        /// without a hitch. Broadcast to everyone (matches the client's broadcast policy).
+        /// </summary>
+        public static void PreloadCharacterData(AttackableUnit unit, string skinName, int skinID = -1)
+        {
+            _game.PacketNotifier.NotifyS2C_PreloadCharacterData(unit, skinName, skinID);
+        }
+
+        /// <summary>
+        /// Registers a shop item substitution for the given champion and notifies its client: the shop
+        /// shows/sells <paramref name="substitutionItemId"/> wherever <paramref name="originalItemId"/>
+        /// would appear (S2C_ShopItemSubstitutionSet). E.g. the Culinary Master mastery swaps Health
+        /// Potion (2003) for the Biscuit (2010). No-op for non-champions or zero ids. Call it from the
+        /// granting talent/spell script (e.g. on activate). The mapping persists on the champion's shop
+        /// (queryable via Shop.GetItemSubstitution).
+        /// </summary>
+        public static void SetShopItemSubstitution(ObjAIBase owner, int originalItemId, int substitutionItemId)
+        {
+            if (owner is Champion champion)
+            {
+                champion.Shop.SetItemSubstitution(originalItemId, substitutionItemId);
+            }
+        }
+
+        /// <summary>
         /// Logs the given string to the server console as info.
         /// </summary>
         /// <param name="format">String to print.</param>
@@ -127,13 +192,17 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
-        /// Creates a new instance of a GameScriptTimer with the specified arguments.
-        /// This should only be used for debug purposes.
+        /// Schedules a fire-once callback after <paramref name="duration"/> seconds, as a
+        /// GAME-scoped <see cref="GameScriptTimer"/> — it ticks on the global game loop, so it
+        /// still fires if the owner dies during the delay (e.g. a Vel'Koz W rift detonates even
+        /// if Vel'Koz died). The delay is wall-clock-accumulated in seconds, matching Riot's
+        /// time-based scripting model (BBExecutePeriodically). For a timer that should be cancelled
+        /// when a specific unit dies, use <c>unit.RegisterTimer(new GameScriptTimer(...))</c> instead.
+        /// Returns the timer so callers can query/cancel it (IsDead/EndTimerNow).
         /// </summary>
-        /// <param name="duration">Time till the timer ends.</param>
+        /// <param name="duration">Delay in seconds before the callback fires.</param>
         /// <param name="callback">Action to perform when the timer ends.</param>
-        /// <returns>New GameScriptTimer instance.</returns>
-        [Obsolete("CreateTimer should only be used for debug purposes.")]
+        /// <returns>The registered GameScriptTimer instance.</returns>
         public static GameScriptTimer CreateTimer(float duration, Action callback)
         {
             var newTimer = new GameScriptTimer(duration, callback);
@@ -558,6 +627,55 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Reduces a shield's amount by the given (positive) value and notifies the client so the
+        /// shield bar shrinks. If the shield drains to 0 it is removed via its holder — which fires
+        /// OnShieldBreak, the same break path as damage consumption (ConsumeShields).
+        /// </summary>
+        public static void ReduceShield(Shield shield, float amount)
+        {
+            // Resolve the holder FIRST: reducing a shield that isn't on a unit would mutate its
+            // amount with no way to notify the client or remove it (orphan shield + bar desync).
+            var unit = shield?.TargetUnit;
+            if (unit == null || amount <= 0)
+            {
+                return;
+            }
+
+            float applied = shield.Reduce(amount);
+            if (applied <= 0)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyModifyShield(unit, -applied, shield.Physical, shield.Magical, false);
+            if (shield.IsConsumed())
+            {
+                unit.RemoveShield(shield);
+            }
+        }
+
+        /// <summary>
+        /// Increases a shield's amount by the given (positive) value and notifies the client so
+        /// the shield bar grows.
+        /// </summary>
+        public static void IncShield(Shield shield, float amount)
+        {
+            var unit = shield?.TargetUnit;
+            if (unit == null || amount <= 0)
+            {
+                return;
+            }
+
+            float applied = shield.Increase(amount);
+            if (applied <= 0)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyModifyShield(unit, applied, shield.Physical, shield.Magical, false);
+        }
+
+        /// <summary>
         /// Gets the target's current primary ability resource.
         /// </summary>
         /// <param name="target">Unit to query.</param>
@@ -762,11 +880,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null, uint? skinColorSourceNetID = null,
+            float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
             return p;
         }
 
@@ -792,11 +911,12 @@ namespace LeagueSandbox.GameServer.API
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint? keywordNetIDOverride = null)
+            uint? skinColorSourceNetID = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
+            bool sendIfOnScreenOrDiscard = false)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, keywordNetIDOverride);
+                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
         }
 
         /// <summary>
@@ -821,11 +941,12 @@ namespace LeagueSandbox.GameServer.API
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null)
+            float overrideTargetHeight = 0f, string enemyParticle = null, uint? skinColorSourceNetID = null,
+            float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle);
+                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
             return p;
         }
 
@@ -1298,6 +1419,67 @@ namespace LeagueSandbox.GameServer.API
             return EnumerateUnitsInCone(self, origin, direction, range, coneAngleDegrees, isAlive, useFlags)
                 .OrderBy(unit => Vector2.DistanceSquared(unit.Position, origin))
                 .ToList();
+        }
+
+        /// <summary>
+        ///     Resolves the units hit by a spell directly from its SpellData targeting shape (Riot's
+        ///     spelltargeting* model) instead of hardcoded geometry. Handles the STATIC-AoE targeting
+        ///     types only:
+        ///     <list type="bullet">
+        ///         <item>Cone: CastConeAngle (HALF-angle) + CastConeDistance, emanating from the caster.</item>
+        ///         <item>Area / Location: CastRadius circle around the cast point.</item>
+        ///         <item>SelfAOE: CastRadius circle around the caster.</item>
+        ///     </list>
+        ///     Skillshots/beams/single-target (Direction, DragDirection, Target, Self, TargetOrLocation)
+        ///     are missile- or script-driven and return an empty list — the caller keeps its own logic.
+        /// </summary>
+        /// <param name="spell">Spell whose SpellData + CastInfo (owner, target position, level) drive the shape.</param>
+        /// <param name="overrideFlags">
+        ///     Optional target-filter override. When null (default) the spell's OWN affect flags
+        ///     (SpellData.Flags — the JSON's AffectEnemies/Heroes/Minions/Neutral/... bits) are used,
+        ///     so scripts don't repeat them. Pass a value only to deliberately target a different set.
+        /// </param>
+        /// <param name="isAlive">Whether to return alive AttackableUnits.</param>
+        /// <param name="overrideRadius">
+        ///     Optional radius/range override. When null (default) the radius comes from SpellData
+        ///     (CastConeDistance for cones, CastRadius for circles). Pass a value when the spell's own
+        ///     data is wrong/corrupt for hit-detection (e.g. Riven's W: its 4.20 CastRadius is broken,
+        ///     the real effect radius is 300 — see Riven patch history / wiki).
+        /// </param>
+        public static List<AttackableUnit> GetUnitsHitBySpell(Spell spell, SpellDataFlags? overrideFlags = null, float? overrideRadius = null, bool isAlive = true)
+        {
+            var caster = spell.CastInfo.Owner;
+            var sd = spell.SpellData;
+            var useFlags = overrideFlags ?? sd.Flags;
+            var casterPos = caster.Position;
+            var castPoint = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
+            // CastRadius is per-level (GetMultiFloat propagates a scalar to every level slot).
+            int level = Math.Clamp((int)spell.CastInfo.SpellLevel, 0, sd.CastRadius.Length - 1);
+            float radius = overrideRadius ?? sd.CastRadius[level];
+
+            switch (sd.TargetingType)
+            {
+                case TargetingType.Cone:
+                    // LockConeToPlayer => axis is the caster's facing; otherwise the cast direction.
+                    // CastConeAngle is Riot's HALF-angle (cos-threshold); GetUnitsInCone wants the
+                    // FULL angle, hence *2. Cone length = overrideRadius ?? CastConeDistance.
+                    Vector2 coneDir = sd.LockConeToPlayer
+                        ? new Vector2(caster.Direction.X, caster.Direction.Z)
+                        : castPoint - casterPos;
+                    return GetUnitsInCone(caster, casterPos, coneDir, overrideRadius ?? sd.CastConeDistance, sd.CastConeAngle * 2f, isAlive, useFlags);
+
+                case TargetingType.Area:
+                case TargetingType.Location:
+                    return GetUnitsInRange(caster, castPoint, radius, isAlive, useFlags);
+
+                case TargetingType.SelfAOE:
+                    return GetUnitsInRange(caster, casterPos, radius, isAlive, useFlags);
+
+                default:
+                    LogDebug($"GetUnitsHitBySpell: TargetingType {sd.TargetingType} on {spell.SpellName} is not a static AoE shape " +
+                             "(skillshot/beam/target/self) — resolve hits via the missile or script instead.");
+                    return new List<AttackableUnit>();
+            }
         }
 
         /// <summary>
@@ -1850,6 +2032,23 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Returns all live missiles owned by the given unit that originate from the named
+        /// spell. Use this to find a cast's missile from a DIFFERENT script (e.g. a recast
+        /// spell locating the missile spawned by the original cast) instead of holding a
+        /// cross-script field reference — the engine's missile registry + the missile's
+        /// SpellOrigin link is the proper cast→missile relationship.
+        /// </summary>
+        public static List<SpellMissile> GetMissilesByOwnerAndSpell(ObjAIBase owner, string spellName)
+        {
+            return _game.ObjectManager.GetObjects().Values
+                .OfType<SpellMissile>()
+                .Where(m => !m.IsToRemove()
+                            && m.SpellOrigin?.CastInfo?.Owner == owner
+                            && m.SpellOrigin?.SpellName == spellName)
+                .ToList();
+        }
+
+        /// <summary>
         /// Instantly cancels any dashes the specified unit is performing.
         /// </summary>
         /// <param name="unit">Unit to stop dashing.</param>
@@ -1897,7 +2096,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC,
-                movementName, caster, movementType: movementType);
+                movementName, caster, movementType: movementType, movementOrdersType: movementOrdersType);
         }
 
         /// <summary>
@@ -1940,7 +2139,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy,
-                maxTravelTime, consideredAsCC, movementName, caster);
+                maxTravelTime, consideredAsCC, movementName, caster, movementOrdersType);
         }
 
         /// <summary>
@@ -2209,7 +2408,7 @@ namespace LeagueSandbox.GameServer.API
             CastInfo inheritVariablesFrom = null, bool isContinuation = false)
         {
             CastTarget castTarget = new CastTarget(target,
-                CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit));
+                CastTarget.GetHitResult(target, useAutoAttackSpell, caster.IsNextAutoCrit, caster.IsNextAutoMiss, caster.IsNextAutoDodged));
 
             SpellCast(caster, slot, slotType, target.Position, target.Position, fireWithoutCasting, overrideCastPos,
                 new List<CastTarget> { castTarget }, isForceCastingOrChanneling, overrideForceLevel,
@@ -2336,7 +2535,10 @@ namespace LeagueSandbox.GameServer.API
         public static void OverrideUnitAttackSpeedCap(AttackableUnit unit, bool doOverrideMax,
             float maxAttackSpeedOverride, bool doOverrideMin, float minAttackSpeedOverride)
         {
-            //Investigate if we wanna update the stats here too
+            // Store server-side so the windup/cycle timing (SpellData.GetCharacterAttackDelay) applies the
+            // same cap the client is told about — otherwise the server would use the global cap and diverge.
+            unit.MaxAttackSpeedOverride = doOverrideMax ? maxAttackSpeedOverride : 0f;
+            unit.MinAttackSpeedOverride = doOverrideMin ? minAttackSpeedOverride : 0f;
             _game.PacketNotifier.NotifyS2C_UpdateAttackSpeedCapOverrides(doOverrideMax, maxAttackSpeedOverride,
                 doOverrideMin, minAttackSpeedOverride, unit);
         }

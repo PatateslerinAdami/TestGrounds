@@ -155,7 +155,7 @@ namespace Spells
         // CharScriptXerath.luaobj which we don't parse. Hardcoded as a GameScriptTimer because
         // XerathArcanopulse2.json sets InstantCast, which makes the server pipeline fire
         // OnSpellPreCast and OnSpellPostCast same-tick and bypasses ScriptMetadata.CastTime.
-        private const float FireLockoutSeconds = 0.528f;
+        private const float FireLockoutSeconds = 0.5f;
 
         // Beam visual lifetime.
         private const float BeamLifetimeSeconds = 3.0f;
@@ -256,12 +256,16 @@ namespace Spells
             AddParticlePos(_xerath, warningAudio, _xerath.Position, _xerath.Position,
                 lifetime: 1f);
             owner.StopMovement();
+            // This is the release CAST-RECOVERY lockout (the beam's cast-animation hold), NOT a
+            // crowd-control root: Riot applies it automatically as a ref-counted CanMove/CanCast/
+            // CanAttack hold for the cast-animation duration (XerathArcanopulse2 is InstantCast with
+            // no CastTime in its data). Do NOT set StatusFlags.Rooted — that would mis-classify it as
+            // CC (tenacity-reducible / cleansable / root indicator). See project_cast_lockout_vs_cc.
             owner.SetStatus(StatusFlags.CanMove, false);
-            owner.SetStatus(StatusFlags.Rooted, true);
             owner.SetStatus(StatusFlags.CanCast, false);
             owner.SetStatus(StatusFlags.CanAttack, false);
-
-            owner.RegisterTimer(new GameScriptTimer(FireLockoutSeconds, FireBeam));
+            
+            CreateTimer(0.5f, FireBeam);
         }
 
         private void FireBeam()
@@ -288,8 +292,8 @@ namespace Spells
                 lifetime: BeamLifetimeSeconds, overrideTargetHeight: beamElevation,
                 bone: "ROOT", targetBone: "TOP");
 
+            // Release the cast-recovery lockout (mirrors the disable above; no Rooted to clear).
             _xerath.SetStatus(StatusFlags.CanMove, true);
-            _xerath.SetStatus(StatusFlags.Rooted, false);
             _xerath.SetStatus(StatusFlags.CanCast, true);
             _xerath.SetStatus(StatusFlags.CanAttack, true);
 

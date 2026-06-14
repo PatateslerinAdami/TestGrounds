@@ -44,8 +44,10 @@ public class SoulShackles : ISpellScript {
 
     public void OnSpellPostCast(Spell spell) {
         _enemiesTethered.Clear();
-        var unitsInRange = GetUnitsInRange(_morgana, _morgana.Position, TetherRange, true,
-                                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
+        // Primary tether acquire = the SelfAOE cast: radius + flags from SpellData (CastRadius=625,
+        // Enemies|Heroes — champions only). The seal/leash checks in OnUpdate keep TetherRange (those
+        // are tether MAINTENANCE, not the cast shape, and leash range may legitimately differ).
+        var unitsInRange = GetUnitsHitBySpell(spell);
         foreach (var unit in unitsInRange) {
             _enemiesTethered.Add(
                 unit,

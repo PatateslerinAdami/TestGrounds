@@ -25,7 +25,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
             _karma                               =  ownerSpell.CastInfo.Owner;
-            unit.SetStatus(StatusFlags.Rooted, true);
+            // Rooted derived from BuffType.SNARE.
             AddParticleTarget(_karma, unit,   "Karma_Base_W_tar",   unit,   buff.Duration);
             AddParticleTarget(_karma, _karma, "Karma_Base_W_tar02", unit, buff.Duration);
             AddParticleTarget(_karma, _karma, "Karma_Base_W_tar03", unit, buff.Duration);
@@ -35,7 +35,6 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Rooted, false);
             RemoveParticle(_rootParticle);
         }
     }

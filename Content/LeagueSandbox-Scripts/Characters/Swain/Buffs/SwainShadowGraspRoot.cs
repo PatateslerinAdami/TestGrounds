@@ -34,7 +34,7 @@ internal class SwainShadowGraspRoot : IBuffGameScript
         _buff = buff;
         unit.StopMovement();
         SetStatus(unit, StatusFlags.CanMove, false);
-        SetStatus(unit, StatusFlags.Rooted, true);
+        // Rooted derived from BuffType.SNARE (CanMove hold kept as-is).
         _root = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "SwainShadowGraspRootTemp", unit, buff.Duration);
         _root2 = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "swain_shadowGrasp_magic", unit, buff.Duration);
         ApiEventManager.OnDeath.AddListener(this, unit, OnDie);
@@ -54,7 +54,6 @@ internal class SwainShadowGraspRoot : IBuffGameScript
         RemoveParticle(_root);
         RemoveParticle(_root2);
         SetStatus(unit, StatusFlags.CanMove, true);
-        SetStatus(unit, StatusFlags.Rooted, false);
     }
 
     private void OnDie(DeathData data)

@@ -45,10 +45,12 @@ using GameServerCore.Packets.Enums;
 [OnMiss]
 [OnMissileEnd]
 [OnMissileUpdate]
+[OnMoveBegin]
 [OnMoveEnd]
 [OnMoveFailure]
 [OnMoveSuccess]
 [OnNearbyDeath]
+[OnPathToTargetBlocked]
 [OnPreAttack]
 [OnPreDamage]
 [OnPreDealDamage]
@@ -89,55 +91,6 @@ namespace LeagueSandbox.GameServer.API
             foreach (var dispatcher in _dispatchers)
             {
                 dispatcher.RemoveListener(owner);
-            }
-        }
-
-        // Reduces the given shield's Amount by `amount` and notifies the client so the
-        // shield-bar shrinks. If the shield drains to 0 it is removed from the unit and
-        // OnShieldBreak fires (same path as ConsumeShields). `amount` must be positive.
-        public static void ReduceShield(Shield shield, float amount)
-        {
-            if (shield == null || amount <= 0)
-            {
-                return;
-            }
-
-            float applied = shield.Reduce(amount);
-            if (applied <= 0)
-            {
-                return;
-            }
-
-            var unit = shield.TargetUnit;
-            if (unit != null)
-            {
-                _game.PacketNotifier.NotifyModifyShield(unit, -applied, shield.Physical, shield.Magical, false);
-                if (shield.IsConsumed())
-                {
-                    unit.RemoveShield(shield);
-                }
-            }
-        }
-
-        // Increases the given shield's Amount by `amount` and notifies the client so the
-        // shield-bar grows. `amount` must be positive.
-        public static void IncShield(Shield shield, float amount)
-        {
-            if (shield == null || amount <= 0)
-            {
-                return;
-            }
-
-            float applied = shield.Increase(amount);
-            if (applied <= 0)
-            {
-                return;
-            }
-
-            var unit = shield.TargetUnit;
-            if (unit != null)
-            {
-                _game.PacketNotifier.NotifyModifyShield(unit, applied, shield.Physical, shield.Magical, false);
             }
         }
 
@@ -218,6 +171,15 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell> OnLevelUpSpell
             = new Dispatcher<Spell>();
 
+        /// <summary>
+        /// Fired when a unit ENTERS forced movement (dash / leap / engine knock-arc) — symmetric with
+        /// <see cref="OnMoveEnd"/>. Lets components react to the transition (e.g. drop a CC-wander when a
+        /// knockup interrupts) instead of polling <c>MovementParameters != null</c> every tick.
+        /// Part of the forced-movement rewrite P1 (see docs/FORCED_MOVEMENT_REWRITE_PLAN.md).
+        /// </summary>
+        public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveBegin
+            = new Dispatcher<AttackableUnit, ForceMovementParameters>();
+
         public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveEnd
             = new Dispatcher<AttackableUnit, ForceMovementParameters>();
 
@@ -226,6 +188,17 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveSuccess
             = new Dispatcher<AttackableUnit, ForceMovementParameters>();
+
+        /// <summary>
+        /// Fired when an ObjAIBase's navigation to its current attack target fails — the goal is
+        /// unreachable so the pathfinder returned no path (or only a partial path to the closest
+        /// reachable cell). Mirrors the engine-fired Lua callback `OnPathToTargetBlocked`
+        /// (Aggro.lua / Shared/Minions.lua / BaronMinionAI.lua): the AI briefly ignores the target
+        /// and re-acquires. Published deferred (top of the next Update tick) to avoid re-entrant
+        /// target/waypoint mutation inside the pathing pass. Data = the blocked target (may be null).
+        /// </summary>
+        public static DataOnlyDispatcher<ObjAIBase, AttackableUnit> OnPathToTargetBlocked
+            = new DataOnlyDispatcher<ObjAIBase, AttackableUnit>();
 
         public static DataOnlyDispatcher<ObjAIBase, Spell> OnPreAttack
             = new DataOnlyDispatcher<ObjAIBase, Spell>();

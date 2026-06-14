@@ -12,7 +12,9 @@ namespace ItemSpells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            // TODO
+            TriggersSpellCasts = false,
+            PersistsThroughDeath = true,
+            IsNonDispellable = true
         };
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

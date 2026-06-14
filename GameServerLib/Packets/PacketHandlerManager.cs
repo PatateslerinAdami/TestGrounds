@@ -12,6 +12,7 @@ using Channel = GameServerCore.Packets.Enums.Channel;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer;
+using LeagueSandbox.GameServer.Logging;
 
 namespace PacketDefinitions420
 {
@@ -51,6 +52,9 @@ namespace PacketDefinitions420
             _playerManager = _game.PlayerManager;
             _netReq = netReq;
             _netResp = netResp;
+            // Opt-in outbound packet capture (replay-comparable JSON-lines). Set the env var
+            // PACKET_LOG to a path (or "1" for ./packetlog.jsonl) to record every packet we send.
+            PacketLogger.Enable(Environment.GetEnvironmentVariable("PACKET_LOG"));
             _gameConvertorTable = new Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor>();
             _loadScreenConvertorTable = new Dictionary<LoadScreenPacketID, RequestConvertor>();
             _fallbackConvertorTable = new Dictionary<GamePacketID, RequestConvertor>();
@@ -169,6 +173,17 @@ namespace PacketDefinitions420
 
         public bool SendPacket(int userId, byte[] source, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
+            // Log once per logical send. Broadcast helpers (Team/Vision/Spawned) route their
+            // per-recipient sends through EnqueueUnicast (no logging) so a fan-out is still one
+            // line, matching how a single packet appears once in a replay.
+            PacketLogger.Log(source, channelNo, flag, _game.GameTime);
+            return EnqueueUnicast(userId, source, channelNo, flag);
+        }
+
+        // Per-recipient enqueue without logging. Internal callers that already logged the
+        // logical packet (the broadcast helpers below) use this to avoid duplicate log lines.
+        private bool EnqueueUnicast(int userId, byte[] source, Channel channelNo, PacketFlags flag)
+        {
             if (0 <= userId && userId < _sender.Peers.Length)
             {
                 _bridge.EnqueueOutbound(new OutboundUnicast(userId, source, channelNo, flag));
@@ -179,6 +194,7 @@ namespace PacketDefinitions420
 
         public bool BroadcastPacket(byte[] data, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             if (data.Length >= 8)
             {
                 // Fan out to one OutboundUnicast per configured slot. The net
@@ -203,11 +219,12 @@ namespace PacketDefinitions420
         public bool BroadcastPacketTeam(TeamId team, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (var ci in _playerManager.GetPlayers(false))
             {
                 if (ci.Team == team)
                 {
-                    SendPacket(ci.ClientId, data, channelNo, flag);
+                    EnqueueUnicast(ci.ClientId, data, channelNo, flag);
                 }
             }
 
@@ -217,9 +234,10 @@ namespace PacketDefinitions420
         public bool BroadcastPacketVision(GameObject o, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (int pid in o.VisibleForPlayers)
             {
-                SendPacket(pid, data, channelNo, flag);
+                EnqueueUnicast(pid, data, channelNo, flag);
             }
             return true;
         }
@@ -231,9 +249,10 @@ namespace PacketDefinitions420
         public bool BroadcastPacketSpawned(GameObject o, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (int pid in o.SpawnedForPlayers)
             {
-                SendPacket(pid, data, channelNo, flag);
+                EnqueueUnicast(pid, data, channelNo, flag);
             }
             return true;
         }
@@ -283,6 +302,14 @@ namespace PacketDefinitions420
             else
             {
                 var gamePacketId = (GamePacketID)reader.ReadByte();
+                // Extended packets (opcode > 0xFD, e.g. C2S_UndoItemReq 0x10A) arrive as
+                // [0xFE][senderNetID(4)][opcode LE(2)][body]; the real opcode is the 2 bytes at
+                // offset 5-6, not data[0]. Mirror GamePacket.Create's decode so they dispatch.
+                if (gamePacketId == GamePacketID.ExtendedPacket && data.Length >= 7)
+                {
+                    reader.ReadInt32(); // skip senderNetID
+                    gamePacketId = (GamePacketID)reader.ReadUInt16();
+                }
                 convertor = GetConvertor(gamePacketId, channelId);
             }
 

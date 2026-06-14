@@ -21,6 +21,7 @@ internal class AkaliMota : IBuffGameScript {
 
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

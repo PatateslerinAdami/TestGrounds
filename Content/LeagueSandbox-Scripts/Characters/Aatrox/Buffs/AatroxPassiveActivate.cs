@@ -18,6 +18,7 @@ public class AatroxPassiveActivate : IBuffGameScript {
     private ObjAIBase _aatrox;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1,

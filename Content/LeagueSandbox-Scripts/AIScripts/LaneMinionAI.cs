@@ -1,538 +1,369 @@
-﻿using GameServerCore.Enums;
+using GameServerCore.Enums;
+using LeagueSandbox.GameServer.API;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
-using GameServerCore.Scripting.CSharp;
-using System.Linq;
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
+using System.Numerics;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Path;
 
 namespace AIScripts
 {
-    public class LaneMinionAI : IAIScript
+    // Clean, Riot-faithful lane minion AI — a direct mirror of Scripts/Minion.lua + Aggro.lua +
+    // Shared/Scripts/Minions.lua on top of BaseAIScript. Nothing is carried over from the previous
+    // (broken) implementation: targeting is the engine FindTargetInAcR, movement is a state machine
+    // driven by named timers + event hooks, exactly as the Lua does.
+    //
+    // Forward-nav (Riot SetStateAndMoveToForwardNav -> NavPointManager) is a faithful port of
+    // NavPointManager::GetNextNavLocIter (see LaneNavPointManager): a position-driven, stateless
+    // selection of the next lane point, capped at the next alive enemy turret's waypoint
+    // (GetMaxAllowedWaypointIndex). CC is buff-driven in our server (Fear/Flee/Taunt force movement),
+    // so — unlike the Lua — the AI does not drive CC movement; it pauses while crowd-controlled and
+    // reevaluates when CC ends.
+    public class LaneMinionAI : BaseAIScript
     {
-        public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData
+        public LaneMinionAI()
         {
-            HandlesCallsForHelp = true
-        };
-        LaneMinion LaneMinion;
-        int currentWaypointIndex = 0;
-        float minionActionTimer = 250f;
-        bool targetIsStillValid = false;
-        Dictionary<uint, float> temporaryIgnored = new Dictionary<uint, float>();
-        public Dictionary<AttackableUnit, int> unitsAttackingAllies { get; } = new Dictionary<AttackableUnit, int>();
-        float timeSinceLastAttack = 0f;
-        int targetUnitPriority = (int) ClassifyUnit.DEFAULT;
-        float localTime = 0f;
-        bool callsForHelpMayBeCleared = false;
-        bool followsWaypoints = true;
-        // Last lane waypoint an explicit move order was issued for. Intent-tracking instead of
-        // comparing against Waypoints[last]: collision/stuck repaths (OnCollision SafePath,
-        // UpdateStuckRecovery) may legitimately change the waypoint list — comparing against the
-        // live list re-issued the raw lane order every tick and overwrote those repaths,
-        // looping minions back into building footprints.
-        Vector2 _lastOrderedLaneWaypoint = new Vector2(float.NaN, float.NaN);
-        bool _useFirstAcquisitionRange = false;
-        bool _firstTargetSearchActive = false;
-
-        const float LATERAL_SPREAD_DISTANCE = 150.0f;
-
-        const float WAVE_DETECT_RANGE = 1500.0f;
-
-        bool _engagementTriggered = false;
-
-        static Dictionary<(TeamId, string, int, MinionSpawnType), int> _engagementSlotCounters = new Dictionary<(TeamId, string, int, MinionSpawnType), int>();
-
-        private bool hadTarget = false;
-        private bool TargetJustDied()
-        {
-            targetIsStillValid = IsValidTarget(LaneMinion.TargetUnit);
-            if(targetIsStillValid)
-            {
-                hadTarget = true;
-            }
-            else if(hadTarget)
-            {
-                hadTarget = false;
-                ExitFirstWaveBehavior();
-                return true;
-            }
-            return false;
+            AIScriptMetaData.HandlesCallsForHelp = true;
         }
 
-        private void ExitFirstWaveBehavior()
+        private const float MAX_ENGAGE_DISTANCE = 2500f;
+        private const float DELAY_FIND_ENEMIES = 0.25f;
+        // S4 NavPointManager::sNearPointThreshold — distance at which a forward-nav point counts as
+        // reached and the minion advances to the next. Patch 4.20 = 500 (sNearPointThresholdSq =
+        // 250000); note 4.17 used 150. We target 4.20, so 500. Flat threshold, NOT collision-relative.
+        private const float NEAR_POINT_THRESHOLD = 500f;
+
+        private LaneMinion _minion;
+        private Vector2 _lastOrderedWaypoint = new Vector2(float.NaN, float.NaN);
+        private int _navIndex;
+
+        // Whether body-contact with an enemy makes the minion engage it (Aggro.lua OnCollisionEnemy).
+        // BaronMinionAI overrides this to false (its OnCollisionEnemy is a no-op).
+        protected virtual bool EngagesOnCollision => true;
+
+        // ---------------- Lifecycle (Minions.lua OnInit) ----------------
+
+        protected override void OnActivateBehavior()
         {
-            if (LaneMinion == null || !LaneMinion.IsFirstWave) return;
-            LaneMinion.IsFirstWave = false;
-            LaneMinion.IsAsleep = false;
-            _useFirstAcquisitionRange = false;
-            _firstTargetSearchActive = false;
-        }
-
-        private void UpdateHasPassedFirstTurret()
-        {
-            if (LaneMinion.HasPassedFirstTurret) return;
-            if (!LaneMinion.OuterTurretPosition.HasValue) return;
-
-            var spawnToTurret = LaneMinion.OuterTurretPosition.Value - LaneMinion.SpawnPosition;
-            var spawnToMinion = LaneMinion.Position - LaneMinion.SpawnPosition;
-            var axisLengthSq = spawnToTurret.LengthSquared();
-            if (axisLengthSq < 1f) return;
-
-            var dot = Vector2.Dot(spawnToMinion, spawnToTurret);
-            if (dot > axisLengthSq)
-            {
-                LaneMinion.HasPassedFirstTurret = true;
-            }
-        }
-
-        public void OnActivate(ObjAIBase owner)
-        {
-            LaneMinion = owner as LaneMinion;
-        }
-        
-        public void OnUpdate(float delta)
-        {
-            localTime += delta;
-
-            if(LaneMinion != null && !LaneMinion.IsDead)
-            {
-                UpdateHasPassedFirstTurret();
-
-                if(LaneMinion.IsFirstWave && LaneMinion.TargetUnit is Champion)
-                {
-                    ExitFirstWaveBehavior();
-                }
-
-                if(LaneMinion.IsAsleep && HasEnemyInRange(LaneMinion.CharData.WakeUpRange))
-                {
-                    LaneMinion.IsAsleep = false;
-                    _useFirstAcquisitionRange = true;
-                    _firstTargetSearchActive = true;
-                }
-
-                if(!_engagementTriggered && HasEnemyLaneMinionInWaveDetectRange())
-                {
-                    _engagementTriggered = true;
-                    AssignSpreadSlot();
-                }
-
-                if(LaneMinion.IsAttacking || LaneMinion.TargetUnit == null)
-                {
-                    timeSinceLastAttack = 0f;
-                }
-                else
-                {
-                    timeSinceLastAttack += delta;
-                }
-
-                minionActionTimer += delta;
-                if(
-                    //Quote: There’s also a number of things
-                    //       that can occur between the 0.25 second interval
-                    //       of the normal sweep through the AI Priority List:
-                    //Quote: Taunt/Fear/Flee/Movement Disable/Attack Disable.
-                    //       All of these cause a minion to freshly reevaluate its behavior immediately.
-                    LaneMinion.MovementParameters == null
-                    //Quote: Collisions.
-                    //       Minions that end up overlapping other minions will reevaluate their behavior immediately.
-                    //&& !LaneMinion.RecalculateAttackPosition()
-                    && (
-                        //Quote: Their current attack target dies.
-                        //       Minions who witness the death of their foe will check for a new valid target in their acquisition range.
-                        TargetJustDied()
-                        //Quote: Call for Help.
-                        || FoundNewTarget(true)
-                        || minionActionTimer >= 250.0f
-                    )
-                ) {
-                    OrderType nextBehaviour = ReevaluateBehavior(delta);
-                    LaneMinion.UpdateMoveOrder(nextBehaviour);
-                    minionActionTimer = 0;
-
-                    _useFirstAcquisitionRange = false;
-                    _firstTargetSearchActive = false;
-                }
-
-                if(callsForHelpMayBeCleared)
-                {
-                    callsForHelpMayBeCleared = false;
-                    unitsAttackingAllies.Clear();
-                }
-            }
-        }
-
-        public void OnCallForHelp(AttackableUnit attacker, AttackableUnit victium)
-        {
-            if(LaneMinion != null && LaneMinion.IsFirstWave && attacker is Champion)
-            {
-                ExitFirstWaveBehavior();
-            }
-
-            if(LaneMinion != null && LaneMinion.IsFirstWave)
+            _minion = Owner as LaneMinion;
+            if (_minion == null)
             {
                 return;
             }
 
-            if(unitsAttackingAllies != null)
+            InitTimer("TimerFindEnemies", DELAY_FIND_ENEMIES, true, TimerFindEnemies);
+            InitTimer("TimerMoveForward", 0f, true, TimerMoveForward);
+            InitTimer("TimerAntiKite", 4f, false, TimerAntiKite);
+            StopTimer("TimerAntiKite");
+
+            // CC movement is driven by the Fear/Flee/Taunt buffs; just reevaluate when it ends.
+            Subscribe(AIEvent.OnFearEnd, _ => FindTargetOrMove());
+            Subscribe(AIEvent.OnTauntEnd, _ => OnTauntEnded());
+            Subscribe(AIEvent.OnCharmEnd, _ => FindTargetOrMove());
+
+            // Aggro.lua OnCollisionEnemy / OnTargetLost / OnPathToTargetBlocked — immediate
+            // reevaluation on body-contact with an enemy, when the engine drops our target, and
+            // when navigation to the target fails (the 0.25s scan is the fallback for all three).
+            ApiEventManager.OnCollision.AddListener(this, _minion, OnOwnerCollision, false);
+            ApiEventManager.OnTargetLost.AddListener(this, _minion, OnOwnerTargetLost, false);
+            ApiEventManager.OnPathToTargetBlocked.AddListener(this, _minion, OnOwnerPathToTargetBlocked, false);
+
+            NetSetState(AIState.AI_IDLE);
+        }
+
+        // While crowd-controlled / dashing the buff/forced-movement system owns movement; the AI
+        // must not issue competing orders.
+        private bool IsCrowdControlled()
+        {
+            const StatusFlags cc = StatusFlags.Feared | StatusFlags.Charmed | StatusFlags.Taunted;
+            return (_minion.Status & cc) != 0 || _minion.IsForceMoved;
+        }
+
+        // A dormant first-wave minion (RoamState == Inactive) pushes the lane but ignores enemies.
+        // The engine (LaneMinion.UpdateRoamState) flips it to Hostile when the lanes clash; only
+        // then may the AI acquire targets. See MinionRoamState.
+        private bool CanAggro()
+        {
+            return _minion.RoamState == MinionRoamState.Hostile;
+        }
+
+        // ---------------- Timers (Minion.lua) ----------------
+
+        // 0.25s — acquire / maintain a target.
+        private void TimerFindEnemies()
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
             {
-                int priority = Math.Min(
-                    unitsAttackingAllies.GetValueOrDefault(attacker, (int)ClassifyUnit.DEFAULT),
-                    (int)LaneMinion.ClassifyTarget(attacker, victium)
-                );
-                unitsAttackingAllies[attacker] = priority;
+                return;
             }
-        }
 
-        bool UnitInRange(AttackableUnit u, float range)
-        {
-            var effectiveRange = range + u.CollisionRadius;
-            return Vector2.DistanceSquared(LaneMinion.Position, u.Position) < (effectiveRange * effectiveRange);
-        }
-
-        bool IsValidTarget(AttackableUnit u)
-        {
-            if (LaneMinion.IsAsleep) return false;
-
-            if (_firstTargetSearchActive
-                && u is LaneMinion enemyLane
-                && enemyLane.MinionSpawnType == MinionSpawnType.MINION_TYPE_CASTER)
+            if (CurrentState == AIState.AI_ATTACKMOVESTATE)
             {
-                return false;
-            }
-
-            return (
-                u != null
-                && !u.IsDead
-                && u.Team != LaneMinion.Team
-                && UnitInRange(u, GetEffectiveAcquisitionRange())
-                && u.IsVisibleByTeam(LaneMinion.Team)
-                && u.Status.HasFlag(StatusFlags.Targetable)
-                && !UnitIsProtectionActive(u)
-            );
-        }
-
-        float GetEffectiveAcquisitionRange()
-        {
-            if (_useFirstAcquisitionRange)
-            {
-                return LaneMinion.CharData.FirstAcquisitionRange;
-            }
-            return LaneMinion.Stats.AcquisitionRange.Total;
-        }
-
-        bool HasEnemyInRange(float range)
-        {
-            foreach (var obj in EnumerateUnitsInRange(LaneMinion.Position, range, true))
-            {
-                if (obj is AttackableUnit u
-                    && !u.IsDead
-                    && u.Team != LaneMinion.Team
-                    && u.IsVisibleByTeam(LaneMinion.Team)
-                    && u.Status.HasFlag(StatusFlags.Targetable)
-                    && UnitInRange(u, range))
+                if (!CanAggro())
                 {
-                    return true;
+                    return;
+                }
+
+                AttackableUnit target = FindTargetInAcR();
+                if (target != null)
+                {
+                    SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, target);
+                    ResetAndStartTimer("TimerAntiKite");
+                }
+                return;
+            }
+
+            if (CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            {
+                AttackableUnit target = _minion.TargetUnit;
+                if (target == null || target.IsDead
+                    || MAX_ENGAGE_DISTANCE < Vector2.Distance(_minion.Position, target.Position))
+                {
+                    FindTargetOrMove();
                 }
             }
-            return false;
         }
 
-        bool HasEnemyLaneMinionInWaveDetectRange()
+        // Every tick — keep pushing the lane while not engaged.
+        private void TimerMoveForward()
         {
-            foreach (var obj in EnumerateUnitsInRange(LaneMinion.Position, WAVE_DETECT_RANGE, true))
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
             {
-                if (obj is LaneMinion enemyLane
-                    && !enemyLane.IsDead
-                    && enemyLane.Team != LaneMinion.Team
-                    && enemyLane.Status.HasFlag(StatusFlags.Targetable)
-                    && UnitInRange(enemyLane, WAVE_DETECT_RANGE))
+                return;
+            }
+
+            if (CurrentState == AIState.AI_IDLE)
+            {
+                FindTargetOrMove();
+            }
+            else if (CurrentState == AIState.AI_ATTACKMOVESTATE)
+            {
+                SetStateAndMoveToForwardNav();
+            }
+        }
+
+        // 4s — if stuck moving toward a target without landing a hit, ignore it briefly and re-acquire.
+        private void TimerAntiKite()
+        {
+            if (_minion == null || _minion.IsDead)
+            {
+                return;
+            }
+
+            if (CurrentState == AIState.AI_ATTACKMOVE_ATTACKING && IsMoving())
+            {
+                AddToIgnore(0.1f);
+                FindTargetOrMove();
+            }
+        }
+
+        // S4 obj_AI_Minion::IsBetterThanGivenTarget tournament: IsBetterTargetThanMinion returns
+        // EQUAL, so a minion never sub-ranks other minions by type — equal-priority candidates
+        // fall through to the distance tiebreak in FindTargetInAcR. Collapse the lane-minion
+        // subtypes (super/cannon/caster/melee) into the single MINION bucket so the *nearest*
+        // enemy minion is picked, not the highest-"value" one. Everything else keeps the engine
+        // ClassifyTarget ordering (champions/turrets/buildings stay deprioritised below minions,
+        // which is what keeps a pushing minion from peeling onto a nearby champion in lane).
+        protected override int GetTargetPriority(AttackableUnit target)
+        {
+            ClassifyUnit c = _minion.ClassifyTarget(target);
+            switch (c)
+            {
+                case ClassifyUnit.SUPER_OR_CANNON_MINION:
+                case ClassifyUnit.CASTER_MINION:
+                case ClassifyUnit.MELEE_MINION:
+                    return (int)ClassifyUnit.MINION;
+                default:
+                    return (int)c;
+            }
+        }
+
+        // ---------------- Decision (Minion.lua FindTargetOrMove) ----------------
+
+        private void FindTargetOrMove()
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
+            {
+                return;
+            }
+
+            AttackableUnit target = CanAggro() ? FindTargetInAcR() : null;
+            if (target != null)
+            {
+                // Minion.lua LastAutoAttackFinished() guard: never re-issue the attack order mid
+                // auto-attack windup — SetTargetUnit resets the AA pipeline on a target switch, so
+                // doing it now would cancel the committed swing. Defer to the next 0.25s scan.
+                // (IsAttacking == true means an auto-attack windup is in progress.)
+                if (_minion.IsAttacking)
                 {
-                    return true;
+                    return;
                 }
-            }
-            return false;
-        }
 
-        void AssignSpreadSlot()
-        {
-            var key = (LaneMinion.Team, LaneMinion.BarracksName, LaneMinion.WaveNumber, LaneMinion.MinionSpawnType);
-            int counter = _engagementSlotCounters.TryGetValue(key, out var current) ? current : 0;
-            LaneMinion.SpreadSlotIndex = counter;
-            _engagementSlotCounters[key] = counter + 1;
-        }
-
-        Vector2 ComputeLateralOffset(int slot, Vector2 leftPerp)
-        {
-            if (slot <= 0) return Vector2.Zero;
-            int rank = (slot + 1) / 2;
-            bool isLeft = (slot % 2) == 1;
-            float magnitude = rank * LATERAL_SPREAD_DISTANCE;
-            return (isLeft ? leftPerp : -leftPerp) * magnitude;
-        }
-
-        Vector2 GetSpreadedWaypoint(int waypointIndex)
-        {
-            Vector2 baseWaypoint = LaneMinion.PathingWaypoints[waypointIndex];
-            if (LaneMinion.SpreadSlotIndex < 1) return baseWaypoint;
-
-            Vector2 prevWaypoint = waypointIndex > 0
-                ? LaneMinion.PathingWaypoints[waypointIndex - 1]
-                : LaneMinion.SpawnPosition;
-            Vector2 axis = baseWaypoint - prevWaypoint;
-            if (axis.LengthSquared() <= 0.001f) return baseWaypoint;
-
-            Vector2 dirAxis = Vector2.Normalize(axis);
-            Vector2 leftPerp = new Vector2(-dirAxis.Y, dirAxis.X);
-            Vector2 offset = ComputeLateralOffset(LaneMinion.SpreadSlotIndex, leftPerp);
-            return baseWaypoint + offset;
-        }
-
-        void Ignore(AttackableUnit unit, float time = 500)
-        {
-            temporaryIgnored[unit.NetId] = localTime + time;
-        }
-
-        void FilterTemporaryIgnoredList()
-        {
-            List<uint> keysToRemove = new List<uint>();
-            foreach (var pair in temporaryIgnored)
-            {
-                if(pair.Value <= localTime)
-                    keysToRemove.Add(pair.Key);
-            }
-            foreach (var key in keysToRemove)
-            {
-                temporaryIgnored.Remove(key);
-            }
-        }
-
-        bool FoundNewTarget(bool handleOnlyCallsForHelp = false)
-        {
-            callsForHelpMayBeCleared = true;
-
-            AttackableUnit currentTarget = null;
-            AttackableUnit nextTarget = currentTarget;
-            int nextTargetPriority = (int)ClassifyUnit.DEFAULT;
-            float acquisitionRange = GetEffectiveAcquisitionRange();
-            float nextTargetDistanceSquared = acquisitionRange * acquisitionRange;
-            int nextTargetAttackers = 0;
-            if(targetIsStillValid)
-            {
-                currentTarget = LaneMinion.TargetUnit;
-                nextTarget = currentTarget;
-                nextTargetPriority = targetUnitPriority;
-                nextTargetDistanceSquared = Vector2.DistanceSquared(LaneMinion.Position, nextTarget.Position);
-                nextTargetAttackers = LaneMinion.IsFirstWave ? CountUnitsAttackingUnit(nextTarget) : 0;
-            }
-            
-            FilterTemporaryIgnoredList();
-
-            IEnumerable<AttackableUnit> nearestObjects;
-            if(handleOnlyCallsForHelp)
-            {
-                if(unitsAttackingAllies.Count == 0)
-                {
-                    return false;
-                }
-                nearestObjects = unitsAttackingAllies.Keys;
+                SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, target);
+                ResetAndStartTimer("TimerAntiKite");
             }
             else
             {
-                nearestObjects = EnumerateUnitsInRange(LaneMinion.Position, acquisitionRange, true);
+                SetStateAndMoveToForwardNav();
+                StopTimer("TimerAntiKite");
             }
-            foreach (var it in nearestObjects)
-            {
-                if (it is AttackableUnit u && IsValidTarget(u) && !temporaryIgnored.ContainsKey(u.NetId))
-                {
-                    int priority = unitsAttackingAllies.ContainsKey(u) ?
-                        unitsAttackingAllies[u]
-                        : (int)LaneMinion.ClassifyTarget(u)
-                    ;
-                    float distanceSquared = Vector2.DistanceSquared(LaneMinion.Position, u.Position);
-                    int attackers = LaneMinion.IsFirstWave ? CountUnitsAttackingUnit(u) : 0;
-                    if (
-                        nextTarget == null
-                        || attackers < nextTargetAttackers
-                        || (
-                            attackers == nextTargetAttackers
-                            && (
-                                priority < nextTargetPriority
-                                || (
-                                    priority == nextTargetPriority
-                                    && distanceSquared < nextTargetDistanceSquared
-                                )
-                            )
-                        )
-                    ) {
-                        nextTarget = u;
-                        nextTargetPriority = priority;
-                        nextTargetDistanceSquared = distanceSquared;
-                        nextTargetAttackers = attackers;
-                    }
-                }
-            }
-            
-            if(nextTarget != null && nextTarget != currentTarget)
-            {
-                // This is the only place where the target is set
-                LaneMinion.SetTargetUnit(nextTarget, true);
-                targetUnitPriority = nextTargetPriority;
-                timeSinceLastAttack = 0f;
-                followsWaypoints = false;
-
-                return true;
-            }
-            return false;
         }
 
-        bool WaypointReached()
+        // Minion.lua OnTauntEnd: keep attacking the taunter if it's still valid (and restart the
+        // anti-kite timer), only re-acquiring when there's no taunt target. Our taunt is buff-driven:
+        // the CrowdControlComponent set TargetUnit = taunter on taunt begin and does NOT clear it on
+        // end (unlike fear/charm), and the AI yields while Taunted, so TargetUnit still holds the
+        // taunter here. (A plain FindTargetOrMove usually re-acquires the same adjacent taunter, but
+        // this matches the Lua's explicit "stay on the taunter" + anti-kite restart.)
+        private void OnTauntEnded()
         {
-            Vector2 currentWaypoint = GetSpreadedWaypoint(currentWaypointIndex);
-
-            float radius = LaneMinion.CollisionRadius;
-            Vector2 center = LaneMinion.Position;
-
-            var nearestMinions = EnumerateUnitsInRange(LaneMinion.Position, LaneMinion.Stats.AcquisitionRange.Total, true)
-                                .OfType<LaneMinion>()
-                                .OrderBy(minion => Vector2.DistanceSquared(LaneMinion.Position, minion.Position) - minion.CollisionRadius);
-
-            // This is equivalent to making any colliding minions equal to a single minion to save on pathfinding resources.
-            foreach (LaneMinion minion in nearestMinions)
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
             {
-                if(minion != LaneMinion){
-                    // If the closest minion is in collision range, add its collision radius to the waypoint success range.
-                    if (GameServerCore.Extensions.IsVectorWithinRange(minion.Position, center, radius + minion.CollisionRadius))
-                    {
-                        Vector2 dir = Vector2.Normalize(minion.Position - center);
-                        //Vector2 pa = center + dir * (radius + minion.CollisionRadius * 2f);
-                        //Vector2 pb = center - dir * radius;
-                        //center = (pa + pb) * 0.5f;
-                        //radius = (minion.CollisionRadius * 2f + radius * 2f) * 0.5f;
-
-                        // Or simply
-                        center += dir * minion.CollisionRadius;
-                        radius += minion.CollisionRadius;
-                    }
-                    // If the closest minion (above) is not in collision range, then we stop the loop.
-                    else break;
-                }
+                return;
             }
 
-            float margin = 25f; // Otherwise, interferes with AttackableUnit which stops a little earlier
-            if (GameServerCore.Extensions.IsVectorWithinRange(currentWaypoint, center, radius + margin))
+            AttackableUnit tauntTarget = _minion.TargetUnit;
+            if (tauntTarget != null && !tauntTarget.IsDead && tauntTarget.Team != _minion.Team)
             {
-                return true;
+                SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, tauntTarget);
+                ResetAndStartTimer("TimerAntiKite");
             }
-
-            // Also count the waypoint as reached once the minion has projected past it along
-            // the segment, so that combat displacement / spread offsets / body-blocking can't
-            // cause the minion to path back toward base to "pick up" a waypoint it already cleared.
-            Vector2 prev = currentWaypointIndex > 0
-                ? GetSpreadedWaypoint(currentWaypointIndex - 1)
-                : LaneMinion.SpawnPosition;
-            Vector2 axis = currentWaypoint - prev;
-            float axisLenSq = axis.LengthSquared();
-            if (axisLenSq > 0.001f
-                && Vector2.Dot(LaneMinion.Position - prev, axis) >= axisLenSq)
+            else
             {
-                return true;
+                FindTargetOrMove();
             }
-
-            return false;
         }
 
-        OrderType ReevaluateBehavior(float delta)
+        // Aggro.lua OnCallForHelp: respond to an ally's attacker while pushing/engaging.
+        protected override void OnCallForHelpBehavior(AttackableUnit attacker, AttackableUnit victium)
         {
-
-            //Quote: Follow any current specialized behavior rules, such as from CC (Taunts, Flees, Fears)
-            
-            //Quote: Continue attacking (or moving towards) their current target if that target is still valid.
-            if(targetIsStillValid)
+            if (_minion == null || _minion.IsDead || IsCrowdControlled() || attacker == null || !CanAggro())
             {
-                //Quote: If they have failed to attack their target for 4 seconds, they temporarily ignore them instead.
-                if(timeSinceLastAttack >= 4000f)
+                return;
+            }
+
+            if (CurrentState == AIState.AI_ATTACKMOVESTATE || CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            {
+                SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, attacker);
+                ResetAndStartTimer("TimerAntiKite");
+            }
+        }
+
+        // Aggro.lua OnCollisionEnemy: engage an enemy we bump into. Restricted to the pushing
+        // states (not yet locked onto a target) so it never yanks a minion off its current target
+        // every time it grazes another body in a clash — the 0.25s FindTargetInAcR keeps the
+        // best target once engaged.
+        private void OnOwnerCollision(GameObject self, GameObject collider)
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled() || !CanAggro())
+            {
+                return;
+            }
+
+            if (!EngagesOnCollision || CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            {
+                return;
+            }
+
+            if (collider is not AttackableUnit u || u.IsDead || u.Team == _minion.Team
+                || !u.Status.HasFlag(StatusFlags.Targetable) || !u.IsVisibleByTeam(_minion.Team))
+            {
+                return;
+            }
+
+            SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, u);
+            ResetAndStartTimer("TimerAntiKite");
+        }
+
+        // Aggro.lua OnTargetLost: the engine dropped our target (died / went invalid) — re-acquire
+        // immediately instead of waiting for the next 0.25s tick.
+        private void OnOwnerTargetLost(AttackableUnit lostTarget)
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
+            {
+                return;
+            }
+
+            if (CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            {
+                FindTargetOrMove();
+            }
+        }
+
+        // Aggro.lua / Shared/Minions.lua OnPathToTargetBlocked: the engine couldn't path to our
+        // attack target (unreachable / partial path only). Briefly ignore it and re-acquire so the
+        // minion peels onto a reachable target instead of grinding against the obstacle until the
+        // 4s anti-kite timer fires. Identical body to the Lua handler.
+        private void OnOwnerPathToTargetBlocked(AttackableUnit blockedTarget)
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
+            {
+                return;
+            }
+
+            if (CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            {
+                AddToIgnore(0.1f);
+                FindTargetOrMove();
+            }
+        }
+
+        // ---------------- Forward navigation (Riot SetStateAndMoveToForwardNav / NavPointManager) ----------------
+
+        // Faithful port of NavPointManager::GetNextNavLocIter (see LaneNavPointManager): a position-
+        // driven, stateless selection of the next lane point — robust to being shoved off-axis — capped
+        // at the next alive enemy turret's waypoint (GetMaxAllowedWaypointIndex). Paths to the chosen
+        // point through the blocker-aware A* so it arcs around building footprints.
+        private void SetStateAndMoveToForwardNav()
+        {
+            NetSetState(AIState.AI_ATTACKMOVESTATE);
+
+            IReadOnlyList<Vector2> lane = _minion.PathingWaypoints;
+            if (lane == null || lane.Count == 0)
+            {
+                return;
+            }
+
+            int maxIndex = _minion.GetMaxAllowedWaypointIndex();
+            Vector2? next = LaneNavPointManager.GetNextNavTarget(
+                _minion.SpawnPosition, lane, maxIndex,
+                _minion.Position, NEAR_POINT_THRESHOLD, ref _navIndex);
+
+            if (next == null)
+            {
+                // Held at the first alive enemy turret's regroup point, or arrived at the nexus end.
+                _minion.UpdateMoveOrder(OrderType.Stop);
+                return;
+            }
+
+            Vector2 target = next.Value;
+
+            // Inline-turret fidelity (Riot GetNextNavLocIter halts at the enemy turret nav node):
+            // once the cap waypoint is reached, target the capping turret's exact position instead
+            // of the nearest lane waypoint, so the minion always closes into its acquisition range.
+            if (_navIndex >= maxIndex)
+            {
+                var cappingTurret = _minion.GetCappingTurret();
+                if (cappingTurret != null)
                 {
-                    Ignore(LaneMinion.TargetUnit);
-                    targetIsStillValid = false;
+                    target = cappingTurret.Position;
                 }
-                else
-                {
-                    return OrderType.AttackTo;
-                }
-                    
             }
 
-            //Quote: Find a new valid target in the minion’s acquisition range to attack.
-            //Quote: If multiple valid targets, prioritize based on “how hard is it for me to path there?”
-            if (FoundNewTarget())
+            // Re-issue the path only when the target point changed or the current path ran out.
+            if (_lastOrderedWaypoint != target || _minion.IsPathEnded())
             {
-                return OrderType.AttackTo;
-            }
-            else if(LaneMinion.TargetUnit != null)
-            {
-                LaneMinion.CancelAutoAttack(false, true);
-                LaneMinion.SetTargetUnit(null, true);
-            }
-            
-            //Quote: Check if near a target waypoint, if so change the target waypoint to the next in the line.
-            //
-            // Cap advance at the next-alive-enemy-turret waypoint per S4 NavPointManager
-            // semantics (mirror NavPointManager.cpp:1259-1503): minions hold at the regroup
-            // waypoint until the blocking turret dies. `GetMaxAllowedWaypointIndex` returns
-            // the cap with the highest index the minion is allowed to walk to right now. We
-            // permit advancing UP TO and INCLUDING that index so the minion can attack the
-            // turret in range. Once the turret dies, the cap moves up and the minion advances.
-            int maxAllowedIdx = LaneMinion.GetMaxAllowedWaypointIndex();
-            int loopCap = Math.Min(LaneMinion.PathingWaypoints.Count, maxAllowedIdx + 1);
-            bool notYetOutOfRange = true;
-            while(
-                (notYetOutOfRange = currentWaypointIndex < loopCap)
-                && WaypointReached()
-            ) {
-                currentWaypointIndex++;
+                List<Vector2> path = GetPath(_minion.Position, target, _minion.PathfindingRadius)
+                                     ?? new List<Vector2> { _minion.Position, target };
+                _minion.SetWaypoints(path);
+                _lastOrderedWaypoint = target;
             }
 
-            //Quote: Walk towards the target waypoint.
-            if(notYetOutOfRange)
-            {
-                Vector2 currentWaypoint = GetSpreadedWaypoint(currentWaypointIndex);
-
-                // Re-order when the lane target advanced OR the current path ran out without
-                // reaching it (partial path end, stuck-recovery ResetWaypoints, ...).
-                if(_lastOrderedLaneWaypoint != currentWaypoint || LaneMinion.IsPathEnded())
-                {
-                    followsWaypoints = true;
-
-                    // Lane walking goes through the blocker-aware A* — mirrors Riot, where the
-                    // minion AI's move order runs CreatePath/BuildNavigationPath and therefore
-                    // arcs around baked building footprints (inhibitor 186/214, nexus 353).
-                    // The previous raw two-point segment (and the artificial spread
-                    // intermediate) cut straight through those footprints: terrain-OnCollision
-                    // fired, its SafePath repath got overwritten the next tick by the raw
-                    // order, and minions looped into/“stuck inside” the inhibitor. GetPath also
-                    // snaps blocked spread targets via GetClosestTerrainExit internally.
-                    List<Vector2> path = GetPath(LaneMinion.Position, currentWaypoint, LaneMinion.PathfindingRadius);
-
-                    if(path == null)
-                    {
-                        // Degenerate (sub-10u or unreachable): straight segment as last resort.
-                        path = new List<Vector2>()
-                        {
-                            LaneMinion.Position,
-                            currentWaypoint
-                        };
-                    }
-                    LaneMinion.SetWaypoints(path);
-                    _lastOrderedLaneWaypoint = currentWaypoint;
-                }
-                
-                return OrderType.MoveTo;
-            }
-
-            return OrderType.Stop;
+            _minion.UpdateMoveOrder(OrderType.MoveTo);
         }
     }
 }

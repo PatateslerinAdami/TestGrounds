@@ -207,27 +207,77 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         // === Identity ===
 
         /// <summary>
-        /// True when both paths have the same length and every corresponding waypoint is
-        /// within <paramref name="epsilon"/> world units of its peer. Default epsilon is
-        /// 0.5 — sub-cell tolerance, since A* output is cell-snapped to <c>CellSize</c>=25.
+        /// Faithful port of S4 <c>NavigationPath::IsPathTheSame(unitPos, otherPath)</c>
+        /// (mac decomp NavigationPath.cpp:327; Ghidra s4 ai/NavigationPath.cpp:1954 DWARF proto).
+        /// Returns true when, after skipping each path's already-reached prefix near
+        /// <paramref name="unitPos"/>, the remainder of THIS path matches <paramref name="other"/>
+        /// closely enough that <paramref name="other"/> is fully consumed.
+        ///
+        /// Three phases (this = the freshly-built path, other = the current path):
+        ///   1. Advance past THIS waypoints within a 50-unit box of <paramref name="unitPos"/>.
+        ///   2. Advance past OTHER waypoints within a 50-unit box of <paramref name="unitPos"/>.
+        ///   3. Compare the remainders pairwise with a 10-unit box tolerance; the paths are "the
+        ///      same" iff OTHER is exhausted by the match.
+        ///
+        /// <paramref name="thisNext"/> / <paramref name="otherNext"/> are the per-path
+        /// <c>m_NextWaypoint</c> traversal cursors — Riot stores them on the path; we keep them on
+        /// the unit (<c>CurrentWaypointKey</c>), so callers thread them in. Box (Chebyshev) distance
+        /// and the 50/10 thresholds are the client literals; the leniency is deliberate (dedups
+        /// near-identical re-paths so the server doesn't re-broadcast a WaypointGroup every recompute).
         /// </summary>
-        public bool IsPathTheSame(NavigationPath other, float epsilon = 0.5f)
+        public bool IsPathTheSame(NavigationPath other, Vector2 unitPos, int thisNext = 0, int otherNext = 0)
         {
             if (other == null) return false;
-            if (ReferenceEquals(this, other)) return true;
-            if (_waypoints.Count != other._waypoints.Count) return false;
-            float epsSq = epsilon * epsilon;
-            for (int i = 0; i < _waypoints.Count; i++)
+
+            int thisSize = _waypoints.Count;
+            int otherSize = other._waypoints.Count;
+
+            // Both cursors past their ends -> both paths fully traversed -> trivially "the same".
+            bool bothDone = otherNext >= otherSize && thisNext >= thisSize;
+            if (thisNext >= thisSize) return bothDone;
+
+            int iter = thisNext;
+            int iterOther = otherNext;
+            if (iterOther >= otherSize) return bothDone;
+
+            // Phase 1: skip THIS waypoints already reached (within 50-unit box of the unit).
+            while (iter < thisSize)
             {
-                if (Vector2.DistanceSquared(_waypoints[i], other._waypoints[i]) > epsSq)
+                Vector2 p = _waypoints[iter];
+                if (Math.Abs(p.X - unitPos.X) > 50f || Math.Abs(p.Y - unitPos.Y) > 50f) break;
+                iter++;
+            }
+
+            // Phase 2: skip OTHER waypoints already reached.
+            while (iterOther < otherSize)
+            {
+                Vector2 p = other._waypoints[iterOther];
+                if (Math.Abs(p.X - unitPos.X) > 50f || Math.Abs(p.Y - unitPos.Y) > 50f) break;
+                iterOther++;
+            }
+
+            // Phase 3: pairwise compare remainders with a 10-unit box tolerance.
+            if (iter < thisSize)
+            {
+                int i = 0;
+                while (true)
                 {
-                    return false;
+                    int otherIdx = iterOther + i;
+                    if (otherIdx >= otherSize) break;
+                    Vector2 p1 = _waypoints[iter + i];
+                    Vector2 p2 = other._waypoints[otherIdx];
+                    if (Math.Abs(p1.X - p2.X) > 10f || Math.Abs(p1.Y - p2.Y) > 10f) break;
+                    if (iter + i + 1 >= thisSize)
+                    {
+                        iterOther = iterOther + i + 1;
+                        break;
+                    }
+                    i++;
                 }
             }
-            return true;
-        }
 
-        public bool ComparePathClose(NavigationPath other, float epsilon) => IsPathTheSame(other, epsilon);
+            return iterOther == otherSize;
+        }
 
         public bool HasDuplicateInARow()
         {

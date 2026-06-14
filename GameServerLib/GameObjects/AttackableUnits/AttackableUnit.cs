@@ -57,6 +57,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public string Model { get; protected set; }
         /// <summary>
+        /// Layered model/skin override stack (Riot CharacterDataStack). Drives transforms, object-data
+        /// swaps and evolving skins via S2C_ChangeCharacterData / PopCharacterData / PopAllCharacterData.
+        /// Scripts use the ApiFunctionManager wrappers (PushCharacterData/PopCharacterData/...);
+        /// <see cref="ChangeModel"/> routes through its base layer.
+        /// </summary>
+        public CharacterDataStack CharacterDataStack { get; private set; }
+        /// <summary>
         /// Stats used purely in networking the accompishments or status of units and their gameplay affecting stats.
         /// </summary>
         public Replication Replication { get; protected set; }
@@ -65,6 +72,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Currently these are only initialized manually by ObjAIBase and ObjBuilding.
         /// </summary>
         public Stats Stats { get; protected set; }
+        /// <summary>
+        /// Per-unit attack-speed cap overrides (Riot GetMaxAttackSpeedOverride / GetMinAttackSpeedOverride),
+        /// set via the API <c>OverrideUnitAttackSpeedCap</c>. 0 = no override. Consumed by
+        /// <c>SpellData.GetCharacterAttackDelay</c>: a MAX override lowers the attack-delay floor (1/maxAS),
+        /// a MIN override raises the ceiling (1/minAS) — so the server's windup/cycle timing respects the
+        /// same cap the client was told about via S2C_UpdateAttackSpeedCapOverrides.
+        /// </summary>
+        public float MaxAttackSpeedOverride { get; set; }
+        public float MinAttackSpeedOverride { get; set; }
         /// <summary>
         /// Variable which stores the number of times a unit has teleported. Used purely for networking.
         /// Resets when reaching byte.MaxValue (255).
@@ -179,7 +195,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
         public StatusFlags Status { get; private set; }
-        private StatusFlags _statusBeforeApplyingBuffEfects = 0;
+        // Base layer of the action-state. Non-capability flags keep plain set/clear bitfield
+        // semantics; the default-ON capability flags (mirrors Riot's CharacterState::RefCountedState)
+        // are ref-counted DISABLE-holds instead, so overlapping imperative SetStatus(cap, false)
+        // holds compose correctly — one source releasing its hold must not re-enable the capability
+        // while another source still holds it disabled (the Xerath-Q-lockout overlap class of bug).
+        // Immovable is intentionally NOT ref-counted here: it is default-OFF (enable-hold polarity,
+        // opposite to CanX) and has no callers; it stays a plain flag.
+        private StatusFlags _nonCapabilityBase = 0;
+        private int _disableCanMove;
+        private int _disableCanAttack;
+        private int _disableCanCast;
+        private int _disableCanMoveEver;
+        private const StatusFlags CapabilityMask =
+            StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMoveEver;
         private StatusFlags _buffEffectsToEnable = 0;
         private StatusFlags _buffEffectsToDisable = 0;
         private StatusFlags _dashEffectsToDisable = 0;
@@ -188,6 +217,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Parameters of any forced movements (dashes) this unit is performing.
         /// </summary>
         public ForceMovementParameters MovementParameters { get; protected set; }
+
+        /// <summary>
+        /// Whether this unit is currently under forced movement (dash / leap / engine knock-arc).
+        /// Encapsulates the legacy <c>MovementParameters != null</c> poll so consumers (AI scripts,
+        /// components) don't reach into the raw field — the backing representation can change in the
+        /// forced-movement rewrite (P1b) without touching call-sites. Pairs with the OnMoveBegin/OnMoveEnd
+        /// events for transition reactions. See docs/FORCED_MOVEMENT_REWRITE_PLAN.md.
+        /// </summary>
+        public bool IsForceMoved => MovementParameters != null;
         /// <summary>
         /// Information about this object's icon on the minimap.
         /// </summary>
@@ -221,6 +259,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         {
             Model = model;
+            // Base skinID 0 here; ObjAIBase re-seeds it silently once its SkinID is assigned.
+            CharacterDataStack = new CharacterDataStack(this, _game, Model, 0);
             CharData = _game.Config.ContentManager.GetCharData(Model);
             if (stats == null)
             {
@@ -356,7 +396,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // true. The old Count>1 check treated an arrived-at-goal unit as still wanting to move:
             // actualDist≈0 vs expected>0 → "stuck" → TryUnstuckRepath does GetPath(pos→goal) where
             // goal==pos → degenerate null → escalates repathCount 0→15 over ~33s, eventually
-            // ResetWaypoints (the "stopped then teleported far" bug, [STUCKDBG]-confirmed:
+            // ResetWaypoints (the "stopped then teleported far" bug, runtime-confirmed:
             // goal==pos, newPathCount=0, posChanged=False every event). Triggered by very short
             // paths (pathLen~26) where the unit reaches the goal. The degenerate in-blocker case
             // the old comment cared about (HandleMove [pos,pos] on a NOT_PASSABLE cell) is still
@@ -1018,21 +1058,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var targetIsWard = damageData.Target is Minion { IsWard: true };
             if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
-                ApiEventManager.OnBeingHit.Publish(damageData.Target, damageData.Attacker);
-
-                // Wards should not trigger on-hit proc pipelines; Therfore each basic attack consumes only one ward hit.
-                if (!targetIsWard)
-                    ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
-                
-                //TODO: find a use case for these OnDodge OnBeingDodged and OnMiss
-                if (damageData.DamageResultType == DamageResultType.RESULT_DODGE)
+                if (damageData.DamageResultType == DamageResultType.RESULT_MISS)
                 {
+                    // Missed (e.g. Blind): the attack never connected — fire only the miss signal,
+                    // NOT OnBeingHit / OnHitUnit (no on-hit procs on a missed attack).
+                    ApiEventManager.OnMiss.Publish(damageData.Attacker, damageData.Target);
+                }
+                else if (damageData.DamageResultType == DamageResultType.RESULT_DODGE)
+                {
+                    // Dodged (e.g. Jax E): same — only the dodge signals, no on-hit procs.
                     ApiEventManager.OnDodge.Publish(damageData.Target, damageData.Attacker);
                     ApiEventManager.OnBeingDodged.Publish(damageData.Attacker, damageData.Target);
                 }
-                else if (damageData.DamageResultType == DamageResultType.RESULT_MISS)
+                else
                 {
-                    ApiEventManager.OnMiss.Publish(damageData.Attacker, damageData.Target);
+                    // Attack connected: fire on-hit reactions + the on-hit proc pipeline.
+                    ApiEventManager.OnBeingHit.Publish(damageData.Target, damageData.Attacker);
+
+                    // Wards should not trigger on-hit proc pipelines; therefore each basic attack consumes only one ward hit.
+                    if (!targetIsWard)
+                        ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
                 }
             }
 
@@ -1067,7 +1112,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             if (this is Champion c && damageData.Attacker is Champion cAttacker)
             {
-                c.AddAssistMarker(cAttacker, 10.0f, damageData);
+                c.AddAssistMarker(cAttacker, GlobalData.ChampionVariables.TimerForAssist, damageData);
             }
 
             if (!CanTakeDamage(type))
@@ -1155,6 +1200,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             SetToRemove();
 
             ApiEventManager.OnDeath.Publish(data.Unit, data);
+
+            // PersistsThroughDeath (buff side): the holder's death removes every buff that is NOT
+            // flagged to persist. Riot's scriptBaseBuff::PersistsThroughDeath checks only the buff's
+            // own flag (no spell-data fallback). Runs AFTER OnDeath so death-reactive buffs (revives
+            // like Guardian Angel) fire first — those set the flag, so they also survive this pass.
+            foreach (var buff in new List<Buff>(BuffList))
+            {
+                if (buff.BuffScript?.BuffMetaData is { PersistsThroughDeath: false })
+                {
+                    RemoveBuff(buff);
+                }
+            }
+
             if (data.Unit is ObjAIBase obj)
             {
                 if (!(obj is Monster))
@@ -1171,7 +1229,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            if (data.Killer != null && data.Killer is Champion champion)
+            // Gold / kill-credit redirect (Riot GoldRedirectTarget): a unit that cannot hold gold —
+            // an autonomous pet (Malzahar Voidling, etc.) — routes its kill credit to another unit,
+            // normally its summoner, so the OWNER receives the gold / XP / CS count. Without this a
+            // pet's last hit credits nobody (the killer isn't a Champion, so OnKill never fires).
+            // No-op until something sets GoldRedirectTarget (P-C pets / gold-share items).
+            var creditedKiller = data.Killer;
+            if (creditedKiller is ObjAIBase redirector && redirector.GoldRedirectTarget != null)
+            {
+                creditedKiller = redirector.GoldRedirectTarget;
+            }
+
+            if (creditedKiller != null && creditedKiller is Champion champion)
             {
                 //Monsters give XP exclusively to the killer
                 if (data.Unit is Monster)
@@ -1193,14 +1262,43 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Implement model verification (perhaps by making a list of all models in Content) so that clients don't crash if a model which doesn't exist in client files is given.
         public bool ChangeModel(string model)
         {
-            if (Model.Equals(model))
-            {
-                return false;
-            }
-            Model = model;
-            _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this);
-            return true;
+            // Unified through the CharacterDataStack base layer (single source of truth).
+            // SetBase emits S2C_ChangeCharacterData (and syncs Model via ApplyStackModel) only when
+            // the resolved model actually changes — same observable result as the old overwrite.
+            return CharacterDataStack.SetBase(model);
         }
+
+        /// <summary>
+        /// Applies the model/skin resolved by the <see cref="CharacterDataStack"/> onto this unit
+        /// (server-side mirror only — the authoritative wire packet was already sent by the stack).
+        /// </summary>
+        internal void ApplyStackModel(string model, uint skinID)
+        {
+            Model = model;
+            OnStackSkinResolved(skinID);
+        }
+
+        /// <summary>
+        /// Hook for derived units that carry a skin index (ObjAIBase.SkinID) to sync it when the
+        /// CharacterDataStack resolves a new top layer. Base AttackableUnit has no skin index.
+        /// </summary>
+        protected virtual void OnStackSkinResolved(uint skinID) { }
+
+        /// <summary>
+        /// Applies the spellbook resolved by the <see cref="CharacterDataStack"/> (the topmost
+        /// overrideSpells layer, or the base character). Server-side spell-slot swap only; the client
+        /// loads the matching spellbook itself from the ChangeCharacterData useSpells flag.
+        /// </summary>
+        internal void ApplyStackSpellSkin(string spellSkinCharacter)
+        {
+            OnStackSpellSkinResolved(spellSkinCharacter);
+        }
+
+        /// <summary>
+        /// Hook for spell-casting units (ObjAIBase) to swap their Q/W/E/R slots to another character's
+        /// spells on transform. Base AttackableUnit has no spellbook.
+        /// </summary>
+        protected virtual void OnStackSpellSkinResolved(string spellSkinCharacter) { }
 
         /// <summary>
         /// Gets the movement speed stat of this unit (units/sec).
@@ -1223,17 +1321,33 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="enabled">Whether or not to enable the flag.</param>
         public void SetStatus(StatusFlags status, bool enabled)
         {
-            if (enabled)
+            // Capability bits are ref-counted disable-holds (default ON); all other bits are plain
+            // set/clear. Dispatch per-bit because callers pass multi-bit masks mixing the two (e.g.
+            // the constructor enables CanAttack|CanCast|CanMove|CanMoveEver|Targetable in one call).
+            // SetStatus(StatusFlags.None, true) sets zero bits → pure recompute trigger (used by
+            // UpdateBuffs / SetDashingState); the per-flag checks below are simply skipped.
+            if ((status & StatusFlags.CanMove) != 0) _disableCanMove = RefHold(_disableCanMove, enabled);
+            if ((status & StatusFlags.CanAttack) != 0) _disableCanAttack = RefHold(_disableCanAttack, enabled);
+            if ((status & StatusFlags.CanCast) != 0) _disableCanCast = RefHold(_disableCanCast, enabled);
+            if ((status & StatusFlags.CanMoveEver) != 0) _disableCanMoveEver = RefHold(_disableCanMoveEver, enabled);
+
+            StatusFlags otherBits = status & ~CapabilityMask;
+            if (otherBits != 0)
             {
-                _statusBeforeApplyingBuffEfects |= status;
+                if (enabled)
+                {
+                    _nonCapabilityBase |= otherBits;
+                }
+                else
+                {
+                    _nonCapabilityBase &= ~otherBits;
+                }
             }
-            else
-            {
-                _statusBeforeApplyingBuffEfects &= ~status;
-            }
+
+            StatusFlags effectiveBase = ComputeEffectiveBase();
             Status = (
                 (
-                    _statusBeforeApplyingBuffEfects
+                    effectiveBase
                     & ~_buffEffectsToDisable
                 )
                 | _buffEffectsToEnable
@@ -1241,6 +1355,32 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             & ~_dashEffectsToDisable;
 
             UpdateActionState();
+        }
+
+        // Adjust a capability disable-hold counter. enable=true releases one hold (clamped at 0 —
+        // this clamp is LOAD-BEARING: the constructor and PlayerManager enable capabilities before
+        // any disable exists, so an over-release must stay at 0 and leave the capability enabled).
+        // enable=false adds a hold. The capability is enabled iff its counter is 0.
+        private static int RefHold(int count, bool enable)
+        {
+            if (enable)
+            {
+                return count > 0 ? count - 1 : 0;
+            }
+            return count + 1;
+        }
+
+        // The base-layer status: non-capability bits as-is, plus each default-ON capability iff it
+        // currently has no active disable-hold (counter == 0). Replaces the old single
+        // _statusBeforeApplyingBuffEfects bitfield, invisibly to the buff/dash layers and all readers.
+        private StatusFlags ComputeEffectiveBase()
+        {
+            StatusFlags b = _nonCapabilityBase;
+            if (_disableCanMove == 0) b |= StatusFlags.CanMove;
+            if (_disableCanAttack == 0) b |= StatusFlags.CanAttack;
+            if (_disableCanCast == 0) b |= StatusFlags.CanCast;
+            if (_disableCanMoveEver == 0) b |= StatusFlags.CanMoveEver;
+            return b;
         }
 
         void UpdateActionState()
@@ -1324,10 +1464,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         void UpdateBuffs(float diff)
         {
-            // Combine the status effects of all the buffs
-            _buffEffectsToEnable = 0;
-            _buffEffectsToDisable = 0;
-
             var tempBuffs = new List<Buff>(BuffList);
             foreach (Buff buff in tempBuffs)
             {
@@ -1338,17 +1474,58 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 else
                 {
                     buff.Update(diff);
-
-                    _buffEffectsToEnable |= buff.StatusEffectsToEnable;
-                    _buffEffectsToDisable |= buff.StatusEffectsToDisable;
                 }
+            }
+
+            RecomputeBuffEffects();
+        }
+
+        /// <summary>
+        /// Rebuilds the buff-effect status masks from the live buff set and re-applies them. Overlap-safe
+        /// by re-aggregation: every active buff contributes its explicit SetStatusEffect masks PLUS its
+        /// BuffType-derived CC state flag (<see cref="BuffTypeExtensions.ToStatusFlag"/>), so a CC state
+        /// stays set while ANY buff of that type is active and clears only when the last (longest) expires
+        /// — the union/longest-duration semantics Riot gets from BuffType-derived CharacterState.
+        /// Called per tick from <see cref="UpdateBuffs"/> AND right after a buff activates
+        /// (Buff.ActivateBuff) so newly-applied CC takes effect the same tick (no activation latency).
+        /// </summary>
+        // Movement-DISABLING crowd control (the unit cannot move at all — these are the CC flags
+        // CanMove() blocks on). Fear/Charm/Taunt are intentionally excluded: the AI DRIVES movement
+        // for those (flee/pull/walk-to), so they must NOT be auto-stopped.
+        private const StatusFlags MoveDisablingCC =
+            StatusFlags.Stunned | StatusFlags.Rooted | StatusFlags.Sleep
+            | StatusFlags.Suppressed | StatusFlags.Netted;
+
+        internal void RecomputeBuffEffects()
+        {
+            StatusFlags before = Status;
+
+            _buffEffectsToEnable = 0;
+            _buffEffectsToDisable = 0;
+
+            foreach (Buff buff in BuffList)
+            {
+                _buffEffectsToEnable |= buff.StatusEffectsToEnable;
+                _buffEffectsToEnable |= buff.BuffType.ToStatusFlag();
+                _buffEffectsToDisable |= buff.StatusEffectsToDisable;
             }
 
             // If the effect should be enabled, it overrides disable.
             _buffEffectsToDisable &= ~_buffEffectsToEnable;
 
-            // Set the status effects of this unit.
+            // Recompute Status from the new masks (StatusFlags.None sets no base bits).
             SetStatus(StatusFlags.None, true);
+
+            // Auto-stop when a movement-disabling CC becomes NEWLY active (Riot: getting stunned/rooted/
+            // etc. halts you). CanMove() already gates the server-side Move(), but the CLIENT keeps
+            // predicting along the last waypoints until told to stop — so clear the path + broadcast.
+            // Fires once on the transition; skipped while dashing (forced movement owns the unit) so it
+            // doesn't fight a dash, and skipped if already path-ended. Replaces the per-buff StopMovement.
+            StatusFlags newlyDisabling = Status & MoveDisablingCC & ~before;
+            if (newlyDisabling != 0 && MovementParameters == null && !IsPathEnded())
+            {
+                StopMovement();
+            }
         }
 
         /// <summary>
@@ -1587,26 +1764,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     if (hadHardColliders)
                     {
                         Vector2 newDelta = Position - originalPos;
+
+                        // Temp-ghost escalation tracks GENUINE stuck (post-collision movement
+                        // collapsed below 25% of intent) — a separate, stricter condition than the
+                        // 1.5 separation gate below. Decoupled deliberately: the separation push
+                        // fires on nearly every contact, so driving the ghost counter off it would
+                        // ramp _stuckGhostFrames every tick and units would phase through each other
+                        // within ~0.5s. Only a true wedge (movement ≈ cancelled) should escalate.
+                        const float GenuineStuckRatio = 0.25f;
+                        float genuineStuckSq = originalDelta.LengthSquared()
+                                             * (GenuineStuckRatio * GenuineStuckRatio);
+                        if (originalDelta.LengthSquared() > 0.01f
+                            && newDelta.LengthSquared() < genuineStuckSq)
+                        {
+                            _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
+                        }
+                        else
+                        {
+                            _stuckGhostFrames = 0;
+                        }
+
+                        // Per-contact separation nudge (S4 isStuckWithRepulse, gate
+                        // MinionMaxCollisionAvoidanceRatio = 1.5). Terrain-gated; on rejection the
+                        // escalating-repath watchdog (UpdateStuckRecovery) still snaps a genuine wedge.
                         Vector2 stuckPush = ComputeStuckExtraPush(nearby, newDelta, originalDelta, delta);
                         if (stuckPush.LengthSquared() > 0.0001f)
                         {
-                            _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
-
                             Vector2 candidate = Position + stuckPush;
-                            bool canApply = _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
-                            if (canApply)
+                            if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
                             {
                                 Position = candidate;
                                 _unreplicatedDrift += stuckPush;
                                 pushed = true;
                             }
-                            // else: drop the stuck push too. UpdateStuckRecovery's escalating-repath
-                            // watchdog still runs and will snap the unit out via TryUnstuckRepath if
-                            // genuinely wedged.
-                        }
-                        else
-                        {
-                            _stuckGhostFrames = 0;
                         }
                     }
                 }
@@ -2102,33 +2292,37 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// way for units to break free from stuck crowds when their normal
         /// movement has been reduced to zero by push cancellation.
         ///
-        /// Constants estimated:
-        ///   - MinSpeedRatioBeforeStuck = 0.25 (NSEAI.cfg [Collision], verified 2026-06-07)
-        ///   - push magnitude = min(95, moveSpeed * 1.5) units/sec (S4 Actor.cpp:483-486)
+        /// GATE (S4-verified 2026-06-12 vs Actor.cpp:469-470 + NSEAI.cfg [Collision]):
+        ///   isStuckWithRepulse fires when |outMov| <= s_MinionMaxCollisionAvoidanceRatio * speed,
+        ///   with s_MinionMaxCollisionAvoidanceRatio = 1.5 (NOT MinSpeedRatioBeforeStuck=0.25 — that
+        ///   constant is a movement-scale in the path-active branch at Actor.cpp:1217, a different
+        ///   mechanism). A 1.5x gate is met in essentially every contact, so this is a CONTINUOUS
+        ///   gentle separation, not a "severely stuck" signal. The constant lives in Actor_Common
+        ///   (base class) with no actor-type branch → applies to heroes AND minions identically;
+        ///   "Minion" in the name is legacy. The genuinely-stuck escalation (temp-ghost counter)
+        ///   uses a separate, stricter 0.25 gate in Move() so this frequent nudge can't ramp it.
         ///
-        /// Magnitude note (S4-verified 2026-06-07): the client formula is
-        ///   min(95, speed*1.5, ExtraSeparationSpeed * stuckRatio² * dt)
-        /// with stuckRatio = stuckTimerSec / s_timeBetweenPathCorrections + 1 — but in patch
-        /// 4.17 `s_timeBetweenPathCorrections` is a never-assigned static (zero) → the ratio
-        /// is +inf and the third term never binds: the push saturates INSTANTLY to
-        /// min(95, speed*1.5). The gradual quadratic escalation only existed in S1 (divisor
-        /// s_TimeBetweenRepathsInSeconds = 0.25, actor_client.cpp:2112). We mirror the S4
-        /// runtime behavior: no escalation term.
+        /// Magnitude (S4-verified): min(95, speed*1.5, ExtraSeparationSpeed * stuckRatio² * dt)
+        /// with stuckRatio = stuckTimerSec / s_timeBetweenPathCorrections + 1 — but in patch 4.17
+        /// `s_timeBetweenPathCorrections` is a never-assigned static (zero) → the ratio is +inf and
+        /// the third term never binds: the push saturates INSTANTLY to min(95, speed*1.5). The
+        /// gradual quadratic escalation only existed in S1. We mirror S4: no escalation term.
         /// </summary>
         private Vector2 ComputeStuckExtraPush(List<GameObject> nearby, Vector2 newDelta, Vector2 originalDelta, float deltaMs)
         {
-            const float MinSpeedRatioBeforeStuck = 0.25f;
+            const float MinionMaxCollisionAvoidanceRatio = 1.5f; // s_MinionMaxCollisionAvoidanceRatio, Actor.cpp:469
             const float HardCapPerSec = 95.0f;
             const float MaxSpeedMultiplier = 1.5f;
 
-            // Stuck Check requires a meaningful initial movement as a reference
-            // otherwise we won't detect “stuck” at all (stationary units are already pushed indefinitely
-            // by Early Exit).
+            // Reference = the intended per-tick movement (originalDelta = this tick's walk before push).
+            // Stationary / path-ended units (≈0) are handled by the separate stationary branch.
             float originalMagSq = originalDelta.LengthSquared();
             if (originalMagSq <= 0.01f) return Vector2.Zero;
 
-            float stuckThresholdSq = originalMagSq * (MinSpeedRatioBeforeStuck * MinSpeedRatioBeforeStuck);
-            if (newDelta.LengthSquared() >= stuckThresholdSq) return Vector2.Zero; // not stuck
+            // Separation gate: fire unless the post-collision movement already exceeds 1.5x the
+            // intended movement (i.e. the reflection/slide alone pushed hard enough).
+            float gateSq = originalMagSq * (MinionMaxCollisionAvoidanceRatio * MinionMaxCollisionAvoidanceRatio);
+            if (newDelta.LengthSquared() >= gateSq) return Vector2.Zero;
 
             // FirstWave -> ignore ally lane minion collisions until reaching your own outer turret
             // (similar to ComputeSeparationPush — otherwise the stuck push between ally minions
@@ -2286,8 +2480,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Skip the per-tick WaypointGroup broadcast when the new path is identical to
             // the existing one. The unit's traversal state is unaffected; clients already
             // know this path. Reduces wire-format noise from periodic recomputes that
-            // produce the same route.
-            bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints);
+            // produce the same route. The new path is fresh (m_NextWaypoint=0); the current
+            // path's cursor is CurrentWaypointKey (its progress so far), both threaded into the
+            // faithful S4 IsPathTheSame so its near-unit prefix-skip works as the client's does.
+            bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
 
             Waypoints = newWaypoints;
             CurrentWaypointKey = 1;
@@ -2978,7 +3174,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             Shields.AddLast(shield);
-            _game.PacketNotifier.NotifyModifyShield(this, shield.Amount, shield.Physical, shield.Magical, true);
+            // StopShieldFade=false: replay-verified Riot animates the bar on a shield GAIN
+            // (1437/1437 adds in the Morgana replay carry StopShieldFade=0), never snaps it.
+            _game.PacketNotifier.NotifyModifyShield(this, shield.Amount, shield.Physical, shield.Magical, false);
         }
 
         public virtual void RemoveShield(Shield shield)
@@ -2992,9 +3190,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (shield.Amount != 0)
                 {
+                    // Removed while still holding charge (buff expiry / manual dispel) — shrink
+                    // the bar, but this is NOT a break, so OnShieldBreak must not fire.
                     _game.PacketNotifier.NotifyModifyShield(this, -shield.Amount, shield.Physical, shield.Magical, true);
                 }
-                ApiEventManager.OnShieldBreak.Publish(shield);
+                else
+                {
+                    // Fully drained (ConsumeShields by damage, or ReduceShield) — a genuine break.
+                    ApiEventManager.OnShieldBreak.Publish(shield);
+                }
             }
         }
 
@@ -3048,7 +3252,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE)
+        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
         {
             if (MovementParameters != null)
             {
@@ -3073,12 +3277,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
+            // POSTPONE_CURRENT_ORDER + an active plain MoveTo: snapshot the move destination (last
+            // waypoint) NOW, before SetWaypoints below clears it. Re-issued at dash-end (ObjAIBase
+            // .SetDashingState) so the unit resumes walking to it — AttackTo resumes on its own (the
+            // TargetUnit survives), but a MoveTo's destination only lives in Waypoints. See P1b / the
+            // forced-movement plan.
+            Vector2 postponedMoveDest = Vector2.Zero;
+            if (movementOrdersType == ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
+                && this is ObjAIBase moverSelf && moverSelf.MoveOrder == OrderType.MoveTo
+                && Waypoints != null && Waypoints.Count > 1 && !IsPathEnded())
+            {
+                postponedMoveDest = Waypoints[Waypoints.Count - 1];
+            }
+
             // False because we don't want this to be networked as a normal movement.
             SetWaypoints(new List<Vector2> { Position, newCoords }, true);
 
             // TODO: Take into account the rest of the arguments
             MovementParameters = new ForceMovementParameters
             {
+                PostponedMoveDestination = postponedMoveDest,
                 SetStatus = StatusFlags.None,
                 ElapsedTime = 0,
                 PathSpeedOverride = dashSpeed,
@@ -3090,6 +3308,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 FollowBackDistance = 0,
                 FollowTravelTime = 0,
                 MovementName = movementName,
+                MovementOrdersType = movementOrdersType,
                 Caster = caster ?? this
             };
 
@@ -3132,6 +3351,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _dashEffectsToDisable = MovementParameters.SetStatus;
             }
             SetStatus(StatusFlags.None, true);
+
+            // Forced-movement BEGIN: symmetric with the OnMoveEnd publish below. MovementParameters is
+            // already set by the caller (DashToLocation/DashToTarget) before SetDashingState(true).
+            if (state && MovementParameters != null)
+            {
+                ApiEventManager.OnMoveBegin.Publish(this, MovementParameters);
+            }
 
             if (MovementParameters != null && state == false)
             {

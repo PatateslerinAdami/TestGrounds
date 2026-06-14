@@ -1,6 +1,6 @@
 ﻿namespace GameServerCore.Packets.PacketDefinitions.Requests
 {
-    class UndoItemRequest : ICoreRequest
+    public class UndoItemRequest : ICoreRequest
     {
     }
 }

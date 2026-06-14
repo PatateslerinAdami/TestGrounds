@@ -41,6 +41,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             _game.PacketNotifier.NotifySpawnEnd(userId);
+
+            // Enable the shop UI for this player's own champion (S2C_SetShopEnabled). Without it the
+            // client leaves the buy/sell buttons disabled. See docs/SHOP_PACKETS_PLAN.md (P0).
+            if (userInfo.Champion != null)
+            {
+                _game.PacketNotifier.NotifySetShopEnabled(userInfo.Champion);
+            }
+
             if (_game.IsRunning)
             {
                 _game.TryFinishReconnectStart(userId);

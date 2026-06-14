@@ -221,6 +221,8 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<LockCameraRequest>(new HandleLockCamera(this).HandlePacket);
             RequestHandler.Register<JoinTeamRequest>(new HandleJoinTeam(this).HandlePacket);
             RequestHandler.Register<MovementRequest>(new HandleMove(this).HandlePacket);
+            RequestHandler.Register<OnShopOpenedRequest>(new HandleOnShopOpened(this).HandlePacket);
+            RequestHandler.Register<UndoItemRequest>(new HandleUndoItem(this).HandlePacket);
             RequestHandler.Register<MoveConfirmRequest>(new HandleMoveConfirm(this).HandlePacket);
             RequestHandler.Register<PauseRequest>(new HandlePauseReq(this).HandlePacket);
             RequestHandler.Register<QueryStatusRequest>(new HandleQueryStatus(this).HandlePacket);
@@ -553,7 +555,13 @@ namespace LeagueSandbox.GameServer
             }
             using (Profiler.Scope("GameScriptTimers.Update", "scripts"))
             {
-                _gameScriptTimers.ForEach(gsTimer => gsTimer.Update(diff));
+                // Tick a snapshot: a callback may register further timers (added to the live list,
+                // ticked next frame) or spawn objects — iterating the live list would throw
+                // "Collection was modified".
+                foreach (var gsTimer in _gameScriptTimers.ToArray())
+                {
+                    gsTimer.Update(diff);
+                }
                 _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
             }
 
@@ -583,6 +591,9 @@ namespace LeagueSandbox.GameServer
         {
             _gameScriptTimers.Remove(timer);
         }
+
+        /// <summary>Game-loop ticks per second at the current refresh rate (30 or 60).</summary>
+        public double TicksPerSecond => 1000.0 / RefreshRate;
 
         /// <summary>
         /// Function to set the game as running. Allows the game loop to start.

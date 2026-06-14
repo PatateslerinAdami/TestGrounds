@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Numerics;
 using GameServerCore.Enums;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
@@ -25,7 +26,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public Vector2 SpawnPosition { get; }
 
-        public bool IsAsleep { get; set; }
+        // RoamState moved to the shared Minion base (jungle Monster needs it too). For LaneMinion it
+        // is engine-managed: first-wave minions spawn Inactive (dormant — push the lane but ignore
+        // enemies) and UpdateRoamState flips them to Hostile when an enemy enters WakeUpRange.
 
         public int WaveNumber { get; }
 
@@ -71,7 +74,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             BarracksName = barracksName;
             PathingWaypoints = mainWaypoints;
             IsFirstWave = isFirstWave;
-            IsAsleep = isFirstWave; // FirstWave Minions start asleep
+            // FirstWave minions start dormant; all later waves spawn already aggressive.
+            RoamState = isFirstWave ? MinionRoamState.Inactive : MinionRoamState.Hostile;
             OuterTurretPosition = outerTurretPosition;
             SpawnPosition = position;
             WaveNumber = waveNumber;
@@ -99,6 +103,45 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// list because they're already implicitly skipped because we only stored enemy turrets at
         /// spawn time.
         /// </summary>
+        public override void Update(float diff)
+        {
+            // Engine-managed RoamState transition runs before the AI script so the AI sees the
+            // up-to-date state this tick (S4: the engine owns MinionRoamState, the Lua AI reads it).
+            UpdateRoamState();
+            base.Update(diff);
+        }
+
+        /// <summary>
+        /// Wakes a dormant first-wave minion (kInactive -> kHostile) once an enemy enters
+        /// <see cref="CharData.WakeUpRange"/> (default 600). This is the lane-clash trigger: both
+        /// waves walk to lane dormant and flip to hostile when they meet. No-op once hostile.
+        /// </summary>
+        private void UpdateRoamState()
+        {
+            if (RoamState != MinionRoamState.Inactive || IsDead)
+            {
+                return;
+            }
+
+            float wakeRange = CharData.WakeUpRange;
+            float wakeRangeSq = wakeRange * wakeRange;
+            foreach (var u in ApiFunctionManager.EnumerateUnitsInRange(Position, wakeRange, true))
+            {
+                if (u.Team == Team || u.IsDead
+                    || !u.IsVisibleByTeam(Team)
+                    || !u.Status.HasFlag(StatusFlags.Targetable))
+                {
+                    continue;
+                }
+
+                if (Vector2.DistanceSquared(Position, u.Position) <= wakeRangeSq)
+                {
+                    RoamState = MinionRoamState.Hostile;
+                    return;
+                }
+            }
+        }
+
         public int GetMaxAllowedWaypointIndex()
         {
             int totalWaypoints = PathingWaypoints?.Count ?? 0;
@@ -117,6 +160,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return idx;
             }
             return defaultMax;
+        }
+
+        /// <summary>
+        /// The alive enemy turret currently capping forward movement — the same turret whose
+        /// waypoint index <see cref="GetMaxAllowedWaypointIndex"/> returns — or null when no alive
+        /// enemy turret is ahead (push is unrestricted to the nexus). Lets the forward-nav target
+        /// the turret's exact position once the cap waypoint is reached, matching Riot's inline
+        /// turret nav node (GetNextNavLocIter halts the iterator at the enemy turret loc) instead
+        /// of stopping at the nearest lane waypoint.
+        /// </summary>
+        public BaseTurret GetCappingTurret()
+        {
+            if (EnemyLaneTurretsAhead == null)
+            {
+                return null;
+            }
+            for (int i = 0; i < EnemyLaneTurretsAhead.Count; i++)
+            {
+                var turret = EnemyLaneTurretsAhead[i];
+                if (turret == null || turret.IsDead) continue;
+                return turret;
+            }
+            return null;
         }
     }
 }

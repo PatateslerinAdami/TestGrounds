@@ -28,6 +28,7 @@ internal class ElixirOfRuin : IBuffGameScript {
     private float     _refreshTimer = SiegeRefreshIntervalMs;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
