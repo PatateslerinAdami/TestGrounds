@@ -24,9 +24,13 @@ namespace Spells
         private       Vector2        _endPos2D;
         private       Vector2        _castStartPos2D;
         private const float          MaxDashRange         = 650f;
-        private const float          AscendDurationSeconds = 0.4f;
-        private const float          JumpToDashDelaySeconds = 0.30f;
-        private const float          LandingDashDurationS  = 0.30f;
+        // Ascend/dive timings are replay-measured (663eda09, 52/52 Q-casts): ascend = ~24.4u hop at
+        // ~25.8 u/s (≈0.95s flight) with ParabolicGravity=10; dive starts ~0.40s after the ascend and
+        // lasts a fixed ~0.085s (speed scales with distance: 88u→1034, 253u→3058).
+        private const float          AscendDistance        = 24.4f;
+        private const float          AscendDurationSeconds = 0.95f;
+        private const float          JumpToDashDelaySeconds = 0.40f;
+        private const float          LandingDashDurationS  = 0.085f;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
@@ -93,7 +97,7 @@ namespace Spells
             FaceDirection(_endPos2D, _aatrox, true);
             Vector2 direction = new Vector2(_aatrox.Direction.X, _aatrox.Direction.Z);
 
-            float jumpDistance = 10f;
+            float jumpDistance = AscendDistance;
             Vector2 jumpTarget = _aatrox.Position + (direction * jumpDistance);
 
             // Ascend = a real (near-in-place) force-move arc over the 0x64 dash wire — replay-verified
