@@ -25,12 +25,16 @@ namespace Spells
         private       Vector2        _castStartPos2D;
         private const float          MaxDashRange         = 650f;
         // Ascend/dive timings are replay-measured (663eda09, 52/52 Q-casts): ascend = ~24.4u hop at
-        // ~25.8 u/s (≈0.95s flight) with ParabolicGravity=10; dive starts ~0.40s after the ascend and
-        // lasts a fixed ~0.085s (speed scales with distance: 88u→1034, 253u→3058).
+        // ~25.8 u/s (≈0.95s flight) with ParabolicGravity=10; dive starts ~0.40s after the ascend.
+        // Dive = fixed ~0.083s for dist ≤~264u (speed scales linearly: 88u→1034, 264u→3214), BUT a
+        // single long sample (534u→0.25s, speed 2140) shows the speed does NOT keep scaling at long
+        // range — so cap the dive speed at the observed short-regime max (~3214). Beyond ~267u the cap
+        // holds and the dive duration grows (650u → ~0.20s) instead of the absurd 650/0.083≈7800 u/s.
         private const float          AscendDistance        = 24.4f;
         private const float          AscendDurationSeconds = 0.95f;
         private const float          JumpToDashDelaySeconds = 0.40f;
-        private const float          LandingDashDurationS  = 0.085f;
+        private const float          LandingDashDurationS  = 0.083f;
+        private const float          MaxDiveSpeed          = 3214f;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
@@ -124,7 +128,7 @@ namespace Spells
             if (distance <= 1f) {
                 return;
             }
-            var speed = distance / LandingDashDurationS;
+            var speed = Math.Min(distance / LandingDashDurationS, MaxDiveSpeed);
             Dash(_aatrox, _endPos2D, speed, movementName: "AatroxQDash");
 
             ApiEventManager.OnMoveSuccess.AddListener(this, _aatrox, OnMoveSuccess, true);
