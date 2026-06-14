@@ -28,24 +28,7 @@ namespace Buffs
             float knockupDuration = buff.Variables.GetFloat("KnockupTime", 0.5f);
 
             float desiredHeight = 8.0f;
-            Vector2 startPosition = unit.Position;
-            Vector2 endPosition = new Vector2(startPosition.X + 2.0f, startPosition.Y);
-            float horizontalDistance = Vector2.Distance(startPosition, endPosition);
-
-            float requiredSpeed = horizontalDistance / knockupDuration;
-            float requiredGravity = desiredHeight / (knockupDuration * knockupDuration);
-
-            ApiFunctionManager.ForceMovement(
-                unit,
-                "RUN",
-                endPosition,
-                requiredSpeed,
-                0,
-                requiredGravity,
-                0,
-                consideredAsCC: true,
-                movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING
-            );
+            ApiFunctionManager.KnockUp(unit, desiredHeight, knockupDuration, animation: "RUN");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

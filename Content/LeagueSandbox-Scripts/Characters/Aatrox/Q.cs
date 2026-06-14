@@ -24,7 +24,7 @@ namespace Spells
         private       Vector2        _endPos2D;
         private       Vector2        _castStartPos2D;
         private const float          MaxDashRange         = 650f;
-        private const float          JumpDurationSeconds   = 5f;
+        private const float          AscendDurationSeconds = 0.4f;
         private const float          JumpToDashDelaySeconds = 0.30f;
         private const float          LandingDashDurationS  = 0.30f;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -83,7 +83,7 @@ namespace Spells
             Jump();
             _aatrox.RegisterTimer(new GameScriptTimer(JumpToDashDelaySeconds, () =>
             {
-                Dash();
+                Dive();
             }));
         }
 
@@ -91,25 +91,24 @@ namespace Spells
         {
             _aatrox.StopMovement(networked: false);
             FaceDirection(_endPos2D, _aatrox, true);
-            // eh since i tested out a CustomDashTest for some visual thing and not integrated it to forcemovement other things stopped by the forcemovement like having target to auto attack visually break the ascend
-            _aatrox.SetStatus(StatusFlags.CanMove, false);
-            _aatrox.SetStatus(StatusFlags.CanCast, false);
             Vector2 direction = new Vector2(_aatrox.Direction.X, _aatrox.Direction.Z);
 
             float jumpDistance = 10f;
             Vector2 jumpTarget = _aatrox.Position + (direction * jumpDistance);
-            Vector2 jumpTargetFal = _aatrox.Position - (direction * jumpDistance);
 
-            float jumpTime = JumpDurationSeconds;
-            float jumpSpeed = jumpDistance / (jumpTime);
-            float jumpGravity = 4f;
-
-            CustomDashTest(_aatrox, jumpTarget, jumpSpeed, jumpGravity, jumpTargetFal);
+            // Ascend = a real (near-in-place) force-move arc over the 0x64 dash wire — replay-verified
+            // ParabolicGravity=10 and speed ~25 u/s on all 52 Q-casts. Replaces the old CustomDashTest
+            // custom packet (which bypassed the force-move state and needed manual SetStatus);
+            // lockActions (default) now owns the move/cast lockout. The dive (Dive(), JumpToDashDelay
+            // later) ends this ascend via its own force-move and takes over.
+            // NOTE: speed drives the flight TIME (= jumpDistance/speed), and the parabola apex scales
+            // with flightTime² — so a too-low speed (the old jumpDistance/5 = 2 u/s → ~5s flight) shot
+            // Aatrox hugely upward in the first frames. ~0.4s flight (speed ~25) is the replay's small hop.
+            float jumpSpeed = jumpDistance / AscendDurationSeconds;
+            Dash(_aatrox, jumpTarget, jumpSpeed, gravity: 10f, keepFacing: true, movementName: "AatroxQAscend");
         }
-        private void Dash()
+        private void Dive()
         {
-            _aatrox.SetStatus(StatusFlags.CanMove, true);
-            _aatrox.SetStatus(StatusFlags.CanCast, true);
             FaceDirection(_endPos2D, _aatrox, true);
             var desiredDirection = _endPos2D - _castStartPos2D;
             var desiredDistance = desiredDirection.Length();
@@ -122,7 +121,7 @@ namespace Spells
                 return;
             }
             var speed = distance / LandingDashDurationS;
-            _aatrox.DashToLocation(_endPos2D, speed, leapGravity: 0f, movementName:"AatroxQDash");
+            Dash(_aatrox, _endPos2D, speed, movementName: "AatroxQDash");
 
             ApiEventManager.OnMoveSuccess.AddListener(this, _aatrox, OnMoveSuccess, true);
 

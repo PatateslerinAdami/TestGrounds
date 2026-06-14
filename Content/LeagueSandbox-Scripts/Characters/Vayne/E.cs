@@ -96,10 +96,10 @@ public class VayneCondemnMissile : ISpellScript {
         ApiEventManager.OnCollisionTerrain.AddListener(this, target, OnCondemnCollisionTerrain, true);
         ApiEventManager.OnMoveSuccess.AddListener(this, target, OnCondemnMoveSuccess, true);
         ApiEventManager.OnMoveFailure.AddListener(this, target, OnCondemnMoveFailure, true);
-        ForceMovement(target, "RUN", pushEnd, CondemnPushSpeed, 0.0f, 0.0f, 0.0f,
-                      movementType: ForceMovementType.FIRST_WALL_HIT,
-                      movementOrdersType: ForceMovementOrdersType.CANCEL_ORDER,
-                      movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
+        Dash(target, pushEnd, CondemnPushSpeed,
+             resolve: ForceMovementType.FIRST_WALL_HIT,
+             keepFacing: true,
+             orders: ForceMovementOrdersType.CANCEL_ORDER);
         //Particle for wall hit is this: "Vayne_WallHit_tar"
         //This is the damage ratio for wall hit: 45 + _vayne.Stats.AttackDamage.FlatBonus * 0.75f
     }

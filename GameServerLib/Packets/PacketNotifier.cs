@@ -5536,18 +5536,6 @@ namespace PacketDefinitions420
             var packet = ConstructCastSpellPacket(s, elapsedSeconds);
             _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
         }
-        public void NotifyCustomDashTest(AttackableUnit u, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
-        {
-            var md = PacketExtensions.CreateCustomMovementDataWithSpeed(u, _navGrid, targetPos, speed, gravity, parabolicStartPoint);
-
-            var speedWpGroup = new WaypointGroupWithSpeed
-            {
-                SyncID = Environment.TickCount,
-                Movements = new List<MovementDataWithSpeed> { md }
-            };
-
-            _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
-        }
         public void NotifyS2C_HandleQuestUpdate(int userId, uint questId, string objective, string tooltip, string icon, byte command, QuestType questType, bool success)
         {
             var packet = new S2C_HandleQuestUpdate

@@ -65,7 +65,7 @@ namespace Spells
             AddParticleTarget(Fiora, Fiora, "Fiora_Dance_windup", Fiora);
             
             // REPARAȚIE ZBOR: Am schimbat parametrul de înălțime din 150f în 0f
-            ForceMovement(Fiora, null, new Vector2(Fiora.Position.X + 40f, Fiora.Position.Y + 40f), 110f, 0, 0f, 0);
+            Dash(Fiora, new Vector2(Fiora.Position.X + 40f, Fiora.Position.Y + 40f), 110f);
             TargetPos = GetPointFromUnit(Fiora, System.Math.Abs(Vector2.Distance(Target.Position, Fiora.Position)) + 175);
         }
         

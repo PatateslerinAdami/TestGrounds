@@ -223,8 +223,8 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
-                            _owner.DashToLocation(_owner.Position + dir2D * 300, 545, "Spell4_Stop", 0.0f,
-                                false); //0.55 
+                            Dash(_owner, _owner.Position + dir2D * 300, 545, gravity: 0.0f,
+                                keepFacing: false, animation: "Spell4_Stop"); //0.55
                             _owner.RegisterTimer(new GameScriptTimer(0.55f, () => { OnHit(); }));
                         }
                     }));

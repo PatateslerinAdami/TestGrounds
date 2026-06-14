@@ -28,22 +28,7 @@ namespace Buffs
         {
             float desiredDuration = 1.2f;//1.2f
             float desiredHeight = 8.0f;
-            Vector2 startPosition = unit.Position;
-            Vector2 endPosition = new Vector2(startPosition.X + 2.0f, startPosition.Y);// 2f
-            float horizontalDistance = Vector2.Distance(startPosition, endPosition);
-            float requiredSpeed = horizontalDistance / desiredDuration;
-            float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
-
-            ForceMovement(
-            unit,
-            "RUN",
-            endPosition,
-            requiredSpeed,
-            0,
-            requiredGravity,
-            0,
-            movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING
-            );
+            KnockUp(unit, desiredHeight, desiredDuration, animation: "RUN");
 
         }
 

@@ -148,7 +148,7 @@ namespace Spells
             if ((distance > 300f && secondTug) || !secondTug)
             {
                 var pullPosition = target.Position + (dir * 150f);
-                target.DashToLocation(pullPosition, 1000f, "RUN", consideredCC: true);
+                Dash(target, pullPosition, 1000f, animation: "RUN");
             }
         }
     }
@@ -174,7 +174,7 @@ namespace Spells
             if (hookedTarget != null && Vector2.Distance(owner.Position, hookedTarget.Position) <= 3000f)
             {
 
-                owner.DashToTarget(hookedTarget, 1000f, "Spell1_Dash", consideredCC: false, keepFacingLastDirection: false);
+                DashToUnit(owner, hookedTarget, 1000f, keepFacing: false, lockActions: false, animation: "Spell1_Dash");
                 ApiEventManager.OnMoveEnd.AddListener(this, owner, (unit, movementParams) =>
                 {
                     if (reg != null && !reg.IsToRemove())

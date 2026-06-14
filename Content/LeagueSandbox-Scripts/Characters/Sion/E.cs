@@ -78,7 +78,7 @@ namespace Spells
                 }
 
                 AddBuff("SionEKnockback", 0.75f, 1, spell, target, caster);
-                ForceMovement(target, "Run", endPos, 2500f, 0, 0, 0, true, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+                Dash(target, endPos, 2500f, animation: "Run");
             }
             else
             {

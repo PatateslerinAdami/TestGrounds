@@ -76,7 +76,7 @@ namespace Spells
             FaceDirection(TargetPos, Fiora, true);
             AddParticleTarget(Fiora, Fiora, "Fiora_Dance_windup.troy", Fiora);
             AddParticleTarget(Fiora, Fiora, "FioraQLunge_dashtrail.troy", Fiora);
-            ForceMovement(Fiora, null, TargetPos, 2200, 0, 0, 0, movementOrdersType: ForceMovementOrdersType.CANCEL_ORDER);
+            Dash(Fiora, TargetPos, 2200, orders: ForceMovementOrdersType.CANCEL_ORDER);
         }
         
         // AICI ESTE REPARAȚIA: Am adăugat parametrul ForceMovementParameters

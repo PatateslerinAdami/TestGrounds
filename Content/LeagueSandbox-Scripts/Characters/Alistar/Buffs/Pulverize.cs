@@ -47,11 +47,7 @@ namespace Buffs
             {
                 endPosition = startPosition + dirGo * goToLength;
             }
-            float horizontalDistance = Vector2.Distance(startPosition, endPosition);
-            float requiredSpeed = horizontalDistance / desiredDuration;
-            float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
-
-            ForceMovement(unit, "RUN", endPosition, requiredSpeed, 0, requiredGravity, 0, movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
+            KnockUp(unit, desiredHeight, desiredDuration, destination: endPosition, animation: "RUN");
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {

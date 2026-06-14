@@ -2058,96 +2058,15 @@ namespace LeagueSandbox.GameServer.API
             unit.SetDashingState(false);
         }
 
-        /// <summary>
-        /// Forces the specified unit to perform a forced movement which ends at a specified position.
-        /// </summary>
-        /// <param name="unit">Unit that will perform the forced movement.</param>
-        /// <param name="animation">Internally named animation to play during the forced movement.</param>
-        /// <param name="target">End position of the forced movement.</param>
-        /// <param name="speed">How fast the forced movement should travel.</param>
-        /// <param name="idealDistance">How far the forced movement should travel from the unit's position.</param>
-        /// <param name="gravity">How high the force movement should reach at the mid point of the force movement.</param>
-        /// <param name="moveBackBy">How far behind the end point the force movement should go before finishing.</param>
-        /// <param name="consideredAsCC">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
-        /// <param name="movementType">Type of force movement to perform. Refer to ForceMovementType enum.</param>
-        /// <param name="movementOrdersType">How should the force movement affect the orders of the unit?</param>
-        /// <param name="movementOrdersFacing">How should the force movement affect the facing direction of the unit?</param>
-        /// TODO: Fully implement new ForceMovement functionality in AttackableUnit.
-        public static void ForceMovement
-        (
-            AttackableUnit unit,
-            string animation,
-            Vector2 target,
-            float speed,
-            float idealDistance,
-            float gravity,
-            float moveBackBy,
-            bool consideredAsCC = true,
-            ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE,
-            ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
-            string movementName = "",
-            AttackableUnit caster = null)
-        {
-            var keepFacingLastDirection = false;
-            if (movementOrdersFacing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING)
-            {
-                keepFacingLastDirection = true;
-            }
-
-            unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC,
-                movementName, caster, movementType: movementType, movementOrdersType: movementOrdersType);
-        }
-
-        /// <summary>
-        /// Forces the specified unit to perform a forced movement which follows a specified target unit.
-        /// </summary>
-        /// <param name="unit">Unit that will perform the forced movement.</param>
-        /// <param name="animation">Internally named animation to play during the forced movement.</param>
-        /// <param name="target">Target unit the forced movement will follow.</param>
-        /// <param name="speed">How fast the forced movement should travel.</param>
-        /// <param name="idealDistance">How far the forced movement should travel from the unit's position.</param>
-        /// <param name="gravity">How high the force movement should reach at the mid point of the force movement.</param>
-        /// <param name="moveBackBy">How far behind the end point the force movement should go before finishing.</param>
-        /// <param name="maxTravelTime">Maximum amount of time the forced movement is allowed to last.</param>
-        /// <param name="consideredAsCC">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
-        /// <param name="movementType">Type of force movement to perform. Refer to ForceMovementType enum.</param>
-        /// <param name="movementOrdersType">How should the force movement affect the orders of the unit?</param>
-        /// <param name="movementOrdersFacing">How should the force movement affect the facing direction of the unit?</param>
-        /// TODO: Fully implement new ForceMovement functionality in AttackableUnit.
-        public static void ForceMovement
-        (
-            ObjAIBase unit,
-            AttackableUnit target,
-            string animation,
-            float speed,
-            float idealDistance,
-            float gravity,
-            float moveBackBy,
-            float maxTravelTime,
-            bool consideredAsCC = true,
-            ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE,
-            ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-            ForceMovementOrdersFacing movementOrdersFacing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
-            string movementName = "",
-            AttackableUnit caster = null)
-        {
-            var keepFacingLastDirection = false;
-            if (movementOrdersFacing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING)
-            {
-                keepFacingLastDirection = true;
-            }
-
-            unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy,
-                maxTravelTime, consideredAsCC, movementName, caster, movementOrdersType);
-        }
-
         // ===================================================================================
-        // Consolidated forced-movement verb set (docs/FORCED_MOVEMENT_REWRITE_PLAN.md P3).
-        // Five clear verbs over the two engine primitives (line-path = DashToLocation, follow-unit-path
+        // Consolidated forced-movement verb set (docs/FORCED_MOVEMENT_REWRITE_PLAN.md P3/P4).
+        // Four clear verbs over the two engine primitives (line-path = DashToLocation, follow-unit-path
         // = DashToTarget). Replay-verified (2026-06-15): Riot wires knockback, knockup, dash and
         // follow-dash ALL via the engine force-move (0x64 WaypointGroupWithSpeed) with gravity — the
         // flat SetPosition-lerp BBKnockback is vestigial for SR, so KnockBack is a force-move too.
+        // These replace the old `ForceMovement(...)` overloads (deleted P4) — Dash/DashToUnit expose the
+        // full primitive surface (gravity, resolve/ForceMovementType, keepFacing, lockActions, orders,
+        // backDistance, travelTime, ignoreTerrain), so no separate raw escape hatch is needed.
         // ===================================================================================
 
         /// <summary>
@@ -2241,13 +2160,16 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="gravity">Arc gravity; 0 = flat ground dash.</param>
         /// <param name="resolve">Destination-resolution mode (ForceMovementType).</param>
         /// <param name="keepFacing">Keep current facing vs face the movement direction.</param>
+        /// <param name="lockActions">Disable move/attack/cast during the dash (true = a "considered-CC"
+        /// dash). False lets the unit act mid-dash (e.g. Akali R kill-dash).</param>
         /// <param name="ignoreTerrain">Skip the terrain-exit clamp (e.g. blink-style dashes).</param>
         /// <param name="orders">What happens to the unit's order when the dash ends.</param>
         /// <param name="animation">Optional animation (internal name).</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
         public static void Dash(AttackableUnit unit, Vector2 dest, float speed, float gravity = 0f,
             ForceMovementType resolve = ForceMovementType.FURTHEST_WITHIN_RANGE, bool keepFacing = false,
-            bool ignoreTerrain = false, ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
+            bool lockActions = true, bool ignoreTerrain = false,
+            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
             string animation = "", string movementName = "")
         {
             if (unit == null || speed <= 0f)
@@ -2255,7 +2177,7 @@ namespace LeagueSandbox.GameServer.API
                 return;
             }
 
-            unit.DashToLocation(dest, speed, animation, gravity, keepFacing, true, movementName, unit,
+            unit.DashToLocation(dest, speed, animation, gravity, keepFacing, lockActions, movementName, unit,
                 ignoreTerrain, movementType: resolve, movementOrdersType: orders);
         }
 
@@ -2273,13 +2195,15 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="followMaxDistance">Max distance to follow before giving up (0 = unlimited).</param>
         /// <param name="gravity">Arc gravity; 0 = flat.</param>
         /// <param name="keepFacing">Keep current facing vs face the movement direction.</param>
+        /// <param name="lockActions">Disable move/attack/cast during the dash. False lets the unit act
+        /// mid-dash (e.g. Thresh's lantern-pull dash).</param>
         /// <param name="orders">What happens to the unit's order when the dash ends.</param>
         /// <param name="animation">Optional animation (internal name).</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
         public static void DashToUnit(ObjAIBase unit, AttackableUnit target, float speed, float backDistance = 0f,
             float travelTime = 0f, float followMaxDistance = 0f, float gravity = 0f, bool keepFacing = false,
-            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string animation = "",
-            string movementName = "")
+            bool lockActions = true, ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
+            string animation = "", string movementName = "")
         {
             if (unit == null || target == null || speed <= 0f)
             {
@@ -2287,7 +2211,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToTarget(target, speed, animation, gravity, keepFacing, followMaxDistance, backDistance,
-                travelTime, true, movementName, unit, orders);
+                travelTime, lockActions, movementName, unit, orders);
         }
 
         /// <summary>
@@ -3068,12 +2992,6 @@ namespace LeagueSandbox.GameServer.API
         public static void NotifyInstantStopAttack(AttackableUnit unit, bool isSummonerSpell = false)
         {
             _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, isSummonerSpell);
-        }
-
-        public static void CustomDashTest(AttackableUnit unit, Vector2 targetPos, float speed, float gravity,
-            Vector2 parabolicStartPoint)
-        {
-            _game.PacketNotifier.NotifyCustomDashTest(unit, targetPos, speed, gravity, parabolicStartPoint);
         }
 
         /// <summary>

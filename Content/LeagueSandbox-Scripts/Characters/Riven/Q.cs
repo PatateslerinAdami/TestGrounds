@@ -85,7 +85,7 @@ namespace Spells
             var newSpeed = (dashSpeedBase / range) * distance;
             float verticalSpeed = (_currentQStage == 3) ? 50 : 0;
 
-            ForceMovement(_owner, animName, dashPos, newSpeed, 0, verticalSpeed, 0, false);
+            Dash(_owner, dashPos, newSpeed, gravity: verticalSpeed, lockActions: false, animation: animName);
 
             if (!string.IsNullOrEmpty(trailParticle))
             {

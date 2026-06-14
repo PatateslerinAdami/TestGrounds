@@ -144,14 +144,8 @@ public class NautilusAnchorDragMissile : ISpellScript
 
         if (travel > 0f)
         {
-            ForceMovement(_owner, "Spell1_dash", _owner.Position + dir * travel, speed,
-                          0, 0, 0, true, ForceMovementType.FURTHEST_WITHIN_RANGE,
-                          ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-                          ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
-            ForceMovement(target, "RUN", target.Position - dir * travel, speed,
-                          0, 0, 0, true, ForceMovementType.FURTHEST_WITHIN_RANGE,
-                          ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-                          ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+            Dash(_owner, _owner.Position + dir * travel, speed, animation: "Spell1_dash");
+            Dash(target, target.Position - dir * travel, speed, animation: "RUN");
         }
 
         RemoveMissileListeners(missile);
@@ -192,9 +186,6 @@ public class NautilusAnchorDragMissile : ISpellScript
         var q = _owner.GetSpell("NautilusAnchorDrag");
         q.LowerCooldown(q.SpellData.EffectLevelAmount[2][q.CastInfo.SpellLevel]);
 
-        ForceMovement(_owner, "Spell1_dash", endPos, WallPullSpeed,
-                      0, 0, 0, true, ForceMovementType.FURTHEST_WITHIN_RANGE,
-                      ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-                      ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+        Dash(_owner, endPos, WallPullSpeed, animation: "Spell1_dash");
     }
 }
