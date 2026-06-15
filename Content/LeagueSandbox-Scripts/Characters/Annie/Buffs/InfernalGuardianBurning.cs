@@ -17,6 +17,7 @@ internal class InfernalGuardianBurning : IBuffGameScript {
     private       Spell     _spell;
     private       Pet       _pet;
     private       float     _timer  = 0f;
+    private       float     _summonCooldown;   // R's full summon cooldown, captured at cast (see OnActivate)
     private const float     MaxTime = 1000f;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
@@ -28,6 +29,11 @@ internal class InfernalGuardianBurning : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _annie = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
+        // ownerSpell is the InfernalGuardian (summon) spell. R.cs zeroed the guide spell's cooldown so
+        // pet-steering works, which means the 120s summon cooldown no longer lives on any slot. Capture
+        // it here (full, CDR already applied by GetCooldown) so OnDeactivate can restore the REMAINING
+        // amount to R when the guide swaps back to the summon.
+        _summonCooldown = ownerSpell.GetCooldown();
         if (unit is not Pet pet) return;
         _pet = pet;
 
@@ -43,6 +49,19 @@ internal class InfernalGuardianBurning : IBuffGameScript {
         unit.Die(CreateDeathData(false,                                  0, unit, unit, DamageType.DAMAGE_TYPE_TRUE,
                                  DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
         RemoveBuff(buff.SourceUnit, "InfernalGuardianTimer");
+        // Tibbers has ended (killed or the 45s elapsed) — swap Annie's R (slot 3) from the guide spell
+        // back to the summon so she can re-cast Tibbers. Without this, R stayed stuck on
+        // InfernalGuardianGuide after the first cast, so Tibbers could never be re-summoned once it died.
+        var resummon = SetSpell(_annie, "InfernalGuardian", SpellSlotType.SpellSlots, 3);
+
+        // Restore the REMAINING summon cooldown to R: the 120s started at cast, and Tibbers has now been
+        // alive for buff.TimeElapsed seconds. Without this, the swap-back would inherit the guide's
+        // zeroed cooldown (ObjAIBase.SetSpell copies CurrentCooldown) and let Annie re-summon instantly.
+        // Tibbers lives at most 45s while the summon cooldown is 120s, so the remainder is always > 0.
+        float remaining = _summonCooldown - buff.TimeElapsed;
+        if (resummon != null && remaining > 0f) {
+            resummon.SetCooldown(remaining, true);
+        }
     }
 
     public void OnUpdate(float diff) {

@@ -40,6 +40,14 @@ public class InfernalGuardian : ISpellScript {
         );
         var guideSpell = SetSpell(_annie, "InfernalGuardianGuide", SpellSlotType.SpellSlots, 3);
 
+        // ObjAIBase.SetSpell copies the OLD slot spell's running cooldown onto the new one — and R
+        // (InfernalGuardian) was just put on its 120s cooldown by FinishCasting (which runs BEFORE this
+        // OnSpellPostCast). So the guide spell would inherit that 120s cooldown and the server would
+        // reject every guide cast, making pet-steering impossible. The guide is a free steering tool
+        // (its own data cooldown is 0), so clear the inherited cooldown here. The 120s SUMMON cooldown
+        // is not lost: InfernalGuardianBurning captures it and restores the REMAINING amount to R when
+        // the guide swaps back to the summon on Tibbers' death.
+        guideSpell?.SetCooldown(0f, true);
 
         AddBuff("InfernalGuardianBurning", 45.0f, 1, spell, tibbers, _annie);
         AddBuff("InfernalGuardianTimer",   45.0f, 1, spell, _annie,  _annie);

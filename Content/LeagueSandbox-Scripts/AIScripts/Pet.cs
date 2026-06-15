@@ -21,8 +21,8 @@ namespace AIScripts
     //                        the current attack target is lost (the engine drops dead/invisible targets,
     //                        so OnTargetLost is folded into this poll).
     // Hard commands (PetHard*) are the explicit player pet commands and lock out the soft auto-behavior
-    // until cleared. Fear/Taunt/Charm movement is driven by the shared CrowdControlComponent; CC-end
-    // resets the pet to AI_PET_IDLE. The PetCommandParticle visual is deferred (P-D).
+    // until cleared, and show the "PetCommanded" marker buff on the commanded unit. Fear/Taunt/Charm
+    // movement is driven by the shared CrowdControlComponent; CC-end resets the pet to AI_PET_IDLE.
     public class Pet : BaseAIScript
     {
         private const float FAR_MOVEMENT_DISTANCE = 1000.0f;
@@ -80,9 +80,11 @@ namespace AIScripts
             switch (order)
             {
                 // Soft orders (only reach the pet if the owner's orders are forwarded — see plan).
+                // A soft order drops back to auto-behavior → clear the command marker (Pet.lua).
                 case OrderType.AttackTo:
                     if (target == null) return;
                     Engage(AIState.AI_PET_ATTACK, target);
+                    ClearCommandMarker();
                     break;
                 case OrderType.MoveTo:
                     if (Vector2.DistanceSquared(Owner.Position, pos) > FAR_MOVEMENT_DISTANCE * FAR_MOVEMENT_DISTANCE
@@ -90,30 +92,41 @@ namespace AIScripts
                     {
                         Follow(AIState.AI_PET_MOVE, owner);
                     }
+                    ClearCommandMarker();
                     break;
                 case OrderType.AttackMove:
                     Follow(AIState.AI_PET_ATTACKMOVE, owner);
+                    ClearCommandMarker();
                     break;
                 case OrderType.Stop:
-                    // Soft stop just clears the command indicator (cosmetic; deferred).
+                    ClearCommandMarker();
                     break;
                 case OrderType.Hold:
                     Stand(AIState.AI_PET_HOLDPOSITION);
+                    ClearCommandMarker();
                     break;
 
-                // Hard pet commands (these reach the pet via HandleMove → pet.IssueOrder).
+                // Hard pet commands (these reach the pet via HandleMove → pet.IssueOrder, and via the
+                // pet-control guide spell BasePetController). They show the "PetCommanded" marker buff
+                // on the commanded unit (Pet.lua AIScriptSpellBuffAdd "PetCommandParticle" → BuffName
+                // "PetCommanded", texture 27.dds): the target for attack, the owner for return, the pet
+                // itself for move-to-point. PetHardStop clears it.
                 case OrderType.PetHardStop:
                     Stand(AIState.AI_PET_HARDSTOP);
+                    ClearCommandMarker();
                     break;
                 case OrderType.PetHardAttack:
                     if (target == null) return;
                     Engage(AIState.AI_PET_HARDATTACK, target);
+                    SetCommandMarker(target);
                     break;
                 case OrderType.PetHardMove:
                     MoveToPoint(AIState.AI_PET_HARDMOVE, pos);
+                    SetCommandMarker(Owner);
                     break;
                 case OrderType.PetHardReturn:
                     Follow(AIState.AI_PET_HARDRETURN, owner);
+                    SetCommandMarker(owner);
                     break;
             }
         }
@@ -133,7 +146,21 @@ namespace AIScripts
                 return;
             }
 
-            float distToOwner = Vector2.Distance(Owner.Position, owner.Position);
+            // Command marker only lives while a hard command is in progress. Once the pet falls back to
+            // auto-behavior (a non-hard state — e.g. a hard-attack target died → IDLE), clear it.
+            if (_commandMarker != null && !IsHardState(state))
+            {
+                ClearCommandMarker();
+            }
+
+            // Edge-to-edge distance (Pet.lua uses DistanceBetweenObjectBounds, not center-to-center):
+            // subtract both collision radii so the return/follow/teleport thresholds match Riot.
+            float distToOwner = Vector2.Distance(Owner.Position, owner.Position)
+                                - Owner.CollisionRadius - owner.CollisionRadius;
+            if (distToOwner < 0f)
+            {
+                distToOwner = 0f;
+            }
 
             // Too far → teleport back to the owner and idle.
             if (distToOwner > TeleportDistance)
@@ -285,6 +312,36 @@ namespace AIScripts
                         default: Stand(AIState.AI_PET_IDLE); break; // ATTACK / HARDATTACK
                     }
                 }
+            }
+        }
+
+        // ---- command marker ("PetCommanded" buff, texture 27.dds — the pet-command indicator) ----
+
+        private AttackableUnit _commandMarker; // unit currently holding the PetCommanded buff (null = none)
+
+        // Show the command marker on `on` (moving it from any previous holder).
+        private void SetCommandMarker(AttackableUnit on)
+        {
+            if (_commandMarker == on)
+            {
+                return;
+            }
+            ClearCommandMarker();
+            if (on != null)
+            {
+                // Data-only buff (no script → BuffScriptEmpty); the client renders the PetCommanded
+                // data (texture 27.dds). BuffType INTERNAL matches Lua PET_COMMAND_BUFF_TYPE=0. 45s.
+                AddBuff("PetCommanded", 45.0f, 1, null, on, Owner);
+                _commandMarker = on;
+            }
+        }
+
+        private void ClearCommandMarker()
+        {
+            if (_commandMarker != null)
+            {
+                RemoveBuff(_commandMarker, "PetCommanded");
+                _commandMarker = null;
             }
         }
 

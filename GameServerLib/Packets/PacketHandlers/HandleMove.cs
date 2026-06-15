@@ -45,26 +45,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 var pet = champion.GetPet();
                 NavigationPath waypoints;
 
-                // Pet control: the client addresses the commanded unit via the packet header
-                // (SenderNetID). Most orders carry the champion's id, but when the player controls
-                // their pet (the in-client "control pet" key / R), the client sends normal orders
-                // (MoveTo / AttackTo / Stop / Hold) with SenderNetID = the PET. Without this the order
-                // fell through to the champion (it moved Annie, not Tibbers). Remap those soft orders
-                // to the pet-command equivalents and route them to the pet's brain — the same path the
-                // explicit pet-command (PetHard*) orders already use. The pet then paths itself.
-                if (pet != null && req.SenderNetID == pet.NetId)
-                {
-                    OrderType petOrder = req.OrderType switch
-                    {
-                        OrderType.MoveTo or OrderType.AttackMove => OrderType.PetHardMove,
-                        OrderType.AttackTo => OrderType.PetHardAttack,
-                        OrderType.Stop => OrderType.PetHardStop,
-                        _ => req.OrderType
-                    };
-                    pet.IssueOrder(petOrder, u, req.Position);
-                    return true;
-                }
-
+                // NOTE on pet control: while a pet is alive the client mirrors the champion's plain move
+                // orders with a duplicate carrying SenderNetID = the pet (a normal champion right-click
+                // arrives as MoveTo sender=champ AND MoveTo sender=pet). That pet-sender duplicate is NOT
+                // a command to relocate the pet — the pet just follows the owner — so we do NOT route it
+                // to the pet (an earlier attempt remapped it to PetHardMove and made the pet teleport to
+                // every click). The explicit pet commands are the PetHard* orders (alt-click pet bar),
+                // routed to the pet by the IssueOrder block after the switch. Directing the pet via the
+                // owner's R-guide is a separate client-side mechanism that does not come through here.
                 switch (req.OrderType)
                 {
                     case OrderType.MoveTo:

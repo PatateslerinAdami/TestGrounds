@@ -2214,6 +2214,63 @@ namespace LeagueSandbox.GameServer.API
                 travelTime, lockActions, movementName, unit, orders);
         }
 
+        // ===================================================================================
+        // Parabola (arc-dash) timing/height helpers. Match the 4.17 client exactly
+        // (obj_AI_Base::ComputeInitialVelocity / HandleParabolicMovement, AIBaseClient.cpp):
+        //   gravityAccel = ParabolicGravity * 150        (the wire field is scaled ×150 client-side)
+        //   travelTime   = pathDistance / pathSpeed      (XZ flight time; follow-dashes use a fixed time)
+        //   vY0          = (endY-startY + 0.5*gravityAccel*travelTime) * 1.05
+        //   ballistic per 0.01s substep: vY -= gravityAccel*dt; y += vY*dt; apex at vY=0; lands at y=ground.
+        // For a flat ground dash (endY==startY) the gravity CANCELS out of the TIMES — apex and landing
+        // depend only on travelTime (= dist/speed). Gravity only sets the arc HEIGHT. Useful to replace
+        // hardcoded phase timers (e.g. a knockup's "start falling" / "landed" moments) with exact values.
+        // ===================================================================================
+        private const float ParabolaGravityScale = 150f;
+        private const float ParabolaInitialVelocityFactor = 1.05f;
+
+        /// <summary>
+        /// Seconds until a flat parabola/arc dash of <paramref name="distance"/> at <paramref name="speed"/>
+        /// reaches its apex (the moment vertical velocity hits 0 and the unit starts falling again).
+        /// Gravity-INDEPENDENT for flat ground: = 0.525 · distance/speed.
+        /// </summary>
+        public static float GetParabolaApexTime(float distance, float speed)
+        {
+            if (speed <= 0f)
+            {
+                return 0f;
+            }
+            return ParabolaInitialVelocityFactor * 0.5f * (distance / speed);
+        }
+
+        /// <summary>
+        /// Seconds until a flat parabola/arc dash of <paramref name="distance"/> at <paramref name="speed"/>
+        /// lands back on the ground. Gravity-INDEPENDENT for flat ground: = 1.05 · distance/speed.
+        /// </summary>
+        public static float GetParabolaLandingTime(float distance, float speed)
+        {
+            if (speed <= 0f)
+            {
+                return 0f;
+            }
+            return ParabolaInitialVelocityFactor * (distance / speed);
+        }
+
+        /// <summary>
+        /// Peak height of a flat parabola/arc dash. THIS is where <paramref name="parabolicGravity"/>
+        /// (the wire value, scaled ×150 client-side) matters. = vY0² / (2·gravityAccel).
+        /// </summary>
+        public static float GetParabolaApexHeight(float parabolicGravity, float distance, float speed)
+        {
+            if (speed <= 0f || parabolicGravity <= 0f)
+            {
+                return 0f;
+            }
+            float gravityAccel = parabolicGravity * ParabolaGravityScale;
+            float travelTime = distance / speed;
+            float vY0 = ParabolaInitialVelocityFactor * 0.5f * gravityAccel * travelTime;
+            return vY0 * vY0 / (2f * gravityAccel);
+        }
+
         /// <summary>
         /// Forces the given object to perform the given animation.
         /// </summary>
@@ -2680,6 +2737,20 @@ namespace LeagueSandbox.GameServer.API
             }
 
             return GlobalData.ObjAIBaseVariables.DefaultPetReturnRadius;
+        }
+
+        /// <summary>
+        /// Sets the distance past which a pet starts following its owner back (Riot's per-pet pet-return
+        /// radius — the threshold the pet AI's leash/follow uses). Not present in spell/stats data, so a
+        /// summon script sets it per pet (e.g. Annie's R for Tibbers); defaults to
+        /// <see cref="ObjAIBaseVariables.DefaultPetReturnRadius"/> (200) when unset.
+        /// </summary>
+        public static void SetPetReturnRadius(Minion minion, float radius)
+        {
+            if (minion is Pet pet)
+            {
+                pet.SetReturnRadius(radius);
+            }
         }
 
         /// <summary>
