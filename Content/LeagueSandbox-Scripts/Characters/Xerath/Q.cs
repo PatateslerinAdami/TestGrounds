@@ -43,7 +43,7 @@ namespace Spells
         {
             LetGo();
 
-            if (reason == ChannelingStopSource.PlayerCommand)
+            if (reason == ChannelingStopSource.TimeCompleted)
             {
                 float maxChannelTime = ScriptMetadata.ChannelDuration;
                 float timeChanneled = maxChannelTime - spell.CurrentChannelDuration;

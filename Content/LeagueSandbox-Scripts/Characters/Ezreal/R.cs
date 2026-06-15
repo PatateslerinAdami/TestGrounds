@@ -40,7 +40,7 @@ public class EzrealTrueshotBarrage : ISpellScript {
     }
 
     public void OnSpellCast(Spell spell) {
-        AddParticleTarget(_owner, _owner, "Ezreal_bow_huge",      _owner, bone: "L_hand", flags: FXFlags.BindDirection);
+        AddParticleTarget(_owner, _owner, "Ezreal_bow_huge",      _owner, bone: "L_hand", flags: FXFlags.SimulateWhileOffScreen);
     }
 
     private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {

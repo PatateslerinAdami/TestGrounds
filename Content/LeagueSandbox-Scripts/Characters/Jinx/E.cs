@@ -26,7 +26,7 @@ public class JinxE : ISpellScript {
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _targetPosition = end;
         FaceDirection(_targetPosition, _jinx, true);
-        PlayAnimation(_jinx, "Spell3", 0.5f, flags: AnimationFlags.Override);
+        PlayAnimation(_jinx, _jinx.IsPathEnded() ? "Spell3" : "Spell3_Run", 0.5f, flags: AnimationFlags.None);
     }
 
     public void OnSpellCast(Spell spell) { }

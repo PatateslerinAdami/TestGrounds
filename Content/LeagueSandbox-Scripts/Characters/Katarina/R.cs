@@ -70,7 +70,7 @@ namespace Spells
             SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
             AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
 
-            const AnimationFlags spell4Flags = AnimationFlags.UniqueOverride | AnimationFlags.Override | AnimationFlags.Unknown8;
+            const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
             {
                 default: PlayAnimation(_katarina, "Spell4", timeScale: 0f, speedScale: 1f, flags: spell4Flags); break;

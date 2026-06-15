@@ -48,7 +48,7 @@ internal class JinxEMine : IBuffGameScript
                     teamOnly: TeamId.TEAM_BLUE); break;
         }
 
-        PlayAnimation(unit, "Wait1", flags: AnimationFlags.Override);
+        PlayAnimation(unit, "Wait1", flags: AnimationFlags.None);
         PauseAnimation(unit, true);
     }
 
@@ -60,7 +60,7 @@ internal class JinxEMine : IBuffGameScript
             if (armingTicks != 1) return;
 
             PauseAnimation(_unit, false);
-            PlayAnimation(_unit, "Idle1", flags: AnimationFlags.Override);
+            PlayAnimation(_unit, "Idle1", flags: AnimationFlags.Lock);
             _readyParticle = AddParticleTarget(_jinx, _unit, "Jinx_E_Mine_Ready_Green", _unit, _buff.Duration, enemyParticle: "Jinx_E_Mine_Ready_Red");
 
             _isArmed = true;
@@ -99,6 +99,17 @@ internal class JinxEMine : IBuffGameScript
     {
         PauseAnimation(unit, false);
         RemoveParticle(_readyParticle);
+        AddBuff("JinxEMineExplode", 0.75f, 1, ownerSpell, unit, _jinx);
+        
+        if (_triggeredByUnit)
+        {
+            PlayAnimation(unit, "Attack1", flags: AnimationFlags.None);
+        }
+        else
+        {
+            PlayAnimation(unit, "Death1", flags: AnimationFlags.NoBlend);
+        }
+        
         AddBuff("JinxEMineExplode", 0.75f, 1, ownerSpell, unit, _jinx);
         if (_triggeredByUnit)
         {

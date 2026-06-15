@@ -58,7 +58,7 @@ namespace Spells
         public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
         {
             LetGo();
-            if (reason == ChannelingStopSource.PlayerCommand)
+            if (reason == ChannelingStopSource.TimeCompleted)
             {
 
                 float maxChannelTime = ScriptMetadata.ChannelDuration;

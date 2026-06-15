@@ -21,7 +21,6 @@ internal class JinxEMineExplode : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _jinx = ownerSpell.CastInfo.Owner;
-        PlayAnimation(unit, "Death1", flags: AnimationFlags.Override);
         AddParticleTarget(_jinx, unit, "Jinx_E_Mine_Explosion", unit);
     }
 

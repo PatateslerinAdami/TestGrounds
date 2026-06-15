@@ -116,7 +116,7 @@ namespace Spells
 
             ClearOverrideAnimation(_owner, "Attack1", this);
 
-            if (reason != ChannelingStopSource.PlayerCommand && reason != ChannelingStopSource.TimeCompleted)
+            if (reason != ChannelingStopSource.NotCancelled && reason != ChannelingStopSource.TimeCompleted)
             {
                 spell.SetCooldown(2.0f, true);
                 _owner.SetStatus(StatusFlags.CanMove, true);
