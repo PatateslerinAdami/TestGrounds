@@ -41,6 +41,8 @@ public class TrinketTotemLvl3 : ISpellScript {
             truecoords = current + range;
         } else { truecoords = cursor; }
 
+        truecoords = SnapToWalkableTerrain(truecoords);
+
         _ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true, true);
         _ward.Stats.ManaPoints.BaseValue = duration;
         _ward.Stats.CurrentMana          = duration;

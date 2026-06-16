@@ -312,7 +312,7 @@ namespace MapScripts.Map1
                 // Reduced both args to 150 to match visual size; pathing+body-push now both fire only at
                 // visible contact. Server diverges from client's internal pathing-blocker bake by design
                 // if I see this correctly the server's role is collision response and waypoint replication, not nav-grid sync.
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 150, 1700, nexusStats, 150);
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 250, 1700, nexusStats, 150);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);

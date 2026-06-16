@@ -1,104 +1,144 @@
-﻿using GameServerCore.Enums;
+using System.Numerics;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
-using System.Runtime.InteropServices;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Spells
+namespace Spells;
+
+/// <summary>
+/// Soraka E — Equinox (4.17 rework / 4.20).
+/// Ground-targeted zone (1.5s). Silences enemies inside on each tick.
+/// On expiry: roots + deals final damage to enemies still in zone.
+/// Uses SpellSector pattern (matching Katarina W / Rammus Q).
+/// </summary>
+public class SorakaE : ISpellScript
 {
-    public class SorakaE : ISpellScript
+    private const float ZoneDuration = 1.5f;
+    private const float ZoneRadius = 250f;
+
+    private ObjAIBase _soraka;
+    private Spell _spell;
+    private SpellSector _silenceSector;
+    private SpellSector _rootSector;
+    private bool _rootPending;
+
+    public SpellScriptMetadata ScriptMetadata => new()
     {
-        public SpellScriptMetadata ScriptMetadata => new SpellScriptMetadata()
+        TriggersSpellCasts = true,
+        IsDamagingSpell = true,
+        NotSingleTargetSpell = true,
+    };
+
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        _soraka = owner;
+        _spell = spell;
+    }
+
+    public void OnDeactivate(ObjAIBase owner, Spell spell)
+    {
+        ApiEventManager.RemoveAllListenersForOwner(this);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) { }
+
+    public void OnSpellCast(Spell spell) { }
+
+    public void OnSpellPostCast(Spell spell)
+    {
+        var owner = spell.CastInfo.Owner;
+        var cursorPos = new Vector2(
+            spell.CastInfo.TargetPosition.X,
+            spell.CastInfo.TargetPosition.Z);
+
+        // Ground VFX
+        AddParticle(owner, null, "Soraka_Base_E_Tar.troy", cursorPos, ZoneDuration + 0.5f);
+        AddParticle(owner, null, "Soraka_Base_E_Rune.troy", cursorPos, ZoneDuration + 0.5f);
+
+        // Perception bubble so the client can render VFX
+        AddPosPerceptionBubble(cursorPos, ZoneRadius, ZoneDuration + 0.5f, owner.Team);
+
+        // Silence zone — multi-tick, hits every quarter second
+        _silenceSector = spell.CreateSpellSector(new SectorParameters
         {
-            NotSingleTargetSpell = true,
-            IsDamagingSpell = true,
-            TriggersSpellCasts = true
-        };
-        public void OnActivate(ObjAIBase owner, Spell spell)
+            Width = ZoneRadius * 2,
+            Length = ZoneRadius * 2,
+            SingleTick = false,
+            Lifetime = ZoneDuration,
+            Tickrate = 4,
+            CanHitSameTarget = true,
+            CanHitSameTargetConsecutively = false,
+            Type = SectorType.Area,
+            OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes,
+        });
+        ApiEventManager.OnSpellSectorHit.AddListener(this, _silenceSector, OnSilenceZoneHit, false);
+
+        // Schedule root zone at expiry
+        _rootPending = true;
+        owner.RegisterTimer(new GameScriptTimer(ZoneDuration, () =>
         {
-            ApiEventManager.OnSpellPostCast.AddListener(this, spell, OnSpellPostCast, false);
+            if (!_rootPending) return;
+            _rootPending = false;
 
-        }
-
-        Particle p1;
-        Particle beam;
-        private SpellSector EZone;
-        private SpellSector EZoneEnd;
-
-        Spell spell;
-
-        public void OnSpellPostCast(Spell spell)
-        {
-            this.spell = spell;
-            var owner = spell.CastInfo.Owner;
-            var Cursor = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-
-            p1 = AddParticle(owner, null, "Soraka_Base_E_tar.troy", Cursor, 1.5f);
-            beam = AddParticle(owner, owner, "Soraka_Base_E_Beam.troy", Cursor, 1.5f); // TODO: make the beam shoot from her hand
-            AddParticle(owner, null, "Soraka_Base_E_rune.troy", Cursor, 1.5f);
-
-            EZone = spell.CreateSpellSector(new SectorParameters
+            _rootSector = spell.CreateSpellSector(new SectorParameters
             {
-                Width = 260,
-                Length = 260,
+                Width = ZoneRadius * 2,
+                Length = ZoneRadius * 2,
                 SingleTick = true,
-                Lifetime = 1.5f,
-                Tickrate = 30,
+                Lifetime = 0.15f,
+                Tickrate = 1,
                 CanHitSameTarget = false,
                 Type = SectorType.Area,
-                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.IgnoreLaneMinion | SpellDataFlags.IgnoreEnemyMinion | SpellDataFlags.AffectHeroes
+                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes,
             });
-            ApiEventManager.OnSpellSectorHit.AddListener(this, EZone, EZoneHit, false);
+            ApiEventManager.OnSpellSectorHit.AddListener(this, _rootSector, OnRootZoneHit, true);
+        }));
+    }
 
-            owner.RegisterTimer(new GameScriptTimer(1.5f, () =>
-            {
-                EZoneEnd = spell.CreateSpellSector(new SectorParameters
-                {
-                    Width = 260,
-                    Length = 260,
-                    SingleTick = true,
-                    Lifetime = 0.1f,
-                    Tickrate = 30,
-                    CanHitSameTarget = false,
-                    Type = SectorType.Area,
-                    OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.IgnoreLaneMinion | SpellDataFlags.IgnoreEnemyMinion | SpellDataFlags.AffectHeroes
-                });
-                ApiEventManager.OnSpellSectorHit.AddListener(this, EZoneEnd, EZoneEndHit, false);
-            }));
-        }
-        public void EZoneHit(SpellSector sector, AttackableUnit target)
+    private void OnSilenceZoneHit(SpellSector sector, AttackableUnit target)
+    {
+        if (target.IsDead) return;
+        if (target.Team == _soraka.Team) return;
+
+        int rank = _spell.CastInfo.SpellLevel;
+        float ap = _soraka.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+
+        float tickDamage = rank switch
         {
-            var owner = spell.CastInfo.Owner;
-            var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;
-            float damage = 70f + spell.CastInfo.SpellLevel * 40f + AP;
+            1 => 70f, 2 => 110f, 3 => 150f, 4 => 190f, 5 => 230f, _ => 70f
+        } + ap;
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell); // TODO: fix the damage, it's too high
-            AddParticleTarget(owner, target, "soraka_base_e_enemy_tar.troy", target, 1f);
-            if (target is Champion && target.Team != owner.Team)
-            {
-                AddBuff("SorakaEPacify", 1.5f, 1, spell, target, owner);
-            }
-        }
+        target.TakeDamage(_soraka, tickDamage, DamageType.DAMAGE_TYPE_MAGICAL,
+            DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
 
-        public void EZoneEndHit(SpellSector sector, AttackableUnit target)
+        // Refresh silence while in zone
+        if (!target.HasBuff("Silence"))
         {
-            var owner = spell.CastInfo.Owner;
-            var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;
-            float damage = 70f + spell.CastInfo.SpellLevel * 40f + AP;
-
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell); // TODO: fix the damage, it's too high
-            if (target is Champion && target.Team != owner.Team)
-            {
-                AddBuff("SorakaESnare", 1.5f, 1, spell, target, owner);
-            }
+            AddBuff("Silence", ZoneDuration + 0.5f, 1, _spell, target, _soraka);
         }
     }
+
+    private void OnRootZoneHit(SpellSector sector, AttackableUnit target)
+    {
+        if (target.IsDead) return;
+        if (target.Team == _soraka.Team) return;
+
+        int rank = _spell.CastInfo.SpellLevel;
+        float rootDuration = rank switch
+        {
+            1 => 1.0f, 2 => 1.25f, 3 => 1.5f, 4 => 1.75f, 5 => 2.0f, _ => 1.0f
+        };
+        AddBuff("Root", rootDuration, 1, _spell, target, _soraka);
+
+        AddParticleTarget(_soraka, target, "Soraka_Base_E_Root.troy", target, rootDuration);
+    }
+
+    public void OnUpdate(float diff) { }
 }

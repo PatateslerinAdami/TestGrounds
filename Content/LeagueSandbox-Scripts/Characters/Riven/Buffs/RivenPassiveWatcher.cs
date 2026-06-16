@@ -12,30 +12,28 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs
 {
-    internal class RivenPassiveAABoost : IBuffGameScript
+    internal class RivenPassiveWatcher : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.COMBAT_ENCHANCER,
-            BuffAddType = BuffAddType.STACKS_AND_RENEWS,
-            MaxStacks = 3,
+            BuffType = BuffType.INTERNAL,
+            BuffAddType = BuffAddType.RENEW_EXISTING,
+            IsHidden = true,
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        private Buff _thisBuff;
         private bool _subscribed;
         private ObjAIBase _owner;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _thisBuff = buff;
             if (!(unit is ObjAIBase owner)) return;
             _owner = owner;
 
             if (!_subscribed)
             {
-                ApiEventManager.OnHitUnit.AddListener(this, owner, OnHitUnit);
+                ApiEventManager.OnSpellCast.AddListener(this, ownerSpell, OnSpellCast);
                 _subscribed = true;
             }
         }
@@ -49,28 +47,32 @@ namespace Buffs
         {
         }
 
-        private void OnHitUnit(DamageData damageData)
+        private void OnSpellCast(Spell spell)
         {
-            if (_thisBuff == null || _thisBuff.StackCount <= 0) return;
-            if (damageData.Target is BaseTurret) return;
+            string spellName = spell.SpellName;
 
-            int level = _owner.Stats.Level;
-            float bonusAD = _owner.Stats.AttackDamage.FlatBonus;
-            float baseDamage = GetPassiveBaseDamage(level);
-            float bonusRatio = 0.5f;
-            float totalBonusDamage = baseDamage + (bonusAD * bonusRatio);
+            bool isAbility = spellName == "RivenTriCleave"
+                          || spellName == "RivenMartyr"
+                          || spellName == "RivenFeint"
+                          || spellName == "RivenFengShuiEngine"
+                          || spellName == "RivenIzunaBlade";
 
-            damageData.PostMitigationDamage += totalBonusDamage;
+            if (!isAbility) return;
 
-            _thisBuff.DecrementStackCount();
-            _thisBuff.ResetTimeElapsed();
-        }
-
-        private float GetPassiveBaseDamage(int level)
-        {
-            int[] baseDamage = { 5, 5, 5, 7, 7, 7, 9, 9, 9, 11, 11, 11, 13, 13, 13, 15, 15, 15, 15 };
-            int index = System.Math.Min(level - 1, baseDamage.Length - 1);
-            return baseDamage[index];
+            var existing = _owner.GetBuffWithName("RivenPassiveAABoost");
+            if (existing != null)
+            {
+                int currentStacks = existing.StackCount;
+                if (currentStacks < 3)
+                {
+                    existing.IncrementStackCount();
+                }
+                existing.ResetTimeElapsed();
+            }
+            else
+            {
+                AddBuff("RivenPassiveAABoost", 5f, 1, spell, _owner, _owner);
+            }
         }
     }
 }

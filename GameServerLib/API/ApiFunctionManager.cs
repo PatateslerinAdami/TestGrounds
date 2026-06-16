@@ -290,6 +290,40 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Snaps the given position to the nearest walkable terrain using an expanding
+        /// ring search (8 rays per ring, 50-unit step, up to 400-unit radius).
+        /// Returns the original position unchanged if it is already walkable or no
+        /// walkable cell is found within the search radius.
+        /// </summary>
+        /// <param name="position">Position to snap.</param>
+        /// <returns>Nearest walkable position, or the original if already walkable.</returns>
+        public static Vector2 SnapToWalkableTerrain(Vector2 position)
+        {
+            if (IsWalkable(position.X, position.Y))
+                return position;
+
+            const float step = 50f;
+            const float maxRadius = 400f;
+            const int raysPerRing = 8;
+
+            for (float r = step; r <= maxRadius; r += step)
+            {
+                for (int i = 0; i < raysPerRing; i++)
+                {
+                    float angle = (MathF.PI * 2f / raysPerRing) * i;
+                    var test = new Vector2(
+                        position.X + MathF.Cos(angle) * r,
+                        position.Y + MathF.Sin(angle) * r
+                    );
+                    if (IsWalkable(test.X, test.Y))
+                        return test;
+                }
+            }
+
+            return position;
+        }
+
+        /// <summary>
         /// Adds a named buff with the given duration, stacks, and origin spell to a unit.
         /// From = owner of the spell (usually caster).
         /// </summary>

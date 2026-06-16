@@ -147,19 +147,24 @@ namespace PacketDefinitions420
             {
                 case EventType.CONNECT:
                     {
-                        // Set some defaults
-                        enetEvent.Peer.MTU = PEER_MTU;
-                        enetEvent.Data = 0;
+                        if (enetEvent.Peer != null)
+                        {
+                            enetEvent.Peer.MTU = PEER_MTU;
+                            enetEvent.Data = 0;
+                        }
+                        Console.WriteLine("[SRV-ENet] CONNECT");
                     }
                     break;
                 case EventType.RECEIVE:
                     {
+                        Console.WriteLine($"[SRV-ENet] RECEIVE ch={enetEvent.ChannelID}");
                         var channel = (Channel)enetEvent.ChannelID;
                         PacketHandlerManager.HandleNetworkPacket(enetEvent.Peer, enetEvent.Packet, channel);
                     }
                     break;
                 case EventType.DISCONNECT:
                     {
+                        Console.WriteLine($"[SRV-ENet] DISCONNECT");
                         PacketHandlerManager.NotifyDisconnectFromNet(enetEvent.Peer);
                     }
                     break;

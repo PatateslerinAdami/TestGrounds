@@ -110,6 +110,7 @@ namespace LeagueSandbox.GameServer
         /// Class which manages all chat based commands.
         /// </summary>
         internal ChatCommandManager ChatCommandManager { get; private set; }
+        private Chatbox.Commands.TcpTestServer? _tcpTestServer;
         /// <summary>
         /// Interface of functions used to identify players or their properties (such as their champion).
         /// </summary>
@@ -194,6 +195,8 @@ namespace LeagueSandbox.GameServer
             }
             QuestManager.Initialize();
             _logger.Info("Game is ready.");
+            _tcpTestServer = new Chatbox.Commands.TcpTestServer(this);
+            _tcpTestServer.Start();
         }
 
         /// <summary>

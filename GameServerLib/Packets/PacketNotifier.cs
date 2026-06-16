@@ -4919,5 +4919,23 @@ namespace PacketDefinitions420
 
             _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
         }
+
+        public void NotifyS2C_DisplayLocalizedTutorialChatText(int clientId, string message)
+        {
+            var pkt = new S2C_DisplayLocalizedTutorialChatText()
+            {
+                Message = message
+            };
+            _packetHandlerManager.SendPacket(clientId, pkt.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifyS2C_OpenTutorialPopup(int clientId, string message)
+        {
+            var pkt = new S2C_OpenTutorialPopup()
+            {
+                MessageboxID = message
+            };
+            _packetHandlerManager.SendPacket(clientId, pkt.GetBytes(), Channel.CHL_S2C);
+        }
     }
 }

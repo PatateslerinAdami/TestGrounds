@@ -3,6 +3,7 @@ using Buffs;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -13,43 +14,48 @@ using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace ItemSpells;
 
-public class SpiritLantern : ISpellScript {
-    private       ObjAIBase _owner;
-    private       Minion    _ward;
+public class SightWard : ISpellScript
+{
+    private Minion _ward;
 
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts = false
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        TriggersSpellCasts = true,
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _owner = owner;
-    }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        
-        var cursor   = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-        var current  = new Vector2(owner.Position.X,                owner.Position.Y);
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        var cursor = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
+        var current = new Vector2(owner.Position.X, owner.Position.Y);
         var distance = cursor - current;
-        
-        float   duration = 180f;
-        
         Vector2 truecoords;
-        if (distance.Length() > 500f) {
+        if (distance.Length() > 500f)
+        {
             distance = Vector2.Normalize(distance);
             var range = distance * 500f;
             truecoords = current + range;
-        } else { truecoords = cursor; }
+        }
+        else
+        {
+            truecoords = cursor;
+        }
 
         truecoords = SnapToWalkableTerrain(truecoords);
 
-        _ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true, true);
+        float duration = 180f; // green wards last 3 minutes
+
+        _ward = AddMinion(owner, "SightWard", "SightWard", truecoords, owner.Team, 0, true, true, true);
         _ward.Stats.ManaPoints.BaseValue = duration;
-        _ward.Stats.CurrentMana          = duration;
-        AddParticle(owner, _ward, "TrinketOrbLvl1Audio", truecoords);
-        if (owner.HasBuff("SharedWardBuff")) {
+        _ward.Stats.CurrentMana = duration;
+        AddParticle(owner, null, "SightWard.troy", truecoords);
+
+        if (owner.HasBuff("SharedWardBuff"))
+        {
             var buff = owner.GetBuffWithName("SharedWardBuff").BuffScript as SharedWardBuff;
             buff?.AddWard(_ward);
-        } else {
+        }
+        else
+        {
             var buff = AddBuff("SharedWardBuff", 25000f, 1, spell, owner, owner, true).BuffScript as SharedWardBuff;
             buff?.AddWard(_ward);
         }

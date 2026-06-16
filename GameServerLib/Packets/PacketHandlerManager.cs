@@ -255,6 +255,7 @@ namespace PacketDefinitions420
         public bool HandleNetworkPacket(Peer peer, Packet packet, Channel channelId)
         {
             var data = packet.Data;
+            Console.WriteLine($"[PKT] channel={channelId} len={data.Length}");
 
             if (channelId == Channel.CHL_HANDSHAKE)
             {
@@ -384,20 +385,20 @@ namespace PacketDefinitions420
             var peerInfo = _playerManager.GetClientInfoByPlayerId(request.PlayerID);
             if (peerInfo == null)
             {
-                Debug.WriteLine($"Player ID {request.PlayerID} is invalid.");
+                Console.WriteLine($"[HANDSHAKE] Player ID {request.PlayerID} not found in config (players: {_playerManager.GetPlayers(false).Count})");
                 return false;
             }
 
             if (_sender.Peers[peerInfo.ClientId] != null && !peerInfo.IsDisconnected)
             {
-                Debug.WriteLine($"Player {request.PlayerID} is already connected. Request from {peer.Address.IPEndPoint.Address.ToString()}.");
+                Console.WriteLine($"[HANDSHAKE] Player {request.PlayerID} already connected");
                 return false;
             }
 
             long playerID = _sender.Blowfishes[peerInfo.ClientId].Decrypt(request.CheckSum);
             if (request.PlayerID != playerID)
             {
-                Debug.WriteLine($"Blowfish key is wrong!");
+                Console.WriteLine($"[HANDSHAKE] Blowfish fail: expected {request.PlayerID}, got {playerID}");
                 return false;
             }
 

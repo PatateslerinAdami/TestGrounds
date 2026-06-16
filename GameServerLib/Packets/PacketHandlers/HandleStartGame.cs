@@ -3,6 +3,7 @@ using GameServerCore.NetInfo;
 using GameServerCore.Packets.Handlers;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeaguePackets.Game.Events;
+using LeagueSandbox.GameServer.Messages;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.Quests;
 using System.Linq;
@@ -99,6 +100,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
             
             _game.PacketNotifier.NotifyGameStart(player.ClientId);
+
+            Tutorial.Popup(_game, player.ClientId, "Memories of Runterra on TestGrounds");
+            Tutorial.Chat(_game, player.ClientId, "Memories of Runterra");
 
             if (_game.IsRunning)
             {
