@@ -39,6 +39,12 @@ namespace LeagueSandbox.GameServer
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
+
+        // TEMP DIAGNOSTIC (variable-timestep jitter trace): logs deltaTime for the first 100
+        // gameplay ticks so 30Hz-vs-60Hz Thread.Sleep jitter is visible in the log. Remove these
+        // fields + the matching logging block in GameLoop() when the timestep investigation is done.
+        private int _dtLogCount = 0;
+        private float _dtLogMin, _dtLogMax, _dtLogSum, _dtLogSumSq;
         protected double RefreshRate =>
             Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode)
                 ? 1000.0 / 60.0
@@ -459,6 +465,30 @@ namespace LeagueSandbox.GameServer
 
                     if (IsRunning)
                     {
+                        // TEMP DIAGNOSTIC (see _dtLog* fields): trace deltaTime for the first 100
+                        // gameplay ticks to expose Thread.Sleep jitter at 30 vs 60 Hz. Remove when done.
+                        if (_dtLogCount < 100)
+                        {
+                            if (_dtLogCount == 0)
+                            {
+                                _dtLogMin = float.MaxValue;
+                                _dtLogMax = float.MinValue;
+                            }
+                            _dtLogCount++;
+                            _dtLogSum += deltaTime;
+                            _dtLogSumSq += deltaTime * deltaTime;
+                            if (deltaTime < _dtLogMin) _dtLogMin = deltaTime;
+                            if (deltaTime > _dtLogMax) _dtLogMax = deltaTime;
+                            _logger.Info($"[dt] tick={_dtLogCount,3} dt={deltaTime,6:F2}ms target={(float)RefreshRate:F2}ms dev={deltaTime - (float)RefreshRate,6:F2}ms");
+                            if (_dtLogCount == 100)
+                            {
+                                float avg = _dtLogSum / 100f;
+                                float std = (float)System.Math.Sqrt(System.Math.Max(0f, _dtLogSumSq / 100f - avg * avg));
+                                string mode = Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode) ? "60Hz(tournament)" : "30Hz(normal)";
+                                _logger.Info($"[dt] SUMMARY {mode} target={(float)RefreshRate:F2}ms n=100 min={_dtLogMin:F2} max={_dtLogMax:F2} avg={avg:F2} stddev={std:F2} jitter(max-min)={_dtLogMax - _dtLogMin:F2}ms");
+                            }
+                        }
+
                         using (Profiler.Scope("Game.Update"))
                         {
                             Update(deltaTime);
