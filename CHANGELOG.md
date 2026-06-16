@@ -1,7 +1,7 @@
 # TestGrounds-master — Change Log
 
 > **Created:** 2026-06-15
-> **Forked from:** `TestGrounds-old` (indev-perf)
+> **Forked from:** `TestGrounds-old` (Mor version of indev-perf, i didnt keep any changes from indev, just champions)
 > **Status:** Build verified ✅ | Runtime unverified ⏳ (except where noted)
 
 ---
