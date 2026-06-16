@@ -284,10 +284,16 @@ namespace LeagueSandbox.GameServer
 
         public void OnReconnect(int userId, TeamId team)
         {
+            // Soft-reconnect GC mark-and-sweep (Riot 4.17): mark all of the client's objects, re-replicate
+            // the live world (the per-object spawns below refresh/un-mark live objects), then sweep —
+            // destroy anything still marked = stale/ghost objects the client kept across the disconnect.
+            // NotifySpawn is an immediate per-client send, so MARK -> spawns -> SWEEP stay FIFO-ordered.
+            _game.PacketNotifier.NotifyS2C_MarkOrSweepForSoftReconnect(userId, SoftReconnectStage.MarkAllUnits);
             foreach (GameObject obj in _objects.Values)
             {
                 obj.OnReconnect(userId, team);
             }
+            _game.PacketNotifier.NotifyS2C_MarkOrSweepForSoftReconnect(userId, SoftReconnectStage.DestroyAllUnits);
         }
 
         public void SpawnObjects(ClientInfo clientInfo)

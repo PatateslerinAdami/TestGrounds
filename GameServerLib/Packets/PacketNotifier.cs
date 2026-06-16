@@ -3674,6 +3674,47 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Sends S2C_UnitSetPARType (0x113) — sets <paramref name="unit"/>'s PAR (resource-bar) TYPE on
+        /// clients. The target unit is the packet's header SenderNetID (extended-packet routing); the
+        /// body carries only the type byte. Broadcast (PolicyBroadcast per the 4.17 decomp). Riot never
+        /// sends this in normal 4.20 play (PAR type is static) — for custom/runtime type changes.
+        /// </summary>
+        /// <param name="unit">Unit whose PAR type to set (identifies the target via SenderNetID).</param>
+        /// <param name="parType">The PAR type to switch to.</param>
+        public void NotifyUnitSetPARType(AttackableUnit unit, PrimaryAbilityResourceType parType)
+        {
+            var parPacket = new S2C_UnitSetPARType
+            {
+                SenderNetID = unit.NetId,
+                PARType = (byte)parType
+            };
+            _packetHandlerManager.BroadcastPacket(parPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Sends S2C_MarkOrSweepForSoftReconnect (0xEF) to ONE reconnecting client — the GC-style
+        /// state-resync bracket: MarkAllUnits BEFORE re-replicating the world, DestroyAllUnits AFTER
+        /// (sweeps stale/ghost objects the client kept across the disconnect). Per-client, not broadcast.
+        /// </summary>
+        public void NotifyS2C_MarkOrSweepForSoftReconnect(int userId, SoftReconnectStage stage)
+        {
+            var packet = new S2C_MarkOrSweepForSoftReconnect { Stage = (byte)stage };
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Broadcasts S2C_Reconnect (0x0F) — tells all clients that player <paramref name="clientId"/>
+        /// reconnected (the client resolves the hero by ClientID and clears its reconnecting state).
+        /// This is what Riot sends for reconnects (replay-verified, 274x / 117 games); there is no
+        /// separate OnReconnect world-event.
+        /// </summary>
+        public void NotifyS2C_Reconnect(int clientId)
+        {
+            var packet = new S2C_Reconnect { ClientID = clientId };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends a packet to the specified client's team detailing a map ping.
         /// </summary>
         /// <param name="client">Info of the client that initiated the ping.</param>

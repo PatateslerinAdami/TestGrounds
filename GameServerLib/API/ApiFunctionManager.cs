@@ -697,6 +697,25 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Sends S2C_UnitSetPARType (0x113), switching <paramref name="unit"/>'s resource-bar TYPE
+        /// (the bar style — Mana/Energy/Heat/…) on clients. The unit is identified by the packet's
+        /// header SenderNetID (extended-packet routing) — the body carries only the type byte.
+        /// NOTE: this only changes the CLIENT bar type; the server-side Stats.ParType is separate.
+        /// Riot never sends this in normal 4.20 play (PAR type is static, set at spawn from champion
+        /// data) — provided for custom/runtime PAR-type changes.
+        /// </summary>
+        /// <param name="unit">Unit whose PAR (resource-bar) type to set.</param>
+        /// <param name="parType">The PAR type to switch the bar to.</param>
+        public static void SetUnitPARType(AttackableUnit unit, PrimaryAbilityResourceType parType)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+            _game.PacketNotifier.NotifyUnitSetPARType(unit, parType);
+        }
+
+        /// <summary>
         /// Gets the target's maximum primary ability resource.
         /// </summary>
         /// <param name="target">Unit to query.</param>
