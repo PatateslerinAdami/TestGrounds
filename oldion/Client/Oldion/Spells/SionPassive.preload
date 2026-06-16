@@ -1,0 +1,4 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadSpell, Params={Name="sionpassivedelay"}}, 
+{Function=BBPreloadSpell, Params={Name="sionpassivespeed"}}, 
+}

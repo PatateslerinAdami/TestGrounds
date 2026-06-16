@@ -1,0 +1,10 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadParticle, Params={Name="sion_base_q1_tar.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionqslow"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_q2_tar.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_q3_tar.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionqsoundafterhalfhit"}}, 
+{Function=BBPreloadSpell, Params={Name="sionqknockup"}}, 
+{Function=BBPreloadSpell, Params={Name="sionvostacks"}}, 
+{Function=BBPreloadSpell, Params={Name="sionqsoundbeforehalfhit"}}, 
+}

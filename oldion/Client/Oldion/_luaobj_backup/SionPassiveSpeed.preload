@@ -1,0 +1,6 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadParticle, Params={Name="sion_base_passive_speed.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionpassivespeed"}}, 
+{Function=BBPreloadParticle, Params={Name="darkbinding_tar.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="vi_q_tar.troy"}}, 
+}

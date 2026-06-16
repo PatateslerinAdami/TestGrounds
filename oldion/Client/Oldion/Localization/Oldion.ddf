@@ -1,0 +1,12 @@
+{"SionR;f1":{"link":"bonusattackdamage","coeff":".4"}}
+{"SionR;f2":{"link":"bonusattackdamage","coeff":".8"}}
+{"SionR;f3":{"link":"","coeff":""}}
+{"SionR;f4":{"link":"","coeff":""}}
+{"SionQ;f1":{"link":"attackdamage","coeff":".6"}}
+{"SionQ;f2":{"link":"attackdamage","coeff":"1.8"}}
+{"SionQ;f3":{"link":"","coeff":""}}
+{"SionQ;f4":{"link":"","coeff":""}}
+{"SionW;f1":{"link":"health","coeff":".1"}}
+{"SionW;f2":{"link":"","coeff":""}}
+{"SionW;f3":{"link":"","coeff":""}}
+{"SionW;f4":{"link":"","coeff":""}}

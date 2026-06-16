@@ -1,0 +1,4 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadParticle, Params={Name="sion_base_e_buf_champ.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_e_buf.troy"}}, 
+}

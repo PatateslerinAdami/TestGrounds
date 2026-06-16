@@ -1,0 +1,788 @@
+{
+    "situations" :
+    [
+        {
+            "situationName" : "AttackMinion2D", 
+            "cooldown" : 45,
+            "rules" :
+            [
+                {
+                    "ruleName" : "AttackMinion",
+                    "conditions" :
+                    {
+                        "target" :
+                        {
+                            "metadata" :
+                            {
+                                "category" : "class",
+                                "value" : "minion"
+                            }
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioAttackMinion2D"
+                            , "selfEventName" : "AttackMinion2D"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "RecallWindDown", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "RecallWindDown",
+                    "conditions" :
+                    {
+
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "RecallWindDown"
+                            , "selfEventName" : "RecallWindDown3D"
+                            , "allyEventName" : "RecallWindDown3D"
+                            , "enemyEventName" : "RecallWindDown3D"
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "MoveOrder2D", 
+            "cooldown" : 12,
+            "rules" :
+            [
+                {
+                    "ruleName" : "MoveDistance",
+                    "conditions" :
+                    {
+                        "distance" :
+                        {
+                            "value" : "900",
+                            "op" : ">"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioMoveDistance"
+                            , "selfEventName" : "MoveOrder2D"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "Taunt", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "Taunt3DGalio",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "Galio"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "TauntGalio"
+                            , "selfEventName" : "Taunt3DGalio"
+                            , "allyEventName" : "Taunt3DGalio"
+                            , "enemyEventName" : "Taunt3DGalio"
+                            , "spectatorEventName" : "Taunt3DGalio"
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "Taunt3DJarvanIV",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "JarvanIV"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "TauntJarvanIV"
+                            , "selfEventName" : "Taunt3DJarvanIV"
+                            , "allyEventName" : "Taunt3DJarvanIV"
+                            , "enemyEventName" : "Taunt3DJarvanIV"
+                            , "spectatorEventName" : "Taunt3DJarvanIV"
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "Taunt3DSwain",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "Swain"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "TauntSwain"
+                            , "selfEventName" : "Taunt3DSwain"
+                            , "allyEventName" : "Taunt3DSwain"
+                            , "enemyEventName" : "Taunt3DSwain"
+                            , "spectatorEventName" : "Taunt3DSwain"
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "Taunt3DKarthus",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "Karthus"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "TauntKarthus"
+                            , "selfEventName" : "Taunt3DKarthus"
+                            , "allyEventName" : "Taunt3DKarthus"
+                            , "enemyEventName" : "Taunt3DKarthus"
+                            , "spectatorEventName" : "Taunt3DKarthus"
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "Taunt3DPantheon",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "Pantheon"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "TauntPantheon"
+                            , "selfEventName" : "Taunt3DPantheon"
+                            , "allyEventName" : "Taunt3DPantheon"
+                            , "enemyEventName" : "Taunt3DPantheon"
+                            , "spectatorEventName" : "Taunt3DPantheon"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "SpellCast", 
+            "cooldown" : 15,
+            "rules" :
+            [
+                {
+                    "ruleName" : "SionVOModeChangeUp",
+                    "conditions" :
+                    {
+                        "spellName" : "SionVOModeChange"
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioSionVOModeChange"
+                            , "selfEventName" : "SpellCast"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "AttackChampion2D", 
+            "cooldown" : 25,
+            "rules" :
+            [
+                {
+                    "ruleName" : "AttackChampion",
+                    "conditions" :
+                    {
+
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioAttackChampion2D"
+                            , "selfEventName" : "AttackChampion2D"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "BuyItem", 
+            "cooldown" : 15,
+            "rules" :
+            [
+                {
+                    "ruleName" : "BuyItem2011",
+                    "conditions" :
+                    {
+                        "itemID" : 2001
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem2001"
+                            , "selfEventName" : ""
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3111",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3111
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3111"
+                            , "selfEventName" : "BuyItem2D3111"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem1001",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 1001
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem1001"
+                            , "selfEventName" : "BuyItem2D1001"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3047",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3047
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3047"
+                            , "selfEventName" : "BuyItem2D3047"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3022",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3022
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3022"
+                            , "selfEventName" : "BuyItem2D3022"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3025",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3025
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3025"
+                            , "selfEventName" : "BuyItem2D3025"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3031",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3031
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3031"
+                            , "selfEventName" : "BuyItem2D3031"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3068",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3068
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3068"
+                            , "selfEventName" : "BuyItem2D3068"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3071",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3071
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3071"
+                            , "selfEventName" : "BuyItem2D3071"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3072",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3072
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3072"
+                            , "selfEventName" : "BuyItem2D3072"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3083",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3083
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3083"
+                            , "selfEventName" : "BuyItem2D3083"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3102",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3102
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3102"
+                            , "selfEventName" : "BuyItem2D3102"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3143",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3143
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3143"
+                            , "selfEventName" : "BuyItem2D3143"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3153",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3153
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3153"
+                            , "selfEventName" : "BuyItem2D3153"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3156",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCooldown" : 5,
+                        "itemID" : 3156
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3156"
+                            , "selfEventName" : "BuyItem2D3156"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem",
+                    "conditions" :
+                    {
+                        "ruleCooldown" : 15
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem"
+                            , "selfEventName" : "BuyItem2D"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3075",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 1,
+                        "ruleCoolDown" : 5,
+                        "itemID" : 3075
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3075"
+                            , "selfEventName" : "BuyItem2D3075"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "BuyItem3110",
+                    "conditions" :
+                    {
+                        "maxOccurrence" : 3,
+                        "ruleCoolDown" : 5,
+                        "itemID" : 3110
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "AudioBuyItem3110"
+                            , "selfEventName" : "BuyItem2D3110"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "FirstMove2D", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "",
+                    "conditions" :
+                    {
+
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "FirstMove"
+                            , "selfEventName" : "FirstMove2D"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "Joke", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "Joke3DUrgot",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "Urgot"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "JokeUrgot"
+                            , "selfEventName" : "Joke3DUrgot"
+                            , "allyEventName" : "Joke3DUrgot"
+                            , "enemyEventName" : "Joke3DUrgot"
+                            , "spectatorEventName" : "Joke3DUrgot"
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "Joke3DJarvanIV",
+                    "conditions" :
+                    {
+                        "NearestEnemyChampion" :
+                        {
+                            "characterName" : "JarvanIV"
+                        }
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "JokeJarvanIV"
+                            , "selfEventName" : "Joke3DJarvanIV"
+                            , "allyEventName" : "Joke3DJarvanIV"
+                            , "enemyEventName" : "Joke3DJarvanIV"
+                            , "spectatorEventName" : "Joke3DJarvanIV"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "RecallLeadIn", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "RecallLeadIn",
+                    "conditions" :
+                    {
+
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "RecallLeadIn"
+                            , "selfEventName" : "RecallLeadIn3D"
+                            , "allyEventName" : "RecallLeadIn3D"
+                            , "enemyEventName" : "RecallLeadIn3D"
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "situationName" : "UseItem", 
+            "rules" :
+            [
+                {
+                    "ruleName" : "UseItem2043",
+                    "conditions" :
+                    {
+                        "itemID" : 2043
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "UseItem2043"
+                            , "selfEventName" : "UseItem2D2044"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "UseItem2044",
+                    "conditions" :
+                    {
+                        "itemID" : 2044
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "UseItem2044"
+                            , "selfEventName" : "UseItem2D2044"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "UseItem2044",
+                    "conditions" :
+                    {
+                        "itemID" : 2044
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "UseItem2044"
+                            , "selfEventName" : "UseItem2D2044"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                },
+                {
+                    "ruleName" : "UseItem3075",
+                    "conditions" :
+                    {
+                        "itemID" : 3075
+                    },
+                    "actions" :
+                    {
+                        "VO" :
+                        {
+                            "actionName" : "UseItem3075"
+                            , "selfEventName" : "UseItem2D3075"
+                            , "allyEventName" : ""
+                            , "enemyEventName" : ""
+                            , "spectatorEventName" : ""
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

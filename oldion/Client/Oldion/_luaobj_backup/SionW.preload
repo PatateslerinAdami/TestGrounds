@@ -1,0 +1,16 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadSpell, Params={Name="deathscaress"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_sound.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_precas.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_cas.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_shield.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionwshieldstacks"}}, 
+{Function=BBPreloadSpell, Params={Name="sionwsoundshield"}}, 
+{Function=BBPreloadSpell, Params={Name="sionwdetonate"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_nova.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_w_nova_tar.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionwsoundhit"}}, 
+{Function=BBPreloadSpell, Params={Name="sionvostacks"}}, 
+{Function=BBPreloadSpell, Params={Name="sionwsoundexplosion"}}, 
+{Function=BBPreloadSpell, Params={Name="sionw"}}, 
+}

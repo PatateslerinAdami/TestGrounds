@@ -1,0 +1,6 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadSpell, Params={Name="sionvomark"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_vo_transitionbase.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_vo_transitionultra.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="sionvostacks"}}, 
+}

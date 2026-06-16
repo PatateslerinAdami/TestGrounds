@@ -1,0 +1,130 @@
+{
+	"champion": "Oldion",
+	"title": "OldionSR",
+	"type": "riot",
+	"map": "SR",
+	"mode": "CLASSIC",
+	"priority": false,
+	"blocks": [{
+		"type": "starting",
+		"recMath": false,
+		"minSummonerLevel": -1,
+		"maxSummonerLevel": -1,
+		"items": [{
+			"id": "2041",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "2003",
+			"count": 3,
+			"hideCount": false
+		},
+		{
+			"id": "3340",
+			"count": 1,
+			"hideCount": false
+		}]
+	},
+	{
+		"type": "essential",
+		"recMath": false,
+		"minSummonerLevel": -1,
+		"maxSummonerLevel": -1,
+		"items": [{
+			"id": "3111",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3070",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3027",
+			"count": 1,
+			"hideCount": false
+		}]
+	},
+	{
+		"type": "offensive",
+		"recMath": false,
+		"minSummonerLevel": -1,
+		"maxSummonerLevel": -1,
+		"items": [{
+			"id": "3003",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3116",
+			"count": 1,
+			"hideCount": false
+		}]
+	},
+	{
+		"type": "defensive",
+		"recMath": false,
+		"minSummonerLevel": -1,
+		"maxSummonerLevel": -1,
+		"items": [{
+			"id": "3075",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3143",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3102",
+			"count": 1,
+			"hideCount": false
+		},
+		{
+			"id": "3083",
+			"count": 1,
+			"hideCount": false
+		}]
+	},
+	{
+		"type": "consumables",
+		"recMath": false,
+		"minSummonerLevel": -1,
+		"maxSummonerLevel": -1,
+		"showIfSummonerSpell": "",
+		"hideIfSummonerSpell": "",
+		"items": [{
+			"id": "2003",
+			"count": 1,
+			"hideCount": false,
+			"itemname": "hp pots"
+		},
+		{
+			"id": "2004",
+			"count": 1,
+			"hideCount": false,
+			"itemname": "mp pots"
+		},
+		{
+			"id": "2044",
+			"count": 1,
+			"hideCount": false,
+			"itemname": "green ward"
+		},
+		{
+			"id": "2043",
+			"count": 1,
+			"hideCount": false,
+			"itemname": "pink ward"
+		},
+		{
+			"id": "2137",
+			"count": 1,
+			"hideCount": false,
+			"itemname": "split push elixir"
+		}]
+	}]
+}

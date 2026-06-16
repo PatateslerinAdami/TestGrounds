@@ -1,0 +1,7 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadParticle, Params={Name="sion_e_sound.troy"}}, 
+{Function=BBPreloadCharacter, Params={Name="testcube"}}, 
+{Function=BBPreloadSpell, Params={Name="sionemarker"}}, 
+{Function=BBPreloadSpell, Params={Name="sionemarker2"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_e_cas.troy"}}, 
+}

@@ -1,0 +1,13 @@
+PreLoadBuildingBlocks = {
+{Function=BBPreloadParticle, Params={Name="sion_base_passive_smoke.troy"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_passive_hand.troy"}}, 
+{Function=BBPreloadSpell, Params={Name="itemsunfirecapeparticle"}}, 
+{Function=BBPreloadSpell, Params={Name="itemsunfirecapepulse"}}, 
+{Function=BBPreloadSpell, Params={Name="sionpassivespeed"}}, 
+{Function=BBPreloadSpell, Params={Name="sionq"}}, 
+{Function=BBPreloadSpell, Params={Name="sionw"}}, 
+{Function=BBPreloadSpell, Params={Name="sione"}}, 
+{Function=BBPreloadSpell, Params={Name="sionr"}}, 
+{Function=BBPreloadSpell, Params={Name="yorickultstun"}}, 
+{Function=BBPreloadParticle, Params={Name="sion_base_passive_tar.troy"}}, 
+}

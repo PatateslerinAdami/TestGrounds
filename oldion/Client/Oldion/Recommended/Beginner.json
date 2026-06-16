@@ -1,0 +1,15 @@
+{
+	"champion":"Oldion",
+	"title":"Beginner",
+	"type":"riot",
+	"map":"SR",
+	"mode":"INTRO",
+	"priority":false,
+	"blocks": [
+		{"type":"beginner_Starter","maxSummonerLevel":4,"items":[{"id":"1054","count":1}]},
+		{"type":"beginner_Starter","minSummonerLevel":5,"items":[{"id":"1054","count":1},{"id":"2003","count":1}]},
+		{"type":"beginner_Advanced","recMath":true,"items":[{"id":"1028","count":1},{"id":"1027","count":1},{"id":"3010","count":1}]},
+		{"type":"beginner_MovementSpeed","recMath":true,"items":[{"id":"1001","count":1},{"id":"1029","count":1},{"id":"3047","count":1}]},
+		{"type":"beginner_LegendaryItem","recMath":true,"items":[{"id":"3010","count":1},{"id":"1026","count":1},{"id":"3027","count":1}]},
+		{"type":"beginner_MoreLegendaryItems","items":[{"id":"3003","count":1},{"id":"3116","count":1},{"id":"3151","count":1},{"id":"3065","count":1}]}
+]}
