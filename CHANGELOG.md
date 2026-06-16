@@ -10,8 +10,6 @@
 
 ### Soraka — Full Kit Implementation ✅ Player playtested (partial visual issues)
 
-Implemented Soraka's 4.17-rework kit (ported from Chronobreak's CBProject-Converted):
-
 | Spell | Class | Status |
 |-------|-------|--------|
 | **Passive** — Salvation | `CharScriptSoraka.cs` | ✅ Works — MS boost to low-HP allies, `soraka_base_passive_speed.troy` + `soraka_base_passive_cross.troy` + `soraka_base_passive_indicatior.troy` indicator arrow |
