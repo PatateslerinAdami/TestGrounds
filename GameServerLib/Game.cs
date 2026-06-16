@@ -41,12 +41,6 @@ namespace LeagueSandbox.GameServer
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
 
-        // TEMP DIAGNOSTIC (variable-timestep jitter trace): logs deltaTime for the first 100
-        // gameplay ticks so 30Hz-vs-60Hz Thread.Sleep jitter is visible in the log. Remove these
-        // fields + the matching logging block in GameLoop() when the timestep investigation is done.
-        private int _dtLogCount = 0;
-        private float _dtLogMin, _dtLogMax, _dtLogSum, _dtLogSumSq;
-
         // Whether we're on Windows — gates the winmm timer-resolution P/Invokes below so the server
         // stays cross-platform (Linux/macOS sleep is already fine-grained; these are never called there).
         private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
@@ -489,7 +483,6 @@ namespace LeagueSandbox.GameServer
                             accumulator = maxAccum;
                         }
 
-                        int steps = 0;
                         while (accumulator >= step)
                         {
                             using (Profiler.Scope("Game.Update"))
@@ -497,33 +490,6 @@ namespace LeagueSandbox.GameServer
                                 Update((float)step);
                             }
                             accumulator -= step;
-                            steps++;
-                        }
-
-                        // TEMP DIAGNOSTIC (see _dtLog* fields): log the WAKE cadence (real wall time
-                        // between iterations) + steps run, for the first 100 gameplay wakes. After the
-                        // fixed-step fix this should read a tight ~step ms with steps=1. Remove when done.
-                        if (_dtLogCount < 100)
-                        {
-                            if (_dtLogCount == 0)
-                            {
-                                _dtLogMin = float.MaxValue;
-                                _dtLogMax = float.MinValue;
-                            }
-                            _dtLogCount++;
-                            float wall = (float)realElapsed;
-                            _dtLogSum += wall;
-                            _dtLogSumSq += wall * wall;
-                            if (wall < _dtLogMin) _dtLogMin = wall;
-                            if (wall > _dtLogMax) _dtLogMax = wall;
-                            _logger.Info($"[dt] tick={_dtLogCount,3} wall={wall,6:F2}ms steps={steps} target={(float)step:F2}ms dev={wall - (float)step,6:F2}ms");
-                            if (_dtLogCount == 100)
-                            {
-                                float avg = _dtLogSum / 100f;
-                                float sd = (float)System.Math.Sqrt(System.Math.Max(0f, _dtLogSumSq / 100f - avg * avg));
-                                string mode = Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode) ? "60Hz(tournament)" : "30Hz(normal)";
-                                _logger.Info($"[dt] SUMMARY {mode} target={(float)step:F2}ms n=100 min={_dtLogMin:F2} max={_dtLogMax:F2} avg={avg:F2} stddev={sd:F2} jitter(max-min)={_dtLogMax - _dtLogMin:F2}ms");
-                            }
                         }
                     }
                 }
