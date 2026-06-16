@@ -1,7 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Linq;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -37,44 +36,21 @@ namespace Spells
                 //This particle get's displayed globably
                 AddParticle(owner, null, "cursor_moveto", start);
 
-                // Prefer the actual cast target: when the player hovers an enemy with the guide, the
-                // client passes the hovered unit through `target`, so attack THAT. Only when nothing was
-                // hovered do we fall back to a proximity grab of the nearest enemy within the spell's
-                // CastRadius of the point. The old code skipped `target` and used a hardcoded 100u radius
-                // (far smaller than the ~250 CastRadius), so hovering an enemy whose center sat >100u
-                // from the click point fell through to a plain move ("pet walks to the position instead
-                // of attacking the target").
-                AttackableUnit attackTarget = null;
-                if (target != null && target.Team != owner.Team)
-                {
-                    attackTarget = target;
-                }
-                else
-                {
-                    float radius = (spell.SpellData.CastRadius != null && spell.SpellData.CastRadius[0] > 0f)
-                        ? spell.SpellData.CastRadius[0]
-                        : 250.0f;
-                    attackTarget = EnumerateValidUnitsInRange(spell.CastInfo.Owner, end, radius, true,
-                            SpellDataFlags.AffectEnemies)
-                        .OrderBy(u => Vector2.DistanceSquared(u.Position, end))
-                        .FirstOrDefault();
-                }
-
-                // Route the pet command through the pet's brain (PetAI.OnOrder) instead of poking its
-                // MoveOrder/waypoints directly. Setting MoveOrder + SetWaypoints here bypassed the AI's
-                // _aiState, so the AI's 0.15s timers (running on a stale IDLE state) immediately
-                // overrode the move with their auto-return/acquire — the "pet only moves while I spam
-                // the control" bug. IssueOrder makes the AI set AI_PET_HARDMOVE/HARDATTACK, which its
-                // timers respect (hard states neither auto-return nor re-acquire).
-                if (attackTarget != null)
-                {
-                    Pet.IssueOrder(OrderType.PetHardAttack, attackTarget, end);
-                    spell.CastInfo.SetTarget(attackTarget, 0);
-                }
-                else
-                {
-                    Pet.IssueOrder(OrderType.PetHardMove, null, end);
-                }
+                // The R-press guide is MOVE-ONLY (Riot-faithful). Evidence: Annie's guide spell
+                // PetCommandParticle.lua is pure metadata with NO command/target-detection logic (unlike
+                // ViktorChaosStormGuide, which DOES proximity-target via BuildingBlocks); the client shows
+                // only the waypoint cursor; the cast carries no TargetNetID (verified live: targetNetID=0
+                // even when clicking directly on an enemy); and S1 had no Annie guide spell at all. So the
+                // guide just issues a hard move to the clicked point. Tibbers still attacks when steered
+                // onto an enemy — via the pet's OWN AI: on arrival it enters AI_PET_HARDIDLE and
+                // TimerFindEnemies auto-acquires any enemy in acquisition range. Explicit attack-on-target
+                // is the separate pet command (PetHardAttack, the alt-click pet bar), not the guide.
+                //
+                // Route through the pet's brain (PetAI.OnOrder), not its MoveOrder/waypoints directly:
+                // poking those bypasses the AI's _aiState, so its 0.15s timers (on a stale IDLE state)
+                // would immediately override the move with auto-return/acquire ("pet only moves while I
+                // spam the control"). A hard state (AI_PET_HARDMOVE) is respected by the timers.
+                Pet.IssueOrder(OrderType.PetHardMove, null, end);
             }
         }
     }

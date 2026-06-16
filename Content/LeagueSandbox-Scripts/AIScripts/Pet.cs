@@ -27,6 +27,13 @@ namespace AIScripts
     {
         private const float FAR_MOVEMENT_DISTANCE = 1000.0f;
         private const float DEFAULT_RETURN_RADIUS = 200.0f;
+        // After reaching a hard-move destination the pet holds in HARDIDLE for this long, then reverts
+        // to aggressive IDLE (acquire + chase within AcquisitionRange). Verified against the live 4.20
+        // server; Pet.lua keeps the pet in HARDIDLE forever, so this settle-then-resume is engine-side.
+        private const float HARD_IDLE_REVERT_DELAY = 1.5f;
+
+        // LocalTime (seconds) at which a HARDIDLE pet reverts to IDLE; < 0 = no revert pending.
+        private float _hardIdleRevertAt = -1.0f;
 
         // ---- Subclass hooks (UncontrollablePet / YorickPHPet override these) ----
         // The summoner the pet belongs to. Controllable: the spawning champion (Minion.Owner).
@@ -170,6 +177,18 @@ namespace AIScripts
                 return;
             }
 
+            // Hard-move "settle": 1.5s after reaching a hard-commanded point (HARDIDLE), the pet drops
+            // back to aggressive IDLE so it resumes acquiring + chasing within AcquisitionRange. Also
+            // reverts HARDIDLE_ATTACKING (attacked something in place during the hold) → IDLE then chases
+            // it. Verified live; not in Pet.lua (engine-side). Explicit Hold (HOLDPOSITION) is unaffected.
+            if ((state == AIState.AI_PET_HARDIDLE || state == AIState.AI_PET_HARDIDLE_ATTACKING)
+                && _hardIdleRevertAt >= 0f && LocalTime >= _hardIdleRevertAt)
+            {
+                _hardIdleRevertAt = -1f;
+                NetSetState(AIState.AI_PET_IDLE);
+                return;
+            }
+
             // Autonomous pets (UncontrollablePet.lua) actively walk to the owner once they drift past
             // the follow distance, regardless of what they were doing (leash). The owner position is
             // always known server-side, so the >vision "blind move to last-known" branch collapses to
@@ -218,9 +237,11 @@ namespace AIScripts
                 return;
             }
 
-            // Reached a hard-move destination → hard idle.
+            // Reached a hard-move destination → hard idle, and arm the 1.5s settle timer (above) after
+            // which the pet resumes aggressive IDLE.
             if (Owner.IsPathEnded() && state == AIState.AI_PET_HARDMOVE)
             {
+                _hardIdleRevertAt = LocalTime + HARD_IDLE_REVERT_DELAY;
                 Stand(AIState.AI_PET_HARDIDLE);
                 return;
             }
