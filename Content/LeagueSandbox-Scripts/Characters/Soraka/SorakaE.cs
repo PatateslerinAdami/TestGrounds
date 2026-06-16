@@ -25,8 +25,8 @@ public class SorakaE : ISpellScript
 
     private ObjAIBase _soraka;
     private Spell _spell;
+    private Vector2 _cursorPos;
     private SpellSector _silenceSector;
-    private SpellSector _rootSector;
     private bool _rootPending;
 
     public SpellScriptMetadata ScriptMetadata => new()
@@ -54,16 +54,16 @@ public class SorakaE : ISpellScript
     public void OnSpellPostCast(Spell spell)
     {
         var owner = spell.CastInfo.Owner;
-        var cursorPos = new Vector2(
+        _cursorPos = new Vector2(
             spell.CastInfo.TargetPosition.X,
             spell.CastInfo.TargetPosition.Z);
 
         // Ground VFX
-        AddParticle(owner, null, "Soraka_Base_E_Tar.troy", cursorPos, ZoneDuration + 0.5f);
-        AddParticle(owner, null, "Soraka_Base_E_Rune.troy", cursorPos, ZoneDuration + 0.5f);
+        AddParticle(owner, null, "Soraka_Base_E_tar.troy", _cursorPos, ZoneDuration + 0.5f);
+        AddParticle(owner, null, "Soraka_Base_E_rune.troy", _cursorPos, ZoneDuration + 0.5f);
 
         // Perception bubble so the client can render VFX
-        AddPosPerceptionBubble(cursorPos, ZoneRadius, ZoneDuration + 0.5f, owner.Team);
+        AddPosPerceptionBubble(_cursorPos, ZoneRadius, ZoneDuration + 0.5f, owner.Team);
 
         // Silence zone — multi-tick, hits every quarter second
         _silenceSector = spell.CreateSpellSector(new SectorParameters
@@ -80,25 +80,32 @@ public class SorakaE : ISpellScript
         });
         ApiEventManager.OnSpellSectorHit.AddListener(this, _silenceSector, OnSilenceZoneHit, false);
 
-        // Schedule root zone at expiry
+        // Schedule root at expiry — check area directly instead of creating a second sector
         _rootPending = true;
         owner.RegisterTimer(new GameScriptTimer(ZoneDuration, () =>
         {
             if (!_rootPending) return;
             _rootPending = false;
 
-            _rootSector = spell.CreateSpellSector(new SectorParameters
+            // Root all enemies still in the zone area
+            int rank = _spell.CastInfo.SpellLevel;
+            float rootDuration = rank switch
             {
-                Width = ZoneRadius * 2,
-                Length = ZoneRadius * 2,
-                SingleTick = true,
-                Lifetime = 0.15f,
-                Tickrate = 1,
-                CanHitSameTarget = false,
-                Type = SectorType.Area,
-                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes,
-            });
-            ApiEventManager.OnSpellSectorHit.AddListener(this, _rootSector, OnRootZoneHit, true);
+                1 => 1.0f, 2 => 1.25f, 3 => 1.5f, 4 => 1.75f, 5 => 2.0f, _ => 1.0f
+            };
+
+            var enemies = GetUnitsInRange(owner, _cursorPos, ZoneRadius, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
+
+            foreach (var u in enemies)
+            {
+                if (u.IsDead || u.Team == owner.Team) continue;
+                AddBuff("Root", rootDuration, 1, _spell, u, _soraka);
+                AddParticleTarget(_soraka, u, "soraka_base_e_snare_tar.troy", u, rootDuration);
+            }
+
+            // Explosion VFX at zone center
+            AddParticle(owner, null, "Soraka_Base_E_tar.troy", _cursorPos, 0.5f);
         }));
     }
 
@@ -123,21 +130,6 @@ public class SorakaE : ISpellScript
         {
             AddBuff("Silence", ZoneDuration + 0.5f, 1, _spell, target, _soraka);
         }
-    }
-
-    private void OnRootZoneHit(SpellSector sector, AttackableUnit target)
-    {
-        if (target.IsDead) return;
-        if (target.Team == _soraka.Team) return;
-
-        int rank = _spell.CastInfo.SpellLevel;
-        float rootDuration = rank switch
-        {
-            1 => 1.0f, 2 => 1.25f, 3 => 1.5f, 4 => 1.75f, 5 => 2.0f, _ => 1.0f
-        };
-        AddBuff("Root", rootDuration, 1, _spell, target, _soraka);
-
-        AddParticleTarget(_soraka, target, "Soraka_Base_E_Root.troy", target, rootDuration);
     }
 
     public void OnUpdate(float diff) { }

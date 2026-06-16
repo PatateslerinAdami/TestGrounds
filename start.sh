@@ -9,7 +9,7 @@ cd "$SCRIPT_DIR"
 export PATH="$HOME/.dotnet:$PATH"
 export DOTNET_ROOT="$HOME/.dotnet"
 
-CHAMPION="Quinn"
+CHAMPION="Soraka"
 MAP_ID=1
 MAP_NAME="Summoner's Rift"
 CLIENT_DIR="/home/n7reny/PycharmProjects/dpsk/program 3/Client"

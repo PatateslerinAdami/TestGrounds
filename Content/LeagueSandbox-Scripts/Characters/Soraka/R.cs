@@ -39,8 +39,8 @@ public class SorakaR : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        // Caster VFX
-        AddParticleTarget(_soraka, _soraka, "Soraka_Base_R_Cas.troy", _soraka, 2f);
+        // Caster VFX — beam raising from staff
+        AddParticleTarget(_soraka, _soraka, "soraka_base_r_cas.troy", _soraka, 2f);
     }
 
     public void OnSpellPostCast(Spell spell)
@@ -74,7 +74,8 @@ public class SorakaR : ISpellScript
             unit.TakeHeal(owner, heal, HealType.SelfHeal);
 
             // Heal VFX on each ally
-            AddParticleTarget(owner, unit, "Wish_tar.troy", unit, 2f);
+            AddParticleTarget(owner, unit, "Soraka_Base_R_tar.troy", unit, 2f);
+            AddParticleTarget(owner, unit, "Global_Heal.troy", unit, 1.5f);
         }
     }
 

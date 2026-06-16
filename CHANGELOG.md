@@ -6,7 +6,47 @@
 
 ---
 
-## 2026-06-15 (Session 2) — Quinn Full Kit + TCP Test Harness + Engine Fixes
+## 2026-06-16 (Session 3) — Soraka Full Kit + PacketHandlerManager NRE Fix + Engine Fix
+
+### Soraka — Full Kit Implementation ✅ Player playtested (partial visual issues)
+
+Implemented Soraka's 4.17-rework kit (ported from Chronobreak's CBProject-Converted):
+
+| Spell | Class | Status |
+|-------|-------|--------|
+| **Passive** — Salvation | `CharScriptSoraka.cs` | ✅ Works — MS boost to low-HP allies, `soraka_base_passive_speed.troy` + `soraka_base_passive_cross.troy` + `soraka_base_passive_indicatior.troy` indicator arrow |
+| **Q** — Starcall | `SorakaQ.cs` | 🟡 Works — damage, slow (30–50%), heal return, range-based travel delay (0.25–1s), vision bubble during drop. **Star appears on ground** (static, falls from sky not animated). Heal return instant with `global_ss_heal_02.troy` VFX |
+| **W** — Astral Infusion | `SorakaW.cs` | ✅ Works — 10% HP cost, ally heal, `soraka_base_w_eff.troy` + `Soraka_base_W_Beam.troy` + `Global_Heal.troy` + `soraka_base_w_buf.troy` + `soraka_base_w_mis.troy` |
+| **E** — Equinox | `SorakaE.cs` | 🟡 Works — silence sector ticks, damage, delayed root via timer + `GetUnitsInRange` + `AddBuff("Root")`. Lags during playtest, needs re-test |
+| **R** — Wish | `SorakaR.cs` + `SorakaRCastTime.cs` (NEW) | ✅ Works — global heal (+50% on <40% HP), `soraka_base_r_cas.troy` on caster, `Soraka_Base_R_tar.troy` + `Global_Heal.troy` on each ally |
+| **Basic Attacks** | `SorakaBasicAttacks.cs` | ✅ Stubs (silences `Could not find script` warnings) |
+
+**Extra slot stubs created** (game data references — real logic is inline):
+- `SorakaQMissile.cs` — stub
+- `SorakaQReturnMissile.cs` — stub
+- `SorakaWParticleMissile.cs` — stub
+- `SorakaRCastTime.cs` — plays `soraka_base_r_cas.troy` + `Soraka_Base_R_tar.troy`
+
+**Playtest results (2026-06-16):**
+- **Overall**: Some lag/performance issues may affect visual feedback
+- **Passive**: All elements present; slightly glitchy (possibly performance-related)
+- **Q**: Star appears statically on ground ("welding" effect). Travel delay and vision bubble work. Heal return is instant with visual — matches original 4.20 behavior
+- **W**: Works
+- **E**: Works but lag makes root timing hard to verify — needs re-test
+- **R**: Works
+
+### PacketHandlerManager — NRE Crash Fix
+`NotifyDisconnectFromNet` at line 332 crashed the server when a client disconnected before completing the ENet handshake (`peer.UserData` was null). Added null guard `(peer.UserData != null ? (int)peer.UserData : 0)` in all 3 locations.
+
+### Particle Name Fixes (Soraka)
+Corrected particle names to match actual `.troybin` files on disk:
+- `Soraka_Base_R_Cas.troy` → `soraka_base_r_cas.troy`
+- `Wish_tar.troy` → `Soraka_Base_R_tar.troy` (Wish_tar doesn't exist)
+- `Soraka_Base_W_Cas.troy` → `soraka_base_w_eff.troy`
+- `Soraka_Base_E_Root.troy` → `soraka_base_e_snare_tar.troy`
+- `Soraka_Base_Q_Cast_Hand.troy` → removed (doesn't exist)
+
+---
 
 ### Quinn — Full Kit Implementation ⏳ TCP verified, ⏳ client untested
 

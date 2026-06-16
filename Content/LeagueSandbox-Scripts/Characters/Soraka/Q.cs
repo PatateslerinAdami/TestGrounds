@@ -8,10 +8,6 @@ using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -19,13 +15,17 @@ namespace Spells;
 
 public class SorakaQ : ISpellScript
 {
+    private const float Radius = 265f;
+    private const float InnerR = 110f;
+    private const float MaxRange = 950f;
+
     private ObjAIBase _owner;
-    private Vector2   _targetPos;
+    private Vector2 _targetPos;
 
     public SpellScriptMetadata ScriptMetadata => new()
     {
         TriggersSpellCasts = true,
-        IsDamagingSpell    = true,
+        IsDamagingSpell = true,
         NotSingleTargetSpell = true,
     };
 
@@ -43,137 +43,88 @@ public class SorakaQ : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        // Cast VFX on caster
-        AddParticleTarget(_owner, _owner, "Soraka_Base_Q_Cas.troy", _owner, lifetime: 0.8f);
-        AddParticleTarget(_owner, _owner, "Soraka_Base_Q_Cast_Hand.troy", _owner,
-            lifetime: 0.8f, bone: "R_hand");
+        // Cast VFX — Soraka raises her hand
+        AddParticleTarget(_owner, _owner, "Soraka_Base_Q_cas.troy", _owner, lifetime: 0.8f);
+
+        // Beam/arc from Soraka to target
+        AddParticlePos(_owner, "Soraka_Base_Q_mis_accelerate.troy",
+            _owner.Position, _targetPos,
+            lifetime: 0.6f, direction: _owner.Direction);
     }
 
     public void OnSpellPostCast(Spell spell)
     {
-        // Cast the missile to the ground target — client renders Soraka_Base_Q_Mis.troy
-        SpellCast(_owner, 6, SpellSlotType.ExtraSlots, _targetPos, _targetPos, true, Vector2.Zero);
-    }
+        var pos = _targetPos;
 
-    public void OnUpdate(float diff) { }
-}
+        // Travel time scales with distance: 0.25s (close) → 1s (max range 950)
+        float dist = Vector2.Distance(_owner.Position, pos);
+        float travelTime = 0.25f + (Math.Min(dist, MaxRange) / MaxRange) * 0.75f;
 
-public class SorakaQMissile : ISpellScript
-{
-    private const float OuterRadius = 300f;
-    private const float InnerRadius = 110f;
+        // Grant sight of the target area during the drop
+        AddPosPerceptionBubble(pos, 300f, travelTime, _owner.Team);
 
-    private ObjAIBase _owner;
+        // Star visible at target during fall
+        AddParticle(_owner, null, "Soraka_Base_Q_Mis.troy", pos, travelTime);
 
-    public SpellScriptMetadata ScriptMetadata { get; } = new()
-    {
-        MissileParameters = new MissileParameters
+        // Defer impact to after travel time
+        _owner.RegisterTimer(new GameScriptTimer(travelTime, () =>
         {
-            Type = MissileType.Circle
-        },
-        IsDamagingSpell = true,
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell)
-    {
-        _owner = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+            Impact(spell, pos);
+        }));
     }
 
-    public void OnDeactivate(ObjAIBase owner, Spell spell)
+    private void Impact(Spell spell, Vector2 pos)
     {
-        ApiEventManager.RemoveAllListenersForOwner(this);
-    }
-
-    public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
-    {
-        var pos = missile.Position;
-        var qSpell = _owner.GetSpell("SorakaQ");
-        int rank = qSpell.CastInfo.SpellLevel;
+        int rank = spell.CastInfo.SpellLevel;
         float ap = _owner.Stats.AbilityPower.Total * 0.35f;
+        float dmg = (rank switch { 1 => 70, 2 => 110, 3 => 150, 4 => 190, 5 => 230, _ => 70 }) + ap;
 
-        float[] baseDmg = { 0, 70, 110, 150, 190, 230 };
-        float dmg = baseDmg[rank] + ap;
-
-        // Impact VFX
-        AddParticle(_owner, null, "Soraka_Base_Q_Tar.troy", pos, 2f);
-
+        bool hasInnerHit = false;
         int champHits = 0;
-        var enemies = GetUnitsInRange(_owner, pos, OuterRadius, true,
-            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
 
-        foreach (var u in enemies)
+        foreach (var u in GetUnitsInRange(_owner, pos, Radius, true,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral))
         {
             if (u.Team == _owner.Team) continue;
 
             float dist = Vector2.Distance(pos, u.Position);
-            float finalDmg = dist <= InnerRadius ? dmg * 1.5f : dmg;
+            bool isInner = dist <= InnerR;
+            u.TakeDamage(_owner, isInner ? dmg * 1.5f : dmg,
+                DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, isInner);
 
-            u.TakeDamage(_owner, finalDmg, DamageType.DAMAGE_TYPE_MAGICAL,
-                DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+            // Slow: 30/35/40/45/50% for 2s
+            var slowVars = new BuffVariables();
+            slowVars.Set("slowPercent", 0.25f + 0.05f * rank);
+            AddBuff("Slow", 2f, 1, spell, u, _owner, buffVariables: slowVars);
 
-            AddBuff("Slow", 2f, 1, qSpell, u, _owner);
-
+            if (isInner && u is Champion)
+                hasInnerHit = true;
             if (u is Champion)
                 champHits++;
         }
 
-        // Return missiles: each champion hit sends a heal back to Soraka
+        // Impact VFX — crit if inner ring hit
+        AddParticle(_owner, null,
+            hasInnerHit ? "Soraka_Base_Q_Tar_crit.troy" : "Soraka_Base_Q_Tar.troy",
+            pos, 1.5f);
+
+        // Heal return per champion hit
+        float missingHpPct = 1f - _owner.Stats.CurrentHealth / _owner.Stats.HealthPoints.Total;
+        float baseH = rank switch { 1 => 25, 2 => 35, 3 => 45, 4 => 55, 5 => 65, _ => 25 };
+        float maxH = rank switch { 1 => 50, 2 => 70, 3 => 90, 4 => 110, 5 => 130, _ => 50 };
+
         for (int i = 0; i < champHits; i++)
         {
-            SpellCast(_owner, 4, SpellSlotType.ExtraSlots, true, _owner, pos);
+            float heal = Math.Min(baseH * (1f + missingHpPct), maxH);
+            _owner.TakeHeal(_owner, heal, HealType.SelfHeal);
         }
 
-        missile.SetToRemove();
-    }
-
-    public void OnSpellPostCast(Spell spell) { }
-    public void OnUpdate(float diff) { }
-}
-
-public class SorakaQReturnMissile : ISpellScript
-{
-    private ObjAIBase _owner;
-
-    public SpellScriptMetadata ScriptMetadata { get; } = new()
-    {
-        MissileParameters = new MissileParameters
+        if (champHits > 0)
         {
-            Type = MissileType.Target
-        },
-        TriggersSpellCasts = true,
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell)
-    {
-        _owner = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+            AddParticleTarget(_owner, _owner, "global_ss_heal_02.troy", _owner, lifetime: 0.5f);
+        }
     }
 
-    public void OnDeactivate(ObjAIBase owner, Spell spell)
-    {
-        ApiEventManager.RemoveAllListenersForOwner(this);
-    }
-
-    public void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
-    {
-        // Return missile reached Soraka — heal
-        var qSpell = _owner.GetSpell("SorakaQ");
-        int rank = qSpell.CastInfo.SpellLevel;
-
-        float missingHpPct = 1f - _owner.Stats.CurrentHealth / _owner.Stats.HealthPoints.Total;
-        float[] baseH = { 0, 25, 35, 45, 55, 65 };
-        float[] maxH  = { 0, 50, 70, 90, 110, 130 };
-
-        float heal = Math.Min(baseH[rank] * (1f + missingHpPct), maxH[rank]);
-        _owner.TakeHeal(_owner, heal, HealType.SelfHeal);
-
-        AddParticleTarget(_owner, _owner, "global_ss_heal_02.troy", _owner);
-
-        missile.SetToRemove();
-    }
-
-    public void OnSpellPostCast(Spell spell) { }
     public void OnUpdate(float diff) { }
 }

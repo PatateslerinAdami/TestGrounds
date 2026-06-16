@@ -1,6 +1,7 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
@@ -25,6 +26,7 @@ public class CharScriptSoraka : ICharScript {
 
     private ObjAIBase _soraka;
     private bool _passiveActive;
+    private Particle _passiveParticle;
 
     public StatsModifier StatsModifier { get; } = new();
 
@@ -53,9 +55,29 @@ public class CharScriptSoraka : ICharScript {
             if (shouldBeActive) {
                 StatsModifier.MoveSpeed.PercentBonus = MsPercentBonus;
                 _soraka.AddStatModifier(StatsModifier);
+                _passiveParticle = AddParticleTarget(_soraka, _soraka,
+                    "soraka_base_passive_speed.troy", _soraka, lifetime: float.MaxValue);
             } else {
                 _soraka.RemoveStatModifier(StatsModifier);
+                if (_passiveParticle != null) {
+                    RemoveParticle(_passiveParticle);
+                    _passiveParticle = null;
+                }
             }
+        }
+
+        // Update target indicator — arrow pointing to nearest low-HP ally
+        if (shouldBeActive && validAlly != null)
+        {
+            if (_passiveParticle != null)
+            {
+                AddParticleTarget(_soraka, validAlly,
+                    "soraka_base_passive_cross.troy", validAlly, lifetime: 0.1f);
+            }
+            // Arrow indicator pointing from Soraka toward the ally
+            AddParticlePos(_soraka, "soraka_base_passive_indicatior.troy",
+                _soraka.Position, validAlly.Position,
+                lifetime: 0.25f, direction: _soraka.Direction);
         }
     }
 

@@ -264,7 +264,7 @@ namespace PacketDefinitions420
 
             if (data.Length >= 8)
             {
-                int clientId = ((int)peer.UserData) - 1;
+                int clientId = (peer.UserData != null ? (int)peer.UserData : 0) - 1;
                 data = _sender.Blowfishes[clientId].Decrypt(data);
             }
 
@@ -291,7 +291,7 @@ namespace PacketDefinitions420
 
             if (convertor != null)
             {
-                int clientId = ((int)peer.UserData) - 1;
+                int clientId = (peer.UserData != null ? (int)peer.UserData : 0) - 1;
                 ICoreRequest req = convertor(data);
                 _bridge.Inbound.Enqueue(new InboundRequest(clientId, req));
                 return true;
@@ -329,7 +329,7 @@ namespace PacketDefinitions420
                 return true;
             }
 
-            int clientId = ((int)peer.UserData) - 1;
+            int clientId = (peer.UserData != null ? (int)peer.UserData : 0) - 1;
             if (clientId < 0)
             {
                 // Didn't receive an ID by initiating a handshake.
