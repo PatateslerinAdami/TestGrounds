@@ -24,6 +24,7 @@ using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Quests;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace LeagueSandbox.GameServer
 {
@@ -45,6 +46,14 @@ namespace LeagueSandbox.GameServer
         // fields + the matching logging block in GameLoop() when the timestep investigation is done.
         private int _dtLogCount = 0;
         private float _dtLogMin, _dtLogMax, _dtLogSum, _dtLogSumSq;
+
+        // Whether we're on Windows — gates the winmm timer-resolution P/Invokes below so the server
+        // stays cross-platform (Linux/macOS sleep is already fine-grained; these are never called there).
+        private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+        private static extern uint TimeBeginPeriod(uint uMilliseconds);
+        [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+        private static extern uint TimeEndPeriod(uint uMilliseconds);
         protected double RefreshRate =>
             Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode)
                 ? 1000.0 / 60.0
@@ -373,14 +382,20 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public void GameLoop()
         {
-            double refreshRate = RefreshRate;
-            double timeout = 0;
-
-            Stopwatch lastMapDurationWatch = new Stopwatch();
+            // Fixed simulation step (ms) = the server tick. Riot advances the sim by a FIXED amount
+            // per tick (30Hz = 33.3ms, tournament 60Hz = 16.7ms), NOT by the real elapsed wall-clock.
+            // We accumulate real time and run whole fixed steps, so the simulation is deterministic and
+            // identical run-to-run regardless of Thread.Sleep jitter / GC / load (matches Riot's ~33ms
+            // wire metronome). RefreshRate is constant per game (tournament flag only) → read once.
+            double step = RefreshRate;
+            // Cap catch-up: a startup stall (JIT/asset load can be 1-3s) or a GC hitch must NOT spawn
+            // dozens of steps (spiral of death) nor jump the world seconds in one frame. Excess time is
+            // dropped — the sim briefly lags real time, then the 10s SynchSimTime resync corrects clients.
+            // 5 steps = ~166ms@30Hz / ~83ms@60Hz max catch-up.
+            double maxAccum = step * 5;
+            double accumulator = 0;
 
             bool wasNotPaused = true;
-            bool firstCycle = true;
-
             float timeToForcedStart = Config.ForcedStart;
 
             // Kick off the dedicated I/O thread. From this point onwards, all
@@ -394,6 +409,16 @@ namespace LeagueSandbox.GameServer
                 Thread.CurrentThread.Name = "GameLoop";
             }
 
+            // Raise OS timer resolution to 1ms so the hybrid sleep+spin wait is precise. Windows
+            // defaults to ~15.6ms (Thread.Sleep overshoots the tick target → the loop oscillates
+            // 31/46ms); winmm fixes it. Guarded → no-op on Linux/macOS (already fine-grained),
+            // keeping the server cross-platform.
+            if (_isWindows) TimeBeginPeriod(1);
+
+            var clock = Stopwatch.StartNew();
+            double lastNow = clock.Elapsed.TotalMilliseconds;
+            double nextWake = lastNow;   // absolute schedule anchor (drift-free cadence)
+
             long tickNumber = 0;
             while (!SetToExit)
             {
@@ -401,8 +426,9 @@ namespace LeagueSandbox.GameServer
                 // same-name slices into one giant bar.
                 using var _tickScope = Profiler.Scope($"Tick {tickNumber++}");
 
-                double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                lastMapDurationWatch.Restart();
+                double now = clock.Elapsed.TotalMilliseconds;
+                double realElapsed = now - lastNow;
+                lastNow = now;
 
                 // Drain everything the net thread has produced since the last
                 // tick. Done at the very top so the rest of the tick sees a
@@ -413,19 +439,10 @@ namespace LeagueSandbox.GameServer
                     DrainInboundEvents();
                 }
                 
-                float deltaTime = (float)lastSleepDuration;
-                if(firstCycle)
-                {
-                    firstCycle = false;
-                    // To avoid Update(0)
-                    deltaTime = (float)refreshRate;
-                }
-
                 if (IsPaused)
                 {
                     if (wasNotPaused)
                     {
-                        refreshRate = 1000.0;
                         wasNotPaused = false;
                     }
                     else
@@ -450,23 +467,42 @@ namespace LeagueSandbox.GameServer
 
                 if (!IsPaused)
                 {
-                    refreshRate = RefreshRate;
                     wasNotPaused = true;
 
                     if(!IsRunning && timeToForcedStart > 0)
                     {
-                        if(timeToForcedStart <= deltaTime && !CheckIfAllPlayersLeft())
+                        if(timeToForcedStart <= realElapsed && !CheckIfAllPlayersLeft())
                         {
                             _logger.Info($"Patience is over. The game will start earlier.");
                             _gameStartHandler.ForceStart();
                         }
-                        timeToForcedStart -= deltaTime;
+                        timeToForcedStart -= (float)realElapsed;
                     }
 
                     if (IsRunning)
                     {
-                        // TEMP DIAGNOSTIC (see _dtLog* fields): trace deltaTime for the first 100
-                        // gameplay ticks to expose Thread.Sleep jitter at 30 vs 60 Hz. Remove when done.
+                        // Fixed-timestep: convert elapsed real time into whole fixed steps. Normally
+                        // exactly 1 step/wake; >1 only to catch up after a hitch (bounded by maxAccum).
+                        accumulator += realElapsed;
+                        if (accumulator > maxAccum)
+                        {
+                            accumulator = maxAccum;
+                        }
+
+                        int steps = 0;
+                        while (accumulator >= step)
+                        {
+                            using (Profiler.Scope("Game.Update"))
+                            {
+                                Update((float)step);
+                            }
+                            accumulator -= step;
+                            steps++;
+                        }
+
+                        // TEMP DIAGNOSTIC (see _dtLog* fields): log the WAKE cadence (real wall time
+                        // between iterations) + steps run, for the first 100 gameplay wakes. After the
+                        // fixed-step fix this should read a tight ~step ms with steps=1. Remove when done.
                         if (_dtLogCount < 100)
                         {
                             if (_dtLogCount == 0)
@@ -475,43 +511,73 @@ namespace LeagueSandbox.GameServer
                                 _dtLogMax = float.MinValue;
                             }
                             _dtLogCount++;
-                            _dtLogSum += deltaTime;
-                            _dtLogSumSq += deltaTime * deltaTime;
-                            if (deltaTime < _dtLogMin) _dtLogMin = deltaTime;
-                            if (deltaTime > _dtLogMax) _dtLogMax = deltaTime;
-                            _logger.Info($"[dt] tick={_dtLogCount,3} dt={deltaTime,6:F2}ms target={(float)RefreshRate:F2}ms dev={deltaTime - (float)RefreshRate,6:F2}ms");
+                            float wall = (float)realElapsed;
+                            _dtLogSum += wall;
+                            _dtLogSumSq += wall * wall;
+                            if (wall < _dtLogMin) _dtLogMin = wall;
+                            if (wall > _dtLogMax) _dtLogMax = wall;
+                            _logger.Info($"[dt] tick={_dtLogCount,3} wall={wall,6:F2}ms steps={steps} target={(float)step:F2}ms dev={wall - (float)step,6:F2}ms");
                             if (_dtLogCount == 100)
                             {
                                 float avg = _dtLogSum / 100f;
-                                float std = (float)System.Math.Sqrt(System.Math.Max(0f, _dtLogSumSq / 100f - avg * avg));
+                                float sd = (float)System.Math.Sqrt(System.Math.Max(0f, _dtLogSumSq / 100f - avg * avg));
                                 string mode = Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode) ? "60Hz(tournament)" : "30Hz(normal)";
-                                _logger.Info($"[dt] SUMMARY {mode} target={(float)RefreshRate:F2}ms n=100 min={_dtLogMin:F2} max={_dtLogMax:F2} avg={avg:F2} stddev={std:F2} jitter(max-min)={_dtLogMax - _dtLogMin:F2}ms");
+                                _logger.Info($"[dt] SUMMARY {mode} target={(float)step:F2}ms n=100 min={_dtLogMin:F2} max={_dtLogMax:F2} avg={avg:F2} stddev={sd:F2} jitter(max-min)={_dtLogMax - _dtLogMin:F2}ms");
                             }
-                        }
-
-                        using (Profiler.Scope("Game.Update"))
-                        {
-                            Update(deltaTime);
                         }
                     }
                 }
 
-                double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-
-                double overshoot = Math.Max(0, lastSleepDuration - refreshRate);
-                timeout = Math.Max(0, refreshRate - lastUpdateDuration - overshoot);
-
-                if (timeout > 0)
+                // Pace the loop: while paused, idle ~1s (PauseTimeLeft counts seconds); otherwise wait
+                // to the next fixed-step boundary on an absolute, drift-free schedule. If a slow tick
+                // put us behind, re-anchor to now (the accumulator already turned the lost time into
+                // catch-up steps) instead of busy-running a backlog of zero-length ticks.
+                if (IsPaused)
                 {
-                    Thread.Sleep((int)timeout);
+                    accumulator = 0;
+                    PreciseWait(clock, now + 1000.0);
+                    nextWake = clock.Elapsed.TotalMilliseconds;
+                }
+                else
+                {
+                    nextWake += step;
+                    double afterWork = clock.Elapsed.TotalMilliseconds;
+                    if (nextWake < afterWork)
+                    {
+                        nextWake = afterWork;
+                    }
+                    else
+                    {
+                        PreciseWait(clock, nextWake);
+                    }
                 }
             }
+
+            // Restore the OS timer resolution we raised for the loop (no-op on non-Windows).
+            if (_isWindows) TimeEndPeriod(1);
 
             _packetServer.StopNetThread();
 
             // Flush the CPU trace to disk. Safe to call even when the profiler
             // was disabled.
             Profiler.Shutdown();
+        }
+
+        // Waits until targetMs on the given clock with sub-ms precision: a coarse Thread.Sleep for the
+        // bulk (cheap, yields the core) then a short Stopwatch spin for the final ~1.5ms. Cross-platform;
+        // relies on a 1ms OS timer resolution (raised via timeBeginPeriod on Windows, native on Linux).
+        private static void PreciseWait(Stopwatch clock, double targetMs)
+        {
+            const double spinBudgetMs = 1.5;
+            int coarse = (int)(targetMs - clock.Elapsed.TotalMilliseconds - spinBudgetMs);
+            if (coarse > 0)
+            {
+                Thread.Sleep(coarse);
+            }
+            while (clock.Elapsed.TotalMilliseconds < targetMs)
+            {
+                Thread.SpinWait(50);
+            }
         }
 
         // Drains all events the net thread has queued for the game thread:
