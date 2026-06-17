@@ -518,8 +518,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var newPath = _game.Map.PathingHandler.GetPath(this, goal);
             if (newPath != null && newPath.Count >= 2)
             {
+                // Only count this as genuine "unstuck" progress if the recompute actually
+                // rerouted (or we snapped off a blocked cell). When the unit is wedged against
+                // OTHER UNITS (not terrain), the actor-aware A* still routes straight through
+                // allies (BuildActorBlockedPredicate skips same-team) and lands on enemies via
+                // the near-goal exemption — so GetPath returns the SAME blocked path. Reporting
+                // that as success resets _stuckRepathCount every 200ms, pinning the watchdog in a
+                // tight 200ms loop that re-runs a full A* forever and never lets Riot's escalating
+                // backoff (NSEAI TimeBetweenRepathsInMS=250) engage. Treat a same-path recompute
+                // as NO progress so the watchdog backs off; the real escape for a unit-wedge is the
+                // temp-ghost counter (Move(): _stuckGhostFrames → IsTemporarilyGhosted at 45/15),
+                // which phases the unit through and resets the stuck state once it moves freely.
+                bool reroutedOrSnapped = positionChanged
+                    || !newPath.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
                 SetWaypoints(newPath);
-                return true;
+                return reroutedOrSnapped;
             }
 
             return positionChanged;
