@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 
 namespace LeagueSandbox.GameServer.Content.Navigation
 {
@@ -24,6 +25,16 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// touching the goal cell.
         /// </summary>
         public bool IsPartial { get; set; }
+
+        /// <summary>
+        /// Force-movement (dash / leap / knock-arc) parameters bound to THIS path, or null for a
+        /// normal walk path. Mirrors Riot's layout where the override speed / gravity / track-unit
+        /// fields live directly on the NavigationPath (we keep them in a cohesive
+        /// <see cref="ForceMovementParameters"/> object). Sharing the path's lifetime means replacing
+        /// the path atomically clears any previous force-move state. Read/written through
+        /// <see cref="AttackableUnit.MovementParameters"/>.
+        /// </summary>
+        public ForceMovementParameters ForceMovement { get; set; }
 
         public int Count => _waypoints.Count;
         public Vector2 this[int index] => _waypoints[index];

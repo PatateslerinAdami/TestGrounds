@@ -35,6 +35,13 @@ namespace Spells
         private float _wallCheckRadius = 60f;
         private float _collisionGracePeriod = 0.25f;
 
+        // Final-leap parameters measured from replay bae83ecc (Sion netid 1073741857, leap at t=1108417):
+        // a force-move with gravity 0, ~268 world-units at speed 605 (the leap's 0x64 WaypointGroupWithSpeed).
+        // The leap fires ONLY on clean release/timeout — a wall/champion collision slams in place with NO
+        // force-move (the collided-branch in OnUpdate FireCharges at the current position; replay-confirmed).
+        private const float LeapDistance = 268f;
+        private const float LeapSpeed = 605f;
+
         private StatsModifier _speedModifier;
         private float _currentBonusSpeed;
         private float _lastBonusSpeed;
@@ -178,10 +185,10 @@ namespace Spells
 
         public void OnSpellChargeFire(Spell spell)
         {
-            // Recast or duration timeout — both trigger the slam after a 300u leap forward.
+            // Recast or duration timeout — both trigger the slam after the forward leap.
             // Clear charge HUD; impact lands at the leap endpoint.
             Vector2 dir2D = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
-            spell.FireCharge(_owner.Position + dir2D * 300f);
+            spell.FireCharge(_owner.Position + dir2D * LeapDistance);
             StopCharge(false);
         }
 
@@ -229,9 +236,10 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
-                            ForceMove(_owner, _owner.Position + dir2D * 300, 545, gravity: 0.0f,
-                                facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION); //0.55
-                            _owner.RegisterTimer(new GameScriptTimer(0.55f, () => { OnHit(); }));
+                            ForceMove(_owner, _owner.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0.0f,
+                                facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+                            // OnHit lands when the leap reaches its endpoint: distance / speed.
+                            _owner.RegisterTimer(new GameScriptTimer(LeapDistance / LeapSpeed, () => { OnHit(); }));
                         }
                     }));
                 }

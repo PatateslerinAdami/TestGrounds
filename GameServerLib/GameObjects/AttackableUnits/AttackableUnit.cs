@@ -215,7 +215,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Parameters of any forced movements (dashes) this unit is performing.
         /// </summary>
-        public ForceMovementParameters MovementParameters { get; protected set; }
+        public ForceMovementParameters MovementParameters
+        {
+            // Riot stores force-move params on the active NavigationPath; we mirror that by keeping the
+            // ForceMovementParameters on Waypoints.ForceMovement. This stays the canonical accessor so
+            // the poll-sites are untouched. The dash setup (ServerForceLinePath / ServerForceFollowUnitPath)
+            // always assigns the path via SetWaypoints before setting these, so Waypoints is non-null
+            // when a force-move begins; the null-guard covers construction/reset where no path exists yet.
+            get => Waypoints?.ForceMovement;
+            protected set
+            {
+                if (Waypoints != null)
+                {
+                    Waypoints.ForceMovement = value;
+                }
+            }
+        }
 
         /// <summary>
         /// Whether this unit is currently under forced movement (dash / leap / engine knock-arc).
