@@ -1986,6 +1986,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// (signTable[sideDot &gt; 0] = +1, Actor.cpp:313/425) — ported literally even though it
         /// reads counter-intuitive; runtime fidelity over intuition.
         /// </summary>
+        // S4 Actor_Common::GetHardRadius/GetSoftRadius (Actor.cpp:2384-2398). The collision
+        // response is ASYMMETRIC: the SELF term uses these type-scaled radii, the NEIGHBOR term
+        // always uses full GetRadius (= CollisionRadius). The gating flag mUseSlowerButMoreAccurate-
+        // Search == !UsesFastPath (champions = fast A*, minions = slow-accurate — same flag drives
+        // the NavGrid travelFactor branch). Champions (fast): hard = r, soft = 2r — IDENTICAL to
+        // the old full-radius behaviour, so this changes nothing for them. Minions (slow): hard =
+        // 0.2r, soft = 0.3r → waves pack to Riot's tighter threshold (~69.6u vs our old ~108u for
+        // two r=48 minions: neighbor-full 48 + self-hard 9.6 + buffer 12). Used for SELF only.
+        private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius : CollisionRadius * 0.2f;
+        private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius * 2f : CollisionRadius * 0.3f;
+
         private Vector2 ComputeGroupCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 movementDelta, out bool hadHardColliders)
         {
             const float ReflectionIndex = 5.1f;   // S4 Actor.cpp:314
@@ -2007,6 +2018,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             // Collider collection — same classification as the client callback (Actor.cpp:240-285):
             // dead/ghosted filter, direction gate, min-distance buffer, 10u deep-overlap floor.
+            float selfHard = GetHardRadius();
             var colliders = new List<AttackableUnit>(4);
             Vector2 barycenter = Vector2.Zero;
             foreach (var other in nearby)
@@ -2021,8 +2033,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (distSq < MinColliderDistSq) continue;
 
                 float pairBuffer = Math.Clamp(
-                    Math.Min(CollisionRadius, other.CollisionRadius) * 0.25f, 12f, 20f);
-                float pairRadius = CollisionRadius + other.CollisionRadius + pairBuffer;
+                    Math.Min(selfHard, other.CollisionRadius) * 0.25f, 12f, 20f);
+                float pairRadius = selfHard + other.CollisionRadius + pairBuffer;
                 if (distSq >= pairRadius * pairRadius) continue;
 
                 colliders.Add(otherUnit);
@@ -2042,8 +2054,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             float minDistanceBuffer = Math.Clamp(
-                Math.Min(groupRadius, CollisionRadius) * 0.25f, 12f, 20f);
-            float totalThreshold = groupRadius + CollisionRadius + minDistanceBuffer;
+                Math.Min(groupRadius, selfHard) * 0.25f, 12f, 20f);
+            float totalThreshold = groupRadius + selfHard + minDistanceBuffer;
 
             // collisionNormal from the POST-move position (client: info.NextPosition);
             // toCenter from the PRE-move position (client: m_Position).
@@ -2157,7 +2169,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var members = new List<AttackableUnit>(4);
             Vector2 barycenter = Vector2.Zero;
             Vector2 groupVelocity = Vector2.Zero;
-            float softRadius = CollisionRadius * 2f; // GetSoftRadius, fast-mode branch
+            float softRadius = GetSoftRadius(); // SELF soft term (S4 Actor.cpp:766): champion 2r, minion 0.3r
             foreach (var other in nearby)
             {
                 if (other == this || other.IsToRemove()) continue;
@@ -2209,7 +2221,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             // Avoidance buffer caps at 15, not 20 (S4 Actor.cpp:760-764).
             float minDistanceBuffer = Math.Clamp(
-                Math.Min(groupRadius, CollisionRadius) * 0.25f, 12f, 15f);
+                Math.Min(groupRadius, GetHardRadius()) * 0.25f, 12f, 15f);
 
             Vector2 rel = barycenter - Position;
             float relLenSq = rel.LengthSquared();
@@ -2291,12 +2303,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 float distSq = diff.LengthSquared();
                 // Min-distance buffer (S4 Actor.cpp:251-256): the collision trigger distance is
                 // the radius sum PLUS clamp(min(selfR, otherR) * 0.25, 12, 20) — units separate
-                // to slightly beyond raw contact. (Client uses GetHardRadius() for self, which
-                // equals the raw radius for fast-mode/champion actors — our raw CollisionRadius
-                // matches that branch; slow-mode shrink is unverified, see audit memory.)
+                // to slightly beyond raw contact. ASYMMETRIC: SELF uses GetHardRadius (champion r,
+                // minion 0.2r — Actor.cpp:2394), NEIGHBOR uses full GetRadius (= CollisionRadius).
                 float minDistanceBuffer = Math.Clamp(
-                    Math.Min(CollisionRadius, other.CollisionRadius) * 0.25f, 12f, 20f);
-                float combinedRadius = CollisionRadius + other.CollisionRadius + minDistanceBuffer;
+                    Math.Min(GetHardRadius(), other.CollisionRadius) * 0.25f, 12f, 20f);
+                float combinedRadius = GetHardRadius() + other.CollisionRadius + minDistanceBuffer;
                 if (distSq >= combinedRadius * combinedRadius) continue; // no overlap
 
                 float distance = (float)Math.Sqrt(distSq);
@@ -2402,8 +2413,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                 var diff = Position - other.Position;
                 float minDistanceBuffer = Math.Clamp(
-                    Math.Min(CollisionRadius, other.CollisionRadius) * 0.25f, 12f, 20f);
-                float combinedRadius = CollisionRadius + other.CollisionRadius + minDistanceBuffer;
+                    Math.Min(GetHardRadius(), other.CollisionRadius) * 0.25f, 12f, 20f);
+                float combinedRadius = GetHardRadius() + other.CollisionRadius + minDistanceBuffer;
                 if (diff.LengthSquared() >= combinedRadius * combinedRadius) continue;
 
                 centroid += other.Position;
