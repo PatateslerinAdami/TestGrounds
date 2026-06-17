@@ -35,7 +35,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public float ParabolicGravity { get; set; }
         /// <summary>
-        /// End position of the movement.
+        /// Start position of the parabolic arc — the point from which the client measures the dash's
+        /// height curve. Defaults to the unit's position when the force-move begins.
         /// </summary>
         public Vector2 ParabolicStartPoint { get; set; }
         /// <summary>

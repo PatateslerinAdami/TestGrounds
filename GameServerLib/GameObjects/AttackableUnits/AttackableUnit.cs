@@ -211,7 +211,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMoveEver;
         private StatusFlags _buffEffectsToEnable = 0;
         private StatusFlags _buffEffectsToDisable = 0;
-        private StatusFlags _dashEffectsToDisable = 0;
 
         /// <summary>
         /// Parameters of any forced movements (dashes) this unit is performing.
@@ -335,7 +334,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             //       Typically follow dashes are unaffected, but there may be edge cases e.g. LeeSin
             if (MovementParameters != null)
             {
-                SetDashingState(false, MoveStopReason.ForceMovement);
+                SetForceMovementState(false, MoveStopReason.ForceMovement);
             }
             else if (IsPathEnded())
             {
@@ -546,7 +545,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 bool moved = false;
                 if (MovementParameters != null)
                 {
-                    remainingFrameTime = DashMove(diff);
+                    remainingFrameTime = UpdateForceMovement(diff);
                     moved = true;
                 }
                 if (MovementParameters == null)
@@ -1325,7 +1324,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // set/clear. Dispatch per-bit because callers pass multi-bit masks mixing the two (e.g.
             // the constructor enables CanAttack|CanCast|CanMove|CanMoveEver|Targetable in one call).
             // SetStatus(StatusFlags.None, true) sets zero bits → pure recompute trigger (used by
-            // UpdateBuffs / SetDashingState); the per-flag checks below are simply skipped.
+            // UpdateBuffs / SetForceMovementState); the per-flag checks below are simply skipped.
             if ((status & StatusFlags.CanMove) != 0) _disableCanMove = RefHold(_disableCanMove, enabled);
             if ((status & StatusFlags.CanAttack) != 0) _disableCanAttack = RefHold(_disableCanAttack, enabled);
             if ((status & StatusFlags.CanCast) != 0) _disableCanCast = RefHold(_disableCanCast, enabled);
@@ -1346,13 +1345,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             StatusFlags effectiveBase = ComputeEffectiveBase();
             Status = (
-                (
-                    effectiveBase
-                    & ~_buffEffectsToDisable
-                )
-                | _buffEffectsToEnable
+                effectiveBase
+                & ~_buffEffectsToDisable
             )
-            & ~_dashEffectsToDisable;
+            | _buffEffectsToEnable;
 
             UpdateActionState();
         }
@@ -1567,7 +1563,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
         }
 
-        private float DashMove(float frameTime)
+        private float UpdateForceMovement(float frameTime)
         {
             var MP = MovementParameters;
             Vector2 dir;
@@ -1579,7 +1575,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 GameObject unitToFollow = _game.ObjectManager.GetObjectById(MP.FollowNetID);
                 if (unitToFollow == null)
                 {
-                    SetDashingState(false, MoveStopReason.LostTarget);
+                    SetForceMovementState(false, MoveStopReason.LostTarget);
                     return frameTime;
                 }
                 dir = unitToFollow.Position - Position;
@@ -1597,14 +1593,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (Waypoints == null || Waypoints.Count <= 1)
                 {
-                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    SetForceMovementState(false, MoveStopReason.ForceMovement);
                     return frameTime;
                 }
 
                 dir = Waypoints[1] - Position;
                 if (float.IsNaN(dir.X) || float.IsNaN(dir.Y) || float.IsInfinity(dir.X) || float.IsInfinity(dir.Y))
                 {
-                    SetDashingState(false, MoveStopReason.ForceMovement);
+                    SetForceMovementState(false, MoveStopReason.ForceMovement);
                     return frameTime;
                 }
                 distToDest = dir.Length();
@@ -1612,7 +1608,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             distRemaining = Math.Min(distToDest, distRemaining);
 
             float time = Math.Min(frameTime, timeRemaining);
-            float speed = MP.PathSpeedOverride * 0.001f;
+            // Riot's server traverses force-moves at 99% of the override speed (the "reduceSpeedSlightly"
+            // factor in obj_AI_Base::MoveForwardAtMaxSpeed, AIBase.cpp:1920 — applied to the parabolic /
+            // non-overridable branch, i.e. every BBMove). The parabolic arc HEIGHT is client-only; the
+            // server moves purely horizontally and ends on reaching the goal, so dash duration = dist/speed.
+            const float reduceSpeedSlightly = 0.99f;
+            float speed = MP.PathSpeedOverride * 0.001f * reduceSpeedSlightly;
             float distPerFrame = speed * time;
             float dist = Math.Min(distPerFrame, distRemaining);
             if (dir != Vector2.Zero)
@@ -1622,12 +1623,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             if (distRemaining <= distPerFrame)
             {
-                SetDashingState(false);
+                SetForceMovementState(false);
                 return (distPerFrame - distRemaining) / speed;
             }
             if (timeRemaining <= frameTime)
             {
-                SetDashingState(false);
+                SetForceMovementState(false);
                 return frameTime - timeRemaining;
             }
             MP.PassedDistance += dist;
@@ -1860,50 +1861,73 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 //
                 // CHAMPIONS use a much tighter threshold (2026-06-07, replay-measured): the
                 // client HARD-SETS m_Position to Waypoint[0] on every WaypointGroup receive
-                // (ClientFollowServerPath, ActorClient.cpp:171 `m_Position = m_Path.GetStartPoint()`)
+                // (ClientFollowServerPath, ActorClient.cpp:169 `m_Position = m_Path.GetStartPoint()`)
                 // — the snap IS the sync mechanism. Riot therefore corrects walking heroes with
                 // FREQUENT TINY updates: replay 343e3502, 471 mid-walk same-destination 0x61 for
                 // the hero, median gap 96ms, wp0 correction median 19u / p90 86u — invisible.
                 // Our old 175u threshold (sized off the MINION cadence) accumulated half a
-                // second of divergence and released it as one visible forward teleport (worse at
-                // uncapped FPS: the client's local collision sim is pushDistance-based, not
-                // dt-scaled, so it diverges harder per second at high frame rates). 20u puts our
-                // correction size right at Riot's measured median. Minions/others stay at 175u
-                // (replay-verified minion cadence; their snaps aren't player-focused).
-                float driftResyncThreshold = this is Champion ? 20f : 175f;
+                // second of divergence and released it as one visible forward teleport.
+                //
+                // WHY WE NOW GO BELOW RIOT'S 19u MEDIAN (2026-06-17): Riot's server and the
+                // 4.x client ran the SAME collision code, so their positions agreed and the 19u
+                // correction was just float/cadence noise. WE reimplement collision server-side,
+                // SEPARATELY from the client's local sim, so the two genuinely diverge — and the
+                // client's local push is pushDistance-based, NOT dt-scaled, so the divergence
+                // grows with frame rate (uncapped FPS = larger per-second drift). At a 20u cap
+                // that divergence is released as one ~20u snap, which IS visible on the player's
+                // own champion in crowds/teamfights (lateral separation pushes snap sideways).
+                // The cap = the max single-snap magnitude, so we set it well under the
+                // perceptual floor for a champion-sized model. This is purely drift-gated, so a
+                // clean straight walk (drift ≈ 0) still emits NOTHING — the extra packets only
+                // appear while there is real divergence to correct, and each correction is
+                // smaller. Tune CHAMPION_DRIFT_RESYNC up if teamfight bandwidth becomes an issue,
+                // down if snaps are still visible. Minions/others stay at 175u (replay-verified
+                // minion cadence; their snaps aren't player-focused).
+                const float CHAMPION_DRIFT_RESYNC = 8f;
+                float driftResyncThreshold = this is Champion ? CHAMPION_DRIFT_RESYNC : 175f;
                 if (Waypoints.Count > 1
                     && _unreplicatedDrift.LengthSquared() > driftResyncThreshold * driftResyncThreshold)
                 {
                     _movementUpdated = true;
                 }
 
-                // Riot-style travel-cadence keepalive for non-champions (replay-measured ~167u):
-                // periodic Waypoint[0] refreshes keep the client's hard-snap corrections small.
-                // Wave corners (e.g. arcing around the inhibitor footprint) generate collision
-                // drift quickly — without the cadence it only got corrected at the 175u drift
-                // threshold, as one visible snap after the corner.
-                // Cadence 100u (~3 updates/s at minion speed): denser than Riot's walking
-                // cadence (replay p90 ~324u between minion updates) because our server collision
-                // sim necessarily diverges from the old client's local sim — each update is a
-                // hard client snap to Waypoint[0], so SMALLER intervals mean SMALLER corrections.
-                // Affordable since the broadcast waypoint list is capped at 4 entries for
-                // non-champions (GetCenteredWaypoints), matching Riot's packet sizes.
+                // Travel-cadence keepalive = a periodic Waypoint[0] re-anchor while the unit
+                // walks. Each WaypointGroup the client receives hard-sets m_Position to wp0
+                // (ActorClient.cpp:169), so re-anchoring frequently to the unit's TRUE position
+                // keeps the client from interpolating a stale path for long — accumulated
+                // FP/speed/collision divergence is then corrected in many tiny (invisible)
+                // steps instead of released as one visible snap on the next path change. The
+                // resend carries the trimmed route (champions get their full remaining route via
+                // GetCenteredWaypoints, re-seeded at the current Position), so it is purely a
+                // re-anchor, not a path change.
+                //
+                // CHAMPION cadence reinstated 2026-06-17 (fresh replay measurement —
+                // tools/wpan.py over 343e3502 + a6db3774, champion = 0x46 sender — SUPERSEDES the
+                // earlier "Riot goes SILENT for seconds on a fixed path" claim, which was WRONG):
+                // Riot resends a MOVING champion's 0x61 CONTINUOUSLY — gap histogram mode at the
+                // 150-200ms bucket (2046 / 2640 hits), of which 1659 / 1771 are SAME-GOAL resends
+                // (goal within 40u of the prior = a genuine periodic streamer, not new orders);
+                // true silence (gap > 1000ms) is rare (167 / 352 vs thousands). 57u ≈ 167ms at a
+                // 340u/s champion movespeed, putting us at Riot's measured mode. Distance-gated,
+                // so a stopped champion (Waypoints.Count == 1) emits nothing and a slowed one
+                // resends less often — matching Riot's idle behaviour.
+                // CAUTION: the OLD streamer was per-tick (~96ms) AND re-sent the full multi-
+                // waypoint route, which caused arc jitter (network-latency snap-back: a resend
+                // whose wp0 lags the client's in-flight interpolated position pulls it back
+                // ~latency*speed). 57u (~167ms) is far less frequent; IN-GAME VERIFY that arc
+                // jitter has not returned, and raise CHAMPION_KEEPALIVE if it has.
+                //
+                // Non-champions stay at 100u (~3 updates/s at minion speed): denser than Riot's
+                // ~167u minion cadence because our server collision sim diverges from the old
+                // client's local sim — smaller intervals = smaller hard-snap corrections.
+                // Affordable since GetCenteredWaypoints caps non-champion lists at 4 entries.
+                const float CHAMPION_KEEPALIVE = 57f;
                 _traveledSinceLastSync += originalDelta.Length();
-                if (!(this is Champion) && Waypoints.Count > 1 && _traveledSinceLastSync >= 100f)
+                float keepaliveDist = this is Champion ? CHAMPION_KEEPALIVE : 100f;
+                if (Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
                 {
                     _movementUpdated = true;
                 }
-
-                // Champion hero streaming is event-driven, NOT timed (2026-06-08). The old
-                // unconditional 96ms streamer re-sent the full path every tick while walking;
-                // replay analysis showed Riot instead goes SILENT for seconds on a fixed path
-                // (bursts only on path change) and lets the client interpolate. Our per-tick
-                // re-sends each forced a Waypoint[0] hard-snap on the client — on a curving
-                // mouse-held arc those mid-gap snaps were the short-path jitter. Broadcasts now
-                // fire only when the path/state actually changes (SetWaypoints, collision repath,
-                // teleport), matching Riot. WATCH: if straight-line walks drift/rubber-band (our
-                // collision sim diverging from client interpolation), a distance-based safety
-                // resync is needed here (mirror the minion path above with a larger threshold).
             }
             else
             {
@@ -2528,7 +2552,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (Waypoints.Count == 1) return;
             if (MovementParameters != null)
             {
-                SetDashingState(false, reason);
+                SetForceMovementState(false, reason);
                 return;
             }
 
@@ -3241,22 +3265,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
-        /// Forces this unit to perform a dash which ends at the given position.
+        /// Forces this unit to perform a line-path dash which ends at the given position. This is the
+        /// engine line-path force-move primitive — Riot's <c>Actor_Common::ServerForceLinePath</c> (the
+        /// follow variant is <see cref="AI.ObjAIBase.ServerForceFollowUnitPath"/>). Script-facing callers
+        /// use the ForceMove / ForceMoveAway verbs in ApiFunctionManager, not this directly.
+        /// NOTE: in Riot the dash params live on the NavigationPath; here they're on MovementParameters.
         /// </summary>
         /// <param name="endPos">Position to end the dash at.</param>
-        /// <param name="dashSpeed">Amount of units the dash should travel in a second (movespeed).</param>
-        /// <param name="animation">Internal name of the dash animation.</param>
-        /// <param name="leapGravity">Optionally how much gravity the unit will experience when above the ground while dashing.</param>
+        /// <param name="speed">Amount of units the dash should travel in a second (movespeed).</param>
+        /// <param name="gravity">Optionally how much gravity the unit will experience when above the ground while dashing.</param>
         /// <param name="keepFacingLastDirection">Whether or not the AI unit should face the direction they were facing before the dash.</param>
-        /// <param name="consideredCC">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
+        /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
+        public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
         {
             if (MovementParameters != null)
             {
-                SetDashingState(false, MoveStopReason.ForceMovement);
+                SetForceMovementState(false, MoveStopReason.ForceMovement);
             }
 
             // FIRST_WALL_HIT: clamp the destination to the last walkable cell along the ray so the
@@ -3279,7 +3306,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             // POSTPONE_CURRENT_ORDER + an active plain MoveTo: snapshot the move destination (last
             // waypoint) NOW, before SetWaypoints below clears it. Re-issued at dash-end (ObjAIBase
-            // .SetDashingState) so the unit resumes walking to it — AttackTo resumes on its own (the
+            // .SetForceMovementState) so the unit resumes walking to it — AttackTo resumes on its own (the
             // TargetUnit survives), but a MoveTo's destination only lives in Waypoints. See P1b / the
             // forced-movement plan.
             Vector2 postponedMoveDest = Vector2.Zero;
@@ -3299,8 +3326,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 PostponedMoveDestination = postponedMoveDest,
                 SetStatus = StatusFlags.None,
                 ElapsedTime = 0,
-                PathSpeedOverride = dashSpeed,
-                ParabolicGravity = leapGravity,
+                PathSpeedOverride = speed,
+                ParabolicGravity = gravity,
                 ParabolicStartPoint = parabolicStartPoint == default ? Position : parabolicStartPoint,
                 KeepFacingDirection = keepFacingLastDirection,
                 FollowNetID = 0,
@@ -3312,22 +3339,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Caster = caster ?? this
             };
 
-            if (consideredCC)
+            if (lockActions)
             {
                 MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
             }
 
-            SetDashingState(true, MoveStopReason.ForceMovement);
-
-            if (animation != null && animation != "")
-            {
-                var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs, MovementParameters);
-            }
+            SetForceMovementState(true, MoveStopReason.ForceMovement);
 
             // Movement is networked this way instead.
             // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
-            //_game.PacketNotifier.NotifyWaypointListWithSpeed(this, dashSpeed, leapGravity, keepFacingLastDirection, null, 0, 0, 20000.0f);
+            //_game.PacketNotifier.NotifyWaypointListWithSpeed(this, speed, gravity, keepFacingLastDirection, null, 0, 0, 20000.0f);
             _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
             _movementUpdated = false;
 
@@ -3341,29 +3362,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Sets this unit's current dash state to the given state.
         /// </summary>
         /// <param name="state">State to set. True = dashing, false = not dashing.</param>
-        /// <param name="setStatus">Whether or not to modify movement, casting, and attacking states.</param>
-        /// TODO: Implement ForcedMovement methods and enumerators to handle different kinds of dashes.
-        public virtual void SetDashingState(bool state, MoveStopReason reason = MoveStopReason.Finished)
+        /// <param name="reason">Why the forced movement ended (drives OnMoveSuccess vs OnMoveFailure).</param>
+        public virtual void SetForceMovementState(bool state, MoveStopReason reason = MoveStopReason.Finished)
         {
-            _dashEffectsToDisable = 0;
-            if (state)
-            {
-                _dashEffectsToDisable = MovementParameters.SetStatus;
-            }
-            SetStatus(StatusFlags.None, true);
-
-            // Forced-movement BEGIN: symmetric with the OnMoveEnd publish below. MovementParameters is
-            // already set by the caller (DashToLocation/DashToTarget) before SetDashingState(true).
+            // Forced-movement BEGIN. MovementParameters is already set by the caller
+            // (ServerForceLinePath/ServerForceFollowUnitPath) before SetForceMovementState(true).
+            // The action-lock (if any) is applied through the normal ref-counted SetStatus path — the
+            // SAME mechanism Riot uses: a BBMove followed by separate BBSetStatus blocks (e.g.
+            // RenektonUppercut locks SetCanAttack/SetCanCast/SetCanMove; ShyvanaTransformLeap only
+            // SetCanCast). The force-move itself controls position only; movement EXECUTION is already
+            // suppressed intrinsically while MovementParameters != null. Ref-counting means a concurrent
+            // stun/root hold on the same capability survives when this dash releases its own hold.
             if (state && MovementParameters != null)
             {
+                if (MovementParameters.SetStatus != StatusFlags.None)
+                {
+                    SetStatus(MovementParameters.SetStatus, false);
+                }
                 ApiEventManager.OnMoveBegin.Publish(this, MovementParameters);
             }
 
             if (MovementParameters != null && state == false)
             {
-                RemoveAnimStates(MovementParameters);
                 var movementParams = MovementParameters;
                 MovementParameters = null;
+
+                if (movementParams.SetStatus != StatusFlags.None)
+                {
+                    SetStatus(movementParams.SetStatus, true);
+                }
 
                 ApiEventManager.OnMoveEnd.Publish(this, movementParams);
 

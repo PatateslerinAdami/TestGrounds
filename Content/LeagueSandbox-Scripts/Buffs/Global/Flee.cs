@@ -6,16 +6,14 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
 // Flee = Riot AI_FLEEING: the unit runs directly away from the source. Same buff-as-flag / AI-as-mover
 // model as Fear: the buff raises the Feared status flag and records the source + flee flavour on the
-// unit; the shared CrowdControlComponent drives the run-away movement. The buff only drives movement
-// itself as a legacy fallback for units without an AI crowd-control driver (e.g. a player champion
-// still on EmptyAIScript). Differs from Fear (RandomDirection=false) only by BuffType + particle.
+// unit; the shared CrowdControlComponent (auto-attached to every BaseAIScript) drives the run-away
+// movement. Differs from Fear (RandomDirection=false) only by BuffType + particle.
 internal class Flee : IBuffGameScript
 {
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
@@ -28,8 +26,6 @@ internal class Flee : IBuffGameScript
 
     // Optional move-speed change while fleeing (fraction, e.g. 0.3 = -30%). Default 0 = no slow.
     public float slowPercent = 0f;
-
-    private const float LegacyFleeDistance = 1000f;
 
     private AttackableUnit _unit;
     private ObjAIBase _owner;
@@ -49,13 +45,6 @@ internal class Flee : IBuffGameScript
         {
             cc.CrowdControlSource = _owner;
             cc.CrowdControlWander = false;
-
-            // Migration bridge: only drive the movement here for units WITHOUT an AI crowd-control
-            // driver. Units with the CrowdControlComponent (minions today) get it from the AI layer.
-            if (!cc.AICrowdControlActive)
-            {
-                DriveFlee();
-            }
         }
 
         ApplyAssistMarker(unit, _owner, 10.0f);
@@ -72,36 +61,5 @@ internal class Flee : IBuffGameScript
             cc.CrowdControlSource = null;
         }
         unit.StopMovement();
-    }
-
-    public void OnUpdate(float diff)
-    {
-        if (_unit == null || _unit.IsDead) return;
-
-        if (_unit is ObjAIBase ai)
-        {
-            // AI-driven units have the CrowdControlComponent re-issuing the flee; the buff only keeps
-            // driving here for the legacy (non-AI-driven) path.
-            if (ai.AICrowdControlActive) return;
-
-            if (ai.IsPathEnded())
-            {
-                DriveFlee();
-            }
-        }
-    }
-
-    private void DriveFlee()
-    {
-        if (_unit is ObjAIBase ai && _owner != null)
-        {
-            var dir = Vector2.Normalize(_unit.Position - _owner.Position);
-            if (float.IsNaN(dir.X) || float.IsNaN(dir.Y)) dir = new Vector2(1, 0);
-
-            var targetPos = _unit.Position + dir * LegacyFleeDistance;
-            var path = GetPath(_unit.Position, targetPos);
-            ai.SetWaypoints(path);
-            ai.UpdateMoveOrder(OrderType.MoveTo);
-        }
     }
 }

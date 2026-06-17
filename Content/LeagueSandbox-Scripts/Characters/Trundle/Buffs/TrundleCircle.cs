@@ -55,7 +55,6 @@ public class TrundleCircle : IBuffGameScript {
         );
         foreach (var target in unitsInRange.Where(target => target != _pillar))
         {
-            CancelDash(target);
 
             var away = target.Position - _pillar.Position;
             if (!IsFiniteNonZero(away))

@@ -31,6 +31,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         /// <summary>The AI's current logical state (Riot AI_* state), backed by ObjAIBase._aiState.</summary>
         public AIState CurrentState => Owner.GetAIState();
 
+        /// <summary>When true, the shared CrowdControlComponent handles taunt the non-aggressive way
+        /// (Riot AIComponentNonAggressiveTauntBehavior): the unit STOPS instead of running to and
+        /// attacking the taunter. Default false = DefaultTauntBehavior (walk to + attack). The Scuttle
+        /// Crab (RiverCrabAI) overrides this to true.</summary>
+        public virtual bool NonAggressiveTaunt => false;
+
         private readonly List<IAIComponent> _components = new List<IAIComponent>();
         private readonly List<AITimer> _timers = new List<AITimer>();
         private readonly Dictionary<AIEvent, List<Action<AttackableUnit>>> _eventHandlers = new();

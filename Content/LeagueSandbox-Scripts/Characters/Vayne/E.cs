@@ -89,7 +89,6 @@ public class VayneCondemnMissile : ISpellScript {
         target.TakeDamage(_vayne, 45 + _vayne.Stats.AttackDamage.FlatBonus * 0.5f, DamageType.DAMAGE_TYPE_PHYSICAL,
                           DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
 
-        CancelDash(target);
         ApiEventManager.OnCollisionTerrain.AddListener(this, target, OnCondemnCollisionTerrain, true);
         ApiEventManager.OnMoveSuccess.AddListener(this, target, OnCondemnMoveSuccess, true);
         ApiEventManager.OnMoveFailure.AddListener(this, target, OnCondemnMoveFailure, true);

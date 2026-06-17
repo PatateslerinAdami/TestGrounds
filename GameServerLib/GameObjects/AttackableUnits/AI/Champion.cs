@@ -355,7 +355,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // Back at the fountain and alive: drop the dead-state force-enable (normal location gate).
             Shop.SetShopState(true, false);
             RespawnTimer = -1;
-            SetDashingState(false, MoveStopReason.HeroReincarnate);
+            SetForceMovementState(false, MoveStopReason.HeroReincarnate);
             ApiEventManager.OnResurrect.Publish(this);
             SetCastSpell(null);
         }
@@ -461,7 +461,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             ChampStats.Deaths++;
 
             _game.ObjectManager.StopTargeting(this);
-            SetDashingState(false, MoveStopReason.Death);
+            SetForceMovementState(false, MoveStopReason.Death);
             ApiEventManager.OnDeath.Publish(data.Unit, data);
             data.Unit.SetStatus(StatusFlags.Ghosted, true);
 

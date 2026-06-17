@@ -71,7 +71,7 @@ namespace Spells
         
         public void OnSpellPostCast(Spell spell)
         {
-            Fiora.SetDashingState(false);
+            Fiora.SetForceMovementState(false);
             PlayAnimation(Fiora, "spell4c", 0.3f);
             TeleportTo(Fiora, TargetPos.X, TargetPos.Y);
             AddParticleTarget(Fiora, Target, "Fiora_Dance_tar", Target);

@@ -1709,7 +1709,12 @@ namespace PacketDefinitions420
                     NotifyNPC_Hero_Die(deathData);
                     break;
                 case Minion minion:
-                    if (minion is Pet || minion is LaneMinion)
+                    // Vision-gated AI units (lane minions, jungle monsters, pets) die via the
+                    // vision-gated MapView death (0x126) — replay-verified: SRU_Razorbeak/RedMini/Crab
+                    // jungle deaths all use 0x126. Wards/Thresh-lantern/other base Minions fall through
+                    // to the broadcast NPC_Die (0x9E), which the replay confirms (SightWard/VisionWard
+                    // die via 0x9E broadcast).
+                    if (minion is Pet || minion is LaneMinion || minion is Monster)
                     {
                         NotifyS2C_NPC_Die_MapView(deathData);
                     }
@@ -4121,6 +4126,24 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Notifies clients with vision of a unit that a named contextual situation has triggered
+        /// (S2C_NotifyContextualSituation, 0x121) — the client's ContextualActionComponent plays the
+        /// matching contextual VO/emote/animation. Replay-verified for server-timed recall situations
+        /// ("RecallLeadIn" on channel start, "RecallWindDown" on completion). Vision-gated (PolicyMapView).
+        /// </summary>
+        /// <param name="unit">The unit the situation applies to.</param>
+        /// <param name="situationName">Situation name (hashed via the engine HashString), e.g. "RecallLeadIn".</param>
+        public void NotifyS2C_NotifyContextualSituation(AttackableUnit unit, string situationName)
+        {
+            var packet = new S2C_NotifyContextualSituation
+            {
+                SenderNetID = unit.NetId,
+                SituationNameHash = HashString(situationName)
+            };
+            _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifyS2C_PlaySound(string soundName, AttackableUnit soundOwner)
         {
             var packet = new S2C_PlaySound
@@ -5475,8 +5498,8 @@ namespace PacketDefinitions420
         /// Functionally referred to as a dash in-game.
         /// </summary>
         /// <param name="u">Unit that is dashing.</param>
-        /// <param name="dashSpeed">Constant speed that the unit will have during the dash.</param>
-        /// <param name="leapGravity">Optionally how much gravity the unit will experience when above the ground while dashing.</param>
+        /// <param name="speed">Constant speed that the unit will have during the dash.</param>
+        /// <param name="gravity">Optionally how much gravity the unit will experience when above the ground while dashing.</param>
         /// <param name="keepFacingLastDirection">Optionally whether or not the unit should maintain the direction they were facing before dashing.</param>
         /// <param name="target">Optional GameObject to follow.</param>
         /// <param name="followTargetMaxDistance">Optional maximum distance the unit will follow the Target before stopping the dash or reaching to the Target.</param>
@@ -5486,8 +5509,8 @@ namespace PacketDefinitions420
         public void NotifyWaypointListWithSpeed
         (
             AttackableUnit u,
-            float dashSpeed,
-            float leapGravity = 0,
+            float speed,
+            float gravity = 0,
             bool keepFacingLastDirection = false,
             GameObject target = null,
             float followTargetMaxDistance = 0,
@@ -5498,8 +5521,8 @@ namespace PacketDefinitions420
             // TODO: Implement ForceMovement class/interface and house a List of these with waypoints.
             var speeds = new SpeedParams
             {
-                PathSpeedOverride = dashSpeed,
-                ParabolicGravity = leapGravity,
+                PathSpeedOverride = speed,
+                ParabolicGravity = gravity,
                 // TODO: Implement as parameter (ex: Aatrox Q).
                 ParabolicStartPoint = u.Position,
                 Facing = keepFacingLastDirection,

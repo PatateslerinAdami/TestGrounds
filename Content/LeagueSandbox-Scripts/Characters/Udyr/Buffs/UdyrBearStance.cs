@@ -44,11 +44,11 @@ public class UdyrBearStance : IBuffGameScript {
         var target = (spell.CastInfo.Targets[0] as CastTarget)?.Unit;
         if (target is not Champion) return;
         if (!IsValidTarget(_udyr, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes)) return;
-        if (target.HasBuff("UdyrBearStunCheck") || _udyr.MovementParameters != null) return;
+        if (target.HasBuff("UdyrBearStunCheck") || _udyr.IsForceMoved) return;
 
         _udyr.LungeToTarget(target, ChampionLungeSpeed, keepFacingLastDirection: false,
                             followTargetMaxDistance: ChampionLungeDistance, travelTime: ChampionLungeTravelTime,
-                            consideredCc: false);
+                            lockActions: false);
     }
 
     private void OnHit(DamageData data) {

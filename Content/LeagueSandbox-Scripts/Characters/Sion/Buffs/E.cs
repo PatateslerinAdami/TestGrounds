@@ -57,7 +57,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            CancelDash(unit);
+            CancelForceMovement(unit);
         }
     }
 }

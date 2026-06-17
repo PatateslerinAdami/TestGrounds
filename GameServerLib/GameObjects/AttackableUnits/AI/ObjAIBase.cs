@@ -99,12 +99,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// the leash point (Riot AI_FEARED), false = flee directly away from the source (AI_FLEEING).</summary>
         public bool CrowdControlWander { get; set; }
 
-        /// <summary>True once an AI script with crowd-control handling (a BaseAIScript-derived AI
-        /// running the shared CrowdControlComponent) is attached. CC buffs branch on this: if set
-        /// they only raise the flag + record the source and let the AI drive the movement; if not
-        /// (e.g. a player champion still on EmptyAIScript) they fall back to driving it themselves.
-        /// This is the migration bridge for the buff-driven -> AI-driven CC rollout.</summary>
-        public bool AICrowdControlActive { get; set; }
         /// <summary>
         /// Attack-move destination point (the clicked ground spot), kept separate from the chase
         /// path so the unit can RESUME walking toward it after a target acquired along the way dies
@@ -826,29 +820,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Forces this AI unit to perform a dash which follows the specified AttackableUnit.
+        /// Forces this AI unit to perform a dash which follows the specified AttackableUnit (re-targeting
+        /// each tick). This is the engine follow-unit-path force-move primitive — Riot's
+        /// <c>Actor_Common::ServerForceFollowUnitPath</c> (the line variant is
+        /// <see cref="AttackableUnit.ServerForceLinePath"/>). Script-facing callers use the
+        /// ForceMoveToUnit verb in ApiFunctionManager, not this directly.
         /// </summary>
         /// <param name="target">Unit to follow.</param>
-        /// <param name="dashSpeed">Constant speed that the unit will have during the dash.</param>
-        /// <param name="animation">Internal name of the dash animation.</param>
-        /// <param name="leapGravity">How much gravity the unit will experience when above the ground while dashing.</param>
+        /// <param name="speed">Constant speed that the unit will have during the dash.</param>
+        /// <param name="gravity">How much gravity the unit will experience when above the ground while dashing.</param>
         /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before dashing.</param>
         /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the Target before stopping the dash or reaching to the Target.</param>
         /// <param name="backDistance">Unknown parameter.</param>
         /// <param name="travelTime">Total time (in seconds) the dash will follow the GameObject before stopping or reaching the Target.</param>
-        /// <param name="consideredCC">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
+        /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToTarget
+        public void ServerForceFollowUnitPath
         (
             AttackableUnit target,
-            float dashSpeed,
-            string animation = "",
-            float leapGravity = 0,
+            float speed,
+            float gravity = 0,
             bool keepFacingLastDirection = true,
             float followTargetMaxDistance = 0,
             float backDistance = 0,
             float travelTime = 0,
-            bool consideredCC = true,
+            bool lockActions = true,
             string movementName = "",
             AttackableUnit caster = null,
             ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
@@ -856,7 +852,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (MovementParameters != null)
             {
-                SetDashingState(false, MoveStopReason.ForceMovement);
+                SetForceMovementState(false, MoveStopReason.ForceMovement);
             }
 
             SetWaypoints(new List<Vector2> { Position, target.Position }, true);
@@ -868,8 +864,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 SetStatus = StatusFlags.None,
                 ElapsedTime = 0,
-                PathSpeedOverride = dashSpeed,
-                ParabolicGravity = leapGravity,
+                PathSpeedOverride = speed,
+                ParabolicGravity = gravity,
                 ParabolicStartPoint = Position,
                 KeepFacingDirection = keepFacingLastDirection,
                 FollowNetID = target.NetId,
@@ -881,12 +877,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Caster = caster ?? this
             };
 
-            if (consideredCC)
+            if (lockActions)
             {
                 MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
             }
 
-            // Dashes go over WaypointGroupWithSpeed (0x64) like DashToLocation — replay-verified as
+            // Dashes go over WaypointGroupWithSpeed (0x64) like ServerForceLinePath — replay-verified as
             // Riot's ONLY dash wire (0x64 ×13849 across 38 replays). The previous WaypointListHeroWithSpeed
             // (0x83) is sent 0× by Riot. The follow-target tracking is carried by the SpeedParams the
             // builder reads from MovementParameters (FollowNetID/FollowDistance/FollowBackDistance/
@@ -898,13 +894,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // 34 replays (incl. the Zed game), and the homing-driver path is a separate, 4.x-unused
             // mechanism (our NotifyMovementDriverReplication also has the latent MovementTypeID=0 bug).
             // See docs/FORCED_MOVEMENT_REWRITE_PLAN.md / project_forced_movement_rewrite.
-            SetDashingState(true);
+            SetForceMovementState(true);
 
-            if (animation != null && animation != "")
-            {
-                var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs, MovementParameters);
-            }
             _movementUpdated = false;
             // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
         }
@@ -916,14 +907,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// the unit goes idle (Stop) when the forced movement ends. The OrdersType was previously accepted
         /// at the API boundary but silently dropped. See docs/FORCED_MOVEMENT_REWRITE_PLAN.md P1b.
         /// </summary>
-        public override void SetDashingState(bool state, MoveStopReason reason = MoveStopReason.Finished)
+        public override void SetForceMovementState(bool state, MoveStopReason reason = MoveStopReason.Finished)
         {
             // Capture the policy before base clears MovementParameters.
             bool endingForcedMove = !state && MovementParameters != null;
             var ordersType = MovementParameters?.MovementOrdersType ?? ForceMovementOrdersType.POSTPONE_CURRENT_ORDER;
             var postponedMoveDest = MovementParameters?.PostponedMoveDestination ?? Vector2.Zero;
 
-            base.SetDashingState(state, reason);
+            base.SetForceMovementState(state, reason);
 
             if (endingForcedMove)
             {
@@ -954,38 +945,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         /// <param name="target">Unit to follow.</param>
         /// <param name="speed">Constant speed that the unit will have during the lunge.</param>
-        /// <param name="animation">Internal name of the lunge animation.</param>
-        /// <param name="leapGravity">How much gravity the unit will experience when above the ground while lunging.</param>
+        /// <param name="gravity">How much gravity the unit will experience when above the ground while lunging.</param>
         /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before lunging.</param>
         /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the target before stopping or reaching the target.</param>
         /// <param name="backDistance">Additional stopping distance from the target.</param>
         /// <param name="travelTime">Total time (in seconds) the lunge may follow the target before stopping.</param>
-        /// <param name="consideredCc">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
+        /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// <param name="movementType">Force movement type. Included for API compatibility.</param>
         public void LungeToTarget
         (
             AttackableUnit target,
             float speed,
-            string animation = "",
-            float leapGravity = 0,
+            float gravity = 0,
             bool keepFacingLastDirection = true,
             float followTargetMaxDistance = 0,
             float backDistance = 0,
             float travelTime = 0,
-            bool consideredCc = false,
+            bool lockActions = false,
             ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE
         )
         {
-            DashToTarget(
+            ServerForceFollowUnitPath(
                 target,
                 speed,
-                animation,
-                leapGravity,
+                gravity,
                 keepFacingLastDirection,
                 followTargetMaxDistance,
                 backDistance,
                 travelTime,
-                consideredCc
+                lockActions
             );
         }
 

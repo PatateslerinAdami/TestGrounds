@@ -23,8 +23,6 @@ internal class AatroxQKnockup : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        CancelDash(unit);
-
         // Replay-measured (663eda09, AatroxQKnockup on hit enemies): a near-in-place vertical arc —
         // ParabolicGravity 20, speed ~10, ~10u horizontal nudge. The nudge direction VARIES per enemy
         // in the replay (not a fixed diagonal), so push each enemy away from the caster instead of a

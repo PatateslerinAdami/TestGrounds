@@ -20,7 +20,6 @@ internal class VelkozEStun : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        CancelDash(unit);
         ForceMove(unit, new Vector2(unit.Position.X + 6f, unit.Position.Y + 6f), 10f, gravity: 20f);
     }
 

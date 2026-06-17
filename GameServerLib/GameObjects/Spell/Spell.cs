@@ -666,15 +666,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _attackType = AttackType.ATTACK_TYPE_MELEE;
             }
 
-            // Orient toward the target. Auto-attacks must NOT emit a FaceDirection (0x50) here: Riot's
-            // attack code orients purely via S2C_UnitSetLookAt (sent below at line ~739) — replay-verified
-            // (26ec2d65), Tibbers sends 0x50 ZERO times across a life while sending SetLookAt per attack.
-            // The FaceDirection we used to send was a non-instant TURN; on a moving/chasing pet (which
-            // re-faces a new direction every swing) that turn re-blended the attack animation, re-firing
-            // its hit-frame and spawning a second globalhit_physical at the swing's wind-down (the pet
-            // double-hit-FX bug). Stationary champions never turned, so they never doubled — masking it.
-            // Non-auto-attack spells keep the explicit FaceDirection (their SetLookAt path differs).
-            if (!CastInfo.IsAutoAttack && CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
+            if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
                 if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
@@ -715,21 +707,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
-                    // Pets always send Basic_Attack_Pos (with position), never the position-less
-                    // Basic_Attack — replay-verified: Riot's Tibbers uses Basic_Attack_Pos (0x1A) for
-                    // EVERY auto-attack (incl. chained same-target swings), while we used the IsSecond-
-                    // AutoAttack chain rule and sent Basic_Attack (0x0C) for follow-ups. A moving/chasing
-                    // pet getting the position-less 0x0C made the client re-render the hit FX at the
-                    // attack's wind-down (the "double AA hit FX on pets" bug). Champions keep the chain
-                    // rule (they legitimately send 0x0C when farming stationary).
-                    if (!CastInfo.IsSecondAutoAttack || CastInfo.Owner is Pet)
+                    // Minions/pets auto-attack AUTONOMOUSLY on the client. Once a Basic_Attack puts them
+                    // into the hardcode-attack state, obj_AI_Minion::UpdatePimpl (mac decomp 4.17,
+                    // AIMinionClient.cpp:138) keeps re-firing the swing at the client's own computed cadence
+                    // with NO further packets. So Riot sends a minion/pet a Basic_Attack only on target
+                    // ACQUISITION/CHANGE, never per swing (replay 26ec2d65: Tibbers = 7 Basic_Attacks but 19
+                    // hit/damage events, target NetID changing each packet). Sending one per swing made the
+                    // client render OUR packet-driven attack PLUS its own autonomous one → the hit FX fired
+                    // twice (the "double AA hit FX on pets" bug, reproduces even stationary).
+                    // !IsSecondAutoAttack (== !HasMadeInitialAttack, which resets on (re)target) is exactly
+                    // the first attack against a freshly acquired target = our "target changed" edge.
+                    // Champions (obj_AI_Hero) have NO autonomous attack loop, so they still need a packet
+                    // every swing: the position-less Basic_Attack (0x0C) chain for follow-ups.
+                    if (!CastInfo.IsSecondAutoAttack)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack_Pos(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit);
                     }
-                    else
+                    else if (CastInfo.Owner is not Minion)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.HasMadeInitialAttack);
                     }
+                    // else: minion/pet continuation swing on the same target — send nothing; the client's
+                    // autonomous minion attack loop renders it (sending here would double the hit FX).
                 }
 
                 // Riot wire: DesignerTotalTime of EVERY attack-timed cast = the full
@@ -991,7 +990,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                             // path stop above never covers it. cast=false (fireWithoutCasting,
                             // e.g. Talon blades) correctly skips this whole block.
                             // Dash guard: only clear the WALKING path — never cancel an active
-                            // forced movement (StopMovement would SetDashingState(false)).
+                            // forced movement (StopMovement would SetForceMovementState(false)).
                             // Scripts may start a dash in OnSpellPreCast (runs before this
                             // block, e.g. FioraDanceStrike's windup mini-dash) and manage its
                             // end themselves.
@@ -1024,9 +1023,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _attackType = AttackType.ATTACK_TYPE_MELEE;
             }
 
-            // Auto-attacks orient via S2C_UnitSetLookAt only, never FaceDirection — see the matching
-            // comment in the Cast(start,end,unit) overload (the pet double-hit-FX fix).
-            if (!CastInfo.IsAutoAttack && cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
+            if (cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
                 if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
@@ -1068,21 +1065,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // TODO: Verify if this should be affected by cast variable.
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
-                    // Pets always send Basic_Attack_Pos (with position), never the position-less
-                    // Basic_Attack — replay-verified: Riot's Tibbers uses Basic_Attack_Pos (0x1A) for
-                    // EVERY auto-attack (incl. chained same-target swings), while we used the IsSecond-
-                    // AutoAttack chain rule and sent Basic_Attack (0x0C) for follow-ups. A moving/chasing
-                    // pet getting the position-less 0x0C made the client re-render the hit FX at the
-                    // attack's wind-down (the "double AA hit FX on pets" bug). Champions keep the chain
-                    // rule (they legitimately send 0x0C when farming stationary).
-                    if (!CastInfo.IsSecondAutoAttack || CastInfo.Owner is Pet)
+                    // Minions/pets auto-attack AUTONOMOUSLY on the client. Once a Basic_Attack puts them
+                    // into the hardcode-attack state, obj_AI_Minion::UpdatePimpl (mac decomp 4.17,
+                    // AIMinionClient.cpp:138) keeps re-firing the swing at the client's own computed cadence
+                    // with NO further packets. So Riot sends a minion/pet a Basic_Attack only on target
+                    // ACQUISITION/CHANGE, never per swing (replay 26ec2d65: Tibbers = 7 Basic_Attacks but 19
+                    // hit/damage events, target NetID changing each packet). Sending one per swing made the
+                    // client render OUR packet-driven attack PLUS its own autonomous one → the hit FX fired
+                    // twice (the "double AA hit FX on pets" bug, reproduces even stationary).
+                    // !IsSecondAutoAttack (== !HasMadeInitialAttack, which resets on (re)target) is exactly
+                    // the first attack against a freshly acquired target = our "target changed" edge.
+                    // Champions (obj_AI_Hero) have NO autonomous attack loop, so they still need a packet
+                    // every swing: the position-less Basic_Attack (0x0C) chain for follow-ups.
+                    if (!CastInfo.IsSecondAutoAttack)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack_Pos(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit);
                     }
-                    else
+                    else if (CastInfo.Owner is not Minion)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.HasMadeInitialAttack);
                     }
+                    // else: minion/pet continuation swing on the same target — send nothing; the client's
+                    // autonomous minion attack loop renders it (sending here would double the hit FX).
                 }
 
                 // Riot wire: DesignerTotalTime of EVERY attack-timed cast = the full

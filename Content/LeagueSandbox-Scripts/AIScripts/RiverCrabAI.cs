@@ -31,6 +31,12 @@ namespace AIScripts
     //  - The RiverCornered reaction (ServerCastSpellOnPos slow) and the on-death scuttle buff.
     public class RiverCrabAI : BaseAIScript
     {
+        // The crab is non-aggressive: it never fights, so a taunt makes it STOP rather than run to +
+        // attack the taunter (Riot RiverCrab.lua registers AIComponentNonAggressiveTauntBehavior instead
+        // of the default). The shared CrowdControlComponent reads this and stops the crab on taunt; its
+        // wander already pauses on CC (IsCrowdControlled) and resumes when the taunt ends.
+        public override bool NonAggressiveTaunt => true;
+
         // WanderAlongPath: advance to the next waypoint once within this distance (Lua: < 300).
         private const float WANDER_REACH = 300f;
         // SkittishMonster.attackDuration = 5 — how long the crab keeps fleeing after being hit.

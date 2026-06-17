@@ -57,8 +57,16 @@ namespace AIScripts
             // Crowd control is component-driven (auto-attached); resume normal behavior when it ends.
             Subscribe(AIEvent.OnFearEnd, _ => NetSetState(AIState.AI_PET_IDLE));
             Subscribe(AIEvent.OnFleeEnd, _ => NetSetState(AIState.AI_PET_IDLE));
-            Subscribe(AIEvent.OnTauntEnd, _ => NetSetState(AIState.AI_PET_IDLE));
             Subscribe(AIEvent.OnCharmEnd, _ => NetSetState(AIState.AI_PET_IDLE));
+            // Taunt SET the taunter as target + AttackTo chase (component OnTauntBegin), unlike fear/
+            // charm which clear it on begin. Release it so the pet returns to idle on taunt-end (its
+            // 0.15s TimerFindEnemies then re-acquires normally) instead of staying locked on the ex-taunter.
+            Subscribe(AIEvent.OnTauntEnd, _ =>
+            {
+                Owner.CancelAutoAttack(reset: true, fullCancel: true);
+                Owner.SetTargetUnit(null, true);
+                NetSetState(AIState.AI_PET_IDLE);
+            });
         }
 
         // ---- Pet.lua OnOrder: translate the player's pet command into a pet state ----

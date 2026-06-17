@@ -22,10 +22,20 @@ namespace AIScripts
             // When crowd control ends the player resumes control via orders (no AI re-acquire, unlike
             // minions). Reset the logical state label so a champion is never left tagged AI_FEARED.
             // The movement during CC is the CrowdControlComponent's; Fear.cs/Flee.cs StopMovement on
-            // buff end. Taunt/Charm subscriptions are harmless label resets until those migrate.
+            // buff end. Fear and Charm clear the target on begin, so resetting the state label suffices.
             Subscribe(AIEvent.OnFearEnd, _ => NetSetState(AIState.AI_IDLE));
-            Subscribe(AIEvent.OnTauntEnd, _ => NetSetState(AIState.AI_IDLE));
             Subscribe(AIEvent.OnCharmEnd, _ => NetSetState(AIState.AI_IDLE));
+            // Taunt is different: the component's OnTauntBegin SET the taunter as our target + AttackTo
+            // chase (fear/charm instead CLEAR the target on begin). Just resetting the label would leave
+            // that chase running, so the champion would keep attacking the ex-taunter after the taunt
+            // ends. Release the target so the player regains control — with the Auto Attack option on,
+            // OnTick re-acquires the nearest enemy next tick; with it off, the champion idles.
+            Subscribe(AIEvent.OnTauntEnd, _ =>
+            {
+                Owner.CancelAutoAttack(reset: true, fullCancel: true);
+                Owner.SetTargetUnit(null, true);
+                NetSetState(AIState.AI_IDLE);
+            });
 
             // Order/State split Phase 2: the champion brain owns combat SELECTION (Hero.lua
             // TimerDistanceScan): idle auto-acquire + attack-move acquire / soft-drop / resume. The

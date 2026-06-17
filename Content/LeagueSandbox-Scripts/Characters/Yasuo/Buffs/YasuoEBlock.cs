@@ -169,7 +169,7 @@ namespace Buffs
         }
 
         public void OnSpellPress(Spell sp, SpellCastInfo sc) { doSpin = true; }
-        public void OnSpellPress2(Spell sp, SpellCastInfo sc) { sp.CastInfo.Owner.SetDashingState(false); sp.Cast(sc.Position, sc.EndPosition, sc.TargetUnit); }
+        public void OnSpellPress2(Spell sp, SpellCastInfo sc) { sp.CastInfo.Owner.SetForceMovementState(false); sp.Cast(sc.Position, sc.EndPosition, sc.TargetUnit); }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
     }
 }

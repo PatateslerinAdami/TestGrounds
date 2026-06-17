@@ -11,13 +11,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
     /// unit (<see cref="ObjAIBase.CrowdControlSource"/>), the engine surfaces the flag transition as
     /// an <see cref="AIEvent"/>, and this component drives the actual wander / flee movement.
     ///
-    /// Scope (B.1 step 1): Fear (wander) + Flee. Taunt and Charm movement are intentionally left to
-    /// the existing mechanism for now — Charm's pull is forced-movement, and the taunt path needs a
-    /// source-setting pass on the taunt buffs before it migrates here.
-    ///
-    /// Migration bridge: <see cref="OnAttach"/> sets <see cref="ObjAIBase.AICrowdControlActive"/> so
-    /// CC buffs know to defer movement to this component (a unit without it — e.g. a player champion
-    /// still on EmptyAIScript — keeps the legacy buff-driven movement until HeroAI lands).
+    /// Handles Fear (wander), Flee, Taunt (walk to + attack the taunter) and Charm (pull toward the
+    /// charmer). Every BaseAIScript carries one, so all unit types — minions, monsters, pets, and
+    /// champions (HeroAI) — get CC movement from this single component; the CC buffs are pure flag +
+    /// source setters with no movement of their own.
     /// </summary>
     public class CrowdControlComponent : IAIComponent
     {
@@ -52,7 +49,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         {
             _ai = ai;
             _owner = owner;
-            _owner.AICrowdControlActive = true;
 
             ai.Subscribe(AIEvent.OnFearBegin, OnFearBegin);
             ai.Subscribe(AIEvent.OnFearEnd, OnFearEnd);
@@ -147,6 +143,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             // Fear takes priority over taunt (Riot guards taunt on state != AI_FEARED).
             if (_mode != Mode.None)
             {
+                return;
+            }
+
+            // Riot AIComponentNonAggressiveTauntBehavior (the Scuttle Crab registers this instead of
+            // the default): a non-aggressive unit does NOT run to + attack the taunter — it just stops
+            // (ClearTarget + StopMove + WanderPause). The unit's own wander/patrol is already gated on
+            // its CC state, so it stays paused for the taunt and resumes on end with no extra handler.
+            if (_ai.NonAggressiveTaunt)
+            {
+                _owner.CancelAutoAttack(reset: true, fullCancel: true);
+                _owner.SetTargetUnit(null);
+                _owner.StopMovement();
                 return;
             }
 

@@ -117,7 +117,7 @@ internal class ZedUltDash : IBuffGameScript {
             }
         }
 
-        if (_pendingPostTargetDash && !_dashResolved && !_cancelledByOwnerDeath && _zed.MovementParameters == null) {
+        if (_pendingPostTargetDash && !_dashResolved && !_cancelledByOwnerDeath && !_zed.IsForceMoved) {
             _pendingPostTargetDash = false;
             _postTargetDashStarted = true;
             StartShadowPostTargetDash();
@@ -257,8 +257,8 @@ internal class ZedUltDash : IBuffGameScript {
         _cancelledByOwnerDeath = true;
         _dashResolved          = true;
 
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.Death);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.Death);
         }
 
         RemoveRShadow();
@@ -288,8 +288,8 @@ internal class ZedUltDash : IBuffGameScript {
         _dashInterrupted = true;
         _dashResolved    = true;
 
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.HeroReincarnate);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.HeroReincarnate);
         }
 
         _buff.DeactivateBuff();
@@ -337,8 +337,8 @@ internal class ZedUltDash : IBuffGameScript {
                                               ZedDashForwardDistance);
 
         _ignoreNextMoveFailure = true;
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.ForceMovement);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.ForceMovement);
         }
         ForceMove(_zed, endPoint, DashSpeed);
     }
@@ -356,8 +356,8 @@ internal class ZedUltDash : IBuffGameScript {
     private void StartShadowPostTargetDash(Minion shadow, Vector2 dashCastPosition) {
         if (shadow == null || shadow.IsDead) return;
 
-        if (shadow.MovementParameters != null) {
-            shadow.SetDashingState(false, MoveStopReason.ForceMovement);
+        if (shadow.IsForceMoved) {
+            shadow.SetForceMovementState(false, MoveStopReason.ForceMovement);
         }
 
         var finalDashEndPoint = GetFinalDashEndPoint(shadow, dashCastPosition);

@@ -345,7 +345,7 @@ namespace LeagueSandbox.GameServer.API
         {
             if (unit.MovementParameters != null)
             {
-                CancelDash(unit);
+                CancelForceMovement(unit);
             }
 
             unit.TeleportTo(x, y, silent: silent);
@@ -2152,10 +2152,10 @@ namespace LeagueSandbox.GameServer.API
         /// Instantly cancels any dashes the specified unit is performing.
         /// </summary>
         /// <param name="unit">Unit to stop dashing.</param>
-        public static void CancelDash(AttackableUnit unit)
+        public static void CancelForceMovement(AttackableUnit unit)
         {
             // Allow the user to move the champion
-            unit.SetDashingState(false);
+            unit.SetForceMovementState(false);
         }
 
         // ===================================================================================
@@ -2166,7 +2166,7 @@ namespace LeagueSandbox.GameServer.API
         //   ForceMoveAway    ≙ BBMoveAway    (push the target away from a source point — knockback)
         //   ForceMoveToUnit  ≙ BBMoveToUnit  (follow a moving unit)
         // A knockup is just ForceMove with gravity > 0 (Riot has no BBKnockup) — no separate verb.
-        // Over the two engine primitives (line-path = DashToLocation, follow-unit-path = DashToTarget).
+        // Over the two engine primitives (line-path = ServerForceLinePath, follow-unit-path = ServerForceFollowUnitPath).
         // Replay-verified (2026-06-15): Riot wires knockback, knockup, dash and follow-dash ALL via the
         // engine force-move (0x64 WaypointGroupWithSpeed) with gravity — the flat SetPosition-lerp
         // BBKnockback is vestigial for SR, so ForceMoveAway is a force-move too. These replace the old
@@ -2212,7 +2212,7 @@ namespace LeagueSandbox.GameServer.API
             // Negative distance points back toward the source (pull); positive points away (knockback).
             var endPos = target.Position + dir * distance;
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
-            target.DashToLocation(endPos, speed, "", gravity, keepFacing, true, movementName, source,
+            target.ServerForceLinePath(endPos, speed, gravity, keepFacing, true, movementName, source,
                 movementType: resolve, movementOrdersType: orders);
         }
 
@@ -2249,7 +2249,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
-            unit.DashToLocation(dest, speed, "", gravity, keepFacing, lockActions, movementName, unit,
+            unit.ServerForceLinePath(dest, speed, gravity, keepFacing, lockActions, movementName, unit,
                 ignoreTerrain, movementType: resolve, movementOrdersType: orders);
         }
 
@@ -2283,7 +2283,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
-            unit.DashToTarget(target, speed, "", gravity, keepFacing, followMaxDistance, backDistance,
+            unit.ServerForceFollowUnitPath(target, speed, gravity, keepFacing, followMaxDistance, backDistance,
                 travelTime, lockActions, movementName, unit, orders);
         }
 
@@ -2530,6 +2530,16 @@ namespace LeagueSandbox.GameServer.API
                     _game.PacketNotifier.NotifyLockCamera(player, locked, distance);
                 }
             }
+        }
+
+        /// <summary>
+        /// Triggers a named contextual situation on a unit (S2C_NotifyContextualSituation) so clients
+        /// with vision play the matching contextual VO/emote/animation. Used for server-timed
+        /// situations like "RecallLeadIn" / "RecallWindDown".
+        /// </summary>
+        public static void NotifyContextualSituation(AttackableUnit unit, string situationName)
+        {
+            _game.PacketNotifier.NotifyS2C_NotifyContextualSituation(unit, situationName);
         }
 
         public static void SetSpellToolTipVar<T>(AttackableUnit unit, int tipIndex, T value, SpellbookType book,
