@@ -285,6 +285,27 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                 bool broadcast = !alreadyMoving
                                     || (_game.GameTime - champion.LastMoveOrderBroadcastTime) >= MoveOrderBroadcastWindowMs;
 
+                                // Distinct-destination bypass (2026-06-17): the limiter exists to dedupe
+                                // held-mouse spam to ~the same spot (same endpoint every frame). A new
+                                // order whose ENDPOINT differs materially from the path we're already
+                                // walking is a fresh click (kiting/dodging), not a repeat — broadcast it
+                                // now so rapid distinct clicks aren't throttled to the ~96ms cadence (the
+                                // "sluggish when clicking a lot" symptom). Held / slow-drag orders keep
+                                // ~the same endpoint frame-to-frame (SetWaypoints runs on every order, so
+                                // the current endpoint already reflects the previous one) → still throttled,
+                                // so the 10-30 hard-snaps/s jitter the limiter prevents stays prevented.
+                                const float MoveOrderDistinctDestSq = 50f * 50f;
+                                if (!broadcast && alreadyMoving
+                                    && champion.Waypoints.Count > 0 && waypoints.Count > 0)
+                                {
+                                    var curDest = champion.Waypoints[champion.Waypoints.Count - 1];
+                                    var newDest = waypoints[waypoints.Count - 1];
+                                    if (Vector2.DistanceSquared(curDest, newDest) > MoveOrderDistinctDestSq)
+                                    {
+                                        broadcast = true;
+                                    }
+                                }
+
                                 // Reversal override (2026-06-08): throttling is only safe when the
                                 // client's forward extrapolation moves the SAME way the server does
                                 // — then the gap stays under the client's ~20u drift-snap threshold.
