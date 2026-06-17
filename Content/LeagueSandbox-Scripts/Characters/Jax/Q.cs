@@ -88,7 +88,7 @@ public class JaxLeapStrike : ISpellScript {
 
         FaceDirection(distance <= 150f ? _target.Position : GetPositionByOffset(0f, -150f), _jax, true);
 
-        Dash(_jax, GetPositionByOffset(0f, -150f), speedVar, gravity: gravityVar, keepFacing: false);
+        ForceMove(_jax, GetPositionByOffset(0f, -150f), speedVar, gravity: gravityVar, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
     }
 
     private Vector2 GetPositionByOffset(float angleOffset, float distanceOffset) {

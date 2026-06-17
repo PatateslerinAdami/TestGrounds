@@ -118,7 +118,7 @@ public class BantamTrap : ISpellScript {
 
         _bounceCounter += 1;
         // dash/bounce to new location
-        Dash(_noxiousTrap, nextPos, 1000f, gravity: 50f, keepFacing: false, lockActions: false);
+        ForceMove(_noxiousTrap, nextPos, 1000f, gravity: 50f, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
 
         
     }

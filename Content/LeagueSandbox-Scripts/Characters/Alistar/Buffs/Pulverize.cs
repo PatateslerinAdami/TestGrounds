@@ -47,7 +47,11 @@ namespace Buffs
             {
                 endPosition = startPosition + dirGo * goToLength;
             }
-            KnockUp(unit, desiredHeight, desiredDuration, destination: endPosition, animation: "RUN");
+            // Knockup = BBMove with gravity (Riot has no BBKnockup): speed = horizDist/duration,
+            // gravity = height/duration². keepFacing during the airborne arc.
+            float horizontalDistance = Vector2.Distance(startPosition, endPosition);
+            ForceMove(unit, endPosition, horizontalDistance / desiredDuration,
+                gravity: desiredHeight / (desiredDuration * desiredDuration), facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {

@@ -1,5 +1,7 @@
 ﻿using GameServerCore.Enums;
 using GameServerLib.GameObjects;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using System.Collections.Generic;
 using System.Numerics;
@@ -13,8 +15,19 @@ namespace MapScripts.Map11
 
         public static Dictionary<MonsterCamp, List<Monster>> MonsterCamps = new Dictionary<MonsterCamp, List<Monster>>();
 
+        // Dragon Slayer stacks per team (4.20-era stacking dragon buff). Drives the team HUD counter
+        // via S2C_TeamUpdateDragonBuffCount; one increment + packet per dragon kill for the killing team.
+        private static readonly Dictionary<TeamId, int> DragonStacks = new Dictionary<TeamId, int>
+        {
+            { TeamId.TEAM_BLUE, 0 },
+            { TeamId.TEAM_PURPLE, 0 }
+        };
+
         public static void InitializeCamps()
         {
+            DragonStacks[TeamId.TEAM_BLUE] = 0;
+            DragonStacks[TeamId.TEAM_PURPLE] = 0;
+
             //Blue Side Blue Buff
             var blue_blueBuff = CreateJungleCamp(new Vector3(3871.48846f, 60.0f, 7901.05403f), 1, TeamId.TEAM_BLUE, "Camp", 113.9f * 1000, spawnDuration: 1.1f);
             MonsterCamps.Add(blue_blueBuff, new List<Monster> 
@@ -180,7 +193,24 @@ namespace MapScripts.Map11
                 monster.Stats.Level = (byte)averageLevel;
                 Monster campMonster = monsterCamp.AddMonster(monster);
                 MonsterDataTable.UpdateStats(campMonster);
+
+                // Dragon: count a stack for the killing team and update the HUD when it dies.
+                if (monsterCamp.MinimapIcon == "Dragon")
+                {
+                    ApiEventManager.OnDeath.AddListener(campMonster, campMonster, OnDragonDeath, true);
+                }
             }
+        }
+
+        private static void OnDragonDeath(DeathData death)
+        {
+            var team = death.Killer?.Team;
+            if (team != TeamId.TEAM_BLUE && team != TeamId.TEAM_PURPLE)
+            {
+                return;
+            }
+            DragonStacks[team.Value]++;
+            NotifyTeamDragonBuffCount(team.Value, DragonStacks[team.Value]);
         }
 
         public static void ForceCampSpawn()

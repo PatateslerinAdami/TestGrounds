@@ -50,7 +50,7 @@ public class AkaliShadowDance : ISpellScript {
         }
         _trueCoords = CalcVector(distance, _akali.Position, _target.Position);
         ApiEventManager.OnMoveEnd.AddListener(this, owner, OnMoveEnd, true);
-        Dash(owner, _trueCoords, 2000f, gravity: 0f, keepFacing: false, lockActions: false, animation: "Spell4");
+        ForceMove(owner, _trueCoords, 2000f, gravity: 0f, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
     }
 
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters) {

@@ -93,11 +93,30 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// </summary>
         public ToolTipData ToolTipData { get; protected set; }
 
+        /// <summary>
+        /// Allocates the missile NetID for the cast about to be announced. Heroes get a fresh NetID per
+        /// auto-attack (replay shows champion AAs each carry a unique missile id); non-hero units (minions,
+        /// pets) reuse ONE stable NetID for all their AAs across a life — see
+        /// <see cref="ObjAIBase.AutoAttackMissileNetId"/>. Non-auto-attack casts always get a fresh NetID.
+        /// </summary>
+        private uint GetCastMissileNetId()
+        {
+            if (CastInfo.IsAutoAttack && CastInfo.Owner != null && CastInfo.Owner is not Champion)
+            {
+                if (CastInfo.Owner.AutoAttackMissileNetId == 0)
+                {
+                    CastInfo.Owner.AutoAttackMissileNetId = _networkIdManager.GetNewNetId();
+                }
+                return CastInfo.Owner.AutoAttackMissileNetId;
+            }
+            return _networkIdManager.GetNewNetId();
+        }
+
         public Spell(Game game, ObjAIBase owner, string spellName, byte slot, bool enableScripts = true)
         {
             _game = game;
             _networkIdManager = game.NetworkIdManager;
-            CastInfo.MissileNetID = _networkIdManager.GetNewNetId();
+            CastInfo.MissileNetID = GetCastMissileNetId();
             _overrrideCastRange = 0;
             _attackType = AttackType.ATTACK_TYPE_RADIAL;
 
@@ -425,7 +444,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             CastInfo.AttackSpeedModifier = stats.AttackSpeedMultiplier.Total;
 
-            CastInfo.MissileNetID = _networkIdManager.GetNewNetId();
+            CastInfo.MissileNetID = GetCastMissileNetId();
 
             CastInfo.TargetPosition = new Vector3(start.X, _game.Map.NavigationGrid.GetHeightAtLocation(start), start.Y);
             CastInfo.TargetPositionEnd = new Vector3(end.X, _game.Map.NavigationGrid.GetHeightAtLocation(end), end.Y);
@@ -647,7 +666,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _attackType = AttackType.ATTACK_TYPE_MELEE;
             }
 
-            if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
+            // Orient toward the target. Auto-attacks must NOT emit a FaceDirection (0x50) here: Riot's
+            // attack code orients purely via S2C_UnitSetLookAt (sent below at line ~739) — replay-verified
+            // (26ec2d65), Tibbers sends 0x50 ZERO times across a life while sending SetLookAt per attack.
+            // The FaceDirection we used to send was a non-instant TURN; on a moving/chasing pet (which
+            // re-faces a new direction every swing) that turn re-blended the attack animation, re-firing
+            // its hit-frame and spawning a second globalhit_physical at the swing's wind-down (the pet
+            // double-hit-FX bug). Stationary champions never turned, so they never doubled — masking it.
+            // Non-auto-attack spells keep the explicit FaceDirection (their SetLookAt path differs).
+            if (!CastInfo.IsAutoAttack && CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
                 if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
@@ -688,7 +715,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
-                    if (!CastInfo.IsSecondAutoAttack)
+                    // Pets always send Basic_Attack_Pos (with position), never the position-less
+                    // Basic_Attack — replay-verified: Riot's Tibbers uses Basic_Attack_Pos (0x1A) for
+                    // EVERY auto-attack (incl. chained same-target swings), while we used the IsSecond-
+                    // AutoAttack chain rule and sent Basic_Attack (0x0C) for follow-ups. A moving/chasing
+                    // pet getting the position-less 0x0C made the client re-render the hit FX at the
+                    // attack's wind-down (the "double AA hit FX on pets" bug). Champions keep the chain
+                    // rule (they legitimately send 0x0C when farming stationary).
+                    if (!CastInfo.IsSecondAutoAttack || CastInfo.Owner is Pet)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack_Pos(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit);
                     }
@@ -833,7 +867,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            CastInfo.MissileNetID = _networkIdManager.GetNewNetId();
+            CastInfo.MissileNetID = GetCastMissileNetId();
 
             // 0 is the correct default for both: replay 630b7ceb shows 2541/2599 ANS with
             // ExtraCastTime = StartCastTime = 0. The two non-zero patterns (not implemented):
@@ -990,7 +1024,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _attackType = AttackType.ATTACK_TYPE_MELEE;
             }
 
-            if (cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
+            // Auto-attacks orient via S2C_UnitSetLookAt only, never FaceDirection — see the matching
+            // comment in the Cast(start,end,unit) overload (the pet double-hit-FX fix).
+            if (!CastInfo.IsAutoAttack && cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
                 if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
                 {
@@ -1032,7 +1068,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // TODO: Verify if this should be affected by cast variable.
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
-                    if (!CastInfo.IsSecondAutoAttack)
+                    // Pets always send Basic_Attack_Pos (with position), never the position-less
+                    // Basic_Attack — replay-verified: Riot's Tibbers uses Basic_Attack_Pos (0x1A) for
+                    // EVERY auto-attack (incl. chained same-target swings), while we used the IsSecond-
+                    // AutoAttack chain rule and sent Basic_Attack (0x0C) for follow-ups. A moving/chasing
+                    // pet getting the position-less 0x0C made the client re-render the hit FX at the
+                    // attack's wind-down (the "double AA hit FX on pets" bug). Champions keep the chain
+                    // rule (they legitimately send 0x0C when farming stationary).
+                    if (!CastInfo.IsSecondAutoAttack || CastInfo.Owner is Pet)
                     {
                         _game.PacketNotifier.NotifyBasic_Attack_Pos(CastInfo.Owner, CastInfo.Targets[0].Unit, CastInfo.MissileNetID, CastInfo.Owner.IsNextAutoCrit);
                     }

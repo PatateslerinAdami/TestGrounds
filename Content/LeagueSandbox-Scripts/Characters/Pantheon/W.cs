@@ -69,7 +69,7 @@ public class PantheonW : ISpellScript
         PlayAnimation(_pantheon, "Spell2", animFactor);
 
         _leapInProgress = true;
-        DashToUnit(_pantheon, _target, speedVar, travelTime: -1f, gravity: gravityVar,
+        ForceMoveToUnit(_pantheon, _target, speedVar, travelTime: -1f, gravity: gravityVar,
             orders: ForceMovementOrdersType.CANCEL_ORDER);
     }
 

@@ -21,7 +21,7 @@ internal class VelkozEStun : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         CancelDash(unit);
-        Dash(unit, new Vector2(unit.Position.X + 6f, unit.Position.Y + 6f), 10f, gravity: 20f, animation: "RUN");
+        ForceMove(unit, new Vector2(unit.Position.X + 6f, unit.Position.Y + 6f), 10f, gravity: 20f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }

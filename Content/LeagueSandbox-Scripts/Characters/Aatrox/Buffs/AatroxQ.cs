@@ -48,7 +48,7 @@ internal class AatroxQ : IBuffGameScript {
 
         var direction  = new Vector2(unit.Direction.X, unit.Direction.Z);
         var jumpTarget = unit.Position + direction * AscendDistance;
-        Dash(unit, jumpTarget, AscendSpeed, gravity: 10f, keepFacing: true, lockActions: false, movementName: "AatroxQAscend");
+        ForceMove(unit, jumpTarget, AscendSpeed, gravity: 10f, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING, lockActions: false, movementName: "AatroxQAscend");
 
         // Hand off to the descent phase. The ascend force-move is ended by the descent's own dash.
         // Remove the ascend buff here (replay: AatroxQ lifetime ≈ this delay) and start the descent

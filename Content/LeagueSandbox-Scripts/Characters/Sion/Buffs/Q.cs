@@ -28,7 +28,11 @@ namespace Buffs
             float knockupDuration = buff.Variables.GetFloat("KnockupTime", 0.5f);
 
             float desiredHeight = 8.0f;
-            ApiFunctionManager.KnockUp(unit, desiredHeight, knockupDuration, animation: "RUN");
+            // In-place knockup = BBMove with gravity (no BBKnockup): tiny +2u nudge so the path is
+            // nonzero, the arc comes from gravity = height/duration².
+            ApiFunctionManager.ForceMove(unit, new Vector2(unit.Position.X + 2.0f, unit.Position.Y),
+                2.0f / knockupDuration, gravity: desiredHeight / (knockupDuration * knockupDuration),
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

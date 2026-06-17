@@ -36,7 +36,7 @@ namespace Spells
             FaceDirection(_end, _owner, true);
             var trueCoords = GetPointFromUnit(_owner, dashRange);
             PlayAnimation(_owner, "Spell3", 0.25f);
-            Dash(_owner, trueCoords, 1450, keepFacing: true, lockActions: false);
+            ForceMove(_owner, trueCoords, 1450, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING, lockActions: false);
         }
     }
 }

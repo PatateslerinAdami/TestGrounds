@@ -11,12 +11,15 @@ namespace LeaguePackets.Game
     public class S2C_CameraLock : GamePacket // 0x12B
     {
         public override GamePacketID ID => GamePacketID.S2C_CameraLock;
-        //FIXME: toggle lock?
+        // Replay-verified (Sion R / Unstoppable Onslaught — sole sender across 38 replays, synced to his R cast):
+        // lock toggle. 1 = lock/steer camera on (charge start), 0 = unlock (charge end).
         public bool Unknown0 { get; set; }
-        //FIXME: distance?
+        // Camera distance — 900.0 while locked, 0 while unlocked (Sion R). (FIXME: exact meaning of the 3 floats;
+        // Unknown2/Unknown3 are always 0 in replays, likely camera target offset X/Y, unused for Sion R.)
         public float Unknown1 { get; set; }
         public float Unknown2 { get; set; }
         public float Unknown3 { get; set; }
+        // Secondary flag, mirrors Unknown0 in replays (1 on lock, 0 on unlock).
         public bool Unknown4 { get; set; }
 
         protected override void ReadBody(ByteReader reader)

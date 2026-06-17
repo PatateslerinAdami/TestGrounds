@@ -28,7 +28,10 @@ namespace Buffs
         {
             float desiredDuration = 1.2f;//1.2f
             float desiredHeight = 8.0f;
-            KnockUp(unit, desiredHeight, desiredDuration, animation: "RUN");
+            // In-place knockup = BBMove with gravity (no BBKnockup): tiny +2u nudge, arc from gravity.
+            ForceMove(unit, new Vector2(unit.Position.X + 2.0f, unit.Position.Y),
+                2.0f / desiredDuration, gravity: desiredHeight / (desiredDuration * desiredDuration),
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
 
         }
 

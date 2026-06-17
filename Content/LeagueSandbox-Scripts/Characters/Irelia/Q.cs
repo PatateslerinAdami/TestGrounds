@@ -50,8 +50,8 @@ public class IreliaGatotsu : ISpellScript {
         AddParticle(owner, owner, "irelia_gotasu_dash_01", owner.Position);
         AddParticle(owner, owner, "irelia_gotasu_dash_02", owner.Position, 0.425f);
         PlayAnimation(owner, "Spell1", 0.5f);
-        Dash(owner, _trueCoords, 1400f + owner.Stats.MoveSpeed.Total, gravity: 0f,
-             keepFacing: false, lockActions: false);
+        ForceMove(owner, _trueCoords, 1400f + owner.Stats.MoveSpeed.Total, gravity: 0f,
+             facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
     }
 
     private void OnMoveSuccess(AttackableUnit owner, ForceMovementParameters parameters) {

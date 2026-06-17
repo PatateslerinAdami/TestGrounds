@@ -71,9 +71,11 @@ namespace LeagueSandbox.GameServer.Players
 
             if (isBot)
             {
-                // Set bot flag and status flags for proper movement and actions
-                c.IsBot = false; // Per kot: "the only purpose of [this line] is for bots to get their custom name to show up above their health bars,
-                                 // if it's set to true, their name will be '(Champion) Bot' no matter what you set their name to"
+                // Riot flags bots with IsBot=true on S2C_CreateHero (replay-verified: 4.20 bot games send
+                // CreateHero with IsBot=1 / ClientID=-1 for every bot; SpawnBotS2C is never used). The
+                // client then renders the bot name as "(Champion) Bot" — the faithful behaviour. (Previously
+                // forced false to keep custom gamertag names; we choose fidelity over that gimmick.)
+                c.IsBot = true;
                 c.SetStatus(StatusFlags.CanMove, true);
                 c.SetStatus(StatusFlags.CanMoveEver, true);
                 c.SetStatus(StatusFlags.CanAttack, true);

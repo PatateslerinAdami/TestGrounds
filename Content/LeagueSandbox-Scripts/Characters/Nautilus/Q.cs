@@ -144,8 +144,10 @@ public class NautilusAnchorDragMissile : ISpellScript
 
         if (travel > 0f)
         {
-            Dash(_owner, _owner.Position + dir * travel, speed, animation: "Spell1_dash");
-            Dash(target, target.Position - dir * travel, speed, animation: "RUN");
+            ForceMove(_owner, _owner.Position + dir * travel, speed);
+            // Pull the target toward Nautilus = ForceMoveAway with a NEGATIVE distance (away-from-source
+            // inverted → toward source).
+            ForceMoveAway(target, _owner, -travel, speed);
         }
 
         RemoveMissileListeners(missile);
@@ -186,6 +188,6 @@ public class NautilusAnchorDragMissile : ISpellScript
         var q = _owner.GetSpell("NautilusAnchorDrag");
         q.LowerCooldown(q.SpellData.EffectLevelAmount[2][q.CastInfo.SpellLevel]);
 
-        Dash(_owner, endPos, WallPullSpeed, animation: "Spell1_dash");
+        ForceMove(_owner, endPos, WallPullSpeed);
     }
 }

@@ -99,6 +99,16 @@ namespace LeagueSandbox.GameServer.Inventory
             return _itemSubstitutions.TryGetValue(originalItemId, out var substitute) ? substitute : originalItemId;
         }
 
+        /// <summary>
+        /// Removes an active item substitution and notifies the client (S2C_ShopItemSubstitutionClear).
+        /// NOTE: Riot never sends Clear in 4.20 (substitutions just persist) — provided for completeness.
+        /// </summary>
+        public void ClearItemSubstitution(int originalItemId)
+        {
+            _itemSubstitutions.Remove(originalItemId);
+            _game.PacketNotifier.NotifySetShopItemSubstitutionClear(_owner, originalItemId);
+        }
+
         /// <summary>Updates shop availability and notifies the owning client (S2C_SetShopEnabled).</summary>
         public void SetShopState(bool enabled, bool forceEnabled)
         {

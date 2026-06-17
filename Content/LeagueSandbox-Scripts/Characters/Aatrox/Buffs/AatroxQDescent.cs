@@ -61,7 +61,7 @@ internal class AatroxQDescent : IBuffGameScript {
 
         var speed = Math.Min(distance / LandingDashDurationS, MaxDiveSpeed);
         // lockActions:false — keep CAN_CAST/CAN_MOVE enabled (Riot: castable through the whole Q).
-        Dash(unit, endPos, speed, lockActions: false, movementName: "AatroxQDash");
+        ForceMove(unit, endPos, speed, lockActions: false, movementName: "AatroxQDash");
         ApiEventManager.OnMoveSuccess.AddListener(this, unit, OnDiveLanded, true);
     }
 

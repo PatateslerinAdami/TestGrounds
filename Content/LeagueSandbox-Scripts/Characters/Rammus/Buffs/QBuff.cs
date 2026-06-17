@@ -63,7 +63,7 @@ namespace Buffs
             target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, sp);
             AddParticleTarget(owner, owner, "powerballhit.troy", owner);
             var goTo = owner.Position + (new Vector2(owner.Direction.X, owner.Direction.Z)) * 20f;
-            Dash(owner, goTo, 100, animation: "RUN");
+            ForceMove(owner, goTo, 100);
             //AddParticleTarget(owner, owner, "powerballstop.troy", owner);
             var deactivationTimer = new GameScriptTimer(0.15f, () =>
             {

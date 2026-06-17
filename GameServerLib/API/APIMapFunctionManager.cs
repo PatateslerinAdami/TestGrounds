@@ -47,7 +47,16 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.ProtectionManager.AddProtection(unit, dependOnAll, dependOn);
         }
- 
+
+        /// <summary>
+        /// Updates a team's Dragon Slayer stack count on all clients' HUD (S2C_TeamUpdateDragonBuffCount).
+        /// Call once per dragon kill with the killing team's new total.
+        /// </summary>
+        public static void NotifyTeamDragonBuffCount(TeamId team, int count)
+        {
+            _game.PacketNotifier.NotifyS2C_TeamUpdateDragonBuffCount(team, count);
+        }
+
         public static GameObject CreateShop(string name, Vector2 position, TeamId team)
         {
             var shop = new GameObject(_game, position, team: team, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
@@ -133,14 +142,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="minionNo"></param>
         /// <param name="barracksName"></param>
         /// <param name="waypoints"></param>
-        public static void CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null)
+        public static void CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C)
         {
             if (list.Count <= minionNo)
             {
                 return;
             }
 
-            var m = new LaneMinion(_game, list[minionNo], position, barracksName, waypoints, _map.MapScript.MinionModels[team][list[minionNo]], 0, team, null, laneMinionAI, isFirstWave, outerTurretPosition, waveNumber, enemyLaneTurretsAhead, enemyLaneTurretWaypointIndices);
+            var m = new LaneMinion(_game, list[minionNo], position, barracksName, waypoints, _map.MapScript.MinionModels[team][list[minionNo]], 0, team, null, laneMinionAI, isFirstWave, outerTurretPosition, waveNumber, enemyLaneTurretsAhead, enemyLaneTurretWaypointIndices, lane);
             _game.ObjectManager.AddObject(m);
         }
  

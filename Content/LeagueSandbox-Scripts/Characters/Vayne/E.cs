@@ -89,40 +89,20 @@ public class VayneCondemnMissile : ISpellScript {
         target.TakeDamage(_vayne, 45 + _vayne.Stats.AttackDamage.FlatBonus * 0.5f, DamageType.DAMAGE_TYPE_PHYSICAL,
                           DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
 
-        var castPosition = _vayne.Position;
-        var pushEnd      = GetCondemnTargetPoint(target, castPosition);
-
         CancelDash(target);
         ApiEventManager.OnCollisionTerrain.AddListener(this, target, OnCondemnCollisionTerrain, true);
         ApiEventManager.OnMoveSuccess.AddListener(this, target, OnCondemnMoveSuccess, true);
         ApiEventManager.OnMoveFailure.AddListener(this, target, OnCondemnMoveFailure, true);
-        Dash(target, pushEnd, CondemnPushSpeed,
+        // BBMoveAway: push the target away from Vayne by CondemnPushDistance, clamped at the first wall
+        // (the wall-stun is detected by the OnCollisionTerrain listener above).
+        ForceMoveAway(target, _vayne, CondemnPushDistance, CondemnPushSpeed,
              resolve: ForceMovementType.FIRST_WALL_HIT,
-             keepFacing: true,
+             facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
              orders: ForceMovementOrdersType.CANCEL_ORDER);
         //Particle for wall hit is this: "Vayne_WallHit_tar"
         //This is the damage ratio for wall hit: 45 + _vayne.Stats.AttackDamage.FlatBonus * 0.75f
     }
 
-    private Vector2 GetCondemnTargetPoint(AttackableUnit target, Vector2 castPosition) {
-        var from      = target.Position;
-        var push      = from - castPosition;
-
-        if (push.LengthSquared() < 0.0001f) {
-            push = new Vector2(target.Direction.X, target.Direction.Z);
-        }
-
-        if (push.LengthSquared() < 0.0001f) {
-            push = new Vector2(_vayne.Direction.X, _vayne.Direction.Z);
-        }
-
-        if (push.LengthSquared() < 0.0001f) {
-            push = new Vector2(1.0f, 0.0f);
-        }
-
-        push = Vector2.Normalize(push);
-        return from + push * CondemnPushDistance;
-    }
 
     private void OnCondemnCollisionTerrain(GameObject unitObj) {
         if (unitObj is AttackableUnit unit) {

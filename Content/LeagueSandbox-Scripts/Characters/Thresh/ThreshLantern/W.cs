@@ -27,7 +27,7 @@ namespace Spells
             var spellUser = spell.CastInfo.Owner;
             if (spellUser != ownerTh)
             {
-                DashToUnit(spellUser, ownerTh, 700f, keepFacing: false, lockActions: false);
+                ForceMoveToUnit(spellUser, ownerTh, 700f, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
                 AddParticle(spellUser, spellUser, "lanterndashsound.troy", default);
                 lantern.Die(CreateDeathData(false, 0, lantern, lantern, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
                 var wSpell = ownerTh.GetSpell("ThreshWLanternOut");

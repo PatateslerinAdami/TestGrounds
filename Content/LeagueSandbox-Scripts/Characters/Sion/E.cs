@@ -56,29 +56,15 @@ namespace Spells
 
             if (target is Minion || target is Monster)
             {
-                Vector2 direction = Vector2.Normalize(target.Position - caster.Position);
-
                 float distFromCaster = Vector2.Distance(caster.Position, target.Position);
                 float pushDist = 1350 - distFromCaster;
                 if (pushDist < 0) pushDist = 0;
 
-                Vector2 endPos = target.Position;
-                float step = 20f; 
-
-                for (float d = 0; d <= pushDist; d += step)
-                {
-                    Vector2 testPos = target.Position + direction * d;
-
-                    if (!IsWalkable(testPos.X, testPos.Y, target.PathfindingRadius))
-                    {
-                        endPos = testPos - direction * target.PathfindingRadius;
-                        break;
-                    }
-                    endPos = testPos;
-                }
-
                 AddBuff("SionEKnockback", 0.75f, 1, spell, target, caster);
-                Dash(target, endPos, 2500f, animation: "Run");
+                // BBMoveAway: push the target away from Sion by pushDist; FIRST_WALL_HIT clamps at terrain
+                // (replaces the manual walkable-cell stepping).
+                ForceMoveAway(target, caster, pushDist, 2500f,
+                    resolve: ForceMovementType.FIRST_WALL_HIT);
             }
             else
             {

@@ -45,7 +45,7 @@ public class UFSlash : ISpellScript {
         PlayAnimation(owner, "Spell4");
         AddParticleTarget(owner, owner, "Malphite_Base_UnstoppableForce_cas.troy", owner, 0.5f);
         //AddParticle(owner, null, ".troy", owner.Position);
-        Dash(owner, trueCoords, 2300);
+        ForceMove(owner, trueCoords, 2300);
     }
 
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters) {

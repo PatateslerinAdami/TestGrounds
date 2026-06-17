@@ -26,16 +26,9 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             _playerManager = game.PlayerManager;
         }
 
-        private static readonly Dictionary<string, string> _dedicatedAIScripts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "Ezreal",   "EzrealBot"   },
-            // Add more champions with dedicated scripts here
-        };
-
-        private static string GetAIScript(string model)
-        {
-            return _dedicatedAIScripts.TryGetValue(model, out var script) ? script : "BasicAI";
-        }
+        // All champion bots run the BaseAIScript utility-task bot (AIScripts/Bot/BotAI). The legacy
+        // BasicAI/EzrealBot scripts were removed.
+        private static string GetAIScript(string model) => "BotAI";
 
         public override void Execute(int userId, bool hasReceivedArguments, string arguments = "")
         {

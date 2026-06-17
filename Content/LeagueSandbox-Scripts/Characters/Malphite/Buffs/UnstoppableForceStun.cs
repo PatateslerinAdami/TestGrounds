@@ -28,7 +28,7 @@ namespace Buffs {
             _stunParticle = AddParticleTarget(_malphite, unit, "Malphite_Base_UnstoppableForce_stun.troy", unit);
             _tarParticle = AddParticleTarget(_malphite, unit, "Malphite_Base_UnstoppableForce_tar.troy",  unit);
             CancelDash(unit);
-            Dash(unit, new Vector2(unit.Position.X + 8f, unit.Position.Y + 8f), 8f, gravity: 10f, animation: "RUN");
+            ForceMove(unit, new Vector2(unit.Position.X + 8f, unit.Position.Y + 8f), 8f, gravity: 10f);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

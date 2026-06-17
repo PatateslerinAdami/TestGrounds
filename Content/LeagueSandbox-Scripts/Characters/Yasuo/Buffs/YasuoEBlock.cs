@@ -54,7 +54,7 @@ namespace Buffs
             AddParticleTarget(owner, unit, "Yasuo_Base_E_dash_hit", unit);
             
             var to = Vector2.Normalize(unit.Position - owner.Position);
-            Dash(owner, new Vector2(owner.Position.X + to.X * 375f, owner.Position.Y + to.Y * 375f), 750f + owner.Stats.GetTrueMoveSpeed() * 0.6f, lockActions: false, animation: "Spell3");
+            ForceMove(owner, new Vector2(owner.Position.X + to.X * 375f, owner.Position.Y + to.Y * 375f), 750f + owner.Stats.GetTrueMoveSpeed() * 0.6f, lockActions: false);
         }
 
         public void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)

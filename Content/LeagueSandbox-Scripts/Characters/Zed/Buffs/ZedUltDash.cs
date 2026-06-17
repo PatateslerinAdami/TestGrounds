@@ -121,7 +121,7 @@ internal class ZedUltDash : IBuffGameScript {
             _pendingPostTargetDash = false;
             _postTargetDashStarted = true;
             StartShadowPostTargetDash();
-            Dash(_zed, _pendingPostTargetDashEndPoint, DashSpeed, animation: "zed_spell4_strike");
+            ForceMove(_zed, _pendingPostTargetDashEndPoint, DashSpeed);
         }
 
         if (_stepCount >= MaxStepCount || _dashResolved) return;
@@ -148,7 +148,7 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion1.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow1(ultMinion1);
         FaceDirection(_target.Position, ultMinion1, true);
-        DashToUnit(ultMinion1, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance, animation: "zed_spell4_strike");
+        ForceMoveToUnit(ultMinion1, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion1, "Zed_R_Dash", ultMinion1);
 
         var ultMinion2 = AddMinion(_zed, "ZedShadow", "ZedRShadow", GetPositionByOffset(-60f, 600f), _zed.Team, _zed.SkinID,
@@ -158,7 +158,7 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion2.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow2(ultMinion2);
         FaceDirection(_target.Position, ultMinion2, true);
-        DashToUnit(ultMinion2, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance, animation: "zed_spell4_strike");
+        ForceMoveToUnit(ultMinion2, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion2, "Zed_R_Dash", ultMinion2);
 
         var ultMinion3 = AddMinion(_zed, "ZedShadow", "ZedRShadow", GetPositionByOffset(-180f, 600f), _zed.Team, _zed.SkinID,
@@ -168,10 +168,10 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion3.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow3(ultMinion3);
         FaceDirection(_target.Position, ultMinion3, true);
-        DashToUnit(ultMinion3, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance, animation: "zed_spell4_strike");
+        ForceMoveToUnit(ultMinion3, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion3, "Zed_R_Dash", ultMinion3);
 
-        DashToUnit(_zed, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance, animation: "zed_spell4_strike");
+        ForceMoveToUnit(_zed, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         ApiEventManager.OnMoveSuccess.AddListener(this, _zed, OnMoveSuccess);
         ApiEventManager.OnMoveFailure.AddListener(this, _zed, OnMoveFailure);
         _stepCount++;
@@ -340,7 +340,7 @@ internal class ZedUltDash : IBuffGameScript {
         if (_zed.MovementParameters != null) {
             _zed.SetDashingState(false, MoveStopReason.ForceMovement);
         }
-        Dash(_zed, endPoint, DashSpeed, animation: "zed_spell4_strike");
+        ForceMove(_zed, endPoint, DashSpeed);
     }
 
     private void StartShadowPostTargetDash() {
@@ -368,7 +368,7 @@ internal class ZedUltDash : IBuffGameScript {
             return;
         }
 
-        Dash(shadow, finalDashEndPoint, DashSpeed, animation: "zed_spell4_strike");
+        ForceMove(shadow, finalDashEndPoint, DashSpeed);
         ScheduleShadowCleanup(shadow, dashDistance / DashSpeed);
     }
 

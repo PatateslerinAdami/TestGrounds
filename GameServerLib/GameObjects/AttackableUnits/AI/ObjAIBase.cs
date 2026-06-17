@@ -203,6 +203,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public Spell AutoAttackSpell { get; protected set; }
         /// <summary>
+        /// Stable per-life missile NetID this unit reuses for EVERY auto-attack, lazily allocated on the
+        /// first AA. Replay-verified (26ec2d65): heroes get a fresh missile NetID per auto-attack, but
+        /// non-hero units (minions, pets like Tibbers) reuse a SINGLE NetID for all their AAs across one
+        /// life. Handing the client a new NetID each swing made it spawn a fresh phantom AA-missile per
+        /// attack, whose instant melee "arrival" re-rendered the hit FX at the swing's wind-down (the
+        /// pet double-hit-FX bug). 0 = not yet allocated.
+        /// </summary>
+        public uint AutoAttackMissileNetId { get; set; }
+        /// <summary>
         /// Spell this AI is currently channeling.
         /// </summary>
         public Spell ChannelSpell { get; protected set; }
@@ -2381,10 +2390,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 float delayInSeconds = (_game.GameTime - info.CreationTime) / 1000.0f;
                 var spellCastPacket = _game.PacketNotifier.ConstructCastSpellPacket(spell, delayInSeconds);
+                // LookAtType != AttackType (see PacketNotifier.NotifyS2C_UnitSetLookAt): attacks on a target
+                // unit orient toward the Unit, only radial attacks toward a Direction. (Pet double-hit-FX fix.)
                 var lookAtPacket = new S2C_UnitSetLookAt
                 {
                     SenderNetID = this.NetId,
-                    LookAtType = (byte)attackType,
+                    LookAtType = (byte)(attackType == AttackType.ATTACK_TYPE_RADIAL ? LookAtType.Direction : LookAtType.Unit),
                     TargetNetID = target.NetId,
                     TargetPosition = target.GetPosition3D()
                 };
@@ -2706,62 +2717,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 else
                 {
-                    // Acquires a target while attack-moving, then closes to it (mirrors Riot
-                    // SetStateAndCloseToTarget). PLAYER attack-move in 4.x acquires the NEAREST enemy
-                    // in AcquisitionRange — no champion/minion class priority (that ClassifyUnit
-                    // ordering is the minion/turret "Call for Help" aggro system, not player a-move;
-                    // attack-move-on-cursor came in much later patches). On target loss the unit
-                    // resumes the a-move (see the TargetUnit==null branch at the top of UpdateTarget).
-                    // Parity bridge for non-HeroAI attack-movers (bots): acquire the nearest enemy along
-                    // the a-move. The full player a-move state machine (destination resume + soft-drop)
-                    // lives in HeroAI now; these units never set AttackMoveDestination, so this is just
-                    // the plain "acquire while a-moving" path their own AI relies on closing on.
-                    if (!ScriptOwnsCombatSelection && MoveOrder == OrderType.AttackMove)
-                    {
-                        if (_autoAttackCurrentCooldown > 0)
-                        {
-                            return;
-                        }
-
-                        var nextTarget = AcquireAttackMoveTarget();
-                        if (nextTarget != null)
-                        {
-                            SetTargetUnit(nextTarget, true);
-                        }
-                    }
-                    // "Auto Attack" client option (AutoAcquireTargetEnabled): a champion sitting in a
-                    // soft idle auto-acquires the nearest enemy in acquisition range and attacks it —
-                    // Riot Hero.lua TimerDistanceScan (AI_STANDING/AI_IDLE + IsAutoAcquireTargetEnabled).
-                    // Excluded: an explicit Stop (S-key = hard idle, never auto-acquires), while still
-                    // moving (only acquire once movement has stopped), while casting, and while dashing.
-                    else if (this is Champion
-                             // Order/State split Phase 2: when the champion's AI script (HeroAI) owns
-                             // combat selection, the engine does NOT auto-acquire (avoids double-acquire).
-                             // Non-HeroAI champions (bots) keep this engine path until they migrate.
-                             && !ScriptOwnsCombatSelection
-                             && AutoAcquireTargetEnabled
-                             // Don't auto-acquire while crowd-controlled: CanAttack() is false when
-                             // Feared/Charmed/Stunned/Suppressed/Sleep/Disarmed/Pacified (or casting).
-                             // Without this, a fleeing champion's auto-acquire re-targeted a nearby
-                             // enemy on a path-ended tick and chased it into attack range, overriding
-                             // the flee (Riot only auto-acquires in AI_STANDING/AI_IDLE, never during CC).
-                             && CanAttack()
-                             && MoveOrder != OrderType.Stop
-                             && MoveOrder != OrderType.Hold
-                             && MovementParameters == null
-                             && SpellToCast == null && _castingSpell == null && ChannelSpell == null
-                             && IsPathEnded()
-                             && !IsAttacking)
-                    {
-                        // Hold excluded: Hold keeps its CURRENT target and never auto-acquires a NEW
-                        // one (it just stops movement). Stop excluded: hard idle.
-                        var idleTarget = AcquireAttackMoveTarget();
-                        if (idleTarget != null)
-                        {
-                            SetTargetUnit(idleTarget, true);
-                            UpdateMoveOrder(OrderType.AttackTo, true);
-                        }
-                    }
+                    // Order/State split COMPLETE: every champion archetype now owns combat selection —
+                    // HeroAI (players, defaulted in Champion ctor), PetAI (pets), BotAI (bots) all set
+                    // ScriptOwnsCombatSelection = true and acquire targets in their own script. The old
+                    // engine MoveOrder-driven acquisition that used to live here (attack-move acquire +
+                    // idle auto-acquire, both gated on !ScriptOwnsCombatSelection) was therefore dead for
+                    // champions and never ran for non-champions (minions/monsters/turrets never set
+                    // AttackMove and aren't Champions). Removed — the engine no longer selects combat
+                    // targets for any unit; it only executes the script-set target (P5).
 
                     if (AutoAttackSpell != null && AutoAttackSpell.State == SpellState.STATE_READY && IsAttacking)
                     {

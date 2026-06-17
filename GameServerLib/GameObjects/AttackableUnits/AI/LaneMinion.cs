@@ -17,6 +17,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public string BarracksName { get; }
         public MinionSpawnType MinionSpawnType { get; }
+        /// <summary>
+        /// Which lane this minion belongs to (set at spawn from the spawning barracks' lane). Lets the
+        /// bot AI query minions per lane (Riot GetMinions(team, laneId)) for PushLane.
+        /// </summary>
+        public Lane Lane { get; }
 
         public bool IsFirstWave { get; set; }
 
@@ -66,12 +71,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Vector2? outerTurretPosition = null,
             int waveNumber = 0,
             IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null,
-            IReadOnlyList<int> enemyLaneTurretWaypointIndices = null
+            IReadOnlyList<int> enemyLaneTurretWaypointIndices = null,
+            Lane lane = Lane.LANE_C
         ) : base(game, null, new Vector2(), model, model, netId, team, stats: stats, AIScript: AIScript)
         {
             IsLaneMinion = true;
             MinionSpawnType = spawnType;
             BarracksName = barracksName;
+            Lane = lane;
             PathingWaypoints = mainWaypoints;
             IsFirstWave = isFirstWave;
             // FirstWave minions start dormant; all later waves spawn already aggressive.

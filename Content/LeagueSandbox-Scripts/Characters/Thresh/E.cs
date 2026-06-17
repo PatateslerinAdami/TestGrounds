@@ -113,14 +113,14 @@ namespace Spells
             target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
 
 
-            Vector2 pushDir = new Vector2(missile.Direction.X, missile.Direction.Z);
+            // BBMoveAway: push the target away from the caster (Thresh) — the missile travels from
+            // Thresh, so away-from-Thresh ≙ the old missile-direction push.
             float horizontalDistance = 200f;
-            Vector2 pushEnd = target.Position + (pushDir * horizontalDistance);
             float desiredDuration = 0.75f;//1.2f
             float desiredHeight = 5.0f;
             float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
             float requiredSpeed = horizontalDistance / desiredDuration;
-            Dash(target, pushEnd, requiredSpeed, gravity: requiredGravity, keepFacing: true, animation: "run");
+            ForceMoveAway(target, owner, horizontalDistance, requiredSpeed, gravity: requiredGravity, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
             AddBuff("ThreshEStun", 1.0f, 1, threshESpell, target, owner);
             AddParticleTarget(owner, target, "Thresh_E_hit.troy", target, 1.0f);
         }

@@ -63,13 +63,12 @@ public class TrundleCircle : IBuffGameScript {
             away = NormalizeOrDefault(away, Vector2.UnitX);
 
             var targetPos = _pillar.Position + away * KnockbackDistance;
-            Dash(
+            ForceMove(
                 target,
                 targetPos,
                 KnockbackSpeed,
-                keepFacing: true,
-                orders: ForceMovementOrdersType.CANCEL_ORDER,
-                animation: "RUN"
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
+                orders: ForceMovementOrdersType.CANCEL_ORDER
             );
         }
 

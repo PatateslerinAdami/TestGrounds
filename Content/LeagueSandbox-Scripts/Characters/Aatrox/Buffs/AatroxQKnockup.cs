@@ -38,10 +38,9 @@ internal class AatroxQKnockup : IBuffGameScript {
         }
         dir = Vector2.Normalize(dir);
 
-        // KnockUp(height, duration): with horizDist=10u and duration=1.0s the verb computes
-        // speed = 10/1 = 10 and gravity = 20/1² = 20 → exactly the replay's PathSpeedOverride 10 /
-        // ParabolicGravity 20. (keepFacing + airborne lock are handled by the verb.)
-        KnockUp(unit, 20f, 1.0f, destination: unit.Position + dir * 10f);
+        // Knockup = BBMove with gravity (Riot has no BBKnockup). Replay values: speed 10, gravity 20,
+        // ~10u nudge away from the caster. keepFacing during the airborne arc.
+        ForceMove(unit, unit.Position + dir * 10f, 10f, gravity: 20f, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }

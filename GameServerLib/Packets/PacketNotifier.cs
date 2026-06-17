@@ -1272,6 +1272,26 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacketVision(gameObject, buyItemPacket.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Updates a team's Dragon Slayer stack count on every client's HUD (S2C_TeamUpdateDragonBuffCount,
+        /// 0x12C). Sent once per dragon kill for the killing team. Broadcast to everyone with SenderNetID 0
+        /// (global), matching Riot's wire (the replay sends it per-team, both teams visible).
+        /// </summary>
+        /// <param name="team">The team whose dragon-stack count changed.</param>
+        /// <param name="count">The team's new dragon-stack count.</param>
+        public void NotifyS2C_TeamUpdateDragonBuffCount(TeamId team, int count)
+        {
+            var packet = new S2C_TeamUpdateDragonBuffCount
+            {
+                SenderNetID = 0,
+                // ORDER = blue side; CHAOS = purple/red side.
+                TeamIsOrder = team == TeamId.TEAM_BLUE,
+                Unknown2 = 0,
+                Count = (uint)count
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifySetItem(ObjAIBase ai, Item itemInstance)
         {
             if (!(ai is Champion champion))
@@ -1345,6 +1365,22 @@ namespace PacketDefinitions420
                 SenderNetID = champion.NetId,
                 OriginalItemID = (uint)originalItemId,
                 ReplacementItemID = (uint)substitutionItemId
+            };
+            _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Removes a previously-set shop item substitution on the owning client
+        /// (S2C_ShopItemSubstitutionClear). NOTE: Riot does NOT send this in 4.20 (0× across 40 replays —
+        /// substitutions are never explicitly cleared, they just persist); provided for completeness /
+        /// non-SR modes. Not needed for standard play.
+        /// </summary>
+        public void NotifySetShopItemSubstitutionClear(Champion champion, int originalItemId)
+        {
+            var packet = new S2C_ShopItemSubstitutionClear
+            {
+                SenderNetID = champion.NetId,
+                OriginalItemID = (uint)originalItemId
             };
             _packetHandlerManager.SendPacket(champion.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
@@ -1474,13 +1510,31 @@ namespace PacketDefinitions420
                     }
             }
 
-            var changePacket = new ChangeSlotSpellData()
+            // Per-type wire split (replay-verified across 40 SR replays, no overlap; byte-faithful):
+            //   SpellName (60951x) / TargetingType (1184x) -> ChangeSlotSpellData (0x17), BROADCAST to all
+            //     (decomp PKT_ChangeSlotSpellData_s = PolicyBroadcast) — spell identity/targeting affects every client.
+            //   Range (3457x) / MaxGrowthRange / RangeDisplay / IconIndex (934x) / OffsetTarget (305x) ->
+            //     ChangeSlotSpellData_OwnerOnly (0x125, 4.18+), sent ONLY to the owning player — pure owner UI
+            //     (cast-range circle, spell icon state, offset-target indicator).
+            if (changeType == GameServerCore.Enums.ChangeSlotSpellDataType.SpellName
+                || changeType == GameServerCore.Enums.ChangeSlotSpellDataType.TargetingType)
             {
-                SenderNetID = owner.NetId,
-                ChangeSpellData = spellData
-            };
-
-            _packetHandlerManager.SendPacket(userId, changePacket.GetBytes(), Channel.CHL_S2C);
+                var broadcastPacket = new ChangeSlotSpellData()
+                {
+                    SenderNetID = owner.NetId,
+                    ChangeSpellData = spellData
+                };
+                _packetHandlerManager.BroadcastPacket(broadcastPacket.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                var ownerPacket = new ChangeSlotSpellData_OwnerOnly()
+                {
+                    SenderNetID = owner.NetId,
+                    ChangeSpellData = spellData
+                };
+                _packetHandlerManager.SendPacket(userId, ownerPacket.GetBytes(), Channel.CHL_S2C);
+            }
         }
 
         /// <summary>
@@ -3804,6 +3858,29 @@ namespace PacketDefinitions420
 
             _packetHandlerManager.SendPacket(player.ClientId, cam.GetBytes(), Channel.CHL_S2C);
         }
+
+        /// <summary>
+        /// Locks (or unlocks) a player's camera onto their champion (S2C_CameraLock, 0x12B). Used for
+        /// steered/forced-movement abilities — replay-verified on Sion R (Unstoppable Onslaught):
+        /// lock on at charge start, unlock at charge end. Sent only to the owning player.
+        /// </summary>
+        /// <param name="player">The player whose camera is locked/unlocked.</param>
+        /// <param name="locked">True to lock/steer the camera, false to release it.</param>
+        /// <param name="distance">Camera distance while locked (Sion R uses 900).</param>
+        public void NotifyLockCamera(ClientInfo player, bool locked, float distance = 900f)
+        {
+            var packet = new S2C_CameraLock
+            {
+                SenderNetID = player.Champion.NetId,
+                Unknown0 = locked,
+                Unknown1 = locked ? distance : 0f,
+                Unknown2 = 0f,
+                Unknown3 = 0f,
+                Unknown4 = locked
+            };
+            _packetHandlerManager.SendPacket(player.ClientId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifyS2C_Neutral_Camp_Empty(MonsterCamp monsterCamp, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null, int userId = -1)
         {
             var packet = new S2C_Neutral_Camp_Empty
@@ -4245,10 +4322,15 @@ namespace PacketDefinitions420
         /// <param name="attackType">AttackType that the attacker is using to attack.</param>
         public void NotifyS2C_UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
         {
+            // LookAtType is NOT AttackType — they are unrelated enums. An attack against a specific target
+            // unit (melee OR targeted) must orient toward the UNIT (LookAtType.Unit); only radial/skillshot
+            // attacks look toward a direction. The old `(byte)attackType` cast got TARGETED(2)→Unit(2) and
+            // RADIAL(0)→Direction(0) right by coincidence but mapped MELEE(1)→Location(1) — replay-verified
+            // wrong: Riot's melee Tibbers sends LookAtType.Unit(2). (Part of the pet double-hit-FX fix.)
             var lookAtPacket = new S2C_UnitSetLookAt
             {
                 SenderNetID = attacker.NetId,
-                LookAtType = (byte)attackType,
+                LookAtType = (byte)(attackType == AttackType.ATTACK_TYPE_RADIAL ? LookAtType.Direction : LookAtType.Unit),
                 TargetPosition = attacked.GetPosition3D(),
                 TargetNetID = attacked.NetId
             };

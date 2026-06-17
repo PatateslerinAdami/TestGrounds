@@ -61,7 +61,7 @@ public class VayneTumble : ISpellScript {
         FaceDirection(dashEnd, _vayne, true);
         PlayAnimation(_vayne, "Spell1", 0.425f);
         _tumbleDashPending = true;
-        Dash(_vayne, dashEnd, 500 + _vayne.Stats.MoveSpeed.Total,
+        ForceMove(_vayne, dashEnd, 500 + _vayne.Stats.MoveSpeed.Total,
              resolve: ForceMovementType.FIRST_WALL_HIT,
              orders: ForceMovementOrdersType.CANCEL_ORDER);
     }

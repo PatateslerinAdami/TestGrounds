@@ -57,6 +57,9 @@ namespace Spells
             _chargeTime = 0f;
             _waypointUpdateTimer = 0f;
 
+            // Lock/steer the caster's camera for the charge (replay-verified, distance 900).
+            LockCamera(_owner, true);
+
             _owner.IgnoreMoveOrders = true;
             spell.SpellData.CanMoveWhileChanneling = true;
             _owner.SetStatus(StatusFlags.Ghosted, true);
@@ -189,6 +192,9 @@ namespace Spells
 
             if (_owner != null)
             {
+                // Release the camera lock now the charge has ended (cancel / recast / timeout / collision).
+                LockCamera(_owner, false);
+
                 _owner.IgnoreMoveOrders = false;
                 _owner.SetStatus(StatusFlags.Ghosted, false);
                 _owner.StopMovement();
@@ -223,8 +229,8 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
-                            Dash(_owner, _owner.Position + dir2D * 300, 545, gravity: 0.0f,
-                                keepFacing: false, animation: "Spell4_Stop"); //0.55
+                            ForceMove(_owner, _owner.Position + dir2D * 300, 545, gravity: 0.0f,
+                                facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION); //0.55
                             _owner.RegisterTimer(new GameScriptTimer(0.55f, () => { OnHit(); }));
                         }
                     }));

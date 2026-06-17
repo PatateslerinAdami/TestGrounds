@@ -96,7 +96,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (clientInfo.PlayerId == -1)
             {
-                IsBot = false; // This change was necessary for my customized bot names to work. If you are going to be serious about bot dev and the true value of this is needed somewhere, feel free to revert it
+                // Bot (no real client). Riot flags bots IsBot=true on S2C_CreateHero (replay-verified);
+                // the client renders the name as "(Champion) Bot". Faithful over the custom-name gimmick.
+                IsBot = true;
             }
             PlayerQuestManager = new PlayerQuestManager(game, this);
         }
@@ -157,6 +159,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         protected override void OnSpawn(int userId, TeamId team, bool doVision)
         {
             var peerInfo = _game.PlayerManager.GetClientInfoByChampion(this);
+            // NOTE: bots spawn via the normal S2C_CreateHero path too. The dedicated SpawnBotS2C (0xCF)
+            // packet was tried (NotifyS2C_SpawnBot) but the 4.20 client mis-positions the bot from it
+            // (turret homed off-map) — it's a pre-4.18 path (BotRank deprecated) the client no longer
+            // positions heroes from. CreateHero renders bots correctly, so we keep it.
             _game.PacketNotifier.NotifyS2C_CreateHero(peerInfo, userId, doVision);
             _game.PacketNotifier.NotifyAvatarInfo(peerInfo, userId);
 
