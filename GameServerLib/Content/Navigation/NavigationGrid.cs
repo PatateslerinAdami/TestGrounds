@@ -1262,9 +1262,24 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         ? 100f / CellSize
                         : 0f;
 
-                float tentativeG = thisG + stepCost + arrivalPenalty
-                    + neighborCell.ArrivalCost
-                    + neighborCell.AdditionalCost;
+                // G = predecessor G + step + arrival/hint penalty ONLY. The two static cell fields
+                // ArrivalCost and AdditionalCost are NOT part of Riot's heap-push cost (S4
+                // NavigationGrid.cpp:3360-3371): `nextCellArrivalCost = mCellSize*sArrivalCosts[dir]
+                // + centerCell->mArrivalCost + sHeuristicDistFactor[2|3]`, where centerCell->
+                // mArrivalCost is the PREDECESSOR's running G (offset 0x08 = the per-search scratch
+                // slot, reset to 0 each search) — i.e. our `thisG`/SearchG, which we already add.
+                // We were loading the navgrid binary's serialized mArrivalCost/mAdditionalCost
+                // (Riot's runtime scratch, shipped ≈0) as if they were static per-cell costs and
+                // adding the NEIGHBOUR's value — algorithmically wrong, and unit-mismatched (raw
+                // world units added to a cell-unit G → ~CellSize ≈ 80-100× oversized if nonzero).
+                // The sister field Heuristic is already correctly excluded (H is computed into
+                // SearchHeuristic below, not folded into G), so this restores consistency.
+                // NOTE: mAdditionalCost IS a real Riot mechanism — Set/ClearNavigationTarget write
+                // ±20 ref-counted nav-target cost bubbles (NavigationMesh.cpp:1187/1247), consumed
+                // in the non-decompiled QueryForPath. We don't implement those, so the field stays
+                // 0; if ever added, do it the Riot way (runtime write + correct world→cell scale),
+                // not as a static-loaded heap-push term.
+                float tentativeG = thisG + stepCost + arrivalPenalty;
 
                 // Detect first-touch BEFORE updating the session marker. First-touch is the only
                 // path that re-computes H and bumps the convergence accumulator, mirroring the
@@ -1496,7 +1511,12 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         public NavigationGridCell GetCell(short x, short y)
         {
             long index = y * CellCountX + x;
-            if (x < 0 || x > CellCountX || y < 0 || y > CellCountY || index >= Cells.Length)
+            // Valid cell coords are [0, CellCount). The bounds use >= (not >): at x == CellCountX
+            // the old `x > CellCountX` passed, and index = y*CellCountX + CellCountX wraps to the
+            // NEXT row's column 0 — returning a wrong cell at the right edge instead of null
+            // (the index>=Length backstop only caught the y-overflow case, not this x row-wrap).
+            // Client acceptance range is `x < mXCellCount && y < mYCellCount` (NavigationGrid.cpp:1114).
+            if (x < 0 || x >= CellCountX || y < 0 || y >= CellCountY || index >= Cells.Length)
             {
                 return null;
             }
@@ -2285,12 +2305,28 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// Gets the closest pathable position to the given position. *NOTE*: Computationally heavy, use sparingly.
         /// </summary>
         /// <param name="location">Vector2 position to start the check at.</param>
-        /// <param name="distanceThreshold">Amount of distance away from terrain the exit should be.</param>
+        /// <param name="distanceThreshold">Legacy clearance hint — NO LONGER gates passability
+        /// (see below). Kept for call-site compatibility.</param>
         /// <returns>Vector2 position which can be pathed on.</returns>
         public Vector2 GetClosestTerrainExit(Vector2 location, float distanceThreshold = 0)
         {
-            // Trivial: already walkable.
-            if (IsWalkable(location, distanceThreshold))
+            // SINGLE-CELL passability (2026-06-18), matching the client's snap-out-of-terrain
+            // function NavGrid::SetToNearestPassableCell (NavigationGrid.cpp:1094-1136): spiral
+            // out, accept the first cell whose OWN flag is passable (it also checks HasBlockedActor,
+            // which we don't mirror here). It does NOT run a radius/clearance disc.
+            //
+            // We previously gated each candidate on IsWalkable(cell, distanceThreshold) where
+            // callers pass PathfindingRadius(+1) — a full disc sweep requiring EVERY cell within
+            // that radius to be walkable. On the navgrid (which is the client's already-radius-
+            // inflated grid) that double-counts clearance and REJECTS narrow-gap exit cells the
+            // client accepts → the exit point is shoved further out than the client's, which then
+            // shifts the A* start/end and diverges the whole path. Snapping out of terrain is a
+            // single-cell question; the unit's radius clearance is the A*/collision layer's job.
+            // The ring-nearest selection below is unchanged (deliberate anti-teleport fix — it
+            // returns the CLOSEST passable cell, not a drifting spiral).
+
+            // Trivial: already on a passable cell.
+            if (IsWalkable(location))
             {
                 return location;
             }
@@ -2319,7 +2355,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue;
                         var cell = GetCell((short)(cx + dx), (short)(cy + dy));
                         if (cell == null) continue;
-                        if (!IsWalkable(cell, distanceThreshold)) continue;
+                        if (!IsWalkable(cell)) continue; // single-cell (client SetToNearestPassableCell)
 
                         var center = cell.GetCenter();
                         float dSq = Vector2.DistanceSquared(center, navInput);

@@ -1520,6 +1520,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             StatusFlags.Stunned | StatusFlags.Rooted | StatusFlags.Sleep
             | StatusFlags.Suppressed | StatusFlags.Netted;
 
+        // Attack-DISABLING crowd control (the unit cannot auto-attack — mirrors the CC set CanAttack()
+        // blocks on). A hard CC from this set landing mid-windup cancels the basic attack (no damage).
+        // Silence/Snare are NOT here: a silenced/rooted unit can still auto-attack, so a swing continues.
+        private const StatusFlags AttackDisablingCC =
+            StatusFlags.Charmed | StatusFlags.Disarmed | StatusFlags.Feared
+            | StatusFlags.Pacified | StatusFlags.Sleep | StatusFlags.Stunned | StatusFlags.Suppressed;
+
         internal void RecomputeBuffEffects()
         {
             StatusFlags before = Status;
@@ -1549,6 +1556,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (newlyDisabling != 0 && MovementParameters == null && !IsPathEnded())
             {
                 StopMovement();
+            }
+
+            // A hard attack-disabling CC landing mid-windup cancels the basic attack (no damage) —
+            // LoL's auto-attack windup-cancel. Fires on the transition; the windup-state check +
+            // uncancellable-swing guard live in ObjAIBase.CancelAutoAttackIfWindingUp.
+            StatusFlags newlyAttackDisabling = Status & AttackDisablingCC & ~before;
+            if (newlyAttackDisabling != 0 && this is ObjAIBase aiUnit)
+            {
+                aiUnit.CancelAutoAttackIfWindingUp();
             }
         }
 
@@ -1718,7 +1734,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             bool pushed = false;
             if (MovementParameters == null)
             {
-                var nearby = _game.Map.CollisionHandler.GetNearestObjects(this);
+                // Broadphase query radius = 4·CollisionRadius. The QuadTree match is radius-sum
+                // (dist < query.r + other.r, QuadTree.IntersectsWith), so GetNearestObjects(this)
+                // — query.r = self.r — only reached self.r + other.r (~130u for a champion). That
+                // is SHORTER than the largest per-pair consumer threshold: soft-avoidance needs
+                // out to other.r + GetSoftRadius() = other.r + 2·self.r (~195u), and hard needs
+                // selfHard + other.r + buffer. Neighbours in that band were never returned, so the
+                // pre-contact veer and the group barycenter were computed from a TRUNCATED set
+                // (late/incomplete avoidance, wrong group centre near the edge). Riot collects
+                // collision neighbours at 2·GetRadius() (hard pass) then 4·GetRadius() (avoidance
+                // pass) — Actor.cpp:1543-1606 — so 4·CollisionRadius matches its wider pass and
+                // covers every per-pair threshold with margin. Each helper re-filters by its own
+                // precise threshold, so the extra candidates are harmless (just a wider broadphase).
+                float queryRadius = 4f * MathF.Max(0.5f, CollisionRadius);
+                var nearby = _game.Map.CollisionHandler.GetNearestObjects(
+                    new System.Activities.Presentation.View.Circle(Position, queryRadius));
 
                 Vector2 originalDelta = Position - originalPos;
                 bool moving = originalDelta.LengthSquared() > 0.0001f;

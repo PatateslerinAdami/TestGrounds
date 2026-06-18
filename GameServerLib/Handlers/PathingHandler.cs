@@ -560,7 +560,6 @@ namespace LeagueSandbox.GameServer.Handlers
             float halfCell = _map.NavigationGrid.CellSize * 0.5f;
             float effRadius = Math.Max(15f, pathRadius - halfCell * 1.8f);
             float searchRadius = pathRadius * 2f;
-            var attackerTeam = attacker.Team;
 
             return (cellCenterWorld, _) =>
             {
@@ -575,7 +574,18 @@ namespace LeagueSandbox.GameServer.Handlers
                     {
                         if (otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
                     }
-                    if (other.Team == attackerTeam) continue;
+                    // NO team filter (2026-06-18, new mac decomp): Riot's server A* probes
+                    // actor-blocking with a ZEROED collisionState (mTeamID=0, not ghosted —
+                    // NavigationMesh.cpp:897-900), and NavGrid::HasBlockedActor blocks a cell iff
+                    // !actorState.IgnoreCollisions(probe) (NavigationGrid.cpp:3806+). Since
+                    // ShouldIgnoreCollisionDueToGhost only consults team when one side is ghosted,
+                    // a non-ghosted actor blocks REGARDLESS of team. Allies block pathing exactly
+                    // like enemies — this keeps the pathfinder consistent with the (also team-
+                    // independent) collision response, so a unit routes AROUND allied bodies
+                    // instead of pathing through them and then body-blocking → stuck/repath.
+                    // Lane-wave clumping is preserved by the farFromOrigin actor exemption in
+                    // NavigationGrid.GetPath (actors ignored on far cells, mirroring Riot's
+                    // collisionsteps = 20 - travelDistance/cellSize near-unit-only gate).
 
                     float combined = other.CollisionRadius + effRadius;
                     if (Vector2.DistanceSquared(other.Position, cellCenterWorld) < combined * combined)

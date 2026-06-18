@@ -820,6 +820,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Cancels an in-progress basic-attack WINDUP (no damage) — LoL's auto-attack windup-cancel:
+        /// the swing only commits at its damage point (windup end = <c>FinishCasting</c>). An attack
+        /// still in <see cref="SpellState.STATE_CASTING"/> has not dealt its hit yet, so a hard
+        /// attack-disabling CC (stun/suppress/sleep/charm/fear/disarm) landing now interrupts it; an
+        /// attack already past the damage point is left alone (it committed). Attacks flagged
+        /// <c>CantCancelWhileWindingUp</c> (special uncancellable swings) are never interrupted.
+        /// Called from <see cref="AttackableUnit.RecomputeBuffEffects"/> on the CC transition.
+        /// </summary>
+        public void CancelAutoAttackIfWindingUp()
+        {
+            if (IsAttacking
+                && AutoAttackSpell != null
+                && AutoAttackSpell.State == SpellState.STATE_CASTING
+                && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+            {
+                CancelAutoAttack(reset: true, fullCancel: true);
+            }
+        }
+
+        /// <summary>
         /// Forces this AI unit to perform a dash which follows the specified AttackableUnit (re-targeting
         /// each tick). This is the engine follow-unit-path force-move primitive — Riot's
         /// <c>Actor_Common::ServerForceFollowUnitPath</c> (the line variant is
