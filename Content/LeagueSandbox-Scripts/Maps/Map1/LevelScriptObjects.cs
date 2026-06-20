@@ -194,6 +194,12 @@ namespace MapScripts.Map1
                         inhibitor.Stats.CurrentHealth = inhibitor.Stats.HealthPoints.Total;
                         inhibitor.NotifyState();
                         DeadInhibitors[inhibitor.Team].Remove(inhibitor);
+                        // A respawned inhibitor means the team is no longer fully down — recompute the
+                        // gate that drives DoubleSuperMinionWave. Without this it stays true forever once
+                        // all inhibitors were simultaneously dead, spawning double-supers permanently
+                        // (S4 recomputes totalNumberBarracks each wave). See docs/LANE_MINION_DECOMP_AUDIT.md.
+                        AllInhibitorsAreDead[inhibitor.Team] =
+                            DeadInhibitors[inhibitor.Team].Count == InhibitorList[inhibitor.Team].Count;
                     }
                     else if (DeadInhibitors[team][inhibitor] <= 15.0f * 1000)
                     {

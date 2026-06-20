@@ -209,11 +209,13 @@ namespace PacketDefinitions420
                 // Base layer = the unit's base skin (NOT a.Model, which is the resolved TOP and is
                 // re-sent below as its own override layer for a mid-transform unit).
                 charStackData.SkinName = a.CharacterDataStack.BaseSkinName;
-                // Skip the no-op spawn-time face-direction broadcast — Riot's replay does
-                // not include a FaceDirection(0,0,0) packet for freshly-spawned units that
-                // haven't been oriented yet (e.g. hidden TestCubeRender anchor minions).
-                // Only broadcast when the unit has a non-zero facing.
-                if (a.Direction != Vector3.Zero)
+                // Spawn/vision-acquire orientation is carried by this packet's LookAt field (below),
+                // NOT a separate FaceDirection. Replay (single-player, 2026-06-20) shows ZERO standalone
+                // S2C_FaceDirection (0x50) accompanying a lane-minion spawn — orientation comes from the
+                // 0xBA LookAt + the embedded movement path. For non-champion units the standalone 0x50 is
+                // redundant and a wire divergence, so only champions keep the explicit broadcast.
+                // See docs/LANE_MINION_WIRE_VERIFICATION.md (D2).
+                if (isChampion && a.Direction != Vector3.Zero)
                 {
                     NotifyFaceDirection(a, a.Direction, true);
                 }
@@ -277,6 +279,16 @@ namespace PacketDefinitions420
                 ? PacketExtensions.CreateMovementDataWithSpeedIfPossible(u, _navGrid, useTeleportID: true)
                 : PacketExtensions.CreateMovementDataStop(o);
 
+            // Spawn/vision-acquire LookAt. Replay-verified (single-player, 2026-06-20): ALL 985 lane-minion
+            // spawns across 3 replays — BOTH teams — carry LookAtType=Direction(=0) with the SENTINEL
+            // position (1,0,0); it is a team-independent placeholder, not a real heading. Orientation at
+            // spawn comes from the embedded MovementData path (first segment points down-lane), not this
+            // field. So non-champion units send the (1,0,0) sentinel to match Riot. Champions keep their
+            // real Direction (their spawn LookAt is not cleanly isolated in these replays — left untouched).
+            // NOTE: LookAtType.Direction == 0, so our LookAtType byte already matched Riot; only the
+            // position vector diverged. See docs/LANE_MINION_WIRE_VERIFICATION.md (D3).
+            var lookAtDirection = (isChampion && o.Direction != Vector3.Zero) ? o.Direction : new Vector3(1, 0, 0);
+
             var enterVis = new OnEnterVisibilityClient
             {
                 SenderNetID = o.NetId,
@@ -284,8 +296,8 @@ namespace PacketDefinitions420
                 ShieldValues = shields,
                 CharacterDataStack = charStackDataList,
                 BuffCount = buffCountList,
-                LookAtPosition = new Vector3(1, 0, 0),
-                // TODO: Verify
+                LookAtType = (byte)LookAtType.Direction,
+                LookAtPosition = lookAtDirection,
                 IsHero = isChampion,
                 MovementData = md
             };
@@ -445,7 +457,19 @@ namespace PacketDefinitions420
                 ObjectNodeID = 0x40, // TODO: check this
                 BarracksNetID = 0xFF000000 | Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(m.BarracksName)),
                 WaveCount = 1, // TODO: Unhardcode
-                MinionType = (byte)m.MinionSpawnType,
+                // Wire MinionType is Riot's minionTable index, NOT our internal MinionSpawnType enum.
+                // Replay-verified (990 minions): melee=1, caster=2, cannon=4. Super was unobserved
+                // (no inhibitors fell), but the decomp uses minionType as a minionTable index with an
+                // assert `minionType < size` (~5 entries), so a bitfield value of 8 is impossible —
+                // super fills the gap at 3. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+                MinionType = m.MinionSpawnType switch
+                {
+                    MinionSpawnType.MINION_TYPE_MELEE => (byte)1,
+                    MinionSpawnType.MINION_TYPE_CASTER => (byte)2,
+                    MinionSpawnType.MINION_TYPE_SUPER => (byte)3,
+                    MinionSpawnType.MINION_TYPE_CANNON => (byte)4,
+                    _ => (byte)1,
+                },
                 DamageBonus = (short)m.DamageBonus,
                 HealthBonus = (short)m.HealthBonus,
                 MinionLevel = m.Stats.Level
@@ -2201,17 +2225,6 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing that the specified LaneMinion has spawned.
-        /// </summary>
-        /// <param name="m">LaneMinion that spawned.</param>
-        /// TODO: Implement wave counter.
-        public void NotifyLaneMinionSpawned(LaneMinion m)
-        {
-            var p = ConstructLaneMinionSpawnedPacket(m);
-            _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
-        }
-
-        /// <summary>
         /// Sends a packet to the specified player detailing that the GameObject which has the specified netId has left vision.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
@@ -2311,17 +2324,6 @@ namespace PacketDefinitions420
             teamRoster.TeamSIzeChaosCurrent = chaosSizeCurrent;
 
             _packetHandlerManager.SendPacket(userId, teamRoster.GetBytes(), Channel.CHL_LOADING_SCREEN);
-        }
-
-        /// <summary>
-        /// Sends a packet to all players who have vision of the specified Minion detailing that it has spawned.
-        /// </summary>
-        /// <returns>A new and fully setup SpawnMinionS2C packet.</returns>
-        /// <param name="minion">Minion that is spawning.</param>
-        public void NotifyMinionSpawned(Minion minion)
-        {
-            var spawnPacket = ConstructMinionSpawnedPacket(minion);
-            _packetHandlerManager.BroadcastPacketVision(minion, spawnPacket.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -5193,8 +5195,14 @@ namespace PacketDefinitions420
                     visibilityPacket = ConstructEnterVisibilityClientPacket(obj, obj is Champion, packets);
                 }
                 var healthbarPacket = ConstructEnterLocalVisibilityClientPacket(obj);
-                //TODO: try to include it to packets too?
-                var us = new OnReplication()
+
+                // Riot's lane-minion vision-acquire is exactly TWO packets: OnEnterVisibilityClient (0xBA)
+                // + OnEnterLocalVisibilityClient (0xAE). No separate OnReplication snapshot at spawn —
+                // health/maxhealth ride in the 0xAE and stat deltas follow on the normal per-tick
+                // replication channel. Replay-verified (single-player 2026-06-20). Other unit types keep
+                // the snapshot (not cleanly isolated in these replays — behavior preserved).
+                // See docs/LANE_MINION_WIRE_VERIFICATION.md (D4).
+                OnReplication us = u is LaneMinion ? null : new OnReplication()
                 {
                     SyncID = (uint)Environment.TickCount,
                     ReplicationData = new List<ReplicationData>(1){
@@ -5206,13 +5214,19 @@ namespace PacketDefinitions420
                 {
                     _packetHandlerManager.BroadcastPacketTeam(team, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.BroadcastPacketTeam(team, healthbarPacket.GetBytes(), Channel.CHL_S2C);
-                    _packetHandlerManager.BroadcastPacketTeam(team, us.GetBytes(), Channel.CHL_S2C);
+                    if (us != null)
+                    {
+                        _packetHandlerManager.BroadcastPacketTeam(team, us.GetBytes(), Channel.CHL_S2C);
+                    }
                 }
                 else
                 {
                     _packetHandlerManager.SendPacket(userId, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.SendPacket(userId, healthbarPacket.GetBytes(), Channel.CHL_S2C);
-                    _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
+                    if (us != null)
+                    {
+                        _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
+                    }
                 }
             }
             else //if(obj is IRegion || obj is ISpellMissile || obj is ILevelProp || obj is IParticle)

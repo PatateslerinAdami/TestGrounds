@@ -95,6 +95,18 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public float VisionRadius { get; protected set; }
 
+        // Per-object vision-radius SCALE (S4 Riot::Region::GetSizeModifiersBasedOnAttachment ->
+        // AttackableUnit::GetVisionScale). The effective vision radius is
+        //   VisionRadius * VisionScaleMultiplier + VisionScaleAdditive
+        // mirroring S4 CircleRegion::GetActualRadius() = mRadius * mult + add (Region.cpp:425).
+        // Base GameObject has no scale (mult=1, add=0); AttackableUnit overrides to apply
+        // vision-range buff/item bonuses (obj_AI_Base::GetVisionScale = 1+pct, flat). Vision
+        // queries (ObjectManager) use GetEffectiveVisionRadius() so dynamic vision bonuses take
+        // effect without re-baking VisionRadius.
+        public virtual float VisionScaleMultiplier => 1f;
+        public virtual float VisionScaleAdditive => 0f;
+        public float GetEffectiveVisionRadius() => VisionRadius * VisionScaleMultiplier + VisionScaleAdditive;
+
 
         public virtual bool IsAffectedByFoW => false;
         public virtual bool SpawnShouldBeHidden => false;

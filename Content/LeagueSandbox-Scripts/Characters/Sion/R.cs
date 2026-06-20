@@ -238,8 +238,7 @@ namespace Spells
                         {
                             ForceMove(_owner, _owner.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0.0f,
                                 facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
-                            // OnHit lands when the leap reaches its endpoint: distance / speed.
-                            _owner.RegisterTimer(new GameScriptTimer(LeapDistance / LeapSpeed, () => { OnHit(); }));
+                            _owner.RegisterTimer(new GameScriptTimer(GetForceMoveTravelTime(LeapDistance, LeapSpeed), () => { OnHit(); }));
                         }
                     }));
                 }

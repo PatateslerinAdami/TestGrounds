@@ -653,9 +653,13 @@ namespace LeagueSandbox.GameServer
 
                     Vector2 pos = p.Position;
                     cells[RowOf(pos.Y) * _gridCols + ColOf(pos.X)].Add(p);
-                    if (p.VisionRadius > maxR)
+                    // Effective (scaled) radius so the provider-grid query box still covers a unit
+                    // whose vision radius is buff-extended (GetEffectiveVisionRadius); == VisionRadius
+                    // when no vision-scale is applied.
+                    float effR = p.GetEffectiveVisionRadius();
+                    if (effR > maxR)
                     {
-                        maxR = p.VisionRadius;
+                        maxR = effR;
                     }
                 }
 
@@ -838,8 +842,10 @@ namespace LeagueSandbox.GameServer
                 return true;
             }
 
-            if (Vector2.DistanceSquared(observer.Position, tested.Position) >=
-                observer.VisionRadius * observer.VisionRadius)
+            // Effective vision radius (S4 CircleRegion::GetActualRadius = base * mult + add via
+            // GetVisionScale) so vision-range buffs/items extend sight; == VisionRadius by default.
+            float visionR = observer.GetEffectiveVisionRadius();
+            if (Vector2.DistanceSquared(observer.Position, tested.Position) >= visionR * visionR)
             {
                 return false;
             }

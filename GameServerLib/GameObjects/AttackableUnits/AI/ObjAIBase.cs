@@ -271,6 +271,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool IsBot { get; set; }
         public bool IgnoreMoveOrders { get; set; }
         public IAIScript AIScript { get; protected set; }
+        /// <summary>
+        /// Radius within which this unit's death shares experience to enemy champions. Defaults to the
+        /// engine-wide <c>ai_ExpRadius2</c> (1600); lane minions override it to their map-script value
+        /// (SR = 1400, 4.20 LevelScript.lua EXP_GIVEN_RADIUS) — that is a per-minion give-radius distinct
+        /// from the engine default, which still applies to champions and other units.
+        /// </summary>
+        public float ExperienceGiveRadius { get; set; } = LeagueSandbox.GameServer.Content.GlobalData.ObjAIBaseVariables.ExpRadius2;
         public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
         private bool invisSent = false;
         private bool _charScriptActivated;
@@ -638,9 +645,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (!Status.HasFlag(StatusFlags.CanMoveEver))
                 return false;
 
+            // Reject move-order issuance under any movement-disabling CC. Rooted/Netted (snare/net) must
+            // be listed explicitly: unlike Stun/Suppress, a snare does NOT clear the CanMove CAPABILITY
+            // flag (only the CanMove() METHOD checks the Rooted CC flag), so without these a move order
+            // issued mid-snare passed CanIssueMoveOrders, got accepted by HandleMove and BROADCAST to the
+            // client — the client then walked the path while the server-side Move() (which honors Rooted)
+            // held position, desyncing until the next sync snapped it back (the "kept walking while
+            // snared, snapped back ~root-duration later" bug). Mirrors the CanMove() move-disabling set.
             if (Status.HasFlag(StatusFlags.Stunned)
                 || Status.HasFlag(StatusFlags.Suppressed)
                 || Status.HasFlag(StatusFlags.Sleep)
+                || Status.HasFlag(StatusFlags.Rooted)
+                || Status.HasFlag(StatusFlags.Netted)
                 || Status.HasFlag(StatusFlags.Feared)
                 || Status.HasFlag(StatusFlags.Taunted)
                 || Status.HasFlag(StatusFlags.Charmed)
@@ -1093,6 +1109,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return;
             }
 
+            // NOTE: no CanMove() gate here — a chase under movement-disabling CC is stopped at the
+            // SetWaypoints chokepoint (it rejects moving paths while Stun/Root/Sleep/Suppress/Net is
+            // active). Gating RefreshWaypoints on the full CanMove() instead broke combat re-pathing
+            // (minions clumping / ranged into melee), so the CC block lives only in SetWaypoints.
+
             if (TargetUnit != null && _castingSpell == null && ChannelSpell == null
                 && MoveOrder != OrderType.AttackTo && MoveOrder != OrderType.Hold)
             {
@@ -1154,13 +1175,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // AI_actor.Stop(false) while the order persists as AI_ATTACKTO (AIBaseClient.cpp).
                     // Riot tracks transient "standing in range / waiting for AA cooldown" via a
                     // separate AI_State, never by rewriting the order — AI_HOLD is set ONLY by the
-                    // player's hold command, never internally. Previously this wrote
-                    // UpdateMoveOrder(Hold) on the cooldown wait, which conflated the internal
-                    // wait-state with the player Hold order: once the Hold-aware auto-promote guard
-                    // (top of this method) stopped re-promoting Hold→AttackTo, the unit got stuck in
-                    // Hold and never re-chased a target that kited out of range. Keeping AttackTo
-                    // lets the else branch below re-engage the chase the moment the target leaves
-                    // range. The actual auto-attack fires from the brain's in-range attack path.
+                    // player's hold command, never internally. The auto-attack fires from the
+                    // in-range attack path below.
                     StopMovement(networked: false);
                 }
                 else

@@ -209,6 +209,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private int _disableCanMoveEver;
         private const StatusFlags CapabilityMask =
             StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMoveEver;
+
+        /// <summary>
+        /// Speed scale Riot's server applies while traversing a force-move (the "reduceSpeedSlightly"
+        /// factor in obj_AI_Base::MoveForwardAtMaxSpeed, AIBase.cpp:1920). Single source of truth — a
+        /// dash covers its distance in distance / (speed * ForceMoveSpeedScale) seconds. Scripts that
+        /// time an effect to a force-move's landing use ApiFunctionManager.GetForceMoveTravelTime.
+        /// </summary>
+        public const float ForceMoveSpeedScale = 0.99f;
         private StatusFlags _buffEffectsToEnable = 0;
         private StatusFlags _buffEffectsToDisable = 0;
 
@@ -1244,7 +1252,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (!(obj is Monster))
                 {
-                    var champs = _game.ObjectManager.GetChampionsInRangeFromTeam(Position, GlobalData.ObjAIBaseVariables.ExpRadius2, CustomConvert.GetEnemyTeam(Team), true);
+                    var champs = _game.ObjectManager.GetChampionsInRangeFromTeam(Position, obj.ExperienceGiveRadius, CustomConvert.GetEnemyTeam(Team), true);
                     if (champs.Count > 0)
                     {
                         var expPerChamp = obj.Stats.ExpGivenOnDeath.Total / champs.Count;
@@ -1267,7 +1275,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 creditedKiller = redirector.GoldRedirectTarget;
             }
 
-            if (creditedKiller != null && creditedKiller is Champion champion)
+            // Deny gate (Riot AIMinionEventManager: killer.team == victim.team -> EVENT_ON_MINION_DENIED,
+            // no gold/CS/XP; only an enemy killer fires EVENT_ON_MINION_KILL). Monsters are NEUTRAL, so a
+            // BLUE/PURPLE killer always clears this gate and still gets jungle gold/XP.
+            if (creditedKiller != null && creditedKiller is Champion champion
+                && creditedKiller.Team != data.Unit.Team)
             {
                 //Monsters give XP exclusively to the killer
                 if (data.Unit is Monster)
@@ -1630,7 +1642,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 if (MP.FollowTravelTime > 0)
                 {
-                    timeRemaining = MP.FollowTravelTime - MP.ElapsedTime;
+                    // FollowTravelTime is seconds (script param); ElapsedTime accumulates ms.
+                    timeRemaining = MP.FollowTravelTime * 1000f - MP.ElapsedTime;
                 }
             }
             else
@@ -1652,12 +1665,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             distRemaining = Math.Min(distToDest, distRemaining);
 
             float time = Math.Min(frameTime, timeRemaining);
-            // Riot's server traverses force-moves at 99% of the override speed (the "reduceSpeedSlightly"
-            // factor in obj_AI_Base::MoveForwardAtMaxSpeed, AIBase.cpp:1920 — applied to the parabolic /
-            // non-overridable branch, i.e. every BBMove). The parabolic arc HEIGHT is client-only; the
-            // server moves purely horizontally and ends on reaching the goal, so dash duration = dist/speed.
-            const float reduceSpeedSlightly = 0.99f;
-            float speed = MP.PathSpeedOverride * 0.001f * reduceSpeedSlightly;
+            // Force-moves traverse at ForceMoveSpeedScale (Riot's "reduceSpeedSlightly", AIBase.cpp:1920);
+            // the parabolic arc HEIGHT is client-only, the server moves purely horizontally and ends on
+            // reaching the goal, so a dash covers its distance in distance / (speed * ForceMoveSpeedScale).
+            float speed;
+            if (MP.FollowNetID > 0 && MP.FollowTravelTime > 0)
+            {
+                // Fixed-travel-time follow: re-scale speed every tick so the unit reaches the (moving)
+                // target exactly when the travel time elapses, regardless of how the target moves —
+                // Riot's Actor_Common::TrackTargetUnit (Actor.cpp:2256): travelVelocity = remainDist /
+                // remainTime, set as the path speed override (PathSpeedOverride is ignored in this mode).
+                // distToDest is world-units, timeRemaining is ms → units/ms, matching the else branch.
+                speed = distToDest / Math.Max(timeRemaining, 0.0001f) * ForceMoveSpeedScale;
+            }
+            else
+            {
+                speed = MP.PathSpeedOverride * 0.001f * ForceMoveSpeedScale;
+            }
             float distPerFrame = speed * time;
             float dist = Math.Min(distPerFrame, distRemaining);
             if (dir != Vector2.Zero)
@@ -2026,6 +2050,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // two r=48 minions: neighbor-full 48 + self-hard 9.6 + buffer 12). Used for SELF only.
         private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius : CollisionRadius * 0.2f;
         private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius * 2f : CollisionRadius * 0.3f;
+
+        // Vision-radius scale (S4 obj_AI_Base::GetVisionScale: multiplier = pctBonus + 1, additive =
+        // flatBonus; raw fields fed by vision-range buffs/items). Applied to the effective vision
+        // radius via GameObject.GetEffectiveVisionRadius (= VisionRadius * mult + add). Default (1,0)
+        // = no scaling, so this is inert until a buff/item calls AddVisionScale. NOTE: as of 4.20 we
+        // ship no vision-scaling content, so this currently never changes behaviour — it's the
+        // faithful hook so such effects work when added.
+        private float _visionScalePctBonus;   // additive percent: 0.2 = +20% vision radius
+        private float _visionScaleFlatBonus;   // flat world units added to vision radius
+        public override float VisionScaleMultiplier => 1f + _visionScalePctBonus;
+        public override float VisionScaleAdditive => _visionScaleFlatBonus;
+
+        /// <summary>
+        /// Adjusts this unit's vision-radius scale (S4 GetVisionScale source fields). <paramref
+        /// name="pct"/> is additive percent (0.2 = +20% radius), <paramref name="flat"/> is in world
+        /// units. Buffs/items apply on gain and pass negated values on expiry. Effective vision
+        /// radius = VisionRadius * (1 + sum(pct)) + sum(flat).
+        /// </summary>
+        public void AddVisionScale(float pct, float flat)
+        {
+            _visionScalePctBonus += pct;
+            _visionScaleFlatBonus += flat;
+        }
 
         private Vector2 ComputeGroupCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 movementDelta, out bool hadHardColliders)
         {
@@ -2563,9 +2610,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             // Waypoints should always have an origin at the current position.
             // Dashes are excluded as their paths should be set before being applied.
-            // TODO: Find out the specific cases where we shouldn't be able to set our waypoints. Perhaps CC?
-            // Setting waypoints during auto attacks is allowed.
-            if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position || (!isForced && !CanChangeWaypoints()))
+            // Setting waypoints during auto attacks is allowed (CanMove() permits a cancellable windup).
+            //
+            // CC chokepoint: NEVER accept/broadcast a MOVING path while the unit is under a movement-
+            // disabling CC (Stun / Root-Snare / Sleep / Suppress / Net) and not forced. The server Move()
+            // phase refuses to advance under those, so without this gate any move-issuing path (player
+            // HandleMove, engine RefreshWaypoints, AI-script SetStateAndMove / ResumeAttackMove, BotAI, …)
+            // would broadcast a path the client walks while the server holds — then snaps back ~CC-duration
+            // later (the snare/root desync). Scoped to MoveDisablingCC ONLY, NOT the full CanMove(): casts,
+            // attack windups and the capability flag must NOT gate pathing here — combat units re-path
+            // constantly (collision separation, ranged repositioning) WHILE attacking, and CanMove()'s
+            // non-CC clauses would wrongly reject those (minions clumping into a bulk / ranged minions
+            // walking into melee). Fear/Charm/Taunt are not in the mask — the AI drives that movement.
+            if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position
+                || (!isForced && !CanChangeWaypoints())
+                || (!isForced && (Status & MoveDisablingCC) != 0))
             {
                 return false;
             }
