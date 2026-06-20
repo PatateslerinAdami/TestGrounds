@@ -291,6 +291,8 @@ namespace MapScripts.Map11
         public bool SetUpLaneMinion()
         {
             int cannonMinionCap = 2;
+            // Drip exactly the wave's size (Riot NumToSpawnForWave), not a fixed 8. See LANE_MINION_DECOMP_AUDIT.md (S6).
+            int maxWaveSize = 0;
             foreach (var barrack in LevelScriptObjects.SpawnBarracks)
             {
                 TeamId opposed_team = barrack.Value.GetOpposingTeamID();
@@ -301,6 +303,7 @@ namespace MapScripts.Map11
                 bool isInhibitorDead = inhibitor.InhibitorState == DampenerState.RegenerationState;
                 Tuple<int, List<MinionSpawnType>> spawnWave = MinionWaveToSpawn(GameTime(), _cannonMinionCount, isInhibitorDead, LevelScriptObjects.AllInhibitorsAreDead[opposed_team]);
                 cannonMinionCap = spawnWave.Item1;
+                maxWaveSize = Math.Max(maxWaveSize, spawnWave.Item2.Count);
 
                 List<Vector2> waypoint = new List<Vector2>(MinionPaths[lane]);
                 if (barrackTeam == TeamId.TEAM_PURPLE)
@@ -323,7 +326,7 @@ namespace MapScripts.Map11
                     statModifier: rampModifier, initialLevel: minionLevel, goldGiven: rampGold, expGiven: rampExp);
             }
 
-            if (_minionNumber < 8)
+            if (_minionNumber < maxWaveSize - 1)
             {
                 return false;
             }
