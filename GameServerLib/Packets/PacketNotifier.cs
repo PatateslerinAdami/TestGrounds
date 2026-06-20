@@ -5183,8 +5183,14 @@ namespace PacketDefinitions420
                     visibilityPacket = ConstructEnterVisibilityClientPacket(obj, obj is Champion, packets);
                 }
                 var healthbarPacket = ConstructEnterLocalVisibilityClientPacket(obj);
-                //TODO: try to include it to packets too?
-                var us = new OnReplication()
+
+                // Riot's lane-minion vision-acquire is exactly TWO packets: OnEnterVisibilityClient (0xBA)
+                // + OnEnterLocalVisibilityClient (0xAE). No separate OnReplication snapshot at spawn —
+                // health/maxhealth ride in the 0xAE and stat deltas follow on the normal per-tick
+                // replication channel. Replay-verified (single-player 2026-06-20). Other unit types keep
+                // the snapshot (not cleanly isolated in these replays — behavior preserved).
+                // See docs/LANE_MINION_WIRE_VERIFICATION.md (D4).
+                OnReplication us = u is LaneMinion ? null : new OnReplication()
                 {
                     SyncID = (uint)Environment.TickCount,
                     ReplicationData = new List<ReplicationData>(1){
@@ -5196,13 +5202,19 @@ namespace PacketDefinitions420
                 {
                     _packetHandlerManager.BroadcastPacketTeam(team, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.BroadcastPacketTeam(team, healthbarPacket.GetBytes(), Channel.CHL_S2C);
-                    _packetHandlerManager.BroadcastPacketTeam(team, us.GetBytes(), Channel.CHL_S2C);
+                    if (us != null)
+                    {
+                        _packetHandlerManager.BroadcastPacketTeam(team, us.GetBytes(), Channel.CHL_S2C);
+                    }
                 }
                 else
                 {
                     _packetHandlerManager.SendPacket(userId, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.SendPacket(userId, healthbarPacket.GetBytes(), Channel.CHL_S2C);
-                    _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
+                    if (us != null)
+                    {
+                        _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
+                    }
                 }
             }
             else //if(obj is IRegion || obj is ISpellMissile || obj is ILevelProp || obj is IParticle)
