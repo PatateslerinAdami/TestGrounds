@@ -457,12 +457,10 @@ namespace PacketDefinitions420
                 ObjectNodeID = 0x40, // TODO: check this
                 BarracksNetID = 0xFF000000 | Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(m.BarracksName)),
                 WaveCount = 1, // TODO: Unhardcode
-                // REVERTED 2026-06-20: mapping this to Riot's replay wire values (melee=1/caster=2/cannon=4)
-                // caused an in-game regression — minions fired the wrong projectiles and the game lagged.
-                // Our client resolves the minion's data/spells from THIS index differently than Riot's
-                // minionTable, so the internal MinionSpawnType value is what our setup expects. The wire
-                // 1/2/4 finding holds for Riot's client but is not portable to ours. See docs/LANE_MINION_WIRE_VERIFICATION.md.
-                MinionType = (byte)m.MinionSpawnType,
+                // Per-MAP wire MinionType (Riot's minionTable index differs by map). LaneMinion.WireMinionType
+                // returns the replay-verified 1/2/4 only on Map11; every other map keeps the internal
+                // MinionSpawnType value (the global 1/2/4 mapping broke Map1). See docs/LANE_MINION_WIRE_VERIFICATION.md.
+                MinionType = m.WireMinionType,
                 DamageBonus = (short)m.DamageBonus,
                 HealthBonus = (short)m.HealthBonus,
                 MinionLevel = m.Stats.Level

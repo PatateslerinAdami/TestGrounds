@@ -36,6 +36,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public int WaveNumber { get; }
 
+        /// <summary>
+        /// Wire MinionType byte for the embedded Barrack_SpawnUnit. This is Riot's per-MAP minionTable
+        /// index, so it differs by map: Map11 (real 4.20 SR) uses the replay-verified
+        /// melee=1/caster=2/super=3/cannon=4; every other map's client expects our internal
+        /// MinionSpawnType order — applying the 1/2/4 mapping globally broke Map1 (wrong projectiles +
+        /// lag). EXPERIMENT 2026-06-20: try the replay order on Map11 only. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+        /// </summary>
+        public byte WireMinionType => _game.Map.Id == 11
+            ? this.MinionSpawnType switch
+            {
+                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_MELEE => (byte)1,
+                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_CASTER => (byte)2,
+                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_SUPER => (byte)3,
+                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_CANNON => (byte)4,
+                _ => (byte)this.MinionSpawnType,
+            }
+            : (byte)this.MinionSpawnType;
+
         public int SpreadSlotIndex { get; set; } = -1;
 
         public override bool SpawnShouldBeHidden => false;
