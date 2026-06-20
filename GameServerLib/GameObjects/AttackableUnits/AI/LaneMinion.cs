@@ -137,6 +137,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Applies the per-wave stat ramp (HP/AD/Armor/MR bonus) and average-champion level to this
+        /// minion at spawn. Must run BEFORE the unit is added to the ObjectManager — the spawn packet
+        /// (0xBA's embedded Barrack_SpawnUnit + 0xAE health) is built synchronously on AddObject, so the
+        /// transmitted HealthBonus/DamageBonus + boosted max-HP have to be in place already (4.20 OQ#15:
+        /// the client re-derives max-HP from the packet, so server and wire must agree).
+        /// </summary>
+        public void ApplySpawnStatRamp(StatsModifier bonus, int level)
+        {
+            if (bonus != null)
+            {
+                AddStatModifier(bonus);
+                HealthBonus = (int)bonus.HealthPoints.FlatBonus;
+                DamageBonus = (int)bonus.AttackDamage.FlatBonus;
+            }
+            if (level > 0)
+            {
+                Stats.Level = (byte)level;
+            }
+            // Bring current HP up to the ramped maximum so the minion spawns at full (boosted) health.
+            Stats.CurrentHealth = Stats.HealthPoints.Total;
+        }
+
+        /// <summary>
         /// Highest waypoint index the minion is currently allowed to reach. Walks the
         /// <see cref="EnemyLaneTurretsAhead"/> list in order, returning the waypoint cap of
         /// the first alive entry. If all entries are dead (or list is empty), returns

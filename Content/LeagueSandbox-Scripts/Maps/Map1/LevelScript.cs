@@ -120,42 +120,25 @@ namespace MapScripts.Map1
             MinionSpawnType.MINION_TYPE_CASTER }
         }};
 
-        //These minion modifiers will remain unused for the moment, untill i pull the spawning systems to MapScripts
-        Dictionary<MinionSpawnType, StatsModifier> MinionModifiers = new Dictionary<MinionSpawnType, StatsModifier>
+        // 4.20 Map1 (classic SR) lane-minion stat ramp — values from LEVELS/Map1/Scripts/LevelScript.lua.
+        // Map1 ramps Armor/MR and keeps HpUpgrade constant (no growth); the ramp is advanced every
+        // UPGRADE_MINION_TIMER (90s) and applied additively to each spawning minion. Gold/Exp-given ramp
+        // is tracked but not yet wired to rewards. See MapScripts.MinionStatRamp / docs/LANE_MINION_DECOMP_AUDIT.md.
+        private readonly Dictionary<MinionSpawnType, MinionStatRamp> _minionRamps = new Dictionary<MinionSpawnType, MinionStatRamp>
         {
-            { MinionSpawnType.MINION_TYPE_MELEE, new StatsModifier() },
-            { MinionSpawnType.MINION_TYPE_CASTER, new StatsModifier() },
-            { MinionSpawnType.MINION_TYPE_CANNON, new StatsModifier() },
-            { MinionSpawnType.MINION_TYPE_SUPER, new StatsModifier() },
+            { MinionSpawnType.MINION_TYPE_MELEE, new MinionStatRamp { HpUpgrade = 10f, DamageUpgrade = 0.5f, ArmorUpgrade = 1f, MagicResistUpgrade = 0.625f, GoldUpgrade = 0.2f, GoldMaximumBonus = 12f, GoldGivenBase = 18.8f, ExpGivenBase = 64f } },
+            { MinionSpawnType.MINION_TYPE_CASTER, new MinionStatRamp { HpUpgrade = 7.5f, DamageUpgrade = 1f, ArmorUpgrade = 0.625f, MagicResistUpgrade = 1f, GoldUpgrade = 0.2f, GoldMaximumBonus = 8f, GoldGivenBase = 13.8f, ExpGivenBase = 32f } },
+            { MinionSpawnType.MINION_TYPE_CANNON, new MinionStatRamp { HpUpgrade = 13.5f, DamageUpgrade = 1.5f, ArmorUpgrade = 1.5f, MagicResistUpgrade = 1.5f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
+            { MinionSpawnType.MINION_TYPE_SUPER, new MinionStatRamp { HpUpgrade = 100f, DamageUpgrade = 5f, ArmorUpgrade = 0f, MagicResistUpgrade = 0f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
         };
+        private const float UPGRADE_MINION_TIMER = 90000f;
+        private float _minionUpgradeTimer = 0f;
 
         //This function is executed in-between Loading the map structures and applying the structure protections. Is the first thing on this script to be executed
         public virtual void Init(Dictionary<GameObjectTypes, List<MapObject>> mapObjects)
         {
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
             AddSurrender(1200000.0f, 300000.0f, 30.0f);
-
-            MinionModifiers[MinionSpawnType.MINION_TYPE_MELEE].GoldGivenOnDeath.FlatBonus = 0.5f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_MELEE].HealthPoints.FlatBonus = 20.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_MELEE].AttackDamage.FlatBonus = 1.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_MELEE].Armor.FlatBonus = 3.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_MELEE].MagicResist.FlatBonus = 1.25f;
-
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CASTER].GoldGivenOnDeath.FlatBonus = 0.2f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CASTER].HealthPoints.FlatBonus = 7.5f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CASTER].AttackDamage.FlatBonus = 1.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CASTER].Armor.FlatBonus = 0.625f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CASTER].MagicResist.FlatBonus = 1.0f;
-
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CANNON].GoldGivenOnDeath.FlatBonus = 1f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CANNON].HealthPoints.FlatBonus = 27.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CANNON].AttackDamage.FlatBonus = 3.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CANNON].Armor.FlatBonus = 3.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_CANNON].MagicResist.FlatBonus = 3.0f;
-
-            MinionModifiers[MinionSpawnType.MINION_TYPE_SUPER].GoldGivenOnDeath.FlatBonus = 1.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_SUPER].HealthPoints.FlatBonus = 200.0f;
-            MinionModifiers[MinionSpawnType.MINION_TYPE_SUPER].AttackDamage.FlatBonus = 10.0f;
 
             // Replace the hardcoded MinionPaths with the client-side __NAV_<lane>NN
             // waypoints from the .sco.json scene files. Trailing-digit sort gives the correct
@@ -257,6 +240,19 @@ namespace MapScripts.Map1
         {
             LevelScriptObjects.OnUpdate(diff);
             NeutralMinionSpawn.OnUpdate(diff);
+
+            // Lane-minion stat ramp (4.20 UpgradeMinionTimer): every 90s, advance every type's running
+            // bonus. Ticked before the spawn clock so a wave spawning on the same frame as an upgrade
+            // already carries it (matches the replay: wave-1 minions at 90s already have one upgrade).
+            _minionUpgradeTimer += diff;
+            while (_minionUpgradeTimer >= UPGRADE_MINION_TIMER)
+            {
+                _minionUpgradeTimer -= UPGRADE_MINION_TIMER;
+                foreach (var ramp in _minionRamps.Values)
+                {
+                    ramp.Tick();
+                }
+            }
 
             var gameTime = GameTime();
 
@@ -443,10 +439,21 @@ namespace MapScripts.Map1
                     }
                 }
 
+                // Per-wave stat ramp + level for this drip's minion type. The accumulated bonus (HP/AD/
+                // Armor/MR) is applied additively at spawn; the level = average champion level (minions
+                // have no per-level stats, so this only drives the XP-on-death level delta).
+                StatsModifier rampModifier = null;
+                if (_minionNumber < spawnWave.Item2.Count
+                    && _minionRamps.TryGetValue(spawnWave.Item2[_minionNumber], out var ramp))
+                {
+                    rampModifier = ramp.ToStatsModifier();
+                }
+                int minionLevel = Math.Max(1, GetPlayerAverageLevel());
+
                 var spawnedMinion = CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
                     isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount,
                     enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices,
-                    lane: lane);
+                    lane: lane, statModifier: rampModifier, initialLevel: minionLevel);
 
                 // Lane-minion death-XP give-radius (4.20 LevelScript.lua EXP_GIVEN_RADIUS = 1400; engine
                 // default ai_ExpRadius2 = 1600 still applies to champions/other units). Gold is last-hit
