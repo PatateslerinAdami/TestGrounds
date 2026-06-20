@@ -92,9 +92,47 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             SetPosition(position);
 
-            StopMovement();
+            // Find the first lane waypoint ahead of the spawn point (skip points coincident with spawn).
+            Vector2? firstLaneWaypoint = null;
+            if (mainWaypoints != null)
+            {
+                foreach (var waypoint in mainWaypoints)
+                {
+                    if (Vector2.DistanceSquared(position, waypoint) <= 1f)
+                    {
+                        continue;
+                    }
+                    firstLaneWaypoint = waypoint;
+                    break;
+                }
+            }
 
-            MoveOrder = OrderType.Hold;
+            if (firstLaneWaypoint.HasValue)
+            {
+                var laneDir = Vector2.Normalize(firstLaneWaypoint.Value - position);
+                if (!float.IsNaN(laneDir.X))
+                {
+                    Direction = new Vector3(laneDir.X, 0, laneDir.Y);
+                }
+
+                // Spawn already IN MOTION toward the first lane waypoint so the spawn OnEnterVisibilityClient
+                // carries a 2-waypoint moving path (Riot does this — replay-verified, single-player 2026-06-20).
+                // The client orients a spawning minion by its MOTION; a stationary (1-waypoint) spawn instead
+                // leaves facing to the LookAt field, which the client does NOT honor for a static unit (it
+                // falls back to a world-ward default heading, so minions visibly face map-center / "toward mid"
+                // regardless of the LookAt value — the long-standing spawn-facing bug). The AI's forward-nav
+                // refines this to a blocker-aware A* path on its first tick. broadcastImmediately:false keeps
+                // it out of a separate 0x61 — the path rides along in the spawn 0xBA's MovementData.
+                // See docs/LANE_MINION_WIRE_VERIFICATION.md.
+                SetWaypoints(new List<Vector2> { position, firstLaneWaypoint.Value }, broadcastImmediately: false);
+                MoveOrder = OrderType.MoveTo;
+            }
+            else
+            {
+                StopMovement();
+                MoveOrder = OrderType.Hold;
+            }
+
             Replication = new ReplicationLaneMinion(this);
         }
 
