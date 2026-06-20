@@ -7,6 +7,7 @@ using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiGameEvents;
 
 namespace MapScripts.Map11
@@ -154,6 +155,17 @@ namespace MapScripts.Map11
             LevelScriptObjects.OnUpdate(diff);
             NeutralMinionSpawn.OnUpdate(diff);
 
+            // Lane-minion stat ramp (4.20 UpgradeMinionTimer): advance every type's bonus every 90s.
+            _minionUpgradeTimer += diff;
+            while (_minionUpgradeTimer >= UPGRADE_MINION_TIMER)
+            {
+                _minionUpgradeTimer -= UPGRADE_MINION_TIMER;
+                foreach (var ramp in _minionRamps.Values)
+                {
+                    ramp.Tick();
+                }
+            }
+
             var gameTime = GameTime();
 
             if (MapScriptMetadata.MinionSpawnEnabled)
@@ -260,6 +272,19 @@ namespace MapScripts.Map11
 
         public int _minionNumber;
         public int _cannonMinionCount;
+        // 4.20 Map11 (real SR) lane-minion stat ramp — values from LEVELS/map11/Scripts/LevelScript.lua.
+        // Map11 GROWS HpUpgrade each tick (HpUpgradeGrowth) and does NOT ramp Armor/MR (the Lua
+        // UpgradeMinionTimer no-ops those), so Armor/MagicResistUpgrade are left 0 here.
+        private readonly Dictionary<MinionSpawnType, MinionStatRamp> _minionRamps = new Dictionary<MinionSpawnType, MinionStatRamp>
+        {
+            { MinionSpawnType.MINION_TYPE_MELEE, new MinionStatRamp { HpUpgrade = 15f, HpUpgradeGrowth = 0.2f, DamageUpgrade = 0.5f, GoldUpgrade = 0.2f, GoldMaximumBonus = 12f, GoldGivenBase = 18.8f, ExpGivenBase = 64f } },
+            { MinionSpawnType.MINION_TYPE_CASTER, new MinionStatRamp { HpUpgrade = 11f, HpUpgradeGrowth = 0.2f, DamageUpgrade = 1f, GoldUpgrade = 0.2f, GoldMaximumBonus = 8f, GoldGivenBase = 13.8f, ExpGivenBase = 32f } },
+            { MinionSpawnType.MINION_TYPE_CANNON, new MinionStatRamp { HpUpgrade = 23f, HpUpgradeGrowth = 0.3f, DamageUpgrade = 1.5f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
+            { MinionSpawnType.MINION_TYPE_SUPER, new MinionStatRamp { HpUpgrade = 100f, HpUpgradeGrowth = 0f, DamageUpgrade = 5f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
+        };
+        private const float UPGRADE_MINION_TIMER = 90000f;
+        private float _minionUpgradeTimer = 0f;
+
         public bool SetUpLaneMinion()
         {
             int cannonMinionCap = 2;
@@ -280,7 +305,16 @@ namespace MapScripts.Map11
                     waypoint.Reverse();
                 }
 
-                CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI);
+                StatsModifier rampModifier = null;
+                if (_minionNumber < spawnWave.Item2.Count
+                    && _minionRamps.TryGetValue(spawnWave.Item2[_minionNumber], out var ramp))
+                {
+                    rampModifier = ramp.ToStatsModifier();
+                }
+                int minionLevel = Math.Max(1, GetPlayerAverageLevel());
+
+                CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
+                    statModifier: rampModifier, initialLevel: minionLevel);
             }
 
             if (_minionNumber < 8)
