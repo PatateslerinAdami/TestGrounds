@@ -83,9 +83,9 @@ namespace AIScripts
             return (_minion.Status & cc) != 0 || _minion.IsForceMoved;
         }
 
-        // A dormant first-wave minion (RoamState == Inactive) pushes the lane but ignores enemies.
-        // The engine (LaneMinion.UpdateRoamState) flips it to Hostile when the lanes clash; only
-        // then may the AI acquire targets. See MinionRoamState.
+        // Lane minions are always Hostile (4.20 has no spawn dormancy) — the lane clash emerges from
+        // movement + AcquisitionRange, not a wake gate. This check now only excludes RunInFear (CC
+        // fear-flee), during which the minion must not acquire. See MinionRoamState.
         private bool CanAggro()
         {
             return _minion.RoamState == MinionRoamState.Hostile;

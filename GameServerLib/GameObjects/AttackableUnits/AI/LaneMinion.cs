@@ -31,9 +31,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public Vector2 SpawnPosition { get; }
 
-        // RoamState moved to the shared Minion base (jungle Monster needs it too). For LaneMinion it
-        // is engine-managed: first-wave minions spawn Inactive (dormant — push the lane but ignore
-        // enemies) and UpdateRoamState flips them to Hostile when an enemy enters WakeUpRange.
+        // RoamState moved to the shared Minion base (jungle Monster needs it too). Lane minions are
+        // always Hostile (no 4.20 spawn dormancy — see ctor); only CC fear sets RunInFear.
 
         public int WaveNumber { get; }
 
@@ -81,8 +80,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Lane = lane;
             PathingWaypoints = mainWaypoints;
             IsFirstWave = isFirstWave;
-            // FirstWave minions start dormant; all later waves spawn already aggressive.
-            RoamState = isFirstWave ? MinionRoamState.Inactive : MinionRoamState.Hostile;
+            // 4.20 lane minions have NO spawn dormancy (OQ#7): the lane AI (Minion.lua/Minions.lua) arms
+            // FindEnemies + MoveForward immediately and acquires within AcquisitionRange — the lane clash
+            // emerges from movement + range, not a wake gate. So every wave (incl. the first) spawns
+            // Hostile. (RoamState.Inactive remains for jungle/neutral AIs only.)
+            RoamState = MinionRoamState.Hostile;
             OuterTurretPosition = outerTurretPosition;
             SpawnPosition = position;
             WaveNumber = waveNumber;
@@ -182,45 +184,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// list because they're already implicitly skipped because we only stored enemy turrets at
         /// spawn time.
         /// </summary>
-        public override void Update(float diff)
-        {
-            // Engine-managed RoamState transition runs before the AI script so the AI sees the
-            // up-to-date state this tick (S4: the engine owns MinionRoamState, the Lua AI reads it).
-            UpdateRoamState();
-            base.Update(diff);
-        }
-
-        /// <summary>
-        /// Wakes a dormant first-wave minion (kInactive -> kHostile) once an enemy enters
-        /// <see cref="CharData.WakeUpRange"/> (default 600). This is the lane-clash trigger: both
-        /// waves walk to lane dormant and flip to hostile when they meet. No-op once hostile.
-        /// </summary>
-        private void UpdateRoamState()
-        {
-            if (RoamState != MinionRoamState.Inactive || IsDead)
-            {
-                return;
-            }
-
-            float wakeRange = CharData.WakeUpRange;
-            float wakeRangeSq = wakeRange * wakeRange;
-            foreach (var u in ApiFunctionManager.EnumerateUnitsInRange(Position, wakeRange, true))
-            {
-                if (u.Team == Team || u.IsDead
-                    || !u.IsVisibleByTeam(Team)
-                    || !u.Status.HasFlag(StatusFlags.Targetable))
-                {
-                    continue;
-                }
-
-                if (Vector2.DistanceSquared(Position, u.Position) <= wakeRangeSq)
-                {
-                    RoamState = MinionRoamState.Hostile;
-                    return;
-                }
-            }
-        }
-
         public int GetMaxAllowedWaypointIndex()
         {
             int totalWaypoints = PathingWaypoints?.Count ?? 0;
