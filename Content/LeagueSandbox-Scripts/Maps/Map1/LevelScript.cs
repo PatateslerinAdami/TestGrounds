@@ -326,11 +326,13 @@ namespace MapScripts.Map1
         //Here you setup the conditions of which wave will be spawned
         public Tuple<int, List<MinionSpawnType>> MinionWaveToSpawn(float gameTime, int cannonMinionCount, bool isInhibitorDead, bool areAllInhibitorsDead)
         {
+            // Cannon-wave frequency (4.20 LEVELS/Map1: CANNON_MINION_SPAWN_FREQUENCY 3 -> 2 at
+            // INCREASE_CANNON_RATE_TIMER=2090s; never reaches 1). cap = freq-1 (cap2 = cannon every 3rd
+            // wave, cap1 = every 2nd). See docs/LANE_MINION_DECOMP_AUDIT.md.
             var cannonMinionTimestamps = new List<Tuple<long, int>>
             {
                 new Tuple<long, int>(0, 2),
-                new Tuple<long, int>(20 * 60 * 1000, 1),
-                new Tuple<long, int>(35 * 60 * 1000, 0)
+                new Tuple<long, int>(2090 * 1000, 1)
             };
             var cannonMinionCap = 2;
 
