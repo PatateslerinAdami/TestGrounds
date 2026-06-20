@@ -638,9 +638,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (!Status.HasFlag(StatusFlags.CanMoveEver))
                 return false;
 
+            // Reject move-order issuance under any movement-disabling CC. Rooted/Netted (snare/net) must
+            // be listed explicitly: unlike Stun/Suppress, a snare does NOT clear the CanMove CAPABILITY
+            // flag (only the CanMove() METHOD checks the Rooted CC flag), so without these a move order
+            // issued mid-snare passed CanIssueMoveOrders, got accepted by HandleMove and BROADCAST to the
+            // client — the client then walked the path while the server-side Move() (which honors Rooted)
+            // held position, desyncing until the next sync snapped it back (the "kept walking while
+            // snared, snapped back ~root-duration later" bug). Mirrors the CanMove() move-disabling set.
             if (Status.HasFlag(StatusFlags.Stunned)
                 || Status.HasFlag(StatusFlags.Suppressed)
                 || Status.HasFlag(StatusFlags.Sleep)
+                || Status.HasFlag(StatusFlags.Rooted)
+                || Status.HasFlag(StatusFlags.Netted)
                 || Status.HasFlag(StatusFlags.Feared)
                 || Status.HasFlag(StatusFlags.Taunted)
                 || Status.HasFlag(StatusFlags.Charmed)
@@ -1092,6 +1101,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 return;
             }
+
+            // NOTE: no CanMove() gate here — a chase under movement-disabling CC is stopped at the
+            // SetWaypoints chokepoint (it rejects moving paths while Stun/Root/Sleep/Suppress/Net is
+            // active). Gating RefreshWaypoints on the full CanMove() instead broke combat re-pathing
+            // (minions clumping / ranged into melee), so the CC block lives only in SetWaypoints.
 
             if (TargetUnit != null && _castingSpell == null && ChannelSpell == null
                 && MoveOrder != OrderType.AttackTo && MoveOrder != OrderType.Hold)

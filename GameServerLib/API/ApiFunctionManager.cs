@@ -2302,6 +2302,22 @@ namespace LeagueSandbox.GameServer.API
         private const float ParabolaInitialVelocityFactor = 1.05f;
 
         /// <summary>
+        /// Seconds a force-move of <paramref name="distance"/> world-units at <paramref name="speed"/>
+        /// takes to reach its endpoint on the server = <paramref name="distance"/> / (<paramref name="speed"/>
+        /// * <see cref="AttackableUnit.ForceMoveSpeedScale"/>). Use this to time a script effect to a dash's
+        /// landing (e.g. Sion R slam) so it stays exact if the engine speed-scale changes. Gravity-agnostic:
+        /// the parabolic arc height is client-side and does not affect when the unit reaches its XZ endpoint.
+        /// </summary>
+        public static float GetForceMoveTravelTime(float distance, float speed)
+        {
+            if (speed <= 0f)
+            {
+                return 0f;
+            }
+            return distance / (speed * AttackableUnit.ForceMoveSpeedScale);
+        }
+
+        /// <summary>
         /// Seconds until a flat parabola/arc dash of <paramref name="distance"/> at <paramref name="speed"/>
         /// reaches its apex (the moment vertical velocity hits 0 and the unit starts falling again).
         /// Gravity-INDEPENDENT for flat ground: = 0.525 · distance/speed.
