@@ -457,19 +457,12 @@ namespace PacketDefinitions420
                 ObjectNodeID = 0x40, // TODO: check this
                 BarracksNetID = 0xFF000000 | Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(m.BarracksName)),
                 WaveCount = 1, // TODO: Unhardcode
-                // Wire MinionType is Riot's minionTable index, NOT our internal MinionSpawnType enum.
-                // Replay-verified (990 minions): melee=1, caster=2, cannon=4. Super was unobserved
-                // (no inhibitors fell), but the decomp uses minionType as a minionTable index with an
-                // assert `minionType < size` (~5 entries), so a bitfield value of 8 is impossible —
-                // super fills the gap at 3. See docs/LANE_MINION_WIRE_VERIFICATION.md.
-                MinionType = m.MinionSpawnType switch
-                {
-                    MinionSpawnType.MINION_TYPE_MELEE => (byte)1,
-                    MinionSpawnType.MINION_TYPE_CASTER => (byte)2,
-                    MinionSpawnType.MINION_TYPE_SUPER => (byte)3,
-                    MinionSpawnType.MINION_TYPE_CANNON => (byte)4,
-                    _ => (byte)1,
-                },
+                // REVERTED 2026-06-20: mapping this to Riot's replay wire values (melee=1/caster=2/cannon=4)
+                // caused an in-game regression — minions fired the wrong projectiles and the game lagged.
+                // Our client resolves the minion's data/spells from THIS index differently than Riot's
+                // minionTable, so the internal MinionSpawnType value is what our setup expects. The wire
+                // 1/2/4 finding holds for Riot's client but is not portable to ours. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+                MinionType = (byte)m.MinionSpawnType,
                 DamageBonus = (short)m.DamageBonus,
                 HealthBonus = (short)m.HealthBonus,
                 MinionLevel = m.Stats.Level
