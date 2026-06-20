@@ -2916,7 +2916,12 @@ namespace PacketDefinitions420
             var castAnsPacket = new NPC_CastSpellAns
             {
                 SenderNetID = s.CastInfo.Owner.NetId,
-                CasterPositionSyncID = Environment.TickCount,
+                // Same per-object client gate as movement (AIBaseClient.cpp:1961:
+                // CastSpell(ci, CanSyncUpdate(casterPosSyncID))) — so it MUST share the movement
+                // SyncID scale. Mixing a huge TickCount here with the small WireSyncID on
+                // WaypointGroups poisons mSyncID and the client drops every post-cast move order
+                // (= "can't move after casting"). See PacketExtensions.WireSyncID.
+                CasterPositionSyncID = PacketExtensions.WireSyncID,
                 // bitfield bit 0 ("Unknown1" in our wire-name): client-side packet-routing flag.
                 // S4 decomp (obj_AI_Base_PImpl_Int.cpp:2987) shows the client routes through a
                 // DIFFERENT path when bit 0 = 1 — Spell::SpellbookRouter::ChooseSpellbook +
@@ -3169,7 +3174,7 @@ namespace PacketDefinitions420
                 u.Replication.Update();
                 var us = new OnReplication()
                 {
-                    SyncID = (uint)Environment.TickCount,
+                    SyncID = (uint)PacketExtensions.WireSyncID,
                     // TODO: Support multi-unit replication creation (perhaps via a separate function which takes in a list of units).
                     ReplicationData = new List<ReplicationData>(1){
                         u.Replication.GetData(partial)
@@ -4958,7 +4963,7 @@ namespace PacketDefinitions420
         {
             var md = new MovementDataNormal()
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketExtensions.WireSyncID,
                 TeleportNetID = unit.NetId,
                 HasTeleportID = true,
                 TeleportID = unit.TeleportID,
@@ -4967,7 +4972,7 @@ namespace PacketDefinitions420
 
             var wpGroup = new WaypointGroup()
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketExtensions.WireSyncID,
                 Movements = new List<MovementDataNormal> { md }
             };
 
@@ -5195,7 +5200,7 @@ namespace PacketDefinitions420
                 // See docs/LANE_MINION_WIRE_VERIFICATION.md (D4).
                 OnReplication us = u is LaneMinion ? null : new OnReplication()
                 {
-                    SyncID = (uint)Environment.TickCount,
+                    SyncID = (uint)PacketExtensions.WireSyncID,
                     ReplicationData = new List<ReplicationData>(1){
                         u.Replication.GetData(false)
                     }
@@ -5381,7 +5386,7 @@ namespace PacketDefinitions420
                 {
                     var packet = new WaypointGroup
                     {
-                        SyncID = Environment.TickCount,
+                        SyncID = PacketExtensions.WireSyncID,
                         Movements = list
                     };
 
@@ -5435,7 +5440,7 @@ namespace PacketDefinitions420
                 {
                     var packet = new OnReplication()
                     {
-                        SyncID = (uint)Environment.TickCount,
+                        SyncID = (uint)PacketExtensions.WireSyncID,
                         ReplicationData = list
                     };
 
@@ -5459,7 +5464,7 @@ namespace PacketDefinitions420
             // TODO: Implement support for multiple movements.
             var packet = new WaypointGroup
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketExtensions.WireSyncID,
                 Movements = new List<MovementDataNormal>() { move }
             };
 
@@ -5489,7 +5494,7 @@ namespace PacketDefinitions420
 
             var speedWpGroup = new WaypointGroupWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketExtensions.WireSyncID,
                 // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
                 Movements = new List<MovementDataWithSpeed> { md }
             };
@@ -5545,7 +5550,7 @@ namespace PacketDefinitions420
             var speedWpGroup = new WaypointListHeroWithSpeed
             {
                 SenderNetID = u.NetId,
-                SyncID = Environment.TickCount,
+                SyncID = PacketExtensions.WireSyncID,
                 // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
                 WaypointSpeedParams = speeds,
                 // Defensive copy: the game loop can mutate `u.Waypoints` between packet
@@ -5662,7 +5667,9 @@ namespace PacketDefinitions420
             var castAnsPacket = new NPC_CastSpellAns
             {
                 SenderNetID = s.CastInfo.Owner.NetId,
-                CasterPositionSyncID = Environment.TickCount,
+                // Shares the per-object movement gate (CanSyncUpdate(casterPosSyncID)) — must use the
+                // same scale as WireSyncID or post-cast move orders get dropped.
+                CasterPositionSyncID = PacketExtensions.WireSyncID,
                 Unknown1 = false,
                 CastInfo = castInfo
             };

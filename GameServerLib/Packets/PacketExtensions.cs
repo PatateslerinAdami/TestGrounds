@@ -11,6 +11,48 @@ namespace PacketDefinitions420
 {
     public static class PacketExtensions
     {
+        private static long _movementSyncEpochMs = -1;
+
+        /// <summary>
+        /// The single shared server-side "sync clock" stamped into EVERY syncID-bearing wire field.
+        /// Replay a6db3774 (decoded 2026-06-20) shows Riot reads ONE per-client, session-relative
+        /// monotonic clock for all of them — WaypointGroup (0x61) / WaypointGroupWithSpeed (0x64) /
+        /// WaypointListHeroWithSpeed (0x83) headers, the MovementData embedded in the spawn
+        /// OnEnterVisibilityClient (0xBA) via WriteMovementDataWithHeader, the NPC_CastSpellAns
+        /// casterPosSyncID, AND OnReplication (0xC4). Proof they share one clock: in the replay the
+        /// OnReplication and WaypointGroup syncIDs interleave at the same magnitude (rep=682 @t=125640
+        /// vs wp=697 @t=125706) and both advance ~0.67/ms even while idle, both starting at ~0 on
+        /// client join.
+        ///
+        /// The clock is ~2/3 per millisecond. We reproduce its SHAPE with a global clock that starts
+        /// at ~0 on the first packet (= game start for our single-game-per-process server, where
+        /// game-relative == session-relative because all clients join at start) and scales elapsed ms
+        /// by 2/3. A single global value is mandatory because BroadcastPacketVision serializes one
+        /// packet for all viewers (a true per-client origin would need per-client serialization).
+        ///
+        /// Several of these feed the SAME per-object client gate (AIManager_Client::CanSyncUpdate —
+        /// the 3 callers are WaypointGroup, Pause/Stop and CastSpell's casterPosSyncID): a packet is
+        /// dropped unless its syncID >= the last that object saw. So mixing scales is a real bug, not
+        /// just cosmetics: e.g. a huge TickCount casterPosSyncID followed by small WaypointGroup
+        /// values poisons mSyncID and the client drops every post-cast move order ("can't move after
+        /// casting"). OnReplication uses its OWN separate gate variables (mSyncIDClientOnly etc.) so
+        /// its scale can't break movement — but it samples the same clock on the wire, so we keep it
+        /// here for fidelity. Behaviour is identical to any monotonic source; the value choice is
+        /// cosmetic, the SINGLE-SOURCE rule is not. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+        /// </summary>
+        public static int WireSyncID
+        {
+            get
+            {
+                long now = Environment.TickCount64;
+                if (_movementSyncEpochMs < 0)
+                {
+                    _movementSyncEpochMs = now;
+                }
+                return (int)((now - _movementSyncEpochMs) * 2 / 3);
+            }
+        }
+
         /// <summary>
         /// Converts the given list of Vector2s into a list of CompressedWaypoints compatible with LeaguePackets, which are Vector2s with their origin at the center of the map.
         /// </summary>
@@ -76,7 +118,7 @@ namespace PacketDefinitions420
         {
             return new MovementDataStop
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 Position = o.Position,
                 Forward = new Vector2(o.Direction.X, o.Direction.Z)
             };
@@ -137,7 +179,7 @@ namespace PacketDefinitions420
         {
             return new MovementDataNormal
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
@@ -172,7 +214,7 @@ namespace PacketDefinitions420
 
             return new MovementDataWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
