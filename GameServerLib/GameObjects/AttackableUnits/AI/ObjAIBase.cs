@@ -1168,13 +1168,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // AI_actor.Stop(false) while the order persists as AI_ATTACKTO (AIBaseClient.cpp).
                     // Riot tracks transient "standing in range / waiting for AA cooldown" via a
                     // separate AI_State, never by rewriting the order — AI_HOLD is set ONLY by the
-                    // player's hold command, never internally. Previously this wrote
-                    // UpdateMoveOrder(Hold) on the cooldown wait, which conflated the internal
-                    // wait-state with the player Hold order: once the Hold-aware auto-promote guard
-                    // (top of this method) stopped re-promoting Hold→AttackTo, the unit got stuck in
-                    // Hold and never re-chased a target that kited out of range. Keeping AttackTo
-                    // lets the else branch below re-engage the chase the moment the target leaves
-                    // range. The actual auto-attack fires from the brain's in-range attack path.
+                    // player's hold command, never internally. The auto-attack fires from the
+                    // in-range attack path below.
                     StopMovement(networked: false);
                 }
                 else

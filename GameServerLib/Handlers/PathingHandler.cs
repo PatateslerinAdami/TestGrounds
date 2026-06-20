@@ -20,6 +20,15 @@ namespace LeagueSandbox.GameServer.Handlers
         private readonly List<AttackableUnit> _pathfinders = new List<AttackableUnit>();
         private float pathUpdateTimer;
 
+        // Proactive path-revalidation cadence. Was a single 3000ms timer that revalidated (and
+        // potentially A*-rerouted) EVERY pathfinder in one frame → coarse (3s to notice a path
+        // blocked by a new wall/turret) and a periodic lag spike. Now spread round-robin so each
+        // pathfinder is revalidated ~once per window with the per-frame cost bounded. ~1s keeps the
+        // proactive backstop responsive; the reactive collision/stuck repath still handles contact
+        // within ~200ms.
+        private const float RevalidateWindowMs = 1000f;
+        private int _revalidateCursor;
+
         public PathingHandler(MapScriptHandler map)
         {
             _map = map;
@@ -49,20 +58,34 @@ namespace LeagueSandbox.GameServer.Handlers
         /// </summary>
         public void Update(float diff)
         {
-            // TODO: Verify if this is the proper time between path updates.
-            if (pathUpdateTimer >= 3000.0f)
+            int count = _pathfinders.Count;
+            if (count == 0)
             {
-                // we iterate over a copy of _pathfinders because the original gets modified
-                var objectsCopy = new List<AttackableUnit>(_pathfinders);
-                foreach (var obj in objectsCopy)
-                {
-                    UpdatePaths(obj);
-                }
-
-                pathUpdateTimer = 0;
+                return;
             }
 
-            pathUpdateTimer += diff;
+            // Round-robin: process enough pathfinders this frame to cover the whole set every
+            // RevalidateWindowMs, instead of all-at-once every 3s. Bounds are re-checked each
+            // iteration so a mid-loop add/remove (UpdatePaths -> SetWaypoints) can't index out of
+            // range; an occasional skip/repeat across the cursor wrap is harmless for revalidation.
+            int budget = (int)Math.Ceiling(count * diff / RevalidateWindowMs);
+            if (budget < 1) budget = 1;
+            if (budget > count) budget = count;
+
+            for (int n = 0; n < budget; n++)
+            {
+                if (_pathfinders.Count == 0)
+                {
+                    break;
+                }
+                if (_revalidateCursor >= _pathfinders.Count)
+                {
+                    _revalidateCursor = 0;
+                }
+                var obj = _pathfinders[_revalidateCursor];
+                _revalidateCursor++;
+                UpdatePaths(obj);
+            }
         }
 
         /// <summary>
@@ -102,6 +125,21 @@ namespace LeagueSandbox.GameServer.Handlers
                 return;
             }
 
+            // The corridor is blocked (new turret / dynamic blocker / wall placed across the path
+            // since it was computed). REROUTE to the original goal — full actor-aware A* around the
+            // obstacle (matches Riot, which rebuilds the path) — instead of truncating at the first
+            // blocked waypoint and stopping short of where the unit was ordered to go.
+            var goal = path[path.Count - 1];
+            var rerouted = GetPath(obj, goal);
+            if (rerouted != null && rerouted.Count >= 2)
+            {
+                obj.SetWaypoints(rerouted);
+                return;
+            }
+
+            // Fallback: no route to the goal exists (fully walled off). Truncate at the first blocked
+            // waypoint so the unit at least advances cleanly to the last reachable point rather than
+            // marching into the blocker; the reactive stuck/collision layer takes over from there.
             var newPath = new NavigationPath(path.Count);
             newPath.AddWaypoint(obj.Position);
 

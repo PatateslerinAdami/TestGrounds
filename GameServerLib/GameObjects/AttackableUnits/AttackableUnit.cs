@@ -2047,6 +2047,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius : CollisionRadius * 0.2f;
         private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius * 2f : CollisionRadius * 0.3f;
 
+        // Vision-radius scale (S4 obj_AI_Base::GetVisionScale: multiplier = pctBonus + 1, additive =
+        // flatBonus; raw fields fed by vision-range buffs/items). Applied to the effective vision
+        // radius via GameObject.GetEffectiveVisionRadius (= VisionRadius * mult + add). Default (1,0)
+        // = no scaling, so this is inert until a buff/item calls AddVisionScale. NOTE: as of 4.20 we
+        // ship no vision-scaling content, so this currently never changes behaviour — it's the
+        // faithful hook so such effects work when added.
+        private float _visionScalePctBonus;   // additive percent: 0.2 = +20% vision radius
+        private float _visionScaleFlatBonus;   // flat world units added to vision radius
+        public override float VisionScaleMultiplier => 1f + _visionScalePctBonus;
+        public override float VisionScaleAdditive => _visionScaleFlatBonus;
+
+        /// <summary>
+        /// Adjusts this unit's vision-radius scale (S4 GetVisionScale source fields). <paramref
+        /// name="pct"/> is additive percent (0.2 = +20% radius), <paramref name="flat"/> is in world
+        /// units. Buffs/items apply on gain and pass negated values on expiry. Effective vision
+        /// radius = VisionRadius * (1 + sum(pct)) + sum(flat).
+        /// </summary>
+        public void AddVisionScale(float pct, float flat)
+        {
+            _visionScalePctBonus += pct;
+            _visionScaleFlatBonus += flat;
+        }
+
         private Vector2 ComputeGroupCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 movementDelta, out bool hadHardColliders)
         {
             const float ReflectionIndex = 5.1f;   // S4 Actor.cpp:314
