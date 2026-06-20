@@ -143,7 +143,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// transmitted HealthBonus/DamageBonus + boosted max-HP have to be in place already (4.20 OQ#15:
         /// the client re-derives max-HP from the packet, so server and wire must agree).
         /// </summary>
-        public void ApplySpawnStatRamp(StatsModifier bonus, int level)
+        public void ApplySpawnStatRamp(StatsModifier bonus, int level, float goldGiven = -1f, float expGiven = -1f)
         {
             if (bonus != null)
             {
@@ -154,6 +154,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (level > 0)
             {
                 Stats.Level = (byte)level;
+            }
+            // Reward override (4.20 GetMinionSpawnInfo): the level script's GoldGiven/ExpGiven (base +
+            // ramp) REPLACE the chardata reward, not stack on it — so set the base directly. Gold ramps
+            // (+GoldUpgrade/90s, capped); Exp is static (ExpUpgrade = 0 on every type). -1 = leave as-is.
+            if (goldGiven >= 0f)
+            {
+                Stats.GoldGivenOnDeath.BaseValue = goldGiven;
+            }
+            if (expGiven >= 0f)
+            {
+                Stats.ExpGivenOnDeath.BaseValue = expGiven;
             }
             // Bring current HP up to the ramped maximum so the minion spawns at full (boosted) health.
             Stats.CurrentHealth = Stats.HealthPoints.Total;

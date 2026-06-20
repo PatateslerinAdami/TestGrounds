@@ -261,15 +261,18 @@ namespace MapScripts.Map10
                     waypoint.Add(new Vector2(opposedBarrack.CentralPoint.X, opposedBarrack.CentralPoint.Z));
 
                     StatsModifier rampModifier = null;
+                    float rampGold = -1f, rampExp = -1f;
                     if (_minionNumber < spawnWave.Item2.Count
                         && _minionRamps.TryGetValue(spawnWave.Item2[_minionNumber], out var ramp))
                     {
                         rampModifier = ramp.ToStatsModifier();
+                        rampGold = ramp.GoldGiven;
+                        rampExp = ramp.ExpGiven;
                     }
                     int minionLevel = Math.Max(1, GetPlayerAverageLevel());
 
                     CreateLaneMinion(spawnWave.Item2, position, team, _minionNumber, barrack.Name, waypoint, LaneMinionAI,
-                        statModifier: rampModifier, initialLevel: minionLevel);
+                        statModifier: rampModifier, initialLevel: minionLevel, goldGiven: rampGold, expGiven: rampExp);
                 }
             }
 

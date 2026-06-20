@@ -122,8 +122,8 @@ namespace MapScripts.Map1
 
         // 4.20 Map1 (classic SR) lane-minion stat ramp — values from LEVELS/Map1/Scripts/LevelScript.lua.
         // Map1 ramps Armor/MR and keeps HpUpgrade constant (no growth); the ramp is advanced every
-        // UPGRADE_MINION_TIMER (90s) and applied additively to each spawning minion. Gold/Exp-given ramp
-        // is tracked but not yet wired to rewards. See MapScripts.MinionStatRamp / docs/LANE_MINION_DECOMP_AUDIT.md.
+        // UPGRADE_MINION_TIMER (90s) and applied additively to each spawning minion. GoldGiven (ramps) /
+        // ExpGiven (static) override the chardata reward. See MapScripts.MinionStatRamp / docs/LANE_MINION_DECOMP_AUDIT.md.
         private readonly Dictionary<MinionSpawnType, MinionStatRamp> _minionRamps = new Dictionary<MinionSpawnType, MinionStatRamp>
         {
             { MinionSpawnType.MINION_TYPE_MELEE, new MinionStatRamp { HpUpgrade = 10f, DamageUpgrade = 0.5f, ArmorUpgrade = 1f, MagicResistUpgrade = 0.625f, GoldUpgrade = 0.2f, GoldMaximumBonus = 12f, GoldGivenBase = 18.8f, ExpGivenBase = 64f } },
@@ -443,17 +443,20 @@ namespace MapScripts.Map1
                 // Armor/MR) is applied additively at spawn; the level = average champion level (minions
                 // have no per-level stats, so this only drives the XP-on-death level delta).
                 StatsModifier rampModifier = null;
+                float rampGold = -1f, rampExp = -1f;
                 if (_minionNumber < spawnWave.Item2.Count
                     && _minionRamps.TryGetValue(spawnWave.Item2[_minionNumber], out var ramp))
                 {
                     rampModifier = ramp.ToStatsModifier();
+                    rampGold = ramp.GoldGiven;
+                    rampExp = ramp.ExpGiven;
                 }
                 int minionLevel = Math.Max(1, GetPlayerAverageLevel());
 
                 var spawnedMinion = CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
                     isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount,
                     enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices,
-                    lane: lane, statModifier: rampModifier, initialLevel: minionLevel);
+                    lane: lane, statModifier: rampModifier, initialLevel: minionLevel, goldGiven: rampGold, expGiven: rampExp);
 
                 // Lane-minion death-XP give-radius (4.20 LevelScript.lua EXP_GIVEN_RADIUS = 1400; engine
                 // default ai_ExpRadius2 = 1600 still applies to champions/other units). Gold is last-hit

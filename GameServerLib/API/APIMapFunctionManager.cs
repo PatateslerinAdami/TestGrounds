@@ -142,7 +142,7 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="minionNo"></param>
         /// <param name="barracksName"></param>
         /// <param name="waypoints"></param>
-        public static LaneMinion CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C, StatsModifier statModifier = null, int initialLevel = 0)
+        public static LaneMinion CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C, StatsModifier statModifier = null, int initialLevel = 0, float goldGiven = -1f, float expGiven = -1f)
         {
             if (list.Count <= minionNo)
             {
@@ -154,7 +154,7 @@ namespace LeagueSandbox.GameServer.API
             // Apply the per-wave stat ramp BEFORE AddObject — AddObject -> SpawnObject builds the spawn
             // packet (0xBA embedding Barrack_SpawnUnit + 0xAE health) synchronously, so the bonuses and
             // level must be on the unit's Stats by now or the client receives the un-ramped values.
-            m.ApplySpawnStatRamp(statModifier, initialLevel);
+            m.ApplySpawnStatRamp(statModifier, initialLevel, goldGiven, expGiven);
 
             _game.ObjectManager.AddObject(m);
             return m;

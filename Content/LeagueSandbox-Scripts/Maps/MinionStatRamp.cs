@@ -13,7 +13,8 @@ namespace MapScripts
     ///    constant (HpUpgradeGrowth = 0) -> linear HP.
     ///  - Map11 (real 4.20 SR) does NOT ramp Armor/MagicResist (set those upgrades to 0) but grows
     ///    HpUpgrade by HpUpgradeGrowth each tick -> accelerating HP.
-    /// Gold/Exp-given ramp is tracked but not yet applied to rewards (see GoldGiven/ExpGiven).
+    /// GoldGiven/ExpGiven (base + ramp) are applied as the minion's death reward at spawn — gold ramps
+    /// (+GoldUpgrade/tick, capped at GoldMaximumBonus); Exp is static (ExpUpgrade = 0 on every type).
     /// </summary>
     public class MinionStatRamp
     {
