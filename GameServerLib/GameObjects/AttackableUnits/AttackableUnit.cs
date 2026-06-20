@@ -1275,7 +1275,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 creditedKiller = redirector.GoldRedirectTarget;
             }
 
-            if (creditedKiller != null && creditedKiller is Champion champion)
+            // Deny gate (Riot AIMinionEventManager: killer.team == victim.team -> EVENT_ON_MINION_DENIED,
+            // no gold/CS/XP; only an enemy killer fires EVENT_ON_MINION_KILL). Monsters are NEUTRAL, so a
+            // BLUE/PURPLE killer always clears this gate and still gets jungle gold/XP.
+            if (creditedKiller != null && creditedKiller is Champion champion
+                && creditedKiller.Team != data.Unit.Team)
             {
                 //Monsters give XP exclusively to the killer
                 if (data.Unit is Monster)
