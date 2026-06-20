@@ -366,6 +366,11 @@ namespace MapScripts.Map1
         public int _minionNumber;
         public int _cannonMinionCount;
         public int _waveCount;
+        // 4.20 SR lane-minion reward give-radii (LevelScript.lua EXP_GIVEN_RADIUS / GOLD_GIVEN_RADIUS).
+        // EXP is proximity-shared within 1400; GOLD is last-hit on SR (shared portion = 0), so only the
+        // exp radius is wired through to the minion. See docs/LANE_MINION_WIRE_VERIFICATION.md (#5).
+        private const float EXP_GIVEN_RADIUS = 1400f;
+
         public bool SetUpLaneMinion()
         {
             int cannonMinionCap = 2;
@@ -438,10 +443,19 @@ namespace MapScripts.Map1
                     }
                 }
 
-                CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
+                var spawnedMinion = CreateLaneMinion(spawnWave.Item2, position, barrackTeam, _minionNumber, barrack.Value.Name, waypoint, LaneMinionAI,
                     isFirstWave: _waveCount == 0, outerTurretPosition: outerTurretPos, waveNumber: _waveCount,
                     enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices,
                     lane: lane);
+
+                // Lane-minion death-XP give-radius (4.20 LevelScript.lua EXP_GIVEN_RADIUS = 1400; engine
+                // default ai_ExpRadius2 = 1600 still applies to champions/other units). Gold is last-hit
+                // (GOLD_GIVEN_RADIUS only governs the shared-gold portion, which is 0 on SR), so no gold
+                // radius is wired. See docs/LANE_MINION_WIRE_VERIFICATION.md (#5).
+                if (spawnedMinion != null)
+                {
+                    spawnedMinion.ExperienceGiveRadius = EXP_GIVEN_RADIUS;
+                }
             }
 
             if (_minionNumber < 8)

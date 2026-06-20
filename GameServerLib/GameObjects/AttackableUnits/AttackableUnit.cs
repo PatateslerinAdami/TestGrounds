@@ -1252,7 +1252,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (!(obj is Monster))
                 {
-                    var champs = _game.ObjectManager.GetChampionsInRangeFromTeam(Position, GlobalData.ObjAIBaseVariables.ExpRadius2, CustomConvert.GetEnemyTeam(Team), true);
+                    var champs = _game.ObjectManager.GetChampionsInRangeFromTeam(Position, obj.ExperienceGiveRadius, CustomConvert.GetEnemyTeam(Team), true);
                     if (champs.Count > 0)
                     {
                         var expPerChamp = obj.Stats.ExpGivenOnDeath.Total / champs.Count;

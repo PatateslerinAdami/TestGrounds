@@ -271,6 +271,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool IsBot { get; set; }
         public bool IgnoreMoveOrders { get; set; }
         public IAIScript AIScript { get; protected set; }
+        /// <summary>
+        /// Radius within which this unit's death shares experience to enemy champions. Defaults to the
+        /// engine-wide <c>ai_ExpRadius2</c> (1600); lane minions override it to their map-script value
+        /// (SR = 1400, 4.20 LevelScript.lua EXP_GIVEN_RADIUS) — that is a per-minion give-radius distinct
+        /// from the engine default, which still applies to champions and other units.
+        /// </summary>
+        public float ExperienceGiveRadius { get; set; } = LeagueSandbox.GameServer.Content.GlobalData.ObjAIBaseVariables.ExpRadius2;
         public List<DelayedSpellPacketInfo> delayedSpellPackets = new List<DelayedSpellPacketInfo>();
         private bool invisSent = false;
         private bool _charScriptActivated;

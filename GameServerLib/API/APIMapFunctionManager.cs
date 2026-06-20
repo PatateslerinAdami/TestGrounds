@@ -142,15 +142,16 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="minionNo"></param>
         /// <param name="barracksName"></param>
         /// <param name="waypoints"></param>
-        public static void CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C)
+        public static LaneMinion CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C)
         {
             if (list.Count <= minionNo)
             {
-                return;
+                return null;
             }
 
             var m = new LaneMinion(_game, list[minionNo], position, barracksName, waypoints, _map.MapScript.MinionModels[team][list[minionNo]], 0, team, null, laneMinionAI, isFirstWave, outerTurretPosition, waveNumber, enemyLaneTurretsAhead, enemyLaneTurretWaypointIndices, lane);
             _game.ObjectManager.AddObject(m);
+            return m;
         }
  
         /// <summary>
