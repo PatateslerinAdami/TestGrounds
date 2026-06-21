@@ -26,7 +26,7 @@ public class SRU_ChaosMinionRangedBasicAttack : ISpellScript
     };
 }
 
-public class SRU_ChaosMinionRangedBasicAttacks2 : ISpellScript
+public class SRU_ChaosMinionRangedBasicAttack2 : ISpellScript
 {
     public SpellScriptMetadata ScriptMetadata => new() {
         

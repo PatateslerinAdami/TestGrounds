@@ -2549,6 +2549,57 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Overrides a champion's level cap on its owning client (S2C_UnitSetMaxLevelOverride) — e.g. URF's
+        /// level 30. The server-side cap is enforced separately via MapScriptMetadata.MaxLevel; this keeps
+        /// the client HUD/XP bar correct past level 18. No-op for non-player units.
+        /// </summary>
+        public static void SetMaxLevelOverride(ObjAIBase unit, byte maxLevel)
+        {
+            if (unit is Champion champion)
+            {
+                var player = _game.PlayerManager.GetClientInfoByChampion(champion);
+                if (player != null)
+                {
+                    _game.PacketNotifier.NotifyS2C_UnitSetMaxLevelOverride(player.ClientId, unit, maxLevel);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Overrides the mana cost of a spell slot on the owning client (S2C_UnitSetSpellPARCost, owner-only).
+        /// This is the engine side of Riot's BBSetPARCostInc building block: recast-window ults (Ahri R,
+        /// Kha'Zix R, Irelia R, ...) set a negative <paramref name="amount"/> on their R slot when cast so
+        /// the recasts are free, then call it again with amount 0 to restore the base cost when the window
+        /// ends; Kog'Maw's Living Artillery uses a positive, escalating amount. No-op for non-player units.
+        /// </summary>
+        /// <param name="unit">The casting unit (must be a player champion to have an owning client).</param>
+        /// <param name="slot">Spell slot to modify (e.g. 3 for R).</param>
+        /// <param name="costType">Additive or Multiplicative mana-cost increment.</param>
+        /// <param name="amount">Cost delta; negative = cheaper, positive = more expensive, 0 = restore base.</param>
+        public static void SetSpellPARCost(ObjAIBase unit, int slot, SpellPARCostType costType, float amount)
+        {
+            if (unit is Champion champion)
+            {
+                var player = _game.PlayerManager.GetClientInfoByChampion(champion);
+                if (player != null)
+                {
+                    _game.PacketNotifier.NotifyS2C_UnitSetSpellPARCost(player.ClientId, unit, costType, slot, amount);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Points <paramref name="owner"/>'s hover indicator at <paramref name="target"/>
+        /// (S2C_SetHoverIndicatorTarget, broadcast). The owner is the clickable object carrying the
+        /// indicator (e.g. a Thresh lantern) and the target is what its "click here" ring points toward
+        /// (e.g. Thresh). The indicator radius/texture come from the owner's HoverIndicator* stats.
+        /// </summary>
+        public static void SetHoverIndicatorTarget(AttackableUnit owner, GameObject target)
+        {
+            _game.PacketNotifier.NotifyS2C_SetHoverIndicatorTarget(owner, target);
+        }
+
+        /// <summary>
         /// Triggers a named contextual situation on a unit (S2C_NotifyContextualSituation) so clients
         /// with vision play the matching contextual VO/emote/animation. Used for server-timed
         /// situations like "RecallLeadIn" / "RecallWindDown".

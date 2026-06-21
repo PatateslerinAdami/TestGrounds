@@ -3884,6 +3884,55 @@ namespace PacketDefinitions420
             _packetHandlerManager.SendPacket(player.ClientId, packet.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Tells a unit's owning client that its champion level cap is overridden (S2C_UnitSetMaxLevelOverride,
+        /// 0x112) — e.g. URF raises it from 18 to 30. Owner-only (decomp PolicySendToOwnerClientOnly); the
+        /// server already enforces the cap via MapScriptMetadata.MaxLevel, this keeps the client HUD/XP bar
+        /// in sync past level 18.
+        /// </summary>
+        public void NotifyS2C_UnitSetMaxLevelOverride(int userId, AttackableUnit unit, byte maxLevel)
+        {
+            var packet = new S2C_UnitSetMaxLevelOverride
+            {
+                SenderNetID = unit.NetId,
+                MaxLevelOverride = maxLevel
+            };
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Overrides a spell slot's PAR (mana) cost on the owning client (S2C_UnitSetSpellPARCost,
+        /// owner-only). Riot's recast-window ults set this on the R slot at cast (cheaper/free recasts)
+        /// and restore it to 0 when the window ends — see the BBSetPARCostInc building block.
+        /// </summary>
+        public void NotifyS2C_UnitSetSpellPARCost(int userId, AttackableUnit unit, SpellPARCostType costType, int slot, float amount)
+        {
+            var packet = new S2C_UnitSetSpellPARCost
+            {
+                SenderNetID = unit.NetId,
+                CostType = (byte)costType,
+                SpellSlot = slot,
+                Amount = amount
+            };
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Points a unit's hover indicator at a target (S2C_SetHoverIndicatorTarget, broadcast). The
+        /// owner is the object carrying the indicator (e.g. a Thresh lantern); the target is what the
+        /// "you can click this" ring points toward (e.g. Thresh, the dash destination). The indicator's
+        /// radius/texture come from the owner's HoverIndicator* stats.
+        /// </summary>
+        public void NotifyS2C_SetHoverIndicatorTarget(AttackableUnit owner, GameObject target)
+        {
+            var packet = new S2C_SetHoverIndicatorTarget
+            {
+                SenderNetID = owner.NetId,
+                TargetNetID = target.NetId
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifyS2C_Neutral_Camp_Empty(MonsterCamp monsterCamp, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null, int userId = -1)
         {
             var packet = new S2C_Neutral_Camp_Empty
@@ -3893,8 +3942,10 @@ namespace PacketDefinitions420
                 DoPlayVO = true,
                 CampIndex = monsterCamp.CampIndex,
                 TimerType = monsterCamp.TimerType,
-                //Check what the hell this is for
-                TimerExpire = 0.0f
+                // Absolute respawn game-time (seconds) for camps with a HUD timer (Baron/Dragon, TimerType
+                // != 0). Replay-verified: Riot sends the next-spawn game-time here (e.g. 456.0). Untimed
+                // camps (TimerType 0) carry 0 — the client shows no respawn timer for them.
+                TimerExpire = monsterCamp.TimerType != 0 ? monsterCamp.GetTimerExpire() : 0.0f
             };
             if (deathData != null)
             {
@@ -3911,7 +3962,12 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing that the specified unit has been killed by the specified killer.
+        /// Tells clients that have the unit spawned that it died (NPC_Die_MapView, 0x126). Riot's packet
+        /// is vision-gated (PolicyMapView) — a player who never saw the unit must NOT learn of its death
+        /// (vision leak) and, for lane minions, must instead be told via S2C_IncrementMinionKills so their
+        /// scoreboard CS stays correct. Sent to <see cref="GameObject.SpawnedForPlayers"/> (everyone who
+        /// ever saw it) rather than strict current-vision, so a player who saw the unit then lost vision
+        /// still gets the death and doesn't keep an orphaned unit frozen in fog.
         /// </summary>
         /// <param name="data">Data of the death.</param>
         public void NotifyS2C_NPC_Die_MapView(GameServerLib.GameObjects.AttackableUnits.DeathData data)
@@ -3934,7 +3990,24 @@ namespace PacketDefinitions420
                 dieMapView.DeathData.KillerNetID = data.Killer.NetId;
             }
 
-            _packetHandlerManager.BroadcastPacket(dieMapView.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacketSpawned(data.Unit, dieMapView.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Bumps the killer's lane-minion CS counter on the scoreboard of every player who did NOT have
+        /// the dying minion spawned (S2C_IncrementMinionKills, 0x11F). Players who DID see it count the CS
+        /// locally from the vision-gated NPC_Die (0x126) — this fills the gap for the rest so CS is counted
+        /// exactly once (no double-count). Lane CS only; jungle/neutral CS is replicated separately
+        /// (mNumNeutralMinionsKilled).
+        /// </summary>
+        public void NotifyS2C_IncrementMinionKills(Champion killer, AttackableUnit minion)
+        {
+            var packet = new S2C_IncrementMinionKills
+            {
+                SenderNetID = killer.NetId,
+                PlayerNetID = killer.NetId
+            };
+            _packetHandlerManager.BroadcastPacketUnspawned(minion, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         S2C_OnEnterTeamVisibility ConstructOnEnterTeamVisibilityPacket(GameObject o, TeamId team)
@@ -4952,6 +5025,49 @@ namespace PacketDefinitions420
                 TimeOut = timeOut,
             };
             _packetHandlerManager.BroadcastPacketTeam(starter.Team, surrender.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Sends S2C_TeamBalanceStatus (0xFC) to one player — the team-balance counterpart of
+        /// <see cref="NotifyTeamSurrenderStatus"/>. Reuses the SurrenderReason codes (the client shares
+        /// the surrender vote HUD) and additionally carries the catch-up grant breakdown shown in the UI.
+        /// </summary>
+        public void NotifyTeamBalanceStatus(int userId, TeamId team, SurrenderReason reason, byte yesVotes, byte noVotes, float goldGranted, int experienceGranted, int towersGranted)
+        {
+            var balanceStatus = new S2C_TeamBalanceStatus()
+            {
+                SurrenderReason = (byte)reason,
+                ForVote = yesVotes,
+                AgainstVote = noVotes,
+                TeamID = (uint)team,
+                GoldGranted = goldGranted,
+                ExperienceGranted = experienceGranted,
+                TowersGranted = towersGranted,
+            };
+            _packetHandlerManager.SendPacket(userId, balanceStatus.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Sends S2C_TeamBalanceVote (0xFA) to the voter's team — the team-balance counterpart of
+        /// <see cref="NotifyTeamSurrenderVote"/>, plus the catch-up grant breakdown (gold/exp/towers).
+        /// </summary>
+        public void NotifyTeamBalanceVote(Champion starter, bool open, bool votedYes, byte yesVotes, byte noVotes, byte maxVotes, float timeOut, float goldGranted, int experienceGranted, int towersGranted)
+        {
+            var balance = new S2C_TeamBalanceVote()
+            {
+                PlayerNetID = starter.NetId,
+                OpenVoteMenu = open,
+                VoteYes = votedYes,
+                ForVote = yesVotes,
+                AgainstVote = noVotes,
+                NumPlayers = maxVotes,
+                TeamID = (uint)starter.Team,
+                TimeOut = timeOut,
+                GoldGranted = goldGranted,
+                ExperienceGranted = experienceGranted,
+                TowersGranted = towersGranted,
+            };
+            _packetHandlerManager.BroadcastPacketTeam(starter.Team, balance.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>

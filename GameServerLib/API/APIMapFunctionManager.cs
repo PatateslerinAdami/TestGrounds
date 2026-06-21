@@ -315,6 +315,24 @@ namespace LeagueSandbox.GameServer.API
             if (_map.Surrenders.ContainsKey(who.Team))
                 _map.Surrenders[who.Team].HandleSurrender(userId, who, vote);
         }
+
+        /// <summary>
+        /// Sets up the team-balance vote (catch-up compensation for the disadvantaged team).
+        /// Timing params mirror AddSurrender (time/restTime in ms, length in seconds). The grant
+        /// amounts (gold/exp/towers) are content-owned and NOT 4.20-decomp-verified — tune per map.
+        /// </summary>
+        public static void AddTeamBalance(float time, float restTime, float length,
+            float goldGranted, int experienceGranted, int towersGranted)
+        {
+            _map.TeamBalances.Add(TeamId.TEAM_BLUE, new TeamBalanceHandler(_game, TeamId.TEAM_BLUE, time, restTime, length, goldGranted, experienceGranted, towersGranted));
+            _map.TeamBalances.Add(TeamId.TEAM_PURPLE, new TeamBalanceHandler(_game, TeamId.TEAM_PURPLE, time, restTime, length, goldGranted, experienceGranted, towersGranted));
+        }
+
+        public static void HandleTeamBalanceVote(int userId, Champion who, bool vote)
+        {
+            if (_map.TeamBalances.ContainsKey(who.Team))
+                _map.TeamBalances[who.Team].HandleTeamBalanceVote(userId, who, vote);
+        }
  
         /// <summary>
         /// Adds a fountain

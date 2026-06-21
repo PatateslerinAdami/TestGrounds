@@ -11,7 +11,7 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 
-namespace Spells;
+namespace CharScripts;
 
 public class CharScriptSRU_OrderMinionRanged : ICharScript
 {

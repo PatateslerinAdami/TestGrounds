@@ -28,6 +28,8 @@ namespace MapScripts.Map1
             {
                 //There are mentions to a "rewindcof" buff being loaded too, but it's functions are yet unknown
                 AddBuff("InternalTestBuff", float.MaxValue, 1, null, player, null, true);
+                // Tell each owner their level cap is raised (URF 30); the server-side cap is MapScriptMetadata.MaxLevel.
+                SetMaxLevelOverride(player, (byte)MapScriptMetadata.MaxLevel);
             }
         }
     }

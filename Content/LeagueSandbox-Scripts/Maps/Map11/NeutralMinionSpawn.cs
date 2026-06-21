@@ -5,6 +5,7 @@ using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using System.Collections.Generic;
 using System.Numerics;
+using static GameServerCore.Content.HashFunctions;
 using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace MapScripts.Map11
@@ -30,6 +31,9 @@ namespace MapScripts.Map11
 
             //Blue Side Blue Buff
             var blue_blueBuff = CreateJungleCamp(new Vector3(3871.48846f, 60.0f, 7901.05403f), 1, TeamId.TEAM_BLUE, "Camp", 113.9f * 1000, spawnDuration: 1.1f);
+            // Buff-camp HUD respawn timers: TimerType = HashString("<Side> <Buff>"), Side=Order(blue jungle)/
+            // Chaos(red jungle), Buff=Blue/Red. Replay-verified hashes (strings from LEVELS/map11/NeutralTimers.inibin).
+            blue_blueBuff.TimerType = (int)HashString("Order Blue");
             MonsterCamps.Add(blue_blueBuff, new List<Monster> 
             {
                 CreateJungleMonster("SRU_Blue1.1.1", "SRU_Blue", new Vector2(3871.48846f, 7901.05403f), new Vector3(3420.60846f, 55.0703f, 8190.70403f), blue_blueBuff, spawnAnimation: "spawn", aiScript: "JungleMonsterAI"),
@@ -58,6 +62,7 @@ namespace MapScripts.Map11
 
             //Blue Side RedBuff
             var blue_RedBuff = CreateJungleCamp(new Vector3(7862.243694f, 60.0f, 4111.186667f), 4, TeamId.TEAM_BLUE, "Camp", 113.34f * 1000, spawnDuration: 1.66f);
+            blue_RedBuff.TimerType = (int)HashString("Order Red");
             MonsterCamps.Add(blue_RedBuff, new List<Monster>
             {
                 CreateJungleMonster("SRU_Red4.1.1", "SRU_Red", new Vector2(7862.243694f, 4111.186667f), new Vector3(7622.38846f, 54.426f, 3947.19403f), blue_RedBuff, spawnAnimation: "spawn", aiScript: "JungleMonsterAI"),
@@ -75,6 +80,8 @@ namespace MapScripts.Map11
 
             //Dragon
             var dragon = CreateJungleCamp(new Vector3(9866.14846f, 60.0f, 4414.01403f), 6, TeamId.TEAM_UNKNOWN, "Dragon", 143.5f * 1000, revealEvent: 43, spawnDuration: 6.5f);
+            // HUD respawn-timer category (replay-verified TimerType hash = HashString("Dragon") = 112754270).
+            dragon.TimerType = (int)HashString("Dragon");
             MonsterCamps.Add(dragon, new List<Monster>
             {
                 CreateJungleMonster("Dragon6.1.1", "SRU_Dragon", new Vector2(9866.14846f, 4414.01403f), new Vector3(10517.62846f, -67.0f, 5171.98403f), dragon, spawnAnimation: "spawn", aiScript: "JungleMonsterAI")
@@ -82,6 +89,7 @@ namespace MapScripts.Map11
 
             //Red Side BlueBuff
             var red_BlueBuff = CreateJungleCamp(new Vector3(10931.72846f, 60.0f, 6990.84403f), 7, TeamId.TEAM_PURPLE, "Camp", 113.9f * 1000, spawnDuration: 1.1f);
+            red_BlueBuff.TimerType = (int)HashString("Chaos Blue");
             MonsterCamps.Add(red_BlueBuff, new List<Monster>
             {
                 CreateJungleMonster("SRU_Blue7.1.1", "SRU_Blue", new Vector2(10931.72846f, 6990.84403f), new Vector3(11428.62846f, 54.8568f, 6740.70403f), red_BlueBuff, spawnAnimation: "spawn", aiScript: "JungleMonsterAI"),
@@ -110,6 +118,7 @@ namespace MapScripts.Map11
 
             //Red Side RedBuff
             var red_RedBuff = CreateJungleCamp(new Vector3(7016.869183f, 60.0f, 10775.54653f), 10, TeamId.TEAM_PURPLE, "Camp", 113.34f * 1000, spawnDuration: 1.66f);
+            red_RedBuff.TimerType = (int)HashString("Chaos Red");
             MonsterCamps.Add(red_RedBuff, new List<Monster>
             {
                 CreateJungleMonster("SRU_Red10.1.1", "SRU_Red", new Vector2(7016.869f, 10775.547f), new Vector3(7257.22846f, 56.4084f, 11071.28403f), red_RedBuff, spawnAnimation: "spawn", aiScript: "JungleMonsterAI"),
@@ -127,6 +136,8 @@ namespace MapScripts.Map11
 
             //Baron
             var baron = CreateJungleCamp(new Vector3(5007.123577f, 60.0f, 10471.445944f), 12, TeamId.TEAM_UNKNOWN, "Baron", 1191.5f * 1000, revealEvent: 42, spawnDuration: 8.5f);
+            // HUD respawn-timer category (replay-verified TimerType hash = HashString("Baron") = 6850910).
+            baron.TimerType = (int)HashString("Baron");
             MonsterCamps.Add(baron, new List<Monster>
             {
                 CreateJungleMonster("SRU_Baron12.1.1", "SRU_Baron", new Vector2(5007.123577f, 10471.445944f), new Vector3(4736.05846f, -71.0f, 10107.98403f), baron, spawnAnimation: "spawn", aiScript: "JungleMonsterAI"),

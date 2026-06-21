@@ -103,6 +103,17 @@ namespace GameServerLib.GameObjects
         {
         }
 
+        /// <summary>
+        /// Absolute respawn time in game-SECONDS, for the HUD respawn timer carried in
+        /// S2C_Neutral_Camp_Empty.TimerExpire (only meaningful for camps with a TimerType != 0, i.e.
+        /// Baron/Dragon). The camp-empty packet is only sent while the camp is dead and RespawnTimer is
+        /// counting down, so GameTime + RespawnTimer is the (constant) absolute respawn time.
+        /// </summary>
+        public float GetTimerExpire()
+        {
+            return (_game.GameTime + RespawnTimer) / 1000f;
+        }
+
         public Monster AddMonster(Monster monster)
         {
             var aiscript = monster.AIScript.ToString().Remove(0, 10);

@@ -241,6 +241,13 @@ namespace PacketDefinitions420
             rq.Read(data);
             return new SurrenderRequest(rq.VotedYes);
         }
+        [PacketType(GamePacketID.C2S_TeamBalanceVote)]
+        public static TeamBalanceRequest ReadTeamBalanceRequest(byte[] data)
+        {
+            var rq = new C2S_TeamBalanceVote();
+            rq.Read(data);
+            return new TeamBalanceRequest(rq.VoteYes);
+        }
 
         [PacketType(GamePacketID.OnReplication_Acc)]
         public static ReplicationConfirmRequest ReadStatsConfirmRequest(byte[] data)

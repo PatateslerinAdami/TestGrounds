@@ -52,6 +52,7 @@ namespace LeagueSandbox.GameServer.Handlers
 
         //Consider moving this to MapScripts(?)
         public readonly Dictionary<TeamId, SurrenderHandler> Surrenders = new Dictionary<TeamId, SurrenderHandler>();
+        public readonly Dictionary<TeamId, TeamBalanceHandler> TeamBalances = new Dictionary<TeamId, TeamBalanceHandler>();
 
         /// <summary>
         /// Instantiates map related game settings such as collision handler, navigation grid, announcer events, and map properties.
@@ -113,6 +114,14 @@ namespace LeagueSandbox.GameServer.Handlers
                 foreach (var surrender in Surrenders.Values)
                 {
                     surrender.Update(diff);
+                }
+            }
+
+            using (Profiler.Scope("TeamBalances.Update"))
+            {
+                foreach (var balance in TeamBalances.Values)
+                {
+                    balance.Update(diff);
                 }
             }
         }
