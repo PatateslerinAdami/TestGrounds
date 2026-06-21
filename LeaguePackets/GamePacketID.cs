@@ -133,7 +133,7 @@ namespace LeaguePackets
         AI_Command = 0x7A,                              //DONE?
         NPC_BuffRemove2 = 0x7B,                         //DONE?
         SpawnMinionS2C = 0x7C,                          //DONE?
-        Unused125 = 0x7D,                               //Unused
+        ClientCheatDetectionSignal = 0x7D,              //Anti-cheat (4.17 PKT_ClientCheatDetectionSignal, C2S camera-cheat detect); unused by us
         S2C_ToggleFoW = 0x7E,                           //DONE?
         S2C_ToolTipVars = 0x7F,                         //DONE?
         Unused128 = 0x80,                               //Unused
@@ -142,7 +142,7 @@ namespace LeaguePackets
         WaypointListHeroWithSpeed = 0x83,               //DONE?
         S2C_SetInputLockFlag = 0x84,                    //DONE?
         CHAR_SetCooldown = 0x85,                        //DONE?
-        CHAR_CancelTargetingReticle = 0x86,             //TODO: Unknowns in ExtraBytes
+        CHAR_CancelTargetingReticle = 0x86,             //DONE — owner-only S2C; 1 bitfield byte: SpellSlot(0x3F) + IsSummonerSpell(0x40)
         FX_Create_Group = 0x87,                         //DONE?
         S2C_QueryStatusAns = 0x88,                      //DONE?
         Building_Die = 0x89,                            //DONE?
@@ -158,7 +158,7 @@ namespace LeaguePackets
         SetPARState = 0x93,                             //DONE?
         NPC_BuffRemoveGroup = 0x94,                     //DONE?
         S2C_Ping_Load_Info = 0x95,                      //DONE?
-        S2C_ChangeCharacterVoice = 0x96,                //TODO: Unknowns
+        S2C_ChangeCharacterVoice = 0x96,                //DONE — voice-bank override; body Reset(bit0) + VoiceOverride[64]
         S2C_ChangeCharacterData = 0x97,                 //DONE?
         S2C_Exit = 0x98,                                //DONE — disconnect indicator (Riot enum=PKT_S2C_Exit, handler=ShowDisconnect); body NetID + ShowToEnemies
         SPM_RemoveBBProfileListener = 0x99,             //Unused
