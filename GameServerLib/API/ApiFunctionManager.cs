@@ -2600,6 +2600,18 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Enables/disables <paramref name="owner"/>'s hover indicator (S2C_SetHoverIndicatorEnabled).
+        /// The client gates rendering on this flag (defaults false), so it must be set true — together
+        /// with <see cref="SetHoverIndicatorTarget"/> — for the "click here" ring to appear. Pass
+        /// <paramref name="team"/> to restrict the indicator to one side (e.g. the Thresh lantern's
+        /// allies); null sends to everyone.
+        /// </summary>
+        public static void SetHoverIndicatorEnabled(AttackableUnit owner, bool enabled, TeamId? team = null)
+        {
+            _game.PacketNotifier.NotifyS2C_SetHoverIndicatorEnabled(owner, enabled, team);
+        }
+
+        /// <summary>
         /// Triggers a named contextual situation on a unit (S2C_NotifyContextualSituation) so clients
         /// with vision play the matching contextual VO/emote/animation. Used for server-timed
         /// situations like "RecallLeadIn" / "RecallWindDown".

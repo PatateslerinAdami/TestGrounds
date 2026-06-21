@@ -3933,6 +3933,31 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Enables/disables a unit's hover indicator (S2C_SetHoverIndicatorEnabled). The client's
+        /// `mHoverIndicatorEnabled` defaults to FALSE and the render path is gated on it, so this MUST be
+        /// sent with enabled=true (in addition to NotifyS2C_SetHoverIndicatorTarget) for the ring to draw.
+        /// Since rendering is gated on this flag, restricting it to one team (e.g. the Thresh lantern's
+        /// allies) makes the indicator effectively team-only even though the Target packet is broadcast.
+        /// Pass <paramref name="team"/> = null to send to everyone.
+        /// </summary>
+        public void NotifyS2C_SetHoverIndicatorEnabled(AttackableUnit owner, bool enabled, TeamId? team = null)
+        {
+            var packet = new S2C_SetHoverIndicatorEnabled
+            {
+                SenderNetID = owner.NetId,
+                Enabled = enabled
+            };
+            if (team.HasValue)
+            {
+                _packetHandlerManager.BroadcastPacketTeam(team.Value, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
         public void NotifyS2C_Neutral_Camp_Empty(MonsterCamp monsterCamp, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null, int userId = -1)
         {
             var packet = new S2C_Neutral_Camp_Empty
