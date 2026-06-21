@@ -351,7 +351,7 @@ public class GetPathTests
         }
         Assert.NotEmpty(wallIds);
 
-        NavigationGrid.ActorBlockedPredicate pred = (_, cell) => wallIds.Contains(cell.ID);
+        NavigationGrid.ActorBlockedPredicate pred = (_, cell, _) => wallIds.Contains(cell.ID);
         var path = grid.GetPath(from, to, 0f, false, pred);
 
         Assert.NotNull(path);
@@ -386,7 +386,7 @@ public class GetPathTests
 
         // Predicate that ALWAYS reports the goal cell as blocked (and only the goal cell).
         // Without the ExpandStep exemption, the search would never reach toCell.
-        NavigationGrid.ActorBlockedPredicate pred = (_, cell) => cell.ID == toCell.ID;
+        NavigationGrid.ActorBlockedPredicate pred = (_, cell, _) => cell.ID == toCell.ID;
         var path = grid.GetPath(from, to, 0f, false, pred);
 
         Assert.NotNull(path);
@@ -423,7 +423,7 @@ public class GetPathTests
             }
         }
 
-        NavigationGrid.ActorBlockedPredicate pred = (_, cell) => ringIds.Contains(cell.ID);
+        NavigationGrid.ActorBlockedPredicate pred = (_, cell, _) => ringIds.Contains(cell.ID);
         var path = grid.GetPath(from, to, 0f, false, pred);
 
         // Either a partial path (best-explored is closer than start) or null (no progress).
@@ -454,7 +454,7 @@ public class GetPathTests
         var to = FindWalkablePos(grid, 130, 130);
 
         int callCount = 0;
-        NavigationGrid.ActorBlockedPredicate pred = (_, _) =>
+        NavigationGrid.ActorBlockedPredicate pred = (_, _, _) =>
         {
             callCount++;
             return false;
@@ -493,7 +493,7 @@ public class GetPathTests
         }
         Assert.NotEmpty(nearGoalIds);
 
-        NavigationGrid.ActorBlockedPredicate pred = (_, cell) => nearGoalIds.Contains(cell.ID);
+        NavigationGrid.ActorBlockedPredicate pred = (_, cell, _) => nearGoalIds.Contains(cell.ID);
         var path = grid.GetPath(from, to, 0f, false, pred);
 
         Assert.NotNull(path);
@@ -545,7 +545,7 @@ public class GetPathTests
         // far less than for a short path. Concrete check: the path returns successfully and
         // (because predicate is bypassed mid-path) is allowed to traverse wall cells.
         int wallConsultCount = 0;
-        NavigationGrid.ActorBlockedPredicate pred = (_, cell) =>
+        NavigationGrid.ActorBlockedPredicate pred = (_, cell, _) =>
         {
             if (wallIds.Contains(cell.ID)) wallConsultCount++;
             return wallIds.Contains(cell.ID);
@@ -640,7 +640,7 @@ public class GetPathTests
         var targetNav = grid.TranslateToNavGrid(target);
         var targetCell = grid.GetCell((short)targetNav.X, (short)targetNav.Y);
 
-        NavigationGrid.ActorBlockedPredicate blockTargetOnly = (worldPos, cell) => cell.ID == targetCell.ID;
+        NavigationGrid.ActorBlockedPredicate blockTargetOnly = (worldPos, cell, _) => cell.ID == targetCell.ID;
         Assert.False(grid.CheckIsGetToAble(from, target, blockTargetOnly));
     }
 
@@ -655,7 +655,7 @@ public class GetPathTests
         var fromNav = grid.TranslateToNavGrid(from);
         var blockedX = (short)(fromNav.X + 1);
 
-        NavigationGrid.ActorBlockedPredicate blockOnlyXAxis = (worldPos, cell) =>
+        NavigationGrid.ActorBlockedPredicate blockOnlyXAxis = (worldPos, cell, _) =>
             cell.Locator.X == blockedX && cell.Locator.Y == (short)fromNav.Y;
         // The function should fall through to BFS when +X ring fails, and BFS finds an
         // unobstructed path to target via the +Y axis or diagonals. Result depends on target
@@ -686,7 +686,7 @@ public class GetPathTests
         var targetNav = grid.TranslateToNavGrid(target);
         var targetCell = grid.GetCell((short)targetNav.X, (short)targetNav.Y);
 
-        NavigationGrid.ActorBlockedPredicate blockTargetOnly = (worldPos, cell) => cell.ID == targetCell.ID;
+        NavigationGrid.ActorBlockedPredicate blockTargetOnly = (worldPos, cell, _) => cell.ID == targetCell.ID;
         var snapped = grid.SetToNearestGetToAbleCell(target, from, blockTargetOnly);
         // Snapped position should differ from original target (spiral moved off it).
         // Allow small float tolerance for cell-center quantization.

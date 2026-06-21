@@ -159,6 +159,14 @@ namespace PacketDefinitions420
             return new AttentionPingRequest(rq.Position, rq.TargetNetID, (Pings)rq.PingCategory);
         }
 
+        [PacketType(GamePacketID.C2S_PlayVOCommand)]
+        public static PlayVOCommandRequest ReadPlayVOCommandRequest(byte[] data)
+        {
+            var rq = new C2S_PlayVOCommand();
+            rq.Read(data);
+            return new PlayVOCommandRequest(rq.CommandID, rq.TargetNetID, rq.EventHash, rq.HighlightPlayerIcon, rq.FromPing, rq.AlliesOnly);
+        }
+
         [PacketType(LoadScreenPacketID.RequestJoinTeam)]
         public static JoinTeamRequest ReadClientJoinTeamRequest(byte[] data)
         {

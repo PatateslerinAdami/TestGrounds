@@ -49,7 +49,14 @@ namespace PacketDefinitions420
                 {
                     _movementSyncEpochMs = now;
                 }
-                return (int)((now - _movementSyncEpochMs) * 2 / 3);
+                // Mask to 31 bits so the value stays NON-NEGATIVE for unbounded uptime. Without this the
+                // (int) cast of the scaled elapsed-ms goes negative once it exceeds int.MaxValue (~37 days
+                // of continuous uptime), which breaks the monotonicity CanSyncUpdate demands → the client
+                // would drop all movement. Masking instead wraps cleanly 2^31-1 → 0; that single backward
+                // step is ~2^31, well past the client's 0x40000000 wrap tolerance, so it is accepted and
+                // monotonicity resumes from 0. (64-bit TickCount64 already avoids the 24.8-day signed-ms
+                // wrap; this guards the final 32-bit projection.)
+                return (int)(((now - _movementSyncEpochMs) * 2 / 3) & 0x7FFFFFFFL);
             }
         }
 

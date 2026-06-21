@@ -105,74 +105,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Replication = new ReplicationMinion(this);
         }
 
-        public override void OnCollision(GameObject collider, bool isTerrain = false)
-        {
-            base.OnCollision(collider, isTerrain);
-            if (isTerrain) return;
-
-            if (IsDead || MovementParameters != null || Status.HasFlag(StatusFlags.Ghosted)) return;
-
-            if (collider is AttackableUnit otherUnit)
-            {
-                if (otherUnit.MovementParameters != null || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) return;
-
-                if (IsAttacking || GetCastSpell() != null || ChannelSpell != null || MoveOrder == OrderType.Hold || MoveOrder == OrderType.Stop)
-                {
-                    return;
-                }
-
-                bool otherIsHuman = otherUnit is Champion && (otherUnit as ObjAIBase)?.IsBot == false;
-
-                bool otherIsBusyAI = false;
-                if (otherUnit is ObjAIBase otherAI)
-                {
-                    otherIsBusyAI = otherAI.IsAttacking || otherAI.GetCastSpell() != null || otherAI.ChannelSpell != null || otherAI.MoveOrder == OrderType.Hold || otherAI.MoveOrder == OrderType.Stop;
-                }
-
-                if (collider.Position != Position)
-                {
-                    Vector2 toCollider = collider.Position - Position;
-                    float distSq = toCollider.LengthSquared();
-                    float combinedRadius = CollisionRadius + otherUnit.CollisionRadius;
-
-                    if (distSq < (combinedRadius * combinedRadius) && distSq > 0.0001f)
-                    {
-                        float distance = (float)Math.Sqrt(distSq);
-                        float overlap = combinedRadius - distance;
-
-                        Vector2 pushDirection = -(toCollider / distance);
-
-                        Vector2 myDir = Waypoints.Count > CurrentWaypointKey ? (Waypoints[CurrentWaypointKey] - Position) : Vector2.Zero;
-                        if (myDir != Vector2.Zero) myDir = Vector2.Normalize(myDir); 
-
-                        Vector2 otherDir = otherUnit.Waypoints.Count > otherUnit.CurrentWaypointKey ? (otherUnit.Waypoints[otherUnit.CurrentWaypointKey] - otherUnit.Position) : Vector2.Zero;
-                        if (otherDir != Vector2.Zero) otherDir = Vector2.Normalize(otherDir);
-
-                        bool headingSameWay = Vector2.Dot(myDir, otherDir) > 0.7f;
-
-                        if (headingSameWay && !otherIsBusyAI && !otherIsHuman)
-                        {
-                            Vector2 tangentRight = new Vector2(-myDir.Y, myDir.X);
-                            Vector2 tangentLeft = new Vector2(myDir.Y, -myDir.X);
-
-                            pushDirection = Vector2.Dot(pushDirection, tangentRight) > 0 ? tangentRight : tangentLeft;
-                            overlap *= 0.2f;
-                        }
-                        else
-                        {
-                            overlap *= (otherIsBusyAI || otherIsHuman) ? 1.0f : 0.5f;
-                        }
-                        overlap = Math.Min(overlap, 15.0f);
-
-                        Vector2 newPos = Position + (pushDirection * overlap);
-
-                        if (_game.Map.PathingHandler.IsWalkable(newPos, PathfindingRadius))
-                        {
-                            SetPosition(newPos, false);
-                        }
-                    }
-                }
-            }
-        }
+        // NOTE (2026-06-18): the former Minion.OnCollision unit-vs-unit PUSH was REMOVED — it had
+        // no Riot counterpart and was the root of minion movement over-emission. Decomp:
+        // obj_AI_Minion::OnActorCollision (AIMinionClient.cpp:308) and obj_AI_Base::OnActorCollision
+        // (AIBase.cpp:2391) are BOTH empty no-ops (return Continue); Riot's per-collider OnCollision
+        // hook does NOT move the unit. All minion separation is Move-time in HandleActorCollision
+        // (= our AttackableUnit.Move ComputeGroupCollisionResponse/ComputeAvoidanceResponse/
+        // ComputeSeparationPush — the faithful S4 port). Our override DOUBLE-PUSHED minions on top of
+        // Move() AND emitted via SetPosition on every per-tick collision event (PACKET_LOG snare.jsonl:
+        // ~90% of minion 0x61 were re-anchors vs Riot ~16%). Minions now inherit AttackableUnit.
+        // OnCollision (terrain-escape + API event publish, no unit push), matching Riot.
     }
 }

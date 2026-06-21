@@ -427,6 +427,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     ChampStats.NeutralMinionsKilled += 1;
                 }
+                else if (deathData.Unit is LaneMinion)
+                {
+                    // Lane CS is reconstructed client-side (NOT replicated): players who saw the minion
+                    // die count it from the vision-gated NPC_Die; tell the rest explicitly so their
+                    // scoreboard CS for this champion stays correct. (Runs before NotifyDeath in Die(),
+                    // so the minion's SpawnedForPlayers set still reflects who will get the death.)
+                    _game.PacketNotifier.NotifyS2C_IncrementMinionKills(this, deathData.Unit);
+                }
 
                 var gold = deathData.Unit.Stats.GoldGivenOnDeath.Total;
                 if (gold <= 0)

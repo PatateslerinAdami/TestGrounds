@@ -1061,6 +1061,21 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Repositions a region's client bubble (S2C_MoveRegion). Only meaningful for FREE regions (no
+        /// CollisionUnit) — unit-attached regions follow their unit client-side via AddRegion.UnitNetID,
+        /// so they don't need this. Broadcast, matching NotifyAddRegion/NotifyRemoveRegion.
+        /// </summary>
+        public void NotifyS2C_MoveRegion(Region region)
+        {
+            var packet = new S2C_MoveRegion
+            {
+                RegionNetID = region.NetId,
+                Position = region.Position
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends a packet to all players with vision of the specified attacker detailing that they have targeted the specified target.
         /// </summary>
         /// <param name="attacker">AI that is targeting an AttackableUnit.</param>
@@ -1820,6 +1835,45 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Shows a localization-key floating message over a unit (NPC_MessageToClient_Broadcast) — the
+        /// floating-text feedback system, e.g. "Immune!"/"Blocked!" when a spell shield absorbs CC
+        /// (game_lua_BlackShield_immune, game_lua_Aegis_Block, game_floatingtext_invulnerable). SenderNetID
+        /// = the unit the text floats over; Message is a localization key. Broadcast (the _Broadcast
+        /// variant); pass a userId for the per-player _MapView variant (0x128).
+        /// </summary>
+        public void NotifyNPC_MessageToClient(AttackableUnit unit, string message, uint floatTextType = 0, byte colorIndex = 0, float bubbleDelay = 0f, int slotNumber = 0, bool isError = false, int userId = -1)
+        {
+            if (userId < 0)
+            {
+                var packet = new NPC_MessageToClient_Broadcast
+                {
+                    SenderNetID = unit.NetId,
+                    Message = message,
+                    FloatTextType = floatTextType,
+                    ColorIndex = colorIndex,
+                    BubbleDelay = bubbleDelay,
+                    SlotNumber = slotNumber,
+                    IsError = isError
+                };
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                var packet = new NPC_MessageToClient_MapView
+                {
+                    SenderNetID = unit.NetId,
+                    Message = message,
+                    FloatTextType = floatTextType,
+                    ColorIndex = colorIndex,
+                    BubbleDelay = bubbleDelay,
+                    SlotNumber = slotNumber,
+                    IsError = isError
+                };
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
         /// Sends a packet to the specified user detailing that the GameObject that owns the specified netId has finished being initialized into vision.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
@@ -2448,6 +2502,30 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Overrides (or resets) a unit's voice-over bank on clients (S2C_ChangeCharacterVoice). With
+        /// reset=false the client calls CharacterDataStack.SetVoiceOverride(voiceOverride); with reset=true
+        /// it calls ResetVoiceOverride() (back to default). Used for ult/form VO swaps (Riven "Ult",
+        /// Sion "Berserk"/"Max"). Vision-gated broadcast like the rest of the CharacterData family.
+        /// </summary>
+        public void NotifyS2C_ChangeCharacterVoice(AttackableUnit obj, string voiceOverride, bool reset = false, int userId = -1)
+        {
+            var packet = new S2C_ChangeCharacterVoice
+            {
+                SenderNetID = obj.NetId,
+                Reset = reset,
+                VoiceOverride = voiceOverride
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(obj, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
+        /// <summary>
         /// Tells clients to preload a skin's assets (S2C_PreloadCharacterData). Broadcast (not
         /// vision-gated) in the 4.17 client, so the model is ready before a later ChangeCharacterData.
         /// </summary>
@@ -2601,7 +2679,13 @@ namespace PacketDefinitions420
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
                 BuffType = (byte)b.BuffType,
-                Count = (byte)b.StackCount,
+                // Count is a wire byte and the client treats Count==0 as "remove" (BuffInstance::ResizeClient
+                // -> Clear, BuffInstance.cpp). COUNTER buffs allow >255 stacks, so an unclamped (byte) cast
+                // could wrap — e.g. (byte)256 == 0 — and silently delete the buff client-side. Clamp to 255;
+                // the real COUNTER value travels in NPC_BuffUpdateNumCounter (int32). BuffAdd2 has no counter
+                // field and ResizeClient does NOT set mCounter, so a COUNTER buff also needs a follow-up
+                // NPC_BuffUpdateNumCounter right after the add (see AttackableUnit.AddBuff).
+                Count = (byte)Math.Min(b.StackCount, 255),
                 IsHidden = b.IsHidden,
                 BuffNameHash = HashString(b.Name),
                 // S4 client uses packageHash to look up the buff *script* via PackageManager::GetPackageFromHash
@@ -2645,7 +2729,7 @@ namespace PacketDefinitions420
                     OwnerNetID = buffs[i].TargetUnit.NetId,
                     CasterNetID = 0,
                     Slot = buffs[i].Slot,
-                    Count = (byte)buffs[i].StackCount,
+                    Count = (byte)Math.Min(buffs[i].StackCount, 255),
                     IsHidden = buffs[i].IsHidden
                 };
 
@@ -2778,7 +2862,7 @@ namespace PacketDefinitions420
             {
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
-                Count = (byte)b.StackCount,
+                Count = (byte)Math.Min(b.StackCount, 255),
                 Duration = duration,
                 RunningTime = runningTime,
                 CasterNetID = 0
@@ -2812,7 +2896,7 @@ namespace PacketDefinitions420
                     OwnerNetID = buffs[i].TargetUnit.NetId,
                     CasterNetID = 0,
                     BuffSlot = buffs[i].Slot,
-                    Count = (byte)buffs[i].StackCount
+                    Count = (byte)Math.Min(buffs[i].StackCount, 255)
                 };
 
                 if (buffs[i].OriginSpell != null)
@@ -2836,7 +2920,10 @@ namespace PacketDefinitions420
             {
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
-                Counter = b.StackCount // TODO: Verify if it allows stacks to go above 255 on the buff bar
+                // int32 on the wire (client SetCounter(int), BuffInstance.cpp) — >255 is fine here; this is
+                // the authoritative displayed value for COUNTER-type buffs (mCounter), independent of the
+                // byte stack Count in BuffAdd2/BuffUpdateCount.
+                Counter = b.StackCount
             };
             _packetHandlerManager.BroadcastPacketVision(b.TargetUnit, updateNumPacket.GetBytes(), Channel.CHL_S2C);
         }
@@ -3669,6 +3756,57 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Sets a team's Nexus (HQ) skin (S2C_AnimatedBuildingSetCurrentSkin) — the client finds the
+        /// team's HQ and switches its animated-building skin. Map-specific (ARAM/TT use it for the
+        /// nexus destruction skin at game end); SR doesn't.
+        /// </summary>
+        public void NotifyS2C_AnimatedBuildingSetCurrentSkin(TeamId team, uint skinID)
+        {
+            var packet = new S2C_AnimatedBuildingSetCurrentSkin
+            {
+                TeamID = (byte)team,
+                SkinID = skinID
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Fades out the client's main SFX/audio bus over <paramref name="fadeTime"/> seconds
+        /// (S2C_FadeOutMainSFX). Riot sends it ~4.5s before the end-game screen with FadeTime 2.0 so the
+        /// soundscape fades instead of cutting hard. Purely cosmetic audio.
+        /// </summary>
+        public void NotifyS2C_FadeOutMainSFX(float fadeTime)
+        {
+            var packet = new S2C_FadeOutMainSFX
+            {
+                FadeTime = fadeTime
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Mutes/unmutes an audio volume category on clients (S2C_MuteVolumeCategory → Audio::SetMute).
+        /// Broadcast by default (map-wide audio control, e.g. mute Music/Announcer for a scripted moment);
+        /// pass a userId to target one client.
+        /// </summary>
+        public void NotifyS2C_MuteVolumeCategory(VolumeCategory category, bool mute, int userId = -1)
+        {
+            var packet = new S2C_MuteVolumeCategory
+            {
+                VolumeCategoryType = (byte)category,
+                Mute = mute
+            };
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
+        }
+
         public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
         {
             var packet = new AttachFlexParticleS2C
@@ -4253,6 +4391,32 @@ namespace PacketDefinitions420
                 EmoteID = (byte)targetType
             };
             _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Relays a SmartPing/VO command (S2C_PlayVOCommand) so clients play the source champion's voice
+        /// line + highlight its player icon. Riot vision-gates it (PolicyMapView); we broadcast to the
+        /// source's team when <paramref name="alliesOnly"/>, else vision-gated to everyone who sees it.
+        /// The client throttles ping VO itself. SenderNetID = the commanding champion.
+        /// </summary>
+        public void NotifyS2C_PlayVOCommand(AttackableUnit source, uint commandId, uint targetId, bool highlightPlayerIcon, bool fromPing, bool alliesOnly)
+        {
+            var packet = new S2C_PlayVOCommand
+            {
+                SenderNetID = source.NetId,
+                CommandID = commandId,
+                TargetID = targetId,
+                HighlightPlayerIcon = highlightPlayerIcon,
+                FromPing = fromPing
+            };
+            if (alliesOnly)
+            {
+                _packetHandlerManager.BroadcastPacketTeam(source.Team, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.BroadcastPacketVision(source, packet.GetBytes(), Channel.CHL_S2C);
+            }
         }
 
         /// <summary>
@@ -4933,6 +5097,38 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Replies to a client's SynchSimTimeC2S heartbeat with SyncSimTimeFinalS2C (0x76): the client reads
+        /// field@5 as the server time and field@9 as the estimated one-way latency, smooths its average
+        /// latency and computes a convergence delta (the gradual clock correction; the hard clock-set is
+        /// SynchSimTimeS2C 0xC1). Times are in seconds. estLatency 0 = no latency compensation (safe).
+        /// </summary>
+        public void NotifySyncSimTimeFinalS2C(int userId, float serverTime, float estLatency)
+        {
+            var packet = new SyncSimTimeFinalS2C
+            {
+                TimeLastClient = serverTime,
+                TimeRTTLastOverhead = estLatency,
+                TimeConvergance = 0f
+            };
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Sends the game number + the recipient's summoner name to a client (World_SendGameNumber). The
+        /// client stores these in its ClientMetrics singleton for telemetry/logging only — no gameplay
+        /// effect. We have no real Riot match ID, so gameId is a placeholder (0).
+        /// </summary>
+        public void NotifyWorld_SendGameNumber(int userId, long gameId, string summonerName)
+        {
+            var packet = new World_SendGameNumber
+            {
+                GameID = gameId,
+                SummonerName = summonerName
+            };
+            _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends a packet to the specified player detailing the results of server's the version and game info check for the specified player.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
@@ -5366,13 +5562,23 @@ namespace PacketDefinitions420
                 }
                 var healthbarPacket = ConstructEnterLocalVisibilityClientPacket(obj);
 
-                // Riot's lane-minion vision-acquire is exactly TWO packets: OnEnterVisibilityClient (0xBA)
-                // + OnEnterLocalVisibilityClient (0xAE). No separate OnReplication snapshot at spawn —
-                // health/maxhealth ride in the 0xAE and stat deltas follow on the normal per-tick
-                // replication channel. Replay-verified (single-player 2026-06-20). Other unit types keep
-                // the snapshot (not cleanly isolated in these replays — behavior preserved).
+                // Vision-acquire stat snapshot. EVERY unit — INCLUDING lane minions — gets a full
+                // OnReplication (GetData(false)) right after the 0xBA/0xAE. Replay-verified on the full-SR
+                // 4.17 replays: ALL 2629 minions receive a full group1 (0x7fffff) + group3 (0x3f, incl.
+                // mMoveSpeed) snapshot, the first group3 at a median of ~0.16s after their spawn 0xBA.
+                // The client needs the replicated mMoveSpeed to INTERPOLATE a moving unit between its 0x61
+                // waypoints; without it it cannot tween and hard-snaps to each waypoint's wp0 (ActorClient
+                // hard-sets m_Position on every 0x61) → the minion "teleports along the lane instead of
+                // walking" (the post-spawn desync bug).
+                //
+                // HISTORY: a 2026-06-20 single-player-replay read (D4) concluded lane-minion spawn was
+                // "exactly TWO packets, no OnReplication" and SUPPRESSED this snapshot for LaneMinion. That
+                // was a misread: the snapshot is NOT embedded in the spawn (the spawn IS 2 packets) — it
+                // FOLLOWS ~0.16s later as a separate 0xC4. Suppressing it left our minions with NO
+                // replicated mMoveSpeed ever (group3 is never re-sent because a lane minion's speed/size
+                // never CHANGE, so per-tick dirty-tracking emits only group1 CurHP). Restored to match Riot.
                 // See docs/LANE_MINION_WIRE_VERIFICATION.md (D4).
-                OnReplication us = u is LaneMinion ? null : new OnReplication()
+                OnReplication us = new OnReplication()
                 {
                     SyncID = (uint)PacketExtensions.WireSyncID,
                     ReplicationData = new List<ReplicationData>(1){

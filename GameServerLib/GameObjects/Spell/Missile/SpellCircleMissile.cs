@@ -15,7 +15,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         private readonly float _circleAngularVelocity;
         private readonly float _circleRadialVelocity;
         private readonly Vector2 _circleCenter;
-        private readonly Vector3 _replicationDirection;
 
         private float _circleRadius;
         private float _circleAngle;
@@ -58,7 +57,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             _circleRadius = circleOffset.Length();
             _circleAngle = MathF.Atan2(circleOffset.Y, circleOffset.X);
-            _replicationDirection = new Vector3(_circleRadius, _circleAngle, 0.0f);
 
             // S1-faithful unconditional polar placement (obj_SpellCircleMissile::
             // UpdateProjectile: pos = center + cos/sin*radius, no straight-line mode).
@@ -100,7 +98,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // The client's circle class reads MISREP.direction as (radius, phase)
             // UNCONDITIONALLY (SpellCircleMissileClient::OnNetworkPacket: mRotateRadius
             // = direction.x, mRotatePhase = direction.y) — so polar data always.
-            return _replicationDirection;
+            //
+            // Return the CURRENT (radius, phase), not the spawn-time values: a missile that
+            // enters a client's vision mid-flight is re-replicated (PacketNotifier:845,
+            // GetTimeSinceCreation() > 0) and the client sets mRotateRadius/mRotatePhase raw
+            // from these — it fast-forwards only the lifetime via timeFromCreation, NOT the
+            // polar coords. For non-zero radial/angular velocity the radius/phase have already
+            // advanced, so spawn-time values would place the orbit at the wrong spot. At spawn
+            // (before any Move) these equal the initial values, so spawn replication is
+            // unchanged. Verified against SpellCircleMissileClient.cpp (mac decomp 4.17).
+            return new Vector3(_circleRadius, _circleAngle, 0.0f);
         }
 
         public override void Update(float diff)

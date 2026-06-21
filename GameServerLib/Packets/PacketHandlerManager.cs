@@ -55,6 +55,9 @@ namespace PacketDefinitions420
             // Opt-in outbound packet capture (replay-comparable JSON-lines). Set the env var
             // PACKET_LOG to a path (or "1" for ./packetlog.jsonl) to record every packet we send.
             PacketLogger.Enable(Environment.GetEnvironmentVariable("PACKET_LOG"));
+            // Opt-in collision-push diagnostic (server-vs-client divergence magnitude). Set
+            // COLLISION_LOG to a path (or "1" for ./collisionlog.jsonl). See CollisionLogger.
+            CollisionLogger.Enable(Environment.GetEnvironmentVariable("COLLISION_LOG"));
             _gameConvertorTable = new Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor>();
             _loadScreenConvertorTable = new Dictionary<LoadScreenPacketID, RequestConvertor>();
             _fallbackConvertorTable = new Dictionary<GamePacketID, RequestConvertor>();
@@ -253,6 +256,25 @@ namespace PacketDefinitions420
             foreach (int pid in o.SpawnedForPlayers)
             {
                 EnqueueUnicast(pid, data, channelNo, flag);
+            }
+            return true;
+        }
+
+        // Sends to every player that does NOT have `o` spawned — the complement of
+        // BroadcastPacketSpawned. Use to tell fogged players about something they can't observe directly
+        // (e.g. S2C_IncrementMinionKills: lane CS for a minion they never saw, which the spawned players
+        // already counted from the vision-gated death). Counted exactly once across the two sets.
+        public bool BroadcastPacketUnspawned(GameObject o, byte[] data, Channel channelNo,
+            PacketFlags flag = PacketFlags.RELIABLE)
+        {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
+            var spawned = new HashSet<int>(o.SpawnedForPlayers);
+            foreach (var ci in _playerManager.GetPlayers(false))
+            {
+                if (!spawned.Contains(ci.ClientId))
+                {
+                    EnqueueUnicast(ci.ClientId, data, channelNo, flag);
+                }
             }
             return true;
         }

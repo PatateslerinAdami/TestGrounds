@@ -268,5 +268,20 @@ namespace LeagueSandbox.GameServer.GameObjects
                 _game.PacketNotifier.NotifyRemoveRegion(this);
             }
         }
+
+        /// <summary>
+        /// Moves a FREE (non-unit-attached) region to a new position and syncs the client bubble via
+        /// S2C_MoveRegion. No-op for unit-attached regions — those follow their CollisionUnit client-side
+        /// (AddRegion carries UnitNetID), so an explicit MoveRegion would fight that.
+        /// </summary>
+        public void MoveTo(Vector2 position)
+        {
+            if (CollisionUnit != null)
+            {
+                return;
+            }
+            Position = position;
+            _game.PacketNotifier.NotifyS2C_MoveRegion(this);
+        }
     }
 }

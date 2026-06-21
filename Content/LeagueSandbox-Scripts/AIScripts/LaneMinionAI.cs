@@ -124,8 +124,30 @@ namespace AIScripts
                     || MAX_ENGAGE_DISTANCE < Vector2.Distance(_minion.Position, target.Position))
                 {
                     FindTargetOrMove();
+                    return;
+                }
+
+                // Faithful Minion.lua / Aggro.lua TimerFindEnemies: while the current target is in
+                // ATTACK RANGE, reset the anti-kite timer every 0.25s sweep. The 4s TimerAntiKite is
+                // meant to fire ONLY for a minion that has been CHASING a target it can never reach
+                // (true kiting); a minion that is actually trading hits in range must keep cancelling
+                // it, or it spuriously drops a target it is busy killing. We were missing this reset,
+                // so any minion still nudging (reposition / clash shuffle) while in range eventually
+                // hit 4s and switched targets for no reason.
+                if (TargetInAttackRange(target))
+                {
+                    ResetAndStartTimer("TimerAntiKite");
                 }
             }
+        }
+
+        // Riot TargetInAttackRange(): center-to-center distance within auto-attack range plus both
+        // collision radii (Stats.Range is the edge-to-edge auto range — same expansion the engine's
+        // auto-attack gate uses in ObjAIBase).
+        private bool TargetInAttackRange(AttackableUnit target)
+        {
+            float range = _minion.Stats.Range.Total + target.CollisionRadius + _minion.CollisionRadius;
+            return Vector2.DistanceSquared(_minion.Position, target.Position) <= range * range;
         }
 
         // Every tick — keep pushing the lane while not engaged.
@@ -242,6 +264,20 @@ namespace AIScripts
         protected override void OnCallForHelpBehavior(AttackableUnit attacker, AttackableUnit victium)
         {
             if (_minion == null || _minion.IsDead || IsCrowdControlled() || attacker == null || !CanAggro())
+            {
+                return;
+            }
+
+            // FRONT-OF-WAVE TARGETING (stage A, 2026-06-21): do NOT peel onto a MINION attacker.
+            // A minion attacking us from behind/beside its own front line is exactly the target that,
+            // chased, pulls us off the front of the wave toward the backline — driving same-target
+            // convergence AND the behind-wave routing (the chase path then routes AROUND the enemy
+            // front to reach it). Minion-vs-minion targeting stays the nearest FRONT enemy chosen by
+            // FindTargetInAcR (the 0.25s sweep re-acquires the nearest if we currently have none).
+            // We STILL respond to non-minion threats (champion aggro) — that's the real purpose of
+            // CallForHelp. Verify in-game: faithfulness of the minion-attacker filter is the open
+            // question (Riot's wave doesn't mass-converge on backline minions, which supports it).
+            if (attacker is Minion)
             {
                 return;
             }

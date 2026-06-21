@@ -83,6 +83,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                 champion.AttackMoveDestination = System.Numerics.Vector2.Zero;
                                 champion.UpdateMoveOrder(OrderType.AttackTo, true);
                                 champion.SetTargetUnit(acquired);
+                                // A fresh attack order must drop the stale settle/chase state and
+                                // re-approach to ACTUAL attack range. Without this, re-attack-moving
+                                // onto the SAME target you previously engaged leaves _attackSettledNetId
+                                // == that target → RefreshWaypoints takes the settled "hold" branch and
+                                // the champion stops ~ATTACK_SETTLE_HYSTERESIS (150u) SHORT of range,
+                                // never closing in nor attacking ("attacks the first time, then never
+                                // again after a second attack-move"). Mirrors the u != null path below.
+                                champion.ForceChaseRepath();
                                 break;
                             }
                         }

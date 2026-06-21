@@ -126,6 +126,22 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Overrides a unit's voice-over bank on clients (S2C_ChangeCharacterVoice) — e.g. Riven "Ult"
+        /// during her ultimate, Sion "Berserk"/"Max". Pair with <see cref="ResetCharacterVoiceOverride"/>
+        /// to revert when the form/ult ends.
+        /// </summary>
+        public static void SetCharacterVoiceOverride(AttackableUnit unit, string voiceOverride)
+        {
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterVoice(unit, voiceOverride, reset: false);
+        }
+
+        /// <summary>Resets a unit's voice-over bank back to its default (S2C_ChangeCharacterVoice reset flag).</summary>
+        public static void ResetCharacterVoiceOverride(AttackableUnit unit)
+        {
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterVoice(unit, "", reset: true);
+        }
+
+        /// <summary>
         /// Asks clients to preload a skin's assets so a later <see cref="PushCharacterData"/> swaps
         /// without a hitch. Broadcast to everyone (matches the client's broadcast policy).
         /// </summary>
@@ -3049,6 +3065,24 @@ namespace LeagueSandbox.GameServer.API
         public static void NotifyDisplayFloatingText(FloatingTextData floatTextData, TeamId team = 0, int userId = -1)
         {
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
+        }
+
+        /// <summary>
+        /// Makes <paramref name="unit"/> "say" a floating localization-key message (NPC_MessageToClient) —
+        /// e.g. spell-block / immune / invulnerable feedback ("game_lua_BlackShield_immune",
+        /// "game_floatingtext_invulnerable", "game_lua_UndyingRage"). Unifies both wire variants by audience:
+        /// <paramref name="sayTo"/> null → broadcast to everyone (NPC_MessageToClient_Broadcast 0x18);
+        /// otherwise only that player's client sees it (NPC_MessageToClient_MapView 0x128). The recipient's
+        /// userId is resolved from its owning player, so scripts pass units, not raw ids.
+        /// </summary>
+        public static void Say(AttackableUnit unit, string message, uint floatTextType = 0, ObjAIBase sayTo = null)
+        {
+            int userId = -1;
+            if (sayTo is Champion champion)
+            {
+                userId = _game.PlayerManager.GetClientInfoByChampion(champion)?.ClientId ?? -1;
+            }
+            _game.PacketNotifier.NotifyNPC_MessageToClient(unit, message, floatTextType, userId: userId);
         }
 
         /// <summary>

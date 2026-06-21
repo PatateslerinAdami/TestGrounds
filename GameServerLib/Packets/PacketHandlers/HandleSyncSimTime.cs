@@ -29,6 +29,15 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 _logger.Warn(msg);
             }
 
+            // Reply with SyncSimTimeFinalS2C (0x76) so the client refines its latency average + clock
+            // convergence. serverTime in seconds; estLatency = half the round-trip since the server time
+            // the client echoed (TimeLastServer), clamped to a sane range so a stale/garbage timestamp
+            // can never corrupt the client clock (0 => no latency compensation, still drives convergence).
+            var serverTimeNow = _game.GameTime / 1000.0f;
+            var roundTrip = serverTimeNow - req.TimeLastServer;
+            var estLatency = (roundTrip > 0f && roundTrip < 0.5f) ? roundTrip * 0.5f : 0f;
+            _game.PacketNotifier.NotifySyncSimTimeFinalS2C(userId, serverTimeNow, estLatency);
+
             return true;
         }
     }

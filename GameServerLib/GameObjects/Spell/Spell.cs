@@ -668,7 +668,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
-                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
+                // Minions face their attack target via S2C_UnitSetLookAt (0x10F) only (sent on the
+                // cast's LookAt point). Riot sends ZERO standalone S2C_FaceDirection (0x50) for minions
+                // (replay a6db3774 diff: Riot 0x50/minion = 0; ours was ~11/minion = one redundant
+                // facing packet per auto-attack on top of the LookAt). Suppress it for minions to match
+                // Riot's facing wire; champions/others keep FaceDirection.
+                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret
+                    && CastInfo.Owner is not Minion)
                 {
                     ApiFunctionManager.FaceDirection(CastInfo.Targets[0].Unit.Position, CastInfo.Owner);
                 }
@@ -1025,7 +1031,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (cast && CastInfo.Targets[0].Unit != null && CastInfo.Targets[0].Unit != CastInfo.Owner)
             {
-                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret)
+                // Minions face their attack target via S2C_UnitSetLookAt (0x10F) only (sent on the
+                // cast's LookAt point). Riot sends ZERO standalone S2C_FaceDirection (0x50) for minions
+                // (replay a6db3774 diff: Riot 0x50/minion = 0; ours was ~11/minion = one redundant
+                // facing packet per auto-attack on top of the LookAt). Suppress it for minions to match
+                // Riot's facing wire; champions/others keep FaceDirection.
+                if (Script.ScriptMetadata.AutoFaceDirection && CastInfo.Owner is not BaseTurret
+                    && CastInfo.Owner is not Minion)
                 {
                     ApiFunctionManager.FaceDirection(CastInfo.Targets[0].Unit.Position, CastInfo.Owner);
                 }
@@ -1506,6 +1518,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (Script.ScriptMetadata.SectorParameters != null)
             {
                 CreateSpellSector();
+            }
+
+            // Show the spell's popup message (localization key) as floating text over the caster
+            // (NPC_MessageToClient via Say) when the cast completes, if the script set one. No sayTo =>
+            // broadcast to everyone.
+            if (!string.IsNullOrEmpty(Script.ScriptMetadata.PopupMessage1))
+            {
+                ApiFunctionManager.Say(CastInfo.Owner, Script.ScriptMetadata.PopupMessage1);
             }
 
             bool shouldResumeWalking = !CastInfo.Owner.IsPathEnded();

@@ -216,6 +216,7 @@ namespace LeagueSandbox.GameServer
             // argument to interface ICoreRequest we will get an error cause our generic handlers use generic type
             // even with where statement that doesn't work
             RequestHandler.Register<AttentionPingRequest>(new HandleAttentionPing(this).HandlePacket);
+            RequestHandler.Register<PlayVOCommandRequest>(new HandlePlayVOCommand(this).HandlePacket);
             RequestHandler.Register<AutoAttackOptionRequest>(new HandleAutoAttackOption(this).HandlePacket);
             RequestHandler.Register<BlueTipClickedRequest>(new HandleBlueTipClicked(this).HandlePacket);
             RequestHandler.Register<BuyItemRequest>(new HandleBuyItem(this).HandlePacket);

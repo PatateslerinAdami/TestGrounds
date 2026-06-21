@@ -204,6 +204,9 @@ namespace MapScripts.Map10
         static void OnNexusDeath(DeathData deathaData)
         {
             var nexus = deathaData.Unit;
+            // Switch the destroyed team's nexus to its destruction skin (S2C_AnimatedBuildingSetCurrentSkin).
+            // Replay-verified on TT: team=loser, skinID=1, sent ~2s before the end-game screen.
+            SetAnimatedBuildingSkin(nexus.Team, 1);
             EndGame(nexus.Team, new Vector3(nexus.Position.X, nexus.GetHeight(), nexus.Position.Y), deathData: deathaData);
         }
 

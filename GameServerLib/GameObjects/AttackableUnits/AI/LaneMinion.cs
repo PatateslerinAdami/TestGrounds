@@ -38,18 +38,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         /// <summary>
         /// Wire MinionType byte for the embedded Barrack_SpawnUnit. This is Riot's per-MAP minionTable
-        /// index, so it differs by map: Map11 (real 4.20 SR) uses the replay-verified
-        /// melee=1/caster=2/super=3/cannon=4; every other map's client expects our internal
-        /// MinionSpawnType order — applying the 1/2/4 mapping globally broke Map1 (wrong projectiles +
-        /// lag). EXPERIMENT 2026-06-20: try the replay order on Map11 only. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+        /// INDEX (decomp: Barracks.cpp:768 resolves the minion via minionTable[minionType].MinionName,
+        /// and the table is populated in the map's barrack-config order — so the same index means a
+        /// different minion per map). Map11 (real 4.20 SR) uses the replay-verified order
+        /// melee=1 / caster=2 / super=3 / cannon=4; every other map's minionTable matches our internal
+        /// MinionSpawnType order, so they keep the raw enum value.
+        ///
+        /// HISTORY: a 2026-06-20 note claimed this per-map mapping "caused" Map11 minions to teleport,
+        /// so it was reverted to the internal order everywhere (accepting wrong Map11 projectiles).
+        /// That was a MISATTRIBUTION — the teleport was the 90s minion stat-ramp (confirmed 2026-06-21
+        /// by disabling UPGRADE_MINION_TIMER on both Map1 and Map11), NOT this index. Re-enabled here:
+        /// it gives Map11 wizard minions their correct (visible) projectiles. See
+        /// docs/LANE_MINION_WIRE_VERIFICATION.md.
         /// </summary>
         public byte WireMinionType => _game.Map.Id == 11
             ? this.MinionSpawnType switch
             {
-                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_MELEE => (byte)1,
-                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_CASTER => (byte)2,
-                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_SUPER => (byte)3,
-                GameServerCore.Enums.MinionSpawnType.MINION_TYPE_CANNON => (byte)4,
+                MinionSpawnType.MINION_TYPE_MELEE => (byte)1,
+                MinionSpawnType.MINION_TYPE_CASTER => (byte)2,
+                MinionSpawnType.MINION_TYPE_SUPER => (byte)3,
+                MinionSpawnType.MINION_TYPE_CANNON => (byte)4,
                 _ => (byte)this.MinionSpawnType,
             }
             : (byte)this.MinionSpawnType;

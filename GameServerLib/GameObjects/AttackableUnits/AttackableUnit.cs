@@ -143,29 +143,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private int TempGhostThreshold => (this as ObjAIBase)?.UsesFastPath == true ? 45 : 15;
         public bool IsTemporarilyGhosted => _stuckGhostFrames > TempGhostThreshold;
 
-        // Sticky side-pick for the collision/avoidance slide responses. The client gets
-        // direction hysteresis for free: its response writes back into m_Movement (Actor.cpp
-        // `done:` label) so the NEXT frame's side computation uses the already-slid heading.
-        // Our Move() re-aims at CurrentWaypoint every tick, so a head-on approach onto a
-        // stationary unit has dot(toCenter, side) ≈ ±noise and the slide side flips per tick
-        // (in-game: zigzag in place / walk animation without progress when clicking through an
-        // enemy champion). Once a side is picked it stays until the unit leaves contact.
-        // 0 = no committed side.
-        private float _collisionSlideSign;
-
         // Last GameTime (ms) a move order was broadcast for this unit. Drives the move-order
         // rate-limiter in HandleMove: held-mouse issues a MoveTo every mouse-move frame; we
         // broadcast at most once per streaming window and fold the rest into the 96ms stream.
         public float LastMoveOrderBroadcastTime { get; set; }
 
-        private float ResolveSlideSign(float computedSign)
-        {
-            if (_collisionSlideSign == 0f)
-            {
-                _collisionSlideSign = computedSign;
-            }
-            return _collisionSlideSign;
-        }
+        // NOTE (D11, 2026-06-21): the former `_collisionSlideSign` latch + `ResolveSlideSign`
+        // helper were removed with the D0 collision rewrite. The default per-tick responder is
+        // now the path STEER (SteerPathAroundColliders), which recomputes its slide sign every
+        // tick from `signTable[dot(side, m_Movement) > 0]` (S4 CheckActorCollisionResponse,
+        // Actor.cpp:403) with NO hysteresis — and the gated position-push fallback does the
+        // same. The latch was a server-only invention to emulate the client's m_Movement
+        // feedback for the per-tick push; it has no analogue in the decomp and broke parity.
 
         // RESOLVED 2026-06-07 (mac decomp, Actor.cpp:966-1035): the old
         // ENABLE_ACTORS_SLIDE_INTO_OCCUPIED flag here was a misreading of NSEAI.cfg's
@@ -191,6 +180,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public bool PathHasTrueEnd { get; private set; } = false;
         public Vector2 PathTrueEnd { get; private set; }
         private bool _isInGrass = false;
+        // Body-routing (S4 forceRepath, Actor.cpp:1817-1871): set each tick by RunCollisionResponse to
+        // whether the unit is in HARD collision. While true and still pathing, UpdateStuckRecovery
+        // rebuilds the path actor-aware (around the bodies) on a throttle so clash units route n>=3
+        // around the wave instead of clipping through on a straight n=2 path. _collisionRepathMs is
+        // that throttle accumulator.
+        private bool _inHardCollision;
+        private float _collisionRepathMs;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
@@ -429,7 +425,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _stuckTimerMs = 0f;
                 _stuckRepathCount = 0;
                 _stuckLastCheckPos = Position;
+                _collisionRepathMs = 0f;
                 return;
+            }
+
+            // BODY-ROUTING (S4 forceRepath, Actor.cpp:1817-1871): while IN HARD COLLISION and still
+            // pathing toward a goal, continually rebuild the path actor-aware (skip the straight-line
+            // LOS fast-path so the grid A* routes AROUND the bodies) on a throttle — so clash units
+            // curve n>=3 around the wave instead of clipping straight through on an n=2 path. This is
+            // Riot's per-tick `forceRepath -> BuildNavGridPath` whenever in collision and not making
+            // waypoint progress, gated by the RepathTimer; our 0.25-speed-ratio genuine-stuck watchdog
+            // below is far tighter (a freely-clipping minion never trips it), so it alone left units
+            // clipping. Distinct from that watchdog: this only REROUTES, never gives up / ResetWaypoints.
+            // The skip-LOS GetPath + actor-aware smoothing + the predicate's start-proximity / near-goal
+            // exemptions keep it routing around the NEAR side, not wrapping behind the wave.
+            const float COLLISION_REPATH_INTERVAL_MS = 250f; // ~ Riot s_TimeBetweenRepaths; tunable
+            if (_inHardCollision && !IsPathEnded() && CanChangeWaypoints())
+            {
+                _collisionRepathMs += diff;
+                if (_collisionRepathMs >= COLLISION_REPATH_INTERVAL_MS)
+                {
+                    _collisionRepathMs = 0f;
+                    Vector2 goal = Waypoints[Waypoints.Count - 1];
+                    var routed = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
+                    if (routed != null && routed.Count >= 2
+                        && !routed.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey))
+                    {
+                        SetWaypoints(routed);
+                    }
+                }
+            }
+            else
+            {
+                _collisionRepathMs = 0f;
             }
 
             float dx = Position.X - _stuckLastCheckPos.X;
@@ -523,20 +551,27 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             Vector2 goal = Waypoints[Waypoints.Count - 1];
 
-            var newPath = _game.Map.PathingHandler.GetPath(this, goal);
+            // B1: skip the straight-line LOS fast-path so this recovery repath runs the actor-aware
+            // grid A* and smooths actor-aware — mirroring the client's stuck/in-collision
+            // BuildNavGridPath (Actor.cpp:1866), which is the ONLY place Riot routes a path AROUND
+            // bodies (the normal approach/chase path goes through the LOS-first CreatePath →
+            // BuildNavigationPath, so n=2 there is faithful). A unit wedged against bodies now gets a
+            // bent detour around the clump instead of the LOS-straight n=2 path back into it. The
+            // actor predicate is team-AGNOSTIC (Riot's server A* probes with a zeroed collisionState,
+            // PathingHandler.cs:654), so it routes around allied AND enemy bodies; lane-wave clumping
+            // is preserved by the start-proximity + near-goal exemptions in the predicate/GetPath.
+            var newPath = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
             if (newPath != null && newPath.Count >= 2)
             {
                 // Only count this as genuine "unstuck" progress if the recompute actually
-                // rerouted (or we snapped off a blocked cell). When the unit is wedged against
-                // OTHER UNITS (not terrain), the actor-aware A* still routes straight through
-                // allies (BuildActorBlockedPredicate skips same-team) and lands on enemies via
-                // the near-goal exemption — so GetPath returns the SAME blocked path. Reporting
-                // that as success resets _stuckRepathCount every 200ms, pinning the watchdog in a
-                // tight 200ms loop that re-runs a full A* forever and never lets Riot's escalating
-                // backoff (NSEAI TimeBetweenRepathsInMS=250) engage. Treat a same-path recompute
-                // as NO progress so the watchdog backs off; the real escape for a unit-wedge is the
-                // temp-ghost counter (Move(): _stuckGhostFrames → IsTemporarilyGhosted at 45/15),
-                // which phases the unit through and resets the stuck state once it moves freely.
+                // rerouted (or we snapped off a blocked cell). With the actor-aware skip-LOS repath
+                // above, an enemy-wedge now genuinely reroutes (bent path) → reported as progress →
+                // backoff resets, which is correct (the unit escaped by routing around). If the
+                // recompute STILL returns the same path (e.g. the only blockers are allies, which
+                // don't block, or the wedge is purely the near-goal exemption zone), we report NO
+                // progress so Riot's escalating backoff (NSEAI TimeBetweenRepathsInMS=250) engages
+                // and the temp-ghost counter (Move(): _stuckGhostFrames → IsTemporarilyGhosted at
+                // 45/15) becomes the escape of last resort.
                 bool reroutedOrSnapped = positionChanged
                     || !newPath.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
                 SetWaypoints(newPath);
@@ -1714,6 +1749,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         {
             Vector2 originalPos = Position;
             bool walked = false;
+            // Reset the body-routing trigger each tick; only the moving+collision path
+            // (RunCollisionResponse) sets it true, so stationary / ghosted / dashing leave it false.
+            _inHardCollision = false;
 
             if (CurrentWaypointKey < Waypoints.Count)
             {
@@ -1758,7 +1796,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             bool pushed = false;
             if (MovementParameters == null)
             {
-                // Broadphase query radius = 4·CollisionRadius. The QuadTree match is radius-sum
+                // Broadphase query radius = 4·ActorRadius. The QuadTree match is radius-sum
                 // (dist < query.r + other.r, QuadTree.IntersectsWith), so GetNearestObjects(this)
                 // — query.r = self.r — only reached self.r + other.r (~130u for a champion). That
                 // is SHORTER than the largest per-pair consumer threshold: soft-avoidance needs
@@ -1767,10 +1805,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // pre-contact veer and the group barycenter were computed from a TRUNCATED set
                 // (late/incomplete avoidance, wrong group centre near the edge). Riot collects
                 // collision neighbours at 2·GetRadius() (hard pass) then 4·GetRadius() (avoidance
-                // pass) — Actor.cpp:1543-1606 — so 4·CollisionRadius matches its wider pass and
+                // pass) — Actor.cpp:1543-1606 — so 4·ActorRadius matches its wider pass and
                 // covers every per-pair threshold with margin. Each helper re-filters by its own
                 // precise threshold, so the extra candidates are harmless (just a wider broadphase).
-                float queryRadius = 4f * MathF.Max(0.5f, CollisionRadius);
+                // ActorRadius (= mRadius = PathfindingRadius), NOT the gameplay CollisionRadius.
+                float queryRadius = 4f * MathF.Max(0.5f, ActorRadius);
                 var nearby = _game.Map.CollisionHandler.GetNearestObjects(
                     new System.Activities.Presentation.View.Circle(Position, queryRadius));
 
@@ -1786,145 +1825,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // the client where a ghosted actor's collision handling produces no
                     // stuck/in-collision events and the state clears with the path lifecycle.
                     _smoothedSeparationPush = Vector2.Zero;
-                    _collisionSlideSign = 0f;
                 }
                 else if (moving)
                 {
-                    // MOVING units: client group collision response (S4 Actor.cpp:309-470).
-                    // The response modifies THIS tick's movement directly — no exponential
-                    // smoothing (the client has none; the single coherent group direction is
-                    // the anti-jitter mechanism, per-pair sums were the jitter source). Bounded
-                    // by the S4 movement-length clamp, then terrain-gated like before
-                    // (S1 actor_client.cpp:2241-2259 drop-on-unwalkable; the client's cell-border
-                    // slide handling is approximated by dropping the push).
+                    // MOVING units: run the per-tick collision control-flow structure (S4
+                    // Actor_Common::Update collision tail, Actor.cpp:1714-1741) — steer the path,
+                    // then the gated HandleActorCollision relaxation loop. Consolidated into one
+                    // method so the steps compose as a single coherent flow (instead of the former
+                    // scattered inline pushes).
                     _smoothedSeparationPush = Vector2.Zero;
-
-                    // Hard collision first; the avoidance (soft-radius pre-contact veer) layer
-                    // only runs when there are NO hard colliders — exact client control flow
-                    // (the hard branch exits via `goto done`, S4 Actor.cpp:338-700 vs 705-870).
-                    // Each layer has its own length-clamp parameter set.
-                    Vector2 response = ComputeGroupCollisionResponse(nearby, originalPos, originalDelta,
-                        out bool hadHardColliders);
-                    float clampTrigger = 0.75f, clampLo = 0.625f, clampHi = 1.375f;
-                    if (!hadHardColliders)
-                    {
-                        response = ComputeAvoidanceResponse(nearby, originalPos, originalDelta);
-                        clampTrigger = 0.25f; clampLo = 0.875f; clampHi = 1.125f;
-                    }
-
-                    // Contact-free tick: release the committed slide side so the next contact
-                    // picks fresh.
-                    if (response.LengthSquared() <= 0.0001f)
-                    {
-                        _collisionSlideSign = 0f;
-                    }
-
-                    if (response.LengthSquared() > 0.0001f)
-                    {
-                        Vector2 newMovement = ClampCollisionMovement(originalDelta + response, originalDelta,
-                            clampTrigger, clampLo, clampHi);
-                        // Position already includes originalDelta (the walk above), so the
-                        // remaining push is the clamped movement minus what was already walked.
-                        Vector2 push = newMovement - originalDelta;
-                        if (push.LengthSquared() > 0.0001f)
-                        {
-                            Vector2 candidate = Position + push;
-                            bool canApply = _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
-                            if (canApply)
-                            {
-                                Position = candidate;
-                                _unreplicatedDrift += push;
-                                pushed = true;
-                            }
-                        }
-                    }
-
-                    // Stuck-with-repulse + temp-ghost counter (S4 Actor.cpp:467-491 + 1473-1477):
-                    // the client's stuck branch lives INSIDE the hard-collider response — no hard
-                    // colliders means no stuck evaluation (and the ghost counter stays untouched,
-                    // matching the client where no isStuck event fires that tick). Counter: ++ per
-                    // stuck tick (capped 2x threshold), reset when in collision but NOT stuck.
-                    if (hadHardColliders)
-                    {
-                        Vector2 newDelta = Position - originalPos;
-
-                        // Temp-ghost escalation tracks GENUINE stuck (post-collision movement
-                        // collapsed below 25% of intent) — a separate, stricter condition than the
-                        // 1.5 separation gate below. Decoupled deliberately: the separation push
-                        // fires on nearly every contact, so driving the ghost counter off it would
-                        // ramp _stuckGhostFrames every tick and units would phase through each other
-                        // within ~0.5s. Only a true wedge (movement ≈ cancelled) should escalate.
-                        const float GenuineStuckRatio = 0.25f;
-                        float genuineStuckSq = originalDelta.LengthSquared()
-                                             * (GenuineStuckRatio * GenuineStuckRatio);
-                        if (originalDelta.LengthSquared() > 0.01f
-                            && newDelta.LengthSquared() < genuineStuckSq)
-                        {
-                            _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
-                        }
-                        else
-                        {
-                            _stuckGhostFrames = 0;
-                        }
-
-                        // Per-contact separation nudge (S4 isStuckWithRepulse, gate
-                        // MinionMaxCollisionAvoidanceRatio = 1.5). Terrain-gated; on rejection the
-                        // escalating-repath watchdog (UpdateStuckRecovery) still snaps a genuine wedge.
-                        Vector2 stuckPush = ComputeStuckExtraPush(nearby, newDelta, originalDelta, delta);
-                        if (stuckPush.LengthSquared() > 0.0001f)
-                        {
-                            Vector2 candidate = Position + stuckPush;
-                            if (_game.Map.NavigationGrid.IsWalkable(candidate, 0f))
-                            {
-                                Position = candidate;
-                                _unreplicatedDrift += stuckPush;
-                                pushed = true;
-                            }
-                        }
-                    }
+                    pushed |= RunCollisionResponse(nearby, originalPos, originalDelta, delta);
                 }
                 else
                 {
-                    // STATIONARY units: per-pair radial separation (server-authority necessity —
-                    // spawn/post-dash overlap; the client's collision callback never runs for
-                    // non-moving actors). Keeps the per-tick budget clamp + smoothing.
-                    // A stationary unit is trivially un-stuck: clear the temp-ghost counter
-                    // (covers arrival/stop — the client clears via its Stop/path lifecycle).
+                    // STATIONARY units: NO separation — FAITHFUL to Riot (2026-06-18). The decomp
+                    // collision response (Actor.cpp HandleActorCollision) operates on and MODIFIES
+                    // m_Movement (Actor.cpp:871-873); a non-moving unit has m_Movement≈0 so it yields
+                    // no response, and there is NO stationary-separation "else" branch in Riot. Our
+                    // former ComputeSeparationPush here was a server-authority addition (the client's
+                    // collision callback never runs for non-moving actors) — but Riot simply does NOT
+                    // separate stopped units; overlaps resolve when a unit next MOVES (lane-walk / AI
+                    // reposition), separating via the moving branch above. Removing it kills the
+                    // stationary-drift over-emission + combat-start position churn at the root. Just
+                    // reset the per-tick contact state (a stopped unit is trivially un-stuck).
+                    // WATCH (in-game): if attacking minion clumps visibly STACK, that's a downstream
+                    // gap — our minion AI must reposition like Riot's (which moves ~200u/1s between
+                    // attacks, re-separating via the moving branch) — NOT a reason to re-add this.
                     _stuckGhostFrames = 0;
-                    _collisionSlideSign = 0f;
-
-                    Vector2 rawPush = ComputeSeparationPush(nearby);
-
-                    // Clamp the push against a per tick movement budget (walk-speed fallback so
-                    // stationary units are clamped instead of teleported by the full overlap push).
-                    rawPush = ClampSeparationPush(rawPush, originalDelta, delta);
-
-                    // Frametime correct smoothing. alpha = 1 - exp(-delta/tau). Keeps the response
-                    // consistent at different tick rates and shortens the tail after the overlap clears.
-                    const float PushSmoothingTauMs = 60f;
-                    float alpha = 1f - (float)Math.Exp(-delta / PushSmoothingTauMs);
-                    _smoothedSeparationPush = _smoothedSeparationPush * (1f - alpha)
-                                            + rawPush * alpha;
-
-                    // Body blocking push, terrain gated. Mirrors S1 actor_client.cpp:2241-2259: if
-                    // the collision response would land Position in a NOT_PASSABLE / dynamic blocker
-                    // cell, drop the push instead of applying it. Drained smoothed state on rejection
-                    // so the next tick starts with a fresh push attempt.
-                    if (_smoothedSeparationPush.LengthSquared() > 0.0001f)
-                    {
-                        Vector2 candidate = Position + _smoothedSeparationPush;
-                        bool canApply = _game.Map.NavigationGrid.IsWalkable(candidate, 0f);
-                        if (canApply)
-                        {
-                            Position = candidate;
-                            _unreplicatedDrift += _smoothedSeparationPush;
-                            pushed = true;
-                        }
-                        else
-                        {
-                            _smoothedSeparationPush = Vector2.Zero;
-                        }
-                    }
+                    _smoothedSeparationPush = Vector2.Zero;
                 }
 
                 // (Stuck detection + extra push lives inside the moving branch above — it both
@@ -1932,8 +1860,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
                 // Force a movement data resync once the unreplicated drift gets large enough
                 // that the client would otherwise see a visible snap on the next SetWaypoints.
-                // Skip stopped units (Waypoints.Count == 1) -> GetCenteredWaypoints can't build a
-                // valid packet for them.
+                // Applies to STOPPED units too (Waypoints.Count == 1): GetCenteredWaypoints emits a
+                // valid [Position] (n=1) for them, and Riot replicates a stopped unit's position
+                // EVERY time it changes (AIManager_Common::PauseActor -> Actor::ServerStop,
+                // AIManager.cpp:227-235, `mLastPausePosition != AI_Position`). Replay 343e3502:
+                // attacking minions emit n=1 0x61 ~1/s tracking their ~200u separation jitter, and
+                // Basic_Attack_Pos(0x1A) carries the matching position. WITHOUT replicating stopped
+                // drift, a stationary minion's ComputeSeparationPush accumulated UNSEEN until the
+                // next Basic_Attack_Pos snapped it to a scattered spot ("minions snap to different
+                // positions when combat starts"). The old "can't build a valid packet" claim was
+                // wrong — n=1 IS Riot's stop-packet.
                 //
                 // Threshold sized to match Riot's observed cadence: replay shows walking minions
                 // resync every ~167u (≈ 0.5s at 325u/s movespeed). At the previous 25u threshold
@@ -1965,11 +1901,48 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // smaller. Tune CHAMPION_DRIFT_RESYNC up if teamfight bandwidth becomes an issue,
                 // down if snaps are still visible. Minions/others stay at 175u (replay-verified
                 // minion cadence; their snaps aren't player-focused).
-                const float CHAMPION_DRIFT_RESYNC = 8f;
-                float driftResyncThreshold = this is Champion ? CHAMPION_DRIFT_RESYNC : 175f;
-                if (Waypoints.Count > 1
-                    && _unreplicatedDrift.LengthSquared() > driftResyncThreshold * driftResyncThreshold)
+                // STOPPED units (Waypoints.Count <= 1) resync change-driven, mirroring Riot's
+                // AIManager_Common::PauseActor (AIManager.cpp:227-235): it emits ServerStop the
+                // moment a stopped unit's position differs from mLastPausePosition (exact !=). We
+                // can't use exact != because we (unlike Riot) push stopped units every tick via
+                // ComputeSeparationPush (server-authority overlap fix — Riot's collision callback
+                // never runs for non-moving actors), so an exact gate would emit per-tick; an 8u
+                // sub-perceptual cap is the practical change-driven equivalent. This tracks a
+                // stopped minion's separation jitter tightly so residual <175u drift no longer
+                // surfaces as a snap at the next Basic_Attack_Pos (the "minions snap at combat
+                // start" complaint). Per-frame batching folds clumped minions into one WaypointGroup
+                // so the client follows the small steps smoothly. MOVING minions keep 175u (replay-
+                // verified walking cadence + travel keepalive); champions use 8u in both states.
+                // (Deeper faithfulness option, not done: stop separating stopped units at all, like
+                // Riot — then position is stable and this rarely fires. Risk: spawn/clump overlap.)
+                // 8u = sub-perceptual snap cap, used for champions (any state) and for any STOPPED
+                // unit (change-driven PauseActor equivalent). Moving non-champions use 175u.
+                const float TIGHT_RESYNC = 8f;
+                // MOVING MINION RESYNC (tightened 2026-06-21): the 175u threshold was the root of the
+                // user-observed "melee minions teleport forward when advancing after combat / snap to
+                // different targets". 175u was copied from Riot's measured walking-minion cadence — but
+                // that reasoning only holds for Riot, whose server and 4.x client ran the SAME collision
+                // code, so their positions AGREED and the ~167u resync carried ~0 real drift (see the
+                // champion block above, lines 1928-1935, which fixed the identical "visible forward
+                // teleport" for heroes by dropping to 8u). WE reimplement collision server-side, so a
+                // minion shoved around in a clash (ComputeSeparationPush) genuinely diverges from the
+                // client's local sim by up to the threshold, and the next WaypointGroup hard-snaps
+                // (ActorClient.cpp:169) that whole divergence forward in one visible jump — worst right
+                // after combat, when the accumulated clash-push releases as the unit resumes advancing.
+                // 30u keeps the per-snap correction sub-perceptual for a minion-sized model while still
+                // far cheaper than the champion 8u (≈4 entries/list, per-frame batched). Tune down toward
+                // TIGHT_RESYNC if snaps are still visible, up if minion bandwidth becomes an issue.
+                const float MOVING_MINION_RESYNC = 30f;
+                bool stopped = Waypoints.Count <= 1;
+                float driftResyncThreshold = (this is Champion || stopped) ? TIGHT_RESYNC : MOVING_MINION_RESYNC;
+                if (_unreplicatedDrift.LengthSquared() > driftResyncThreshold * driftResyncThreshold)
                 {
+                    if (CollisionLogger.Enabled && !(this is Champion))
+                    {
+                        // drift here = the divergence the client will hard-snap when the next
+                        // WaypointGroup lands (= the visible teleport magnitude).
+                        CollisionLogger.Log(_game.GameTime, NetId, "resync", 0f, _unreplicatedDrift.Length(), Position);
+                    }
                     _movementUpdated = true;
                 }
 
@@ -2017,7 +1990,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // accumulated stuck state.
                 _smoothedSeparationPush = Vector2.Zero;
                 _stuckGhostFrames = 0;
-                _collisionSlideSign = 0f;
             }
 
             return walked || pushed;
@@ -2040,16 +2012,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// (signTable[sideDot &gt; 0] = +1, Actor.cpp:313/425) — ported literally even though it
         /// reads counter-intuitive; runtime fidelity over intuition.
         /// </summary>
+        // ActorRadius = the movement/pathing-collision radius (S4 Actor_Common::GetRadius() = mRadius).
+        // Riot's Actor IS the nav-mesh actor — SetRadius re-registers it in the NavMesh — so mRadius
+        // is the PATHFINDING footprint, fed from CharacterRecord.pathfindingCollisionRadius (≈35.74),
+        // NOT gameplayCollisionRadius. Our `CollisionRadius` field holds GameplayCollisionRadius
+        // (spell/ability collision) and must NOT drive movement collision: every Actor-collision term
+        // (GetHardRadius/GetSoftRadius, the neighbour radius, group/pair radii, thresholds, the
+        // broadphase) uses mRadius. So the whole steer/collision/pathing layer reads PathfindingRadius
+        // via this accessor (resolves the old D3/D4 "verify mRadius" item, 2026-06-21).
+        private float ActorRadius => PathfindingRadius;
         // S4 Actor_Common::GetHardRadius/GetSoftRadius (Actor.cpp:2384-2398). The collision
         // response is ASYMMETRIC: the SELF term uses these type-scaled radii, the NEIGHBOR term
-        // always uses full GetRadius (= CollisionRadius). The gating flag mUseSlowerButMoreAccurate-
-        // Search == !UsesFastPath (champions = fast A*, minions = slow-accurate — same flag drives
-        // the NavGrid travelFactor branch). Champions (fast): hard = r, soft = 2r — IDENTICAL to
-        // the old full-radius behaviour, so this changes nothing for them. Minions (slow): hard =
-        // 0.2r, soft = 0.3r → waves pack to Riot's tighter threshold (~69.6u vs our old ~108u for
-        // two r=48 minions: neighbor-full 48 + self-hard 9.6 + buffer 12). Used for SELF only.
-        private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius : CollisionRadius * 0.2f;
-        private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? CollisionRadius * 2f : CollisionRadius * 0.3f;
+        // always uses full GetRadius (= mRadius = the neighbour's PathfindingRadius). The gating flag
+        // mUseSlowerButMoreAccurateSearch == !UsesFastPath (champions = fast A*, minions = slow-
+        // accurate — same flag drives the NavGrid travelFactor branch). Champions (fast): hard = r,
+        // soft = 2r. Minions (slow): hard = 0.2r, soft = 0.3r → waves pack to Riot's tighter
+        // threshold. Used for SELF only.
+        private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? ActorRadius : ActorRadius * 0.2f;
+        private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? ActorRadius * 2f : ActorRadius * 0.3f;
 
         // Vision-radius scale (S4 obj_AI_Base::GetVisionScale: multiplier = pctBonus + 1, additive =
         // flatBonus; raw fields fed by vision-range buffs/items). Applied to the effective vision
@@ -2074,61 +2054,148 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             _visionScaleFlatBonus += flat;
         }
 
-        private Vector2 ComputeGroupCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 movementDelta, out bool hadHardColliders)
+        /// <summary>
+        /// Collects the hard-collider set ahead of a MOVING unit and reduces it to a single group
+        /// circle. Shared by the per-tick waypoint steer (S4 CheckActorCollisionResponse) and the
+        /// gated position-push fallback (HandleActorCollision) so both consume the EXACT same set —
+        /// the steer's collision flag is what gates the push (Actor.cpp:1722). Classification mirrors
+        /// the client neighbor collection (Actor.cpp:240-285): self/dead/ghosted filter, forward
+        /// direction gate, 10u deep-overlap floor, and the hard-radius + [12,20] buffer threshold
+        /// (SELF uses GetHardRadius, the NEIGHBOR term uses full mRadius = PathfindingRadius — the asymmetry is
+        /// faithful). Fills <paramref name="barycenter"/> (plain average of collider positions) and
+        /// <paramref name="groupRadius"/> (max enclosing radius); returns the collider count.
+        /// </summary>
+        private int CollectHardColliders(List<GameObject> nearby, Vector2 objFwd,
+            out Vector2 barycenter, out float groupRadius)
+        {
+            const float MinColliderDistSq = 100f; // deep overlaps (<10u) are NOT colliders here;
+                                                  // the gated stuck layer handles them.
+            barycenter = Vector2.Zero;
+            groupRadius = 0f;
+
+            float selfHard = GetHardRadius();
+            var colliders = new List<AttackableUnit>(4);
+            foreach (var other in nearby)
+            {
+                if (other == this || other.IsToRemove()) continue;
+                if (!(other is AttackableUnit otherUnit)) continue;
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
+                if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
+
+                float distSq = Vector2.DistanceSquared(Position, other.Position);
+                if (distSq < MinColliderDistSq) continue;
+
+                // NEIGHBOUR term = full mRadius = the neighbour's PathfindingRadius (Actor GetRadius()),
+                // NOT its gameplay CollisionRadius.
+                float pairBuffer = Math.Clamp(
+                    Math.Min(selfHard, otherUnit.PathfindingRadius) * 0.25f, 12f, 20f);
+                float pairRadius = selfHard + otherUnit.PathfindingRadius + pairBuffer;
+                if (distSq >= pairRadius * pairRadius) continue;
+
+                colliders.Add(otherUnit);
+                barycenter += other.Position;
+            }
+            if (colliders.Count == 0) return 0;
+            barycenter /= colliders.Count;
+
+            // Enclosing group radius: max over colliders of (dist to barycenter + their radius)
+            // (S4 Actor.cpp:356-370). Their radius = mRadius = PathfindingRadius.
+            foreach (var c in colliders)
+            {
+                float r = Vector2.Distance(c.Position, barycenter) + c.PathfindingRadius;
+                if (r > groupRadius) groupRadius = r;
+            }
+            return colliders.Count;
+        }
+
+        /// <summary>
+        /// DEFAULT per-tick collision responder for a MOVING unit — faithful port of S4
+        /// <c>Actor_Common::CheckActorCollisionResponse</c> (Actor.cpp:310-414). Instead of pushing
+        /// the unit's POSITION off its path (the old behaviour, now gated to the wedge case), this
+        /// SHIFTS the unit's FUTURE path waypoints sideways around the collider barycenter, in place.
+        /// The unit then follows the bent path normally with its Position always ON the path, so the
+        /// replicated 0x61 WaypointGroup (wp0 == Position) keeps client and server in agreement — no
+        /// off-path snap. Returns whether any hard collider was present (= the decomp's
+        /// <c>isInCollision</c>, which gates the position-push fallback).
+        ///
+        /// Per the decomp the loop runs over waypoints <c>[GetNextWaypointIndex .. GetSize()-2]</c>
+        /// — the FINAL destination waypoint is never shifted, and a 2-point path (the common minion
+        /// path) is therefore a no-op (early return). The slide sign is recomputed every tick from
+        /// <c>signTable[dot(side, m_Movement) &gt; 0]</c> with NO hysteresis (D11).
+        ///
+        /// Replication: this mutates the LIVE <see cref="Waypoints"/> in place but deliberately does
+        /// NOT force <c>_movementUpdated</c> every tick. The bent path is re-broadcast by the EXISTING
+        /// travel keepalive (<c>GetCenteredWaypoints</c> reads the live, now-bent waypoints seeded at
+        /// Position) at Riot's measured cadence — 100u for minions / 57u for champions. Forcing a
+        /// per-tick WaypointGroup would flood 0x61 and reintroduce the champion arc-jitter the
+        /// keepalive cadence was tuned to avoid. Because Position stays ON the (bent) path, every
+        /// re-anchor carries wp0 == true Position, so the periodic resend is smooth — there is no
+        /// off-path drift to release as a snap (that off-path drift was exactly the old position-push
+        /// bug). The 4.x client runs the same per-tick responder on the path it holds, so it bends
+        /// identically between resends.
+        /// </summary>
+        private bool SteerPathAroundColliders(List<GameObject> nearby, Vector2 movementDelta)
+        {
+            const float Epsilon = 1e-9f; // S4 epsilon for the per-waypoint forward normalize (D21)
+
+            if (nearby.Count == 0) return false;
+
+            float movementMag = movementDelta.Length();
+            if (movementMag <= 0.001f) return false;
+            Vector2 objFwd = movementDelta / movementMag;
+
+            int count = CollectHardColliders(nearby, objFwd, out Vector2 barycenter, out float groupRadius);
+            if (count == 0) return false;
+
+            // Nothing to bend once the next waypoint is already the final destination
+            // (decomp: GetNextWaypointIndex() >= GetSize()-1 returns immediately).
+            if (CurrentWaypointKey >= Waypoints.Count - 1) return true;
+
+            float selfHard = GetHardRadius();
+            float minDistanceBuffer = Math.Clamp(Math.Min(groupRadius, selfHard) * 0.25f, 12f, 20f);
+            float threshold = groupRadius + selfHard + minDistanceBuffer;
+
+            // Shift every FUTURE waypoint up to (but excluding) the final goal. The loop STOPS at
+            // the first waypoint whose distance to the barycenter is >= threshold (it and the rest
+            // are far enough that no bend is needed). sideVec = yAxis(0,1,0) x fwd = (fwd.z,-fwd.x).
+            for (int i = CurrentWaypointKey; i < Waypoints.Count - 1; i++)
+            {
+                Vector2 w = Waypoints[i];
+                Vector2 fwd = w - Position;
+                float fwdLen = fwd.Length();
+                if (fwdLen <= Epsilon) continue; // coincident waypoint: degenerate normalize, skip
+                fwd /= fwdLen;
+                Vector2 side = new Vector2(fwd.Y, -fwd.X);
+
+                float d = Vector2.Distance(barycenter, w);
+                if (d >= threshold) break;
+
+                float push = MathF.Max(threshold - d, 0f);
+                float sign = Vector2.Dot(side, movementDelta) > 0f ? 1f : -1f;
+                float f = 2f * push * sign;
+                Waypoints.Replace(i, w + side * f);
+            }
+            return true;
+        }
+
+        private Vector2 ComputeGroupCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 movementDelta, out bool hadHardColliders, out Vector2 barycenter)
         {
             const float ReflectionIndex = 5.1f;   // S4 Actor.cpp:314
             const float AngleThreshold = 0.707f;  // S4 Actor.cpp:315
             const float Epsilon = 1e-6f;          // Riot::Vector3f::kfThreshold class
-            const float MinColliderDistSq = 100f; // S4 Actor.cpp:276 — deep overlaps (<10u) are
-                                                  // NOT colliders; the stuck layer handles them.
 
             hadHardColliders = false;
+            barycenter = Vector2.Zero;
             if (nearby.Count == 0) return Vector2.Zero;
 
             float movementMag = movementDelta.Length();
             if (movementMag <= 0.001f) return Vector2.Zero;
             Vector2 objFwd = movementDelta / movementMag;
 
-            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
-                                       && firstWaveSelf.IsFirstWave
-                                       && !firstWaveSelf.HasPassedFirstTurret;
-
-            // Collider collection — same classification as the client callback (Actor.cpp:240-285):
-            // dead/ghosted filter, direction gate, min-distance buffer, 10u deep-overlap floor.
             float selfHard = GetHardRadius();
-            var colliders = new List<AttackableUnit>(4);
-            Vector2 barycenter = Vector2.Zero;
-            foreach (var other in nearby)
-            {
-                if (other == this || other.IsToRemove()) continue;
-                if (!(other is AttackableUnit otherUnit)) continue;
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
-                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
-                if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
-
-                float distSq = Vector2.DistanceSquared(Position, other.Position);
-                if (distSq < MinColliderDistSq) continue;
-
-                float pairBuffer = Math.Clamp(
-                    Math.Min(selfHard, other.CollisionRadius) * 0.25f, 12f, 20f);
-                float pairRadius = selfHard + other.CollisionRadius + pairBuffer;
-                if (distSq >= pairRadius * pairRadius) continue;
-
-                colliders.Add(otherUnit);
-                barycenter += other.Position;
-            }
-            if (colliders.Count == 0) return Vector2.Zero;
+            int count = CollectHardColliders(nearby, objFwd, out barycenter, out float groupRadius);
+            if (count == 0) return Vector2.Zero;
             hadHardColliders = true;
-            barycenter /= colliders.Count;
-
-            // Enclosing group radius: max over colliders of (dist to barycenter + their radius)
-            // (S4 Actor.cpp:356-370).
-            float groupRadius = 0f;
-            foreach (var c in colliders)
-            {
-                float r = Vector2.Distance(c.Position, barycenter) + c.CollisionRadius;
-                if (r > groupRadius) groupRadius = r;
-            }
 
             float minDistanceBuffer = Math.Clamp(
                 Math.Min(groupRadius, selfHard) * 0.25f, 12f, 20f);
@@ -2158,7 +2225,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 float slide = pushDistance / sideDotAbs;
                 float slideFactor = slide <= totalThreshold ? Math.Max(0.01f, slide) : totalThreshold;
-                float slideSign = ResolveSlideSign(Vector2.Dot(toCenter, side) > 0f ? 1f : -1f);
+                float slideSign = Vector2.Dot(toCenter, side) > 0f ? 1f : -1f;
                 return side * (slideFactor * ReflectionIndex * slideSign);
             }
 
@@ -2173,7 +2240,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (proj >= AngleThreshold)
             {
                 // Head-on: pure side-slide with RAW pushDistance (S4 Actor.cpp:440-447).
-                float sign = ResolveSlideSign(Vector2.Dot(toCenter, side) > 0f ? 1f : -1f);
+                float sign = Vector2.Dot(toCenter, side) > 0f ? 1f : -1f;
                 return side * (pushDistance * ReflectionIndex * sign);
             }
             // Glancing: reflect the movement across the group tangent (S4 Actor.cpp:448-462):
@@ -2181,6 +2248,187 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Vector2 tangential = objFwd - collisionNormal * proj;
             Vector2 reflected = tangential * 2f - objFwd;
             return reflected * (ReflectionIndex * clampedFactor);
+        }
+
+        /// <summary>
+        /// Per-tick collision control-flow structure for a MOVING unit — mirrors the collision tail
+        /// of S4 <c>Actor_Common::Update</c> (Actor.cpp:1714-1741). Runs the default path STEER
+        /// (<see cref="SteerPathAroundColliders"/> = CheckActorCollisionResponse) every tick, then —
+        /// only when <c>Waypoints.Count >= MAX_NUMREPATH(4) &amp;&amp; isInCollision</c> (Actor.cpp:1722) —
+        /// the gated position-push (<see cref="HandleActorCollision"/>) inside the HARDSTOPLOOPCOUNT(3)
+        /// intra-tick relaxation loop: re-resolve from the (progressively separated) Position each
+        /// iteration, break once out of collision, with a 2nd push pass on the final iteration
+        /// (Actor.cpp:1724). Drives the temp-ghost counter and clears it on a collision-free tick
+        /// (Actor.cpp:1738-1740). Returns whether any push was applied this tick.
+        ///
+        /// Stage B keeps Stage A's position-based application. The persistent <c>m_Movement</c>
+        /// velocity model and the inline <c>forceRepath</c> → actor-aware repath land in Stage C: in
+        /// the position model the natural walk is applied BEFORE collision, so the decomp's
+        /// "barely moved" forceRepath gate isn't yet meaningful and the actor-aware wedge repath is
+        /// handled by <see cref="UpdateStuckRecovery"/> / <see cref="TryUnstuckRepath"/> (B1).
+        /// </summary>
+        private bool RunCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 originalDelta, float delta)
+        {
+            const int MaxNumRepath = 4;      // S4 MAX_NUMREPATH (Actor.cpp:163)
+            const int HardStopLoopCount = 3; // S4 HARDSTOPLOOPCOUNT (Actor.cpp:1719)
+
+            bool pushed = false;
+
+            // DEFAULT responder: steer FUTURE waypoints around the collider group (no-op on a
+            // 2-point path). Returns isInCollision (hard colliders present), which gates the push.
+            bool hadHardColliders = SteerPathAroundColliders(nearby, originalDelta);
+
+            // Feed the body-routing trigger (S4 forceRepath): "in collision" → UpdateStuckRecovery
+            // reroutes actor-aware on a throttle. True even on a 2-point clash path (the steer is a
+            // no-op there but still reports hard colliders) — which is exactly the clip-through case.
+            _inHardCollision = hadHardColliders;
+
+            if (Waypoints.Count >= MaxNumRepath && hadHardColliders)
+            {
+                float speedPerTick = GetMoveSpeed() * (delta * 0.001f);
+
+                for (int loopCount = 0; loopCount < HardStopLoopCount; loopCount++)
+                {
+                    Vector2 outMovement = originalDelta;
+                    bool isInCollision = HandleActorCollision(nearby, originalPos, originalDelta,
+                        speedPerTick, ref outMovement);
+                    // Position already holds the natural walk (originalDelta); apply the residual.
+                    pushed |= ApplyCollisionPush(outMovement - originalDelta, isInCollision);
+
+                    if (isInCollision && loopCount >= 2)
+                    {
+                        // 2nd HandleActorCollision pass on the final iteration (Actor.cpp:1724).
+                        isInCollision = HandleActorCollision(nearby, originalPos, originalDelta,
+                            speedPerTick, ref outMovement);
+                        pushed |= ApplyCollisionPush(outMovement - originalDelta, isInCollision);
+                    }
+
+                    if (!isInCollision) break;
+                }
+
+                // Temp-ghost counter (S4 Actor.cpp:1473-1477): escalate on GENUINE stuck (final
+                // movement collapsed below 25% of intent), else reset. Position-model caveat noted
+                // above — rarely fires until the Stage C velocity model.
+                Vector2 newDelta = Position - originalPos;
+                const float GenuineStuckRatio = 0.25f;
+                float genuineStuckSq = originalDelta.LengthSquared() * (GenuineStuckRatio * GenuineStuckRatio);
+                if (originalDelta.LengthSquared() > 0.01f && newDelta.LengthSquared() < genuineStuckSq)
+                {
+                    _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
+                }
+                else
+                {
+                    _stuckGhostFrames = 0;
+                }
+            }
+            else if (!hadHardColliders)
+            {
+                // Not in collision this tick (Actor.cpp:1738-1740) -> clear temp-ghost escalation.
+                // (Colliders present but path too short to run the push: leave the counter alone.)
+                _stuckGhostFrames = 0;
+            }
+
+            return pushed;
+        }
+
+        /// <summary>
+        /// Applies a collision-response position delta, terrain-gated by <c>IsWalkable</c> (the only
+        /// surviving cell check in 4.20 — see <see cref="HandleActorCollision"/>). Returns whether it
+        /// moved the unit.
+        /// </summary>
+        private bool ApplyCollisionPush(Vector2 push, bool isInCollision)
+        {
+            if (push.LengthSquared() <= 0.0001f) return false;
+            Vector2 candidate = Position + push;
+            if (!_game.Map.NavigationGrid.IsWalkable(candidate, 0f)) return false;
+            Position = candidate;
+            _unreplicatedDrift += push;
+            if (CollisionLogger.Enabled)
+            {
+                CollisionLogger.Log(_game.GameTime, NetId, isInCollision ? "group" : "avoid", push.Length(), 0f, Position);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Faithful unified port of S4 <c>Actor_Common::HandleActorCollision</c> (Actor.cpp:420-984):
+        /// the gated position-push responder, composed as ONE control-flow structure that modifies a
+        /// SINGLE movement vector (the decomp's <c>outMov</c>) instead of our former scattered
+        /// group-push + separate unclamped stuck delta. Mutates <paramref name="outMovement"/> in
+        /// place (starts at <paramref name="originalDelta"/>) and returns <c>isInCollision</c>
+        /// (= hard colliders present; the decomp only sets it true in the hard branch, Actor.cpp:572).
+        ///
+        /// Structure (decomp): hard branch (group reflection/slide, Actor.cpp:447-570) — OR — soft
+        /// avoidance branch (Actor.cpp:814-976) when no hard colliders; then, in the hard branch only,
+        /// the stuck-with-repulse push folded into <c>outMov</c> (Actor.cpp:578-599) BEFORE a SINGLE
+        /// length clamp (Actor.cpp:607-619). The stuck push reuses the group barycenter (decomp
+        /// reuses baryCenter, line 586) and is min(95, speed*1.5)·normalize(pos−bary) — the /sepDist
+        /// cancels because it multiplies the full (pos−bary) vector whose length IS sepDist (B2).
+        /// <paramref name="speedPerTick"/> = info.max_distance = moveSpeed·dt.
+        ///
+        /// Terrain (Actor.cpp:632-757): the cell-border slide + per-cell <c>mActorList</c> occupancy
+        /// hard-stop are BOTH gated by <c>s_CanActorsSlideIntoOccupiedGridSquares</c>, which is =1 in
+        /// 4.20 (disabled) — so only the <c>IsPassable</c> revert survives. The caller's
+        /// <c>IsWalkable</c> gate on the applied position already does exactly that, so we keep it
+        /// there rather than duplicating the cell math here.
+        /// </summary>
+        private bool HandleActorCollision(List<GameObject> nearby, Vector2 originalPos, Vector2 originalDelta,
+            float speedPerTick, ref Vector2 outMovement)
+        {
+            const float StuckGateRatio = 1.5f; // s_MinionMaxCollisionAvoidanceRatio (Actor.cpp:469/578)
+            const float StuckHardCap = 95.0f;  // per-tick distance cap (Actor.cpp:592) — see B2
+
+            outMovement = originalDelta;
+
+            Vector2 response = ComputeGroupCollisionResponse(nearby, originalPos, originalDelta,
+                out bool hadHardColliders, out Vector2 barycenter);
+
+            if (hadHardColliders)
+            {
+                outMovement = originalDelta + response;
+
+                // Fold the stuck-with-repulse push into outMov BEFORE the clamp (Actor.cpp:578-599):
+                // if the post-response movement collapsed to <= 1.5*speed, add an escape push away
+                // from the SAME group barycenter, magnitude min(95, speed*1.5). The decomp's /sepDist
+                // multiplies the full (pos-bary) vector so it cancels to a unit vector × magnitude.
+                float gate = StuckGateRatio * speedPerTick;
+                if (outMovement.LengthSquared() <= gate * gate)
+                {
+                    Vector2 away = Position - barycenter;
+                    Vector2 dir;
+                    if (away.LengthSquared() < 0.01f)
+                    {
+                        // Perfectly symmetrical crowd (centroid on the unit): deterministic NetId
+                        // fallback so the same setup doesn't jitter frame-to-frame.
+                        float angle = (NetId * 2.39996f) % 6.28318f;
+                        dir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+                    }
+                    else
+                    {
+                        dir = Vector2.Normalize(away);
+                    }
+                    float pushMag = Math.Min(StuckHardCap, speedPerTick * StuckGateRatio);
+                    outMovement += dir * pushMag;
+                }
+
+                // SINGLE hard clamp on the combined (response + stuck) movement (Actor.cpp:607-619),
+                // referenced against the original intended movement so the escape can still exceed the
+                // (near-zero) post-collision movement.
+                outMovement = ClampCollisionMovement(outMovement, originalDelta, 0.75f, 0.625f, 1.375f);
+                return true;
+            }
+
+            // Soft avoidance branch (no hard colliders): pre-contact veer + its own tight clamp. With
+            // the standard gate (called only when the steer found hard colliders) this is normally
+            // unreachable — kept for structural fidelity with HandleActorCollision's two branches.
+            Vector2 avoid = ComputeAvoidanceResponse(nearby, originalPos, originalDelta);
+            if (avoid.LengthSquared() <= 0.0001f)
+            {
+                outMovement = originalDelta;
+                return false;
+            }
+            outMovement = ClampCollisionMovement(originalDelta + avoid, originalDelta, 0.25f, 0.875f, 1.125f);
+            return false;
         }
 
         /// <summary>
@@ -2232,10 +2480,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (movementMag <= 0.001f) return Vector2.Zero;
             Vector2 objFwd = movementDelta / movementMag;
 
-            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
-                                       && firstWaveSelf.IsFirstWave
-                                       && !firstWaveSelf.HasPassedFirstTurret;
-
             // Our per-second velocity for the lockstep gate / speed comparison. The client uses
             // m_Movement on both sides; we derive the neighbor's from its waypoint state.
             Vector2 myVelocity = objFwd * GetMoveSpeed();
@@ -2252,12 +2496,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
                 if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
-                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
                 if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
 
                 float distSq = Vector2.DistanceSquared(Position, other.Position);
                 if (distSq <= Epsilon) continue;
-                float softThreshold = other.CollisionRadius + softRadius;
+                // NEIGHBOUR term = full mRadius = the neighbour's PathfindingRadius (Actor GetRadius()).
+                float softThreshold = otherUnit.PathfindingRadius + softRadius;
                 if (distSq >= softThreshold * softThreshold) continue;
 
                 Vector2 otherVelocity = Vector2.Zero;
@@ -2292,7 +2536,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             float groupRadius = 0f;
             foreach (var m in members)
             {
-                float r = Vector2.Distance(m.Position, barycenter) + m.CollisionRadius;
+                float r = Vector2.Distance(m.Position, barycenter) + m.PathfindingRadius;
                 if (r > groupRadius) groupRadius = r;
             }
 
@@ -2325,14 +2569,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     return Vector2.Zero;
                 }
-                sign = ResolveSlideSign(Vector2.Dot(inObjFwd, side) > 0f ? 1f : -1f);
+                sign = Vector2.Dot(inObjFwd, side) > 0f ? 1f : -1f;
             }
             else
             {
                 // Head-on or crossing: side picked by which side the group center is on
                 // (S4 Actor.cpp:800-805 / 819-823 — same literal sign convention as the hard
                 // branch).
-                sign = ResolveSlideSign(Vector2.Dot(toCenter, side) > 0f ? 1f : -1f);
+                sign = Vector2.Dot(toCenter, side) > 0f ? 1f : -1f;
             }
 
             float sideDotAbs = Math.Abs(Vector2.Dot(collisionNormal, side));
@@ -2344,204 +2588,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             return side * (sign * magnitude);
-        }
-
-        /// <summary>
-        /// Body blocking for STATIONARY units -> Calculates a push vector that pushes this unit
-        /// out of any overlap with AttackableUnit neighbors. Half of the overlap is applied per
-        /// tick; the opposing unit pushes itself by the remainder in its own tick.
-        ///
-        /// Server-authority necessity, NOT a client port: the client's collision callback only
-        /// runs for moving actors, but the server must resolve spawn/post-dash overlap for units
-        /// that aren't walking (moving units use <see cref="ComputeGroupCollisionResponse"/>).
-        /// </summary>
-        private Vector2 ComputeSeparationPush(List<GameObject> nearby)
-        {
-            if (nearby.Count == 0) return Vector2.Zero;
-
-            // FirstWave -> Ignore ally lane minion collision until reaching your own outer turret,
-            // so that champions cannot manipulate the initial wave by body-blocking.
-            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
-                                       && firstWaveSelf.IsFirstWave
-                                       && !firstWaveSelf.HasPassedFirstTurret;
-
-            Vector2 totalPush = Vector2.Zero;
-            foreach (var other in nearby)
-            {
-                if (other == this || other.IsToRemove()) continue;
-                if (!(other is AttackableUnit otherUnit)) continue;
-                // Dead champions don't SetToRemove (they sit at death position until respawn,
-                // ~30s) so without this filter they keep body-pushing live units. Ghosted units
-                // pass through everything client-side too this matches PathingHandler's predicate.
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
-                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
-
-                var diff = Position - other.Position;
-                float distSq = diff.LengthSquared();
-                // Min-distance buffer (S4 Actor.cpp:251-256): the collision trigger distance is
-                // the radius sum PLUS clamp(min(selfR, otherR) * 0.25, 12, 20) — units separate
-                // to slightly beyond raw contact. ASYMMETRIC: SELF uses GetHardRadius (champion r,
-                // minion 0.2r — Actor.cpp:2394), NEIGHBOR uses full GetRadius (= CollisionRadius).
-                float minDistanceBuffer = Math.Clamp(
-                    Math.Min(GetHardRadius(), other.CollisionRadius) * 0.25f, 12f, 20f);
-                float combinedRadius = GetHardRadius() + other.CollisionRadius + minDistanceBuffer;
-                if (distSq >= combinedRadius * combinedRadius) continue; // no overlap
-
-                float distance = (float)Math.Sqrt(distSq);
-                Vector2 radialDir;
-                float overlap;
-
-                if (distance < 0.01f)
-                {
-                    //TODO: this needs tuning
-                    // Perfect overlap -> deterministic fallback via NetId, so that the same pair
-                    // always chooses the same direction -> should be no visual jitter.
-                    float angle = (NetId * 2.39996f) % 6.28318f;
-                    radialDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
-                    overlap = combinedRadius;
-                }
-                else
-                {
-                    radialDir = diff / distance;
-                    overlap = combinedRadius - distance;
-                }
-
-                // Pure radial separation. (The old 0.3-radial/0.7-tangential mix was an invented
-                // approximation of the client's slide behavior for WALKING units — superseded by
-                // ComputeGroupCollisionResponse; this method only ever runs with zero movement
-                // now, where radial is the only meaningful direction.)
-                totalPush += radialDir * (overlap * 0.5f);
-            }
-
-            return totalPush;
-        }
-
-        /// <summary>
-        /// Stuck Branch -> If, after the other checks above dont work, the effective movement for this tick is less
-        /// than a certain fraction of the originally intended movement, the unit
-        /// is considered stuck -> should happen typically in dense crowds where push vectors cancel each other out or
-        /// are completely clamped out by the above clamp.
-        ///
-        /// Formula based on actor_client.cpp L6620-6681 thanks to Feta:
-        ///   pushSpeed = ExtraSeparationSpeed × CollisionRadius  (units/sec)
-        ///   pushSpeed = min(pushSpeed, maxSpeed × 1.5)
-        ///   pushSpeed = min(pushSpeed, 95 units/sec)
-        ///   push = (Position - centroid_of_neighbors).normalized × pushSpeed × deltaSeconds
-        ///
-        /// This push bypasses the clamp (in S1: (so this could be wrong) bypasses ±37.5% clamp) and is the only
-        /// way for units to break free from stuck crowds when their normal
-        /// movement has been reduced to zero by push cancellation.
-        ///
-        /// GATE (S4-verified 2026-06-12 vs Actor.cpp:469-470 + NSEAI.cfg [Collision]):
-        ///   isStuckWithRepulse fires when |outMov| <= s_MinionMaxCollisionAvoidanceRatio * speed,
-        ///   with s_MinionMaxCollisionAvoidanceRatio = 1.5 (NOT MinSpeedRatioBeforeStuck=0.25 — that
-        ///   constant is a movement-scale in the path-active branch at Actor.cpp:1217, a different
-        ///   mechanism). A 1.5x gate is met in essentially every contact, so this is a CONTINUOUS
-        ///   gentle separation, not a "severely stuck" signal. The constant lives in Actor_Common
-        ///   (base class) with no actor-type branch → applies to heroes AND minions identically;
-        ///   "Minion" in the name is legacy. The genuinely-stuck escalation (temp-ghost counter)
-        ///   uses a separate, stricter 0.25 gate in Move() so this frequent nudge can't ramp it.
-        ///
-        /// Magnitude (S4-verified): min(95, speed*1.5, ExtraSeparationSpeed * stuckRatio² * dt)
-        /// with stuckRatio = stuckTimerSec / s_timeBetweenPathCorrections + 1 — but in patch 4.17
-        /// `s_timeBetweenPathCorrections` is a never-assigned static (zero) → the ratio is +inf and
-        /// the third term never binds: the push saturates INSTANTLY to min(95, speed*1.5). The
-        /// gradual quadratic escalation only existed in S1. We mirror S4: no escalation term.
-        /// </summary>
-        private Vector2 ComputeStuckExtraPush(List<GameObject> nearby, Vector2 newDelta, Vector2 originalDelta, float deltaMs)
-        {
-            const float MinionMaxCollisionAvoidanceRatio = 1.5f; // s_MinionMaxCollisionAvoidanceRatio, Actor.cpp:469
-            const float HardCapPerSec = 95.0f;
-            const float MaxSpeedMultiplier = 1.5f;
-
-            // Reference = the intended per-tick movement (originalDelta = this tick's walk before push).
-            // Stationary / path-ended units (≈0) are handled by the separate stationary branch.
-            float originalMagSq = originalDelta.LengthSquared();
-            if (originalMagSq <= 0.01f) return Vector2.Zero;
-
-            // Separation gate: fire unless the post-collision movement already exceeds 1.5x the
-            // intended movement (i.e. the reflection/slide alone pushed hard enough).
-            float gateSq = originalMagSq * (MinionMaxCollisionAvoidanceRatio * MinionMaxCollisionAvoidanceRatio);
-            if (newDelta.LengthSquared() >= gateSq) return Vector2.Zero;
-
-            // FirstWave -> ignore ally lane minion collisions until reaching your own outer turret
-            // (similar to ComputeSeparationPush — otherwise the stuck push between ally minions
-            // would trigger again even though Phase 1 correctly skips it).
-            bool skipAllyLaneMinions = this is LaneMinion firstWaveSelf
-                                       && firstWaveSelf.IsFirstWave
-                                       && !firstWaveSelf.HasPassedFirstTurret;
-
-            // this is the center of all overlapping neighbors. (Centoid)
-            int count = 0;
-            Vector2 centroid = Vector2.Zero;
-            foreach (var other in nearby)
-            {
-                if (other == this || other.IsToRemove()) continue;
-                if (!(other is AttackableUnit otherUnit)) continue;
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
-                if (skipAllyLaneMinions && otherUnit is LaneMinion && otherUnit.Team == Team) continue;
-
-                // Same collider classification as ComputeSeparationPush: the client's stuck push
-                // takes the barycenter of the collider list, which was collected WITH the
-                // direction gate and the min-distance buffer (S4 Actor.cpp:251-264) — mirror both
-                // here so the centroid matches the set that actually blocks the movement.
-                // originalDelta is guaranteed non-zero by the early-out above.
-                if (Vector2.Dot(originalDelta, other.Position - Position) <= 0f) continue;
-
-                var diff = Position - other.Position;
-                float minDistanceBuffer = Math.Clamp(
-                    Math.Min(GetHardRadius(), other.CollisionRadius) * 0.25f, 12f, 20f);
-                float combinedRadius = GetHardRadius() + other.CollisionRadius + minDistanceBuffer;
-                if (diff.LengthSquared() >= combinedRadius * combinedRadius) continue;
-
-                centroid += other.Position;
-                count++;
-            }
-            if (count == 0) return Vector2.Zero;
-            centroid /= count;
-
-            Vector2 awayFromCentroid = Position - centroid;
-            Vector2 pushDir;
-            if (awayFromCentroid.LengthSquared() < 0.01f)
-            {
-                // The centroid lies on the unit (perfectly symmetrical crowd). So a deterministic
-                // fallback via NetId, to prevent the same setup from shifting between frames.
-                float angle = (NetId * 2.39996f) % 6.28318f;
-                pushDir = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
-            }
-            else
-            {
-                pushDir = Vector2.Normalize(awayFromCentroid);
-            }
-
-            // S4 4.17 runtime: min(95, speed*1.5) — the escalation term is dead, see doc above.
-            float maxSpeed = GetMoveSpeed();
-            float pushSpeedPerSec = Math.Min(maxSpeed * MaxSpeedMultiplier, HardCapPerSec);
-
-            float deltaSec = deltaMs * 0.001f;
-            return pushDir * (pushSpeedPerSec * deltaSec);
-        }
-
-        /// <summary>
-        /// Clamp: Limits the magnitude of the separation push to a fraction of the unit's
-        /// per-tick movement budget (max of actual walk delta and what the unit could walk
-        /// at full move speed). This prevents stationary units from being shoved out
-        /// instantly and keeps walking-unit body blocking smooth without oscillation.
-        /// </summary>
-        private Vector2 ClampSeparationPush(Vector2 push, Vector2 originalDelta, float deltaMs)
-        {
-            const float ClampRatio = 0.375f;
-
-            float walkBudget = GetMoveSpeed() * 0.001f * deltaMs;
-            float originalMag = originalDelta.Length();
-            float budget = Math.Max(originalMag, walkBudget);
-            if (budget <= 0.0001f) return push;
-
-            float maxPushMag = budget * ClampRatio;
-            float pushMagSq = push.LengthSquared();
-            if (pushMagSq <= maxPushMag * maxPushMag) return push;
-
-            return push * (maxPushMag / (float)Math.Sqrt(pushMagSq));
         }
 
         public bool PathTrueEndIs(Vector2 location)
@@ -2736,6 +2782,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         if (!b.IsHidden)
                         {
                             _game.PacketNotifier.NotifyNPC_BuffAdd2(b);
+                            // BuffAdd2 carries no counter field and the client's ResizeClient doesn't set
+                            // mCounter, so a COUNTER-type buff would display 0 until its first increment.
+                            // Send the initial counter explicitly (int32) right after the add.
+                            if (b.BuffType == BuffType.COUNTER)
+                            {
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(b);
+                            }
                         }
                         b.ActivateBuff();
                     }
@@ -2755,6 +2808,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     if (!b.IsHidden)
                     {
                         _game.PacketNotifier.NotifyNPC_BuffReplace(b);
+                        // BuffReplace (like BuffAdd2) doesn't carry/set the client mCounter — re-send the
+                        // counter for COUNTER-type buffs so the replaced instance shows the right value.
+                        if (b.BuffType == BuffType.COUNTER)
+                        {
+                            _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(b);
+                        }
                     }
                     b.ActivateBuff();
                 }

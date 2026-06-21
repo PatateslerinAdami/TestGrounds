@@ -139,6 +139,9 @@ namespace MapScripts.Map1
         {
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
             AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            // Team-balance vote: same timing as surrender; grant amounts are PLACEHOLDERS (the
+            // server-side trigger/amounts aren't in the 4.20 client decomp — tune here, content-owned).
+            AddTeamBalance(1200000.0f, 300000.0f, 30.0f, 300.0f, 200, 0);
 
             // Replace the hardcoded MinionPaths with the client-side __NAV_<lane>NN
             // waypoints from the .sco.json scene files. Trailing-digit sort gives the correct

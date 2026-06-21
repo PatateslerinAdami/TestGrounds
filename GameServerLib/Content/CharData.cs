@@ -41,13 +41,13 @@ namespace LeagueSandbox.GameServer.Content
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
         /// <summary>
-        /// JSON field present in many character stats files but VERIFIED 2026-05-10 to be
-        /// unread by the S4 client (literal "Chasing" doesn't appear anywhere in S4 decomp,
-        /// and `CharacterData::FillCharacterRecordFromIniFromMyMembers` uses literal-string
-        /// ReadCFG_S/I/B for every field it reads — would surface this one if consumed).
-        /// Loaded here for forward-compat / completeness but DELIBERATELY not wired into
-        /// gameplay — wiring it server-side would diverge from client expectations. See
-        /// memory `project_chardata_chasing_postattack_loaded.md`.
+        /// JSON field present in many stats files. NOT in the 4.17 decomp (literal "Chasing" appears
+        /// nowhere; `CharacterData::FillCharacterRecordFromIniFromMyMembers` reads every field by
+        /// literal ReadCFG string — none match), so it is a 4.20 addition the 4.17 engine predates.
+        /// WIRED 2026-06-21 (ObjAIBase auto-attack/RefreshWaypoints): while chasing, the unit commits
+        /// to within attackRange × this percent before it stops + engages (anti-kite). Default 0.95
+        /// (≈ engage near full range); units whose stats omit it fall back to 0.95. Inferred semantics
+        /// — verify in-game. See memory `project_chardata_chasing_postattack_loaded.md`.
         /// </summary>
         public float ChasingAttackRangePercent { get; private set; } = 0.95f;
         /// <summary>

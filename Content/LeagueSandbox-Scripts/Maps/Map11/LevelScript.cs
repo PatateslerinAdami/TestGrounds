@@ -16,7 +16,7 @@ namespace MapScripts.Map11
     {
         public virtual MapScriptMetadata MapScriptMetadata { get; set; } = new MapScriptMetadata();
         public bool HasFirstBloodHappened { get; set; } = false;
-        public long NextSpawnTime { get; set; } = 90 * 1000;
+        public long NextSpawnTime { get; set; } = 10 * 1000;
         public string LaneMinionAI { get; set; } = "LaneMinionAI";
         public Dictionary<TeamId, Dictionary<int, Dictionary<int, Vector2>>> PlayerSpawnPoints { get; }
         public Dictionary<TeamId, Dictionary<MinionSpawnType, string>> MinionModels { get; set; } = new Dictionary<TeamId, Dictionary<MinionSpawnType, string>>
@@ -139,6 +139,9 @@ namespace MapScripts.Map11
         {
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
             AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            // Team-balance vote: same timing as surrender; grant amounts are PLACEHOLDERS (the
+            // server-side trigger/amounts aren't in the 4.20 client decomp — tune here, content-owned).
+            AddTeamBalance(1200000.0f, 300000.0f, 30.0f, 300.0f, 200, 0);
 
             LevelScriptObjects.LoadObjects(mapObjects);
             CreateLevelProps.CreateProps();

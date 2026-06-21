@@ -72,6 +72,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private uint _repathTargetNetId;
         private Vector2 _repathTargetPos = new Vector2(float.NaN, float.NaN);
         private const float REPATH_TARGET_DRIFT = 75.0f;
+        // Lane-minion chase commit window (anti-wobble, 2026-06-21): with the stage-B actor-aware
+        // chase path, the route around MOVING allies changes slightly each recompute and the cell can
+        // be contested (partial/short path → instant IsPathEnded → immediate recompute). Left ungated
+        // that recomputed ~7×/s, and each 0x61 re-orients the client → visible wobble/"spin" for the
+        // most-constrained (last) minion. Pace SAME-TARGET path-ran-out recomputes to this interval
+        // (≈ the 0.25s brain sweep) so the minion commits to its routed path; a target switch or >75u
+        // drift still recomputes immediately.
+        private float _lastChaseRepathMs = float.NegativeInfinity;
+        private const float MIN_CHASE_REPATH_MS = 250.0f;
 
         // Stop+Hold reconciliation: pressing the Hold key sends AI_STOP immediately followed by
         // AI_HOLD (~65ms apart, verified on the wire), and the Hold packet does NOT carry the held
@@ -1169,18 +1178,36 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (MoveOrder == OrderType.AttackTo && targetPos != Vector2.Zero)
             {
+                // In attack range → STOP and attack in place; out of range → chase to the distinct
+                // GetClosestAttackPoint cell.
+                //
+                // REMOVED the ATTACK_SETTLE_HYSTERESIS hold-band (2026-06-21, AADIAG-confirmed bug):
+                // it let a "settled" unit HOLD anywhere within idealRange + 150, i.e. it would stand
+                // still in the (idealRange, idealRange+150] dead-zone — OUT of actual attack range,
+                // so neither attacking NOR closing in. Repro: attack-move a target, engage, walk out,
+                // attack-move the same target again → she re-acquires already "settled", the target
+                // sits ~58u past range, and she holds there forever ("stops at attack range, doesn't
+                // attack"; AADIAG: dist=618 ideal=560 settled pathEnded notAttacking). A unit out of
+                // attack range MUST re-chase; anti-churn on the re-chase is the REPATH_TARGET_DRIFT
+                // throttle in the chase branch, not a positional hold-band.
                 if (Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange)
                 {
-                    // In range: stop the actor but KEEP MoveOrder == AttackTo, mirroring Riot's
-                    // AI_actor.Stop(false) while the order persists as AI_ATTACKTO (AIBaseClient.cpp).
-                    // Riot tracks transient "standing in range / waiting for AA cooldown" via a
-                    // separate AI_State, never by rewriting the order — AI_HOLD is set ONLY by the
-                    // player's hold command, never internally. The auto-attack fires from the
-                    // in-range attack path below.
-                    StopMovement(networked: false);
+                    // In attack range → STOP and attack in place. NETWORKED stop (replay-verified,
+                    // 26ec2d65): Riot broadcasts a 1-waypoint WaypointGroup at the chase→attack
+                    // transition; StopMovement early-outs at Count==1.
+                    //
+                    // NOTE (2026-06-21): a "keep walking to the committed distinct cell while in range"
+                    // variant was tried to fan allied minions apart, but it re-created the BEHIND-WAVE
+                    // failure (clash7/9/22): the committed chase path to a stand cell near a backline
+                    // target routes AROUND the enemy front (actor-aware A*), so following it all the
+                    // way walked minions behind their target. Halting at the boundary avoids that. The
+                    // allied-spacing spread needs front-of-wave targeting + near-side-only paths, not
+                    // an in-range chase — see the gap-analysis memory.
+                    StopMovement();
                 }
                 else
                 {
+                    // Out of range → chase toward the distinct recommended cell.
                     // F2 Phase 2: full client `Actor_Common::GetClosestAttackPoint` chain — the
                     // C++ backend of the Lua API `SetStateAndCloseToTarget` that every AI script
                     // (Minion.lua / Hero.lua / BaronMinionAI.lua / Aggro.lua / Pet AIs) uses to
@@ -1204,6 +1231,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     {
                         return;
                     }
+
+                    // Anti-wobble commit window (lane minions): if this recompute is for the SAME
+                    // target at roughly the same spot (i.e. it fired because our actor-aware path just
+                    // ran out / hit a contested cell, NOT because the target moved), pace it to
+                    // MIN_CHASE_REPATH_MS so we commit to the routed path instead of re-routing every
+                    // tick around moving allies (the client-side wobble). A target switch or >75u drift
+                    // skips this and recomputes now.
+                    bool sameTargetSameSpot = _repathTargetNetId == TargetUnit.NetId
+                        && !float.IsNaN(_repathTargetPos.X)
+                        && Vector2.DistanceSquared(_repathTargetPos, targetPos) <= REPATH_TARGET_DRIFT * REPATH_TARGET_DRIFT;
+                    if (this is LaneMinion && sameTargetSameSpot
+                        && _game.GameTime - _lastChaseRepathMs < MIN_CHASE_REPATH_MS)
+                    {
+                        return;
+                    }
+                    _lastChaseRepathMs = _game.GameTime;
                     _repathTargetNetId = TargetUnit.NetId;
                     _repathTargetPos = targetPos;
 
@@ -1225,9 +1268,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     }
 
                     // Unit-aware overload threads the actor-blocked predicate (A1) so the search
-                    // routes around blocking enemy units instead of producing a path that would
+                    // routes around blocking units instead of producing a path that would
                     // immediately need post-process collision correction.
-                    var newWaypoints = _game.Map.PathingHandler.GetPath(this, pathDestination);
+                    //
+                    // STAGE B (allied-spacing fan-out, 2026-06-21): for LANE MINIONS, skip the
+                    // straight-line LOS fast-path so the actor-aware A* actually runs on the approach
+                    // — a follower whose straight line to its stand cell is blocked by a LEADING ALLY
+                    // routes AROUND it and arrives from a distinct angle, so the wave fans onto
+                    // distinct boundary points instead of piling on one line (the user's "ally in the
+                    // way → I go around" model). Scoped to lane minions ONLY: they target the FRONT of
+                    // the wave (stage A — CallForHelp no longer redirects them to backline minions),
+                    // so "route around" only ever means around ALLIES between them and a front target,
+                    // never around the enemy front to reach a backline target (which is what produced
+                    // behind-wave for the unscoped chase, clash22). Champions/pets keep the LOS-first
+                    // path, where skip-LOS WOULD route behind a backline target. The actor-aware
+                    // smoothing (B1) keeps the bend from being flattened back to a straight line.
+                    bool actorAwareChase = this is LaneMinion;
+                    var newWaypoints = _game.Map.PathingHandler.GetPath(this, pathDestination,
+                        skipLineOfSight: actorAwareChase);
                     if (newWaypoints != null && newWaypoints.Count > 1)
                     {
                         SetWaypoints(newWaypoints);
@@ -2681,7 +2739,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // TODO: Verify if there are any other cases we want to avoid.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
                 {
-                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius;
+                    // ChasingAttackRangePercent (4.20 stats.json field, NOT in the 4.17 decomp — inferred
+                    // semantics, verify in-game): while CHASING, a unit commits to within attackRange ×
+                    // percent before it stops + engages, instead of attacking at the very edge of range
+                    // (anti-kite "stick closer"; e.g. Garen 0.5 closes deep, Velkoz 0.8 less). Applied to
+                    // the ENGAGE range only — it scales the start-attack gate (below) AND the chase/stop
+                    // in RefreshWaypoints (which receives this idealRange), so engage and stop stay
+                    // consistent (no attack-while-moving). The DISENGAGE stays at full range: the
+                    // IsAttacking cancel uses Stats.Range.Total + buffer. This engage(idealRange) <
+                    // disengage(full range + StopAttackRangeModifier) gap IS the anti-churn hysteresis
+                    // (a unit that engaged keeps attacking until the target leaves full range), so the
+                    // former explicit ATTACK_SETTLE_HYSTERESIS hold-band was redundant and was removed
+                    // (it created a dead-zone where a unit held OUT of attack range, not attacking).
+                    // Default 0.95 (CharData) ≈ no-op; units whose stats omit the field fall back to
+                    // 0.95. Clamped to a sane floor.
+                    float chasePct = System.Math.Clamp(CharData?.ChasingAttackRangePercent ?? 0.95f, 0.1f, 1f);
+                    idealRange = Stats.Range.Total * chasePct + TargetUnit.CollisionRadius + CollisionRadius;
 
                     if (Vector2.DistanceSquared(Position, TargetUnit.Position) <= idealRange * idealRange && MovementParameters == null)
                     {

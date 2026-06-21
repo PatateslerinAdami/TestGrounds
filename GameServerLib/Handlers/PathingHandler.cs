@@ -186,13 +186,14 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <see cref="NavigationPath.IsPartial"/> flag signals that the goal was unreachable
         /// and the path lands at the closest reachable cell.
         /// </summary>
-        public NavigationPath GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true)
+        public NavigationPath GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true,
+            bool skipLineOfSight = false)
         {
             bool useFastPath = obj is ObjAIBase ai && ai.UsesFastPath;
             float radius = usePathingRadius ? obj.PathfindingRadius : 0f;
             var actorBlocked = BuildActorBlockedPredicate(obj);
             return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked,
-                ENABLE_MOVEMENT_HINT_PENALTY ? ComputeMovementHint(obj) : null);
+                ENABLE_MOVEMENT_HINT_PENALTY ? ComputeMovementHint(obj) : null, skipLineOfSight);
         }
 
         // DISABLED 2026-06-07 (in-game regression): penalizing the cell directly ahead by +100
@@ -258,10 +259,12 @@ namespace LeagueSandbox.GameServer.Handlers
         ///   - Removed objects skipped (they're about to vanish).
         ///   - Ghosted units pass through everything (Wukong stealth, etc.) —> both as
         ///     the attacker (whole predicate becomes false) and as a candidate (skipped).
-        ///   - Same-team units don't block path expansion: the client's <c>Actor_Common::shouldCollide</c>
-        ///     filters allies out of the pathfinding query (post-process push handles overlap),
-        ///     otherwise a champion would route around its own minion wave instead of walking
-        ///     through it. Cross-team units block.
+        ///   - NO team filter (corrected 2026-06-18, new mac decomp): Riot's server A* probes
+        ///     actor-blocking with a ZEROED collisionState (mTeamID=0), so a non-ghosted actor
+        ///     blocks regardless of team — a unit routes AROUND allied bodies too. Lane-wave
+        ///     clumping is preserved instead by the start-proximity exemption (below) + the
+        ///     farFromOrigin / near-goal exemptions in <see cref="NavigationGrid.GetPath"/>.
+        ///     (The old "same-team units don't block" note described a removed team filter.)
         /// </summary>
         /// <summary>
         /// Computes a stand-position for <paramref name="attacker"/> from which it can hit
@@ -421,37 +424,118 @@ namespace LeagueSandbox.GameServer.Handlers
             }
             travelDistanceNeededBeforeTargetable = travel;
 
-            // Beeline shortcut (NavigationGrid.cpp:2503-2545 else-branch): the path detours so
-            // much that the crow distance to the snapped end cell is shorter than 60% of it —
-            // recommend the end directly.
-            float beelineSq = Vector2.DistanceSquared(end, attacker.Position);
-            if (0.36f * travel * travel <= beelineSq)
+            // Stand point = commit ~2 cells INTO attack range: the first path waypoint within
+            // (effectiveRange − ~2 cells) of the target, floored at the close radius. DISTANCE-based,
+            // NOT "firstInRange + 2 waypoints": our A* path is sparse (corner waypoints), so +2 indices
+            // overshoots toward the target and pulled RANGED units into melee. The decomp does
+            // firstInRange+2 at PER-CELL granularity (NavigationGrid.cpp:2531) — i.e. the same ~2-cell
+            // commit; this reproduces it independent of our waypoint spacing.
+            float commit = 2f * _map.NavigationGrid.CellSize;
+            float standDist = Math.Max(effectiveRange - commit, closeRadius);
+            // Walk the path and find where it first crosses INTO standDist of the target, INTERPOLATING
+            // within the segment. The A* path is sparse (corner waypoints) — a straight [start,target]
+            // beeline has no vertex at the stand distance, so picking a vertex collapsed ranged units
+            // onto the target (melee). The interpolated crossing puts the unit exactly standDist away.
+            recommendedAttackPos = path[path.Count - 1];
+            for (int i = 0; i < path.Count - 1; i++)
             {
-                // Close-walk scan: first waypoint within max(radii sum − closingModifier, 15).
-                // closingModifier = ar_ClosingAttackRangeModifier (Constants.var:16, default 300 on
-                // Map1) → the subtraction goes negative and the 15u floor binds. Sourced from
-                // GlobalData so a config/map override is honoured instead of a magic number.
-                float ClosingAttackRangeModifier = LeagueSandbox.GameServer.Content.GlobalData.AttackRangeVariables.ClosingAttackRangeModifier;
-                float closeRange = Math.Max(closeRadius - ClosingAttackRangeModifier, 15f);
-                float closeRangeSq = closeRange * closeRange;
-                int closeIdx = 1;
-                while (Vector2.DistanceSquared(projected, path[closeIdx]) >= closeRangeSq)
+                float da = Vector2.Distance(projected, path[i]);
+                if (da <= standDist)
                 {
-                    closeIdx++;
-                    if (closeIdx >= path.Count)
+                    // Already at/inside the stand distance at this vertex — don't advance further in.
+                    recommendedAttackPos = path[i];
+                    break;
+                }
+                float db = Vector2.Distance(projected, path[i + 1]);
+                if (db <= standDist)
+                {
+                    float t = (da - standDist) / Math.Max(da - db, 1e-3f);
+                    recommendedAttackPos = Vector2.Lerp(path[i], path[i + 1], Math.Clamp(t, 0f, 1f));
+                    break;
+                }
+            }
+
+            // --- 4. Near-side stand-cell divergence ---
+            // clash8 proved the faithful HasStuckActor path port does NOT un-stack a tight clash:
+            // Riot's own start-proximity + near-goal pathing exemptions deliberately clear actor-
+            // blocking in the clash zone, so A* paths stay straight there (reroute=0). The wave
+            // spread therefore comes from distinct attack-stand CELLS — each attacker stands on a
+            // different free cell around the enemy. If the natural stand point above is free we keep
+            // it; otherwise spiral to the nearest free (actor-unblocked) cell — but CONSTRAINED to
+            // the attacker's HEMISPHERE of the target so we never relocate a unit through or behind
+            // the wave (the failure of the earlier unconstrained spiral, clash7: melee teleported
+            // across the wave + dropped their target). The spiral already prefers the cell closest
+            // to THIS attacker, so co-attacking units fan onto distinct near-side cells.
+            Vector2 fromTargetToAttacker = attacker.Position - projected;
+            // Band max sits HALF A CELL inside the attack range, not AT it: the chase→settle handoff
+            // in RefreshWaypoints settles only when the arrived unit is within idealRange (== this
+            // effectiveRange). A cell exactly at the range edge fails that check after grid
+            // quantization, so IsPathEnded() keeps re-triggering needRepath → a re-path flood that
+            // the client renders as teleporting. Keeping the cell inside the range guarantees the
+            // unit settles on arrival and goes quiet (matches Minion.lua: attack in place, no re-path).
+            float standBandMax = Math.Max(effectiveRange - halfCell, closeRadius + halfCell);
+            float standBandMaxSq = standBandMax * standBandMax;
+            float standBandMinSq = closeRadius * closeRadius;
+
+            // CLEARANCE snapshot (lane minions only, 2026-06-21): capture nearby allied minions so the
+            // stand-cell spiral keeps a body-gap from them. Without this the spiral accepts any FREE
+            // cell — including one right next to an already-occupied cell — so the wave stands shoulder
+            // to shoulder ("still paths to the side where a minion already is" / "fan out more"). With
+            // it, each attacker's cell must clear the others, so they settle on the OPEN side with
+            // spacing. One query; the per-candidate test below is cheap distance checks. Falls back
+            // gracefully (natural stand point) if the band is too dense to find a clear cell. Scoped to
+            // lane minions so champions/pets don't avoid standing near friendly minions.
+            bool spreadFromAllies = attacker is LaneMinion;
+            var allyClear = new List<Vector2>();
+            if (spreadFromAllies)
+            {
+                float snapR = effectiveRange + _map.NavigationGrid.CellSize;
+                foreach (var o in _map.CollisionHandler.GetNearestObjects(
+                             new System.Activities.Presentation.View.Circle(projected, snapR)))
+                {
+                    if (o is AttackableUnit au && au != attacker && au.Team == attacker.Team
+                        && au is Minion && !au.IsDead
+                        && !au.Status.HasFlag(StatusFlags.Ghosted) && !au.IsTemporarilyGhosted)
                     {
-                        closeIdx = path.Count - 1;
-                        break;
+                        allyClear.Add(au.Position);
                     }
                 }
+            }
+            // Body diameter + one cell gap → a visible "bit more" fan beyond just non-overlap. Tunable.
+            float standClearance = attacker.PathfindingRadius * 4f + _map.NavigationGrid.CellSize;
+            float standClearanceSq = standClearance * standClearance;
 
-                int recommended = Math.Min(firstInRange + 2, closeIdx);
-                recommendedAttackPos = path[recommended];
-            }
-            else
-            {
-                recommendedAttackPos = end;
-            }
+            recommendedAttackPos = SetToNearestGetToAbleCell(
+                attacker, recommendedAttackPos, attacker.PathfindingRadius,
+                cellAccept: c =>
+                {
+                    // Reject the far hemisphere (behind the target relative to the attacker).
+                    if (Vector2.Dot(c - projected, fromTargetToAttacker) < 0f)
+                    {
+                        return false;
+                    }
+                    // Keep the cell inside the usable attack band so the relocation can't push the
+                    // unit out of range (→ target re-acquire) or onto the target's footprint.
+                    float dT = Vector2.DistanceSquared(c, projected);
+                    if (dT < standBandMinSq || dT > standBandMaxSq)
+                    {
+                        return false;
+                    }
+                    // Clearance from other allied minions → spread + open side (lane minions only).
+                    for (int i = 0; i < allyClear.Count; i++)
+                    {
+                        if (Vector2.DistanceSquared(c, allyClear[i]) < standClearanceSq)
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                },
+                // Prefer the free cell ALONG the attacker's approach line, not merely the nearest:
+                // the last/most-constrained minion then sidesteps minimally onto its OWN side past
+                // its leaders, instead of crossing the formation to a closer sideways cell (which made
+                // A* route it the long way around both leaders / pass on the wrong side).
+                preferOnAxis: true);
             canReachCloseSpot = true;
             return true;
         }
@@ -566,18 +650,20 @@ namespace LeagueSandbox.GameServer.Handlers
         public Vector2 SetToNearestGetToAbleCell(AttackableUnit unit, Vector2 target,
             float radius = 0,
             float ignoreTargetRadius = 0,
-            float targetRadius = 0)
+            float targetRadius = 0,
+            Func<Vector2, bool> cellAccept = null,
+            bool preferOnAxis = false)
         {
             if (unit == null)
             {
-                return _map.NavigationGrid.SetToNearestGetToAbleCell(target, Vector2.Zero, null, radius, ignoreTargetRadius, targetRadius);
+                return _map.NavigationGrid.SetToNearestGetToAbleCell(target, Vector2.Zero, null, radius, ignoreTargetRadius, targetRadius, cellAccept, preferOnAxis);
             }
             if (unit.Status.HasFlag(StatusFlags.Ghosted) || unit.IsTemporarilyGhosted)
             {
                 return target;
             }
             var pred = BuildActorBlockedPredicate(unit);
-            return _map.NavigationGrid.SetToNearestGetToAbleCell(target, unit.Position, pred, radius, ignoreTargetRadius, targetRadius);
+            return _map.NavigationGrid.SetToNearestGetToAbleCell(target, unit.Position, pred, radius, ignoreTargetRadius, targetRadius, cellAccept, preferOnAxis);
         }
 
         private NavigationGrid.ActorBlockedPredicate BuildActorBlockedPredicate(AttackableUnit attacker)
@@ -596,40 +682,111 @@ namespace LeagueSandbox.GameServer.Handlers
             var collision = _map.CollisionHandler;
             float pathRadius = attacker.PathfindingRadius;
             float halfCell = _map.NavigationGrid.CellSize * 0.5f;
+            // radiusTestField = max(-1.8*halfCell + radius, 15) — HasStuckActor's dontUseRadius=false
+            // branch (NavigationGrid.cpp:3537). This is the actor-sizing radius the cell-occupancy
+            // tests are built around.
             float effRadius = Math.Max(15f, pathRadius - halfCell * 1.8f);
-            float searchRadius = pathRadius * 2f;
+            float searchRadius = pathRadius * 2f; // ForeachInRadius(center, radius + radius)
 
-            return (cellCenterWorld, _) =>
+            // The path START is fixed for this request (decomp: startPos = inActor->Position() at the
+            // HasStuckActor call site). Captured once so the start-proximity exemption below can tell
+            // which blockers are part of the unit's own departure-clump.
+            Vector2 startPos = attacker.Position;
+            // travelDistFactor = arrivalCost / maxSpeed (=1 if speed 0). Captured divisor.
+            float maxSpeed = attacker.GetMoveSpeed();
+            float divisor = maxSpeed > 0f ? maxSpeed : 1f;
+            // minionIncreaseSize = !IsSlowerButMoreAccurateSearch() = UsesFastPath: 2.0 for champions
+            // (fast A*), 1.0 for minions/pets/jungle (slow-accurate). Despite the decomp param name,
+            // it is FALSE for minions (NavigationGrid.cpp:3324 isBlockedCellCheckPassed = !isSlower).
+            bool fastPath = (attacker as ObjAIBase)?.UsesFastPath ?? false;
+
+            // NO team filter (2026-06-18, new mac decomp): Riot's server A* probes actor-blocking with
+            // a ZEROED collisionState (mTeamID=0), and a non-ghosted actor blocks regardless of team —
+            // so a unit routes AROUND allied bodies, not through them. Lane-wave clumping is preserved
+            // by the farFromOrigin exemption in NavigationGrid.GetPath + the start-proximity exemption.
+            return (cellCenterWorld, _, arrivalCost) =>
             {
                 var nearby = collision.GetNearestObjects(
                     new System.Activities.Presentation.View.Circle(cellCenterWorld, searchRadius));
+
+                // Reachability mode (Riot HasBlockedActor, signalled by arrivalCost < 0): a plain
+                // current-position block with no motion prediction. Used by CheckIsGetToAble /
+                // SetToNearestGetToAbleCell — "can I stand here right now", not "route around traffic".
+                if (arrivalCost < 0f)
+                {
+                    for (int i = 0; i < nearby.Count; i++)
+                    {
+                        var other = nearby[i];
+                        if (other == attacker || other.IsToRemove()) continue;
+                        if (other is AttackableUnit ru && (ru.Status.HasFlag(StatusFlags.Ghosted) || ru.IsTemporarilyGhosted)) continue;
+                        // Neighbour pathing footprint = mRadius = PathfindingRadius (NOT the gameplay
+                        // CollisionRadius), matching the attacker's effRadius which is derived from
+                        // attacker.PathfindingRadius.
+                        float combined = other.PathfindingRadius + effRadius;
+                        if (Vector2.DistanceSquared(other.Position, cellCenterWorld) < combined * combined)
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                // HasStuckActor mode (A* expansion, NavigationGrid.cpp:3526). sizeMultiplier is a
+                // PER-CELL crowd accumulator: each near-but-not-blocking actor bumps it +0.12, which
+                // enlarges the effective footprint the next actors are tested against, so dense clumps
+                // push the route out a little further (Riot's anti-stacking nudge).
+                float travelDistFactor = arrivalCost / divisor;
+                float sizeMultiplier = fastPath ? 2f : 1f;
+                float rTF = effRadius;
                 for (int i = 0; i < nearby.Count; i++)
                 {
                     var other = nearby[i];
-                    if (other == attacker) continue;
-                    if (other.IsToRemove()) continue;
-                    if (other is AttackableUnit otherUnit)
-                    {
-                        if (otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
-                    }
-                    // NO team filter (2026-06-18, new mac decomp): Riot's server A* probes
-                    // actor-blocking with a ZEROED collisionState (mTeamID=0, not ghosted —
-                    // NavigationMesh.cpp:897-900), and NavGrid::HasBlockedActor blocks a cell iff
-                    // !actorState.IgnoreCollisions(probe) (NavigationGrid.cpp:3806+). Since
-                    // ShouldIgnoreCollisionDueToGhost only consults team when one side is ghosted,
-                    // a non-ghosted actor blocks REGARDLESS of team. Allies block pathing exactly
-                    // like enemies — this keeps the pathfinder consistent with the (also team-
-                    // independent) collision response, so a unit routes AROUND allied bodies
-                    // instead of pathing through them and then body-blocking → stuck/repath.
-                    // Lane-wave clumping is preserved by the farFromOrigin actor exemption in
-                    // NavigationGrid.GetPath (actors ignored on far cells, mirroring Riot's
-                    // collisionsteps = 20 - travelDistance/cellSize near-unit-only gate).
+                    if (other == attacker || other.IsToRemove()) continue;
+                    if (other is AttackableUnit ou && (ou.Status.HasFlag(StatusFlags.Ghosted) || ou.IsTemporarilyGhosted)) continue;
 
-                    float combined = other.CollisionRadius + effRadius;
-                    if (Vector2.DistanceSquared(other.Position, cellCenterWorld) < combined * combined)
+                    // Neighbour pathing footprint = mRadius = PathfindingRadius (NOT gameplay CollisionRadius).
+                    float aR = other.PathfindingRadius;
+                    Vector2 op = other.Position;
+                    float thr = (rTF + aR) * (rTF + aR) * sizeMultiplier;
+
+                    // A moving actor blocks where it WILL be (predicted = pos + velocity*arrivalTime);
+                    // a stationary/stuck one blocks where it IS. Velocity is reconstructed from the
+                    // heading to its current waypoint × move speed (= decomp Movement()/GetLastTimeDelta()).
+                    bool moving = other is AttackableUnit mu && !mu.IsPathEnded() && mu.GetMoveSpeed() > 0f;
+                    if (moving)
                     {
-                        return true;
+                        if (travelDistFactor <= 0f) continue; // decomp: no lookahead → ignore movers
+                        var mv = (AttackableUnit)other;
+                        Vector2 toWp = mv.CurrentWaypoint - op;
+                        Vector2 vel = toWp.LengthSquared() > 1e-6f
+                            ? Vector2.Normalize(toWp) * mv.GetMoveSpeed()
+                            : Vector2.Zero;
+                        Vector2 predicted = op + vel * travelDistFactor;
+                        // decomp moving branch: predicted FAR → skip WITHOUT bumping; CLOSE → bump,
+                        // fall through (opposite of the stuck branch, which bumps on FAR).
+                        if (thr < Vector2.DistanceSquared(predicted, cellCenterWorld)) continue;
+                        sizeMultiplier += 0.12f;
                     }
+                    else
+                    {
+                        if (Vector2.DistanceSquared(op, cellCenterWorld) >= thr) { sizeMultiplier += 0.12f; continue; }
+                    }
+
+                    // Start-proximity directional exemption (NavigationGrid.cpp:3584-3600): a blocker
+                    // that is ALSO close to the path's start is part of the clump we're leaving behind
+                    // — the two dot-product guards (which together cover every sign) drop it so the
+                    // route doesn't balloon around our own origin pack. THIS is the piece the earlier
+                    // partial port lacked, which let A* route minions to the far side of the wave.
+                    float startProx = aR * 0.95f + rTF;
+                    if (Vector2.DistanceSquared(op, startPos) <= startProx * startProx)
+                    {
+                        Vector2 toActor = op - cellCenterWorld;
+                        Vector2 toStart = startPos - cellCenterWorld;
+                        if (Vector2.Dot(toActor, toStart) <= 0f) continue;
+                        Vector2 fromActor = cellCenterWorld - op;
+                        if (Vector2.Dot(toStart, fromActor) <= 0f) continue;
+                    }
+                    return true; // cell is blocked by this actor
                 }
                 return false;
             };

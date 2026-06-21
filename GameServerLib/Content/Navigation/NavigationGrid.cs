@@ -541,7 +541,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// behavior. The closure typically captures the attacker's collision state and the
         /// CollisionHandler.
         /// </summary>
-        public delegate bool ActorBlockedPredicate(Vector2 cellCenterWorld, NavigationGridCell cell);
+        /// <param name="arrivalCost">World-unit g-cost accumulated to reach the cell being expanded
+        /// FROM (the A* frontier), i.e. how far the unit has already traveled along the candidate
+        /// path. Divided by the unit's max speed this is the arrival-TIME used to predict where
+        /// moving actors will be by the time the unit gets here (mirrors the decomp's
+        /// <c>HasStuckActor(..., arrivalCost / maxSpeed)</c> travelDistFactor, NavigationGrid.cpp:3324).
+        /// A negative value selects "reachability mode" (Riot <c>HasBlockedActor</c>: a plain
+        /// current-position block with no motion prediction) — used by the CheckIsGetToAble family.</param>
+        public delegate bool ActorBlockedPredicate(Vector2 cellCenterWorld, NavigationGridCell cell, float arrivalCost);
 
         /// <summary>
         /// Finds a path of waypoints, which are aligned by the cells of the navgrid (A* method), that lead to a set destination.
@@ -562,7 +569,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// out-of-grid coordinates). When the goal is unreachable, the result lands at the
         /// closest reachable cell and <see cref="NavigationPath.IsPartial"/> is set.
         /// </returns>
-        public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null, Vector2? movementHint = null)
+        /// <param name="skipLineOfSight">When true, the straight-line LOS fast-path is bypassed and
+        /// the search always runs the actor-aware grid A* (and smooths actor-aware). Mirrors the
+        /// client's stuck/in-collision <c>BuildNavGridPath</c> (Actor.cpp:1866) — used by stuck
+        /// recovery so a wedged unit routes AROUND the bodies that wedged it instead of getting the
+        /// LOS-straight n=2 path back into them. Requires <paramref name="actorBlocked"/> to be set
+        /// for the actor-aware smoothing to keep the bend.</param>
+        public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null, Vector2? movementHint = null, bool skipLineOfSight = false)
         {
             // Core A* funnel — every server path computation lands here. Tagged "pathing" so a
             // Perfetto trace shows GetPath call-count and self-time per tick. If this dominates a
@@ -602,7 +615,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // radius parameter — like the A* expansion, unit clearance lives in the pre-inflated
             // footprint bakes, not in per-query radius sweeps. Radius-aware LOS here rejected
             // straight lines the client takes (forcing pointless A* runs near walls).
-            if (!CastCircle(from, to, 0f))
+            if (!skipLineOfSight && !CastCircle(from, to, 0f))
             {
                 return new NavigationPath(new[] { from, to });
             }
@@ -907,7 +920,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // shortcuts run on the same cell-sampled tests as GridLineOfSightTest2. Radius-aware
             // smoothing left stairsteps on wall-hugging paths the client straightens (units
             // visually hugging walls is authentic 4.x).
-            SmoothPath(pathCells, 0f);
+            // ACTOR-AWARE smoothing only on a skip-LOS (stuck-recovery) path: the client's
+            // TrimNavigationPath uses GridLineOfSightTest WITH HasStuckActor (NavigationMesh.cpp:286)
+            // so a shortcut that would collapse the detour back through a body is rejected. Without
+            // this the actor-aware A* bend gets string-pulled straight again (terrain LOS is clear),
+            // undoing the routing-around. Scoped to skipLineOfSight so normal chase paths keep the
+            // faithful terrain-only smoothing.
+            SmoothPath(pathCells, 0f, skipLineOfSight ? actorBlocked : null);
 
             var returnPath = new NavigationPath(pathCells.Count) { IsPartial = isPartialPath };
             returnPath.AddWaypoint(from);
@@ -1225,9 +1244,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         int dyGoal = neighborCell.Locator.Y - actorRefGoal.Locator.Y;
                         bool nearGoal = dxGoal * dxGoal + dyGoal * dyGoal <= 4;
 
+                        // arrivalCost = world-unit g-cost to the cell being expanded FROM (thisG is
+                        // in cell-step units; ×CellSize → world). The predicate divides by maxSpeed
+                        // to get the arrival-time and predicts moving actors forward by it (faithful
+                        // HasStuckActor travelDistFactor = mArrivalCost / maxSpeed, NavGrid.cpp:3324).
                         if (!farFromOrigin
                             && !nearGoal
-                            && actorBlocked(TranslateFromNavGrid(neighborCell.Locator), neighborCell))
+                            && actorBlocked(TranslateFromNavGrid(neighborCell.Locator), neighborCell, thisG * CellSize))
                         {
                             continue;
                         }
@@ -1430,7 +1453,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// Remove waypoints (cells) that have LOS from one to the other from path.
         /// </summary>
         /// <param name="path"></param>
-        private void SmoothPath(List<NavigationGridCell> path, float checkDistance = 0f)
+        private void SmoothPath(List<NavigationGridCell> path, float checkDistance = 0f,
+            ActorBlockedPredicate actorBlocked = null)
         {
             if(path.Count < 3)
             {
@@ -1440,8 +1464,10 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // The first point remains untouched.
             for(int i = 2; i < path.Count; i++)
             {
-                // If there is something between the last added point and the current one
-                if(CastCircle(path[j].GetCenter(), path[i].GetCenter(), checkDistance, false))
+                // If there is something (terrain OR, when actor-aware, a blocking unit) between the
+                // last added point and the current one, keep the intermediate waypoint.
+                if(CastCircle(path[j].GetCenter(), path[i].GetCenter(), checkDistance, false)
+                    || (actorBlocked != null && SegmentBlockedByActor(path[j], path[i], actorBlocked)))
                 {
                     // add previous.
                     path[++j] = path[i - 1];
@@ -1451,6 +1477,47 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             path[++j] = path[path.Count - 1];
             j++; // Remove everything after.
             path.RemoveRange(j, path.Count - j);
+        }
+
+        /// <summary>
+        /// Actor-aware leg of the string-pull LOS test (the <c>HasStuckActor</c> sampling inside the
+        /// client's <c>GridLineOfSightTest</c>, NavigationMesh.cpp:286 + 320). Walks the segment
+        /// between two cell centres in cell-size steps and asks <paramref name="actorBlocked"/>
+        /// whether a blocking unit sits on each sampled cell. Returns true (= "blocked", keep the
+        /// intermediate waypoint) as soon as one sample is occupied. Reachability mode
+        /// (<c>arrivalCost = -1</c>): tests the unit's CURRENT position, no movement prediction —
+        /// matching how the grid pathfinder's reachability sites call the predicate. Bounded to the
+        /// client's <c>collisionsteps</c> window (20 cells) so a long collapse only honours actors in
+        /// the near segment, exactly like the decomp.
+        /// </summary>
+        private bool SegmentBlockedByActor(NavigationGridCell a, NavigationGridCell b,
+            ActorBlockedPredicate actorBlocked)
+        {
+            Vector2 worldA = TranslateFromNavGrid(a.Locator);
+            Vector2 worldB = TranslateFromNavGrid(b.Locator);
+            Vector2 delta = worldB - worldA;
+            float dist = delta.Length();
+            if (dist < 1e-3f) return false;
+
+            const int CollisionSteps = 20; // client collisionsteps window (NavigationMesh.cpp:245)
+            int steps = Math.Min(CollisionSteps, (int)(dist / CellSize));
+            if (steps <= 0) return false;
+            Vector2 step = delta / steps;
+
+            // Skip the endpoints (i in [1, steps-1]); a and b are retained waypoints, what matters is
+            // whether a body sits BETWEEN them and blocks the straight collapse.
+            for (int i = 1; i < steps; i++)
+            {
+                Vector2 sample = worldA + step * i;
+                var cell = GetCell(sample, true);
+                if (cell == null) continue;
+                // The predicate measures actor distance from the CELL CENTRE (BuildActorBlockedPredicate
+                // uses its first arg as cellCenterWorld), so pass the cell's true centre, not the raw
+                // sample point — same coords the A* expansion feeds it.
+                Vector2 cellCenter = TranslateFromNavGrid(cell.Locator);
+                if (actorBlocked(cellCenter, cell, -1f)) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -2454,7 +2521,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             if (actorBlocked != null)
             {
                 Vector2 cellWorld = TranslateFromNavGrid(cell.Locator);
-                if (actorBlocked(cellWorld, cell))
+                // Reachability check (Riot HasBlockedActor) — current-position block, no prediction.
+                if (actorBlocked(cellWorld, cell, -1f))
                 {
                     return false;
                 }
@@ -2571,7 +2639,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             if (actorBlocked != null)
             {
                 Vector2 toWorld = TranslateFromNavGrid(toCell.Locator);
-                if (actorBlocked(toWorld, toCell)) return false;
+                // Reachability check (Riot HasBlockedActor) — current-position block, no prediction.
+                if (actorBlocked(toWorld, toCell, -1f)) return false;
             }
 
             // Chebyshev distance, capped at MAX_RINGS_CHECK. If start IS target, trivially reachable.
@@ -2649,10 +2718,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             ActorBlockedPredicate actorBlocked = null,
             float radius = 0,
             float ignoreTargetRadius = 0,
-            float targetRadius = 0)
+            float targetRadius = 0,
+            Func<Vector2, bool> cellAccept = null,
+            bool preferOnAxis = false)
         {
-            // Trivial: target already reachable.
-            if (CheckIsGetToAble(from, target, actorBlocked, radius, ignoreTargetRadius))
+            // Trivial: target already reachable AND accepted by the optional spatial filter
+            // (e.g. a near-side constraint that keeps an attack-stand cell on the attacker's
+            // hemisphere of the enemy, so the spiral never relocates a unit through/behind the wave).
+            if ((cellAccept == null || cellAccept(target))
+                && CheckIsGetToAble(from, target, actorBlocked, radius, ignoreTargetRadius))
             {
                 return target;
             }
@@ -2680,17 +2754,45 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             short bestX = 0, bestY = 0;
             bool foundAny = false;
 
+            // On-axis preference (2026-06-21): instead of purely the cell CLOSEST to the unit, prefer
+            // the free cell most ALONG the unit's approach line (from → target) — i.e. penalise
+            // lateral deviation. Without this the spiral hands the last/most-constrained minion a
+            // SIDEWAYS free cell (closer than a free cell forward past its leaders), so it crosses the
+            // formation to the wrong side instead of sidestepping minimally onto its own side. A*
+            // then routes it the long way around both leaders. Scoped via preferOnAxis (attack-stand
+            // spiral only). LateralWeight makes a lateral cell clearly costlier than a forward one.
+            const float LateralWeight = 4.0f;
+            var fromNav = TranslateToNavGrid(from);
+            float dirX = cur.X - fromNav.X;
+            float dirY = cur.Y - fromNav.Y;
+            float approachLenSq = dirX * dirX + dirY * dirY;
+            bool useAxis = preferOnAxis && approachLenSq > 1e-4f;
+            if (useAxis)
+            {
+                float inv = 1f / MathF.Sqrt(approachLenSq);
+                dirX *= inv; dirY *= inv;
+            }
+
             while (--iterCap > 0)
             {
                 if (cx > 1 && cy > 1 && cx < CellCountX - 2 && cy < CellCountY - 2)
                 {
                     Vector2 candidate = TranslateFromNavGrid(new NavigationGridLocator(cx, cy));
-                    if (CheckIsGetToAble(from, candidate, actorBlocked, radius, ignoreTargetRadius))
+                    if ((cellAccept == null || cellAccept(candidate))
+                        && CheckIsGetToAble(from, candidate, actorBlocked, radius, ignoreTargetRadius))
                     {
-                        var fromNav = TranslateToNavGrid(from);
                         float ddx = cx - fromNav.X;
                         float ddy = cy - fromNav.Y;
                         float distSq = ddx * ddx + ddy * ddy;
+                        // Primary selection cost: distance from the unit, plus a heavy penalty on
+                        // lateral deviation from the approach line when preferOnAxis is set.
+                        if (useAxis)
+                        {
+                            float forward = ddx * dirX + ddy * dirY;
+                            float latX = ddx - dirX * forward;
+                            float latY = ddy - dirY * forward;
+                            distSq += LateralWeight * (latX * latX + latY * latY);
+                        }
                         if (bestDistSq >= distSq)
                         {
                             // Also weight by distance from original target (penalty for far rings)

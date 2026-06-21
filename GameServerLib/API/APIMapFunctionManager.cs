@@ -57,6 +57,24 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyS2C_TeamUpdateDragonBuffCount(team, count);
         }
 
+        /// <summary>
+        /// Sets a team's Nexus skin (S2C_AnimatedBuildingSetCurrentSkin). Used on ARAM/TT for the nexus
+        /// destruction skin at game end (replay-verified: TT sends team=loser, skinID=1 ~2s before end).
+        /// </summary>
+        public static void SetAnimatedBuildingSkin(TeamId team, uint skinID)
+        {
+            _game.PacketNotifier.NotifyS2C_AnimatedBuildingSetCurrentSkin(team, skinID);
+        }
+
+        /// <summary>
+        /// Mutes or unmutes an audio volume category on clients (S2C_MuteVolumeCategory) — e.g. mute
+        /// Music or Announcer during a scripted moment. Broadcast to all players (map-wide).
+        /// </summary>
+        public static void MuteVolumeCategory(VolumeCategory category, bool mute)
+        {
+            _game.PacketNotifier.NotifyS2C_MuteVolumeCategory(category, mute);
+        }
+
         public static GameObject CreateShop(string name, Vector2 position, TeamId team)
         {
             var shop = new GameObject(_game, position, team: team, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
@@ -392,6 +410,10 @@ namespace LeagueSandbox.GameServer.API
             // Fade out the losing team's minions over 2s as the game ends (S2C_FadeMinions) — replay-
             // verified: sent ~2s before the end-game screen with FadeAmount 0 / FadeTime 2.0. Cosmetic.
             _game.PacketNotifier.NotifyS2C_FadeMinions(losingTeam, 0.0f, 2.0f);
+
+            // Fade out the main SFX/audio bus over 2s as the game ends (S2C_FadeOutMainSFX) — replay-
+            // verified: ~4.5s before the end-game screen, FadeTime 2.0. Cosmetic audio.
+            _game.PacketNotifier.NotifyS2C_FadeOutMainSFX(2.0f);
 
             var players = _game.PlayerManager.GetPlayers(false);
             foreach (var player in players)
