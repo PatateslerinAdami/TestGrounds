@@ -3653,6 +3653,22 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(gameEndPacket.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Fades a team's minions in/out (S2C_FadeMinions, broadcast). Riot sends this ~2s before the
+        /// end-game screen with the losing team's id, FadeAmount 0 (invisible) and FadeTime 2.0 so the
+        /// loser's minions dissolve as the nexus falls. Purely cosmetic.
+        /// </summary>
+        public void NotifyS2C_FadeMinions(TeamId team, float fadeAmount, float fadeTime)
+        {
+            var packet = new S2C_FadeMinions
+            {
+                TeamID = (byte)team,
+                FadeAmount = fadeAmount,
+                FadeTime = fadeTime
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         public void NotifyAttachFlexParticleS2C(uint netId, byte particleFlexId, byte capturePointIndex, uint particleAttachType)
         {
             var packet = new AttachFlexParticleS2C

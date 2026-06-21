@@ -389,6 +389,10 @@ namespace LeagueSandbox.GameServer.API
             // Force the store screen closed on all clients now that the game is over (S2C_CloseShop).
             _game.PacketNotifier.NotifyCloseShop();
 
+            // Fade out the losing team's minions over 2s as the game ends (S2C_FadeMinions) — replay-
+            // verified: sent ~2s before the end-game screen with FadeAmount 0 / FadeTime 2.0. Cosmetic.
+            _game.PacketNotifier.NotifyS2C_FadeMinions(losingTeam, 0.0f, 2.0f);
+
             var players = _game.PlayerManager.GetPlayers(false);
             foreach (var player in players)
             {
