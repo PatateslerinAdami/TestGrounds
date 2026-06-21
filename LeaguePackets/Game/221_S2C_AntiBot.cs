@@ -8,9 +8,10 @@ using System.Threading.Tasks;
 
 namespace LeaguePackets.Game
 {
-    public class Unused221 : GamePacket, IUnusedPacket // 0xDD
+    // Anti-cheat server->client packet (4.17 PKT_S2C_AntiBot). Riot platform feature; unused by us.
+    public class S2C_AntiBot : GamePacket, IUnusedPacket // 0xDD
     {
-        public override GamePacketID ID => GamePacketID.Unused221;
+        public override GamePacketID ID => GamePacketID.S2C_AntiBot;
 
         protected override void ReadBody(ByteReader reader)
         {

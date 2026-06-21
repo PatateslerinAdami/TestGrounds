@@ -391,6 +391,8 @@ namespace PacketDefinitions420
 
             var annoucement = new OnLeave { OtherNetID = peerInfo.Champion.NetId };
             _game.PacketNotifier.NotifyS2C_OnEventWorld(annoucement, peerInfo.Champion);
+            // Show the disconnect indicator over the champion for its allies (S2C_Exit / ShowDisconnect).
+            _game.PacketNotifier.NotifyS2C_ShowDisconnect(peerInfo.Champion);
             peerInfo.IsDisconnected = true;
             peerInfo.IsStartedClient = false;
             peerInfo.ReconnectStartReady = false;

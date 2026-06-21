@@ -55,6 +55,14 @@ namespace PacketDefinitions420
             return new UndoItemRequest();
         }
 
+        [PacketType(GamePacketID.C2S_SoftReconnect)]
+        public static SoftReconnectRequest ReadSoftReconnectRequest(byte[] data)
+        {
+            var rq = new C2S_SoftReconnect();
+            rq.Read(data);
+            return new SoftReconnectRequest();
+        }
+
         [PacketType(GamePacketID.ResumePacket)]
         public static UnpauseRequest ReadUnpauseRequest(byte[] data)
         {

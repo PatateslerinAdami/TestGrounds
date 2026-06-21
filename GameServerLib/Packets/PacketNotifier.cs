@@ -3623,6 +3623,23 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Shows the disconnect indicator over a champion (S2C_Exit 0x98 — Riot's enum name; the client
+        /// handler is "ShowDisconnect"). Broadcast: each client shows the DC marker to allies when
+        /// <paramref name="showToEnemies"/> is false, to enemies when true (per-recipient team check).
+        /// Sent on disconnect; replay-observed value is allies-only (showToEnemies=false). SenderNetID
+        /// stays 0 (system), matching the wire.
+        /// </summary>
+        public void NotifyS2C_ShowDisconnect(Champion champion, bool showToEnemies = false)
+        {
+            var packet = new S2C_Exit
+            {
+                NetID = champion.NetId,
+                ShowToEnemies = showToEnemies
+            };
+            _packetHandlerManager.BroadcastPacket(packet.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends packets to all players notifying the result of a match (Victory or defeat)
         /// </summary>
         /// <param name="losingTeam">The Team that lost the match</param>

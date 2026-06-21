@@ -8,9 +8,11 @@ using System.Threading.Tasks;
 
 namespace LeaguePackets.Game
 {
-    public class UNK_0xDF : GamePacket // 0xDF
+    // Anti-cheat client->server response (4.17 PKT_C2S_AntiBot). Riot platform feature; unused by us
+    // (body never reverse-engineered — empty). C2S, so never appears in S2C replays.
+    public class C2S_AntiBot : GamePacket // 0xDF
     {
-        public override GamePacketID ID => GamePacketID.Unknown_223;
+        public override GamePacketID ID => GamePacketID.C2S_AntiBot;
 
         protected override void ReadBody(ByteReader reader) 
         {

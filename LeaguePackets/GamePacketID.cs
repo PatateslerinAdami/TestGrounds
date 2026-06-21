@@ -160,7 +160,7 @@ namespace LeaguePackets
         S2C_Ping_Load_Info = 0x95,                      //DONE?
         S2C_ChangeCharacterVoice = 0x96,                //TODO: Unknowns
         S2C_ChangeCharacterData = 0x97,                 //DONE?
-        S2C_Exit = 0x98,                                //TODO: Unknowns
+        S2C_Exit = 0x98,                                //DONE — disconnect indicator (Riot enum=PKT_S2C_Exit, handler=ShowDisconnect); body NetID + ShowToEnemies
         SPM_RemoveBBProfileListener = 0x99,             //Unused
         NPC_CastSpellReq = 0x9A,                        //DONE?
         S2C_ToggleInputLockFlag = 0x9B,                 //DONE?
@@ -229,9 +229,9 @@ namespace LeaguePackets
         S2C_IncrementPlayerStat = 0xDA,                 //DONE?
         S2C_ColorRemapFX = 0xDB,                        //DONE?
         S2C_InteractiveMusicCommand = 0xDC,             //DONE?
-        Unused221 = 0xDD,                               //Unused
-        Unused222 = 0xDE,                               //Unused
-        Unknown_223 = 0xDF,                             //TODO: Unknowns in ExtraBytes
+        S2C_AntiBot = 0xDD,                             //Anti-cheat (4.17 PKT_S2C_AntiBot); unused by us
+        S2C_AntiBotAction = 0xDE,                       //Anti-cheat (4.17 PKT_S2C_AntiBotAction); unused by us
+        C2S_AntiBot = 0xDF,                             //Anti-cheat client response (4.17 PKT_C2S_AntiBot); unused by us
         S2C_OnEnterTeamVisibility = 0xE0,               //DONE?
         S2C_OnLeaveTeamVisibility = 0xE1,               //DONE?
         S2C_FX_OnEnterTeamVisibility = 0xE2,            //Unused?
@@ -247,7 +247,7 @@ namespace LeaguePackets
         S2C_SpectatorDataChunkInfo = 0xEC,              //DONE?
         S2C_SpectatorDataChunk = 0xED,                  //DONE?
         S2C_ChangeMissileTarget = 0xEE,                 //DONE?
-        S2C_MarkOrSweepForSoftReconnect = 0xEF,         //TODO: Unknowns
+        S2C_MarkOrSweepForSoftReconnect = 0xEF,         //DONE (body = byte Stage: MarkAllUnits=0 / DestroyAllUnits=1)
         S2C_SetShopEnabled = 0xF0,                      //DONE
         S2C_CreateFollowerObject = 0xF1,                //DONE?
         S2C_ReattachFollowerObject = 0xF2,              //DONE?

@@ -32,7 +32,12 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             var om = _game.ObjectManager as ObjectManager;
             if (_game.IsRunning)
             {
-                om.OnReconnect(userId, userInfo.Team);
+                // Mid-game spawn = a reconnect. Skip the mark-sweep if C2S_SoftReconnect already ran it
+                // this reconnect (ReconnectSpawnReady guard) so we don't resync twice.
+                if (!userInfo.ReconnectSpawnReady)
+                {
+                    om.OnReconnect(userId, userInfo.Team);
+                }
                 userInfo.ReconnectSpawnReady = true;
             }
             else

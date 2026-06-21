@@ -245,6 +245,7 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<StartGameRequest>(_gameStartHandler.HandlePacket);
 
             RequestHandler.Register<ReplicationConfirmRequest>(new HandleStatsConfirm(this).HandlePacket);
+            RequestHandler.Register<SoftReconnectRequest>(new HandleSoftReconnect(this).HandlePacket);
             RequestHandler.Register<SurrenderRequest>(new HandleSurrender(this).HandlePacket);
             RequestHandler.Register<TeamBalanceRequest>(new HandleTeamBalance(this).HandlePacket);
             RequestHandler.Register<SwapItemsRequest>(new HandleSwapItems(this).HandlePacket);
