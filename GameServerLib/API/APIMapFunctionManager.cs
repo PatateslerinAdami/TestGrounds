@@ -177,6 +177,25 @@ namespace LeagueSandbox.GameServer.API
             _game.ObjectManager.AddObject(m);
             return m;
         }
+
+        /// <summary>
+        /// Number of currently-alive lane minions across BOTH teams — the server-side meaning of Riot's
+        /// GetTotalTeamMinionsSpawned() (the S1 client decomp stubs it to 0; Averdrian's server reimpl
+        /// returns the equivalent of LaneMinion.Manager.Count). Drives the map script's endgame minion
+        /// throttle. See Map1 LevelScript / docs S8.
+        /// </summary>
+        public static int CountAllLaneMinions()
+        {
+            int count = 0;
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is LaneMinion minion && !minion.IsDead)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
  
         /// <summary>
         /// Creates and returns a minion

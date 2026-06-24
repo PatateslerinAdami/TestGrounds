@@ -18,6 +18,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Whether or not this minion is considered a ward.
         /// </summary>
         public bool IsWard { get; protected set; }
+        /// <summary>
+        /// Riot CharacterState::IsMinionAcquirable — whether minions may auto-acquire this unit as a
+        /// target. Default true; set false to make a unit invisible to minion target acquisition.
+        /// Only consulted when the acquirer is itself a minion (see <see cref="IsTargetableByUnit"/>).
+        /// </summary>
+        public bool IsMinionAcquirable { get; set; } = true;
+
+        /// <summary>
+        /// Riot obj_AI_Minion::IsTargetableByUnit override: when the acquirer is a minion, a minion
+        /// target is additionally gated on being minion-acquirable and not a ward (minions never
+        /// auto-attack wards), on top of the base global + per-team targetability.
+        /// </summary>
+        public override bool IsTargetableByUnit(AttackableUnit acquirer)
+        {
+            if (acquirer is Minion)
+            {
+                if (!IsMinionAcquirable || IsWard)
+                {
+                    return false;
+                }
+            }
+            return base.IsTargetableByUnit(acquirer);
+        }
 
         // Wards don't auto-provide vision; their sight comes solely from the explicit
         // perception-bubble Region created by the ward script (which also carries reveal-stealth

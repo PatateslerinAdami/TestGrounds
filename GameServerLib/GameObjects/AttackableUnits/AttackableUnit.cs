@@ -794,6 +794,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
+        /// Whether this unit can be targeted by <paramref name="acquirer"/> — Riot's
+        /// AttackableUnit::IsTargetableByUnit. The base check is global + per-team targetability
+        /// (<see cref="GetIsTargetableToTeam"/>); <see cref="AI.Minion"/> overrides it to add the
+        /// minion-acquirer gates (minions skip wards and non-minion-acquirable units).
+        /// </summary>
+        public virtual bool IsTargetableByUnit(AttackableUnit acquirer)
+        {
+            return GetIsTargetableToTeam(acquirer.Team);
+        }
+
+        /// <summary>
         /// Sets whether or not this unit is targetable to the specified team.
         /// </summary>
         /// <param name="team">TeamId to change.</param>

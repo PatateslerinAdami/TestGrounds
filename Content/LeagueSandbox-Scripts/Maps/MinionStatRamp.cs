@@ -30,6 +30,16 @@ namespace MapScripts
         public float GoldGivenBase;
         public float ExpGivenBase;
 
+        // Inhibitor-destruction deltas (4.20 LevelScript.lua *Inhibitor fields, per minion type).
+        // Applied per ENEMY inhibitor currently down (team-wide, all lanes): HP/Damage bonus up,
+        // Exp/Gold given down — reversed when the inhibitor respawns. All 0 on SR (inert); present so
+        // the mechanism is faithful and non-SR maps with non-zero values work.
+        // See ApplyBarracksDestructionBonuses / ApplyBarracksRespawnReductions.
+        public float HpInhibitor;
+        public float DamageInhibitor;
+        public float ExpInhibitor;
+        public float GoldInhibitor;
+
         // --- running accumulators (advanced by Tick) ---
         public float HpBonus;
         public float DamageBonus;

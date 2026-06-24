@@ -15,5 +15,18 @@
         public bool OverrideSpawnPoints { get; set; } = false;
         public int RecallSpellItemId { get; set; } = 2001;
         public long SpawnInterval { get; set; } = 30 * 1000;
+        /// <summary>
+        /// Opt-in: when true the engine-side <c>BarracksSpawnManager</c> drives the lane-minion wave/
+        /// drip clock and calls back into the map script's <c>SpawnBarrackMinion</c> for composition
+        /// (Riot's engine/script split). When false (default) the map script's own Update loop drives
+        /// spawning. Lets maps migrate to the engine driver one at a time.
+        /// See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
+        /// </summary>
+        public bool EngineDrivenMinionSpawn { get; set; } = false;
+        /// <summary>
+        /// Game time (ms) the first lane-minion wave spawns at. Only used when
+        /// <see cref="EngineDrivenMinionSpawn"/> is true (seeds the engine driver's wave clock).
+        /// </summary>
+        public long FirstMinionSpawnTime { get; set; } = 10 * 1000;
     }
 }

@@ -45,6 +45,11 @@ namespace LeagueSandbox.GameServer.Handlers
         /// MapProperties specific to a Map Id. Contains information about passive gold gen, lane minion spawns, experience to level, etc.
         /// </summary>
         public IMapScript MapScript { get; private set; }
+        /// <summary>
+        /// Engine-side per-barrack lane-minion spawn driver (Riot's obj_Barracks model). Ticked from
+        /// <see cref="Update"/>. See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
+        /// </summary>
+        public BarracksSpawnManager BarracksSpawnManager { get; private set; }
         public uint ScriptNameHash { get; private set; }
         public IEventSource ParentScript => null;
 
@@ -109,6 +114,13 @@ namespace LeagueSandbox.GameServer.Handlers
                 MapScript.Update(diff);
             }
 
+            // Engine-side per-barrack spawn drivers. Phase 1: SpawnBarrack.Update is a no-op stub,
+            // so this ticks but the legacy LevelScript loop still drives spawning (wire unchanged).
+            using (Profiler.Scope("BarracksSpawnManager.Update", "scripts"))
+            {
+                BarracksSpawnManager?.Update(diff);
+            }
+
             using (Profiler.Scope("Surrenders.Update"))
             {
                 foreach (var surrender in Surrenders.Values)
@@ -134,9 +146,18 @@ namespace LeagueSandbox.GameServer.Handlers
             MapData = _game.Config.ContentManager.GetMapData(Id);
             GlobalData.Init(MapData.MapConstants);
             // Load data package
+            var mapObjects = LoadMapObjects();
+
+            // Build the engine-side per-barrack spawn drivers from the loaded barrack objects.
+            BarracksSpawnManager = new BarracksSpawnManager(_game, MapScript);
+            if (mapObjects.TryGetValue(GameObjectTypes.ObjBuildingBarracks, out var barrackObjects))
+            {
+                BarracksSpawnManager.Init(barrackObjects);
+            }
+
             try
             {
-                MapScript.Init(LoadMapObjects());
+                MapScript.Init(mapObjects);
             }
             catch (Exception e)
             {

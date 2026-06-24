@@ -191,6 +191,12 @@ namespace MapScripts.Map1
                     DeadInhibitors[team][inhibitor] -= diff;
                     if (DeadInhibitors[team][inhibitor] <= 0)
                     {
+                        // Revive ONLY now, at the actual respawn. SetState(RespawningState) flips
+                        // IsDead=false (re)bakes the footprint and makes the inhibitor targetable
+                        // again via NotifyState. Doing this earlier made lane minions acquire the
+                        // not-yet-respawned inhibitor as a target (IsDead=false + the global
+                        // StatusFlags.Targetable still set) and bunch up "stuck" in front of it.
+                        inhibitor.SetState(DampenerState.RespawningState);
                         inhibitor.Stats.CurrentHealth = inhibitor.Stats.HealthPoints.Total;
                         inhibitor.NotifyState();
                         DeadInhibitors[inhibitor.Team].Remove(inhibitor);
@@ -200,10 +206,6 @@ namespace MapScripts.Map1
                         // (S4 recomputes totalNumberBarracks each wave). See docs/LANE_MINION_DECOMP_AUDIT.md.
                         AllInhibitorsAreDead[inhibitor.Team] =
                             DeadInhibitors[inhibitor.Team].Count == InhibitorList[inhibitor.Team].Count;
-                    }
-                    else if (DeadInhibitors[team][inhibitor] <= 15.0f * 1000)
-                    {
-                        inhibitor.SetState(DampenerState.RespawningState);
                     }
                 }
             }
@@ -225,6 +227,43 @@ namespace MapScripts.Map1
             {
                 AllInhibitorsAreDead[inhibitor.Team] = true;
             }
+        }
+
+        // Super minions spawn for only the first part of an inhibitor's down-window, then stop while
+        // it is still down. Riot (obj_Barracks::DisableInhibitor, mac decomp 4.17): the super-minion
+        // timer is set to (respawn − 2×waveSpawnInterval) and DisableSuperMinions fires when it
+        // expires; the inhibitor itself respawns at the full respawn time. With respawn = 240s and a
+        // 30s wave interval that is a 180s super window followed by a ~60s super-less tail. We derive
+        // the window from the existing respawn countdown (no separate timer): supers are active while
+        // the remaining respawn time is still greater than 2×waveSpawnInterval.
+        // See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md (Phase 4) / LANE_MINION_DECOMP_AUDIT.md (S5).
+        public const float SUPER_MINION_STOP_BEFORE_RESPAWN_MS = 2f * 30f * 1000f; // 2 × 30s wave interval
+
+        /// <summary>
+        /// True while the inhibitor of <paramref name="inhibitorTeam"/> in <paramref name="lane"/> is
+        /// down AND still within its super-minion window (the first respawn−60s of the down-window).
+        /// The enemy team's lane minions are super minions during this window.
+        /// </summary>
+        /// <summary>
+        /// Number of <paramref name="team"/>'s inhibitors currently down (within their respawn
+        /// window). Each one buffs the opposing team's minions (Riot ApplyBarracksDestructionBonuses,
+        /// applied team-wide per dead inhibitor, reversed at full respawn — hence the full down-window
+        /// count, not the 180s super window).
+        /// </summary>
+        public static int CountDeadInhibitors(TeamId team)
+        {
+            return DeadInhibitors.TryGetValue(team, out var dead) ? dead.Count : 0;
+        }
+
+        public static bool IsSuperMinionWindowActive(TeamId inhibitorTeam, Lane lane)
+        {
+            if (!InhibitorList.TryGetValue(inhibitorTeam, out var byLane)
+                || !byLane.TryGetValue(lane, out var inhibitor) || inhibitor == null)
+            {
+                return false;
+            }
+            return DeadInhibitors[inhibitorTeam].TryGetValue(inhibitor, out var respawnRemaining)
+                && respawnRemaining > SUPER_MINION_STOP_BEFORE_RESPAWN_MS;
         }
 
         static float timeCheck = 480.0f * 1000;
@@ -377,6 +416,14 @@ namespace MapScripts.Map1
                     var fountainTurret = CreateLaneTurret(turretObj.Name + "_A", TowerModels[teamId][TurretType.FOUNTAIN_TURRET], position, teamId, TurretType.FOUNTAIN_TURRET, Lane.LANE_Unknown, LaneTurretAI, turretObj);
                     TurretList[teamId][lane].Add(fountainTurret);
                     AddObject(fountainTurret);
+                    // The fountain/shrine turret is the ONE permanently-indestructible structure
+                    // (engine-intrinsic in Riot; the level-script protection chain never covers it).
+                    // Invulnerable so it can never be damaged, and untargetable to the enemy so AI
+                    // units never path to it to attack an unkillable target (the inhibitor soft-lock
+                    // failure mode). It still fires at enemies in the fountain.
+                    var enemyOfTurret = teamId == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+                    fountainTurret.SetStatus(StatusFlags.Invulnerable, true);
+                    fountainTurret.SetIsTargetableToTeam(enemyOfTurret, false);
                     continue;
                 }
 
