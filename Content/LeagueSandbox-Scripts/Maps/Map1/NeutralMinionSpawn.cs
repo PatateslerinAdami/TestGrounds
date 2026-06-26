@@ -11,6 +11,10 @@ namespace MapScripts.Map1
     {
         private static bool forceSpawn;
 
+        // 4.20 NeutralMinionSpawn.lua HERO_EXP_RADIUS = 800 — jungle camps share their kill XP within
+        // 800u (lane minions use 1400; the engine default is wider). See docs / luaobj constants.
+        private const float HERO_EXP_RADIUS = 800f;
+
         public static Dictionary<MonsterCamp, List<Monster>> MonsterCamps = new Dictionary<MonsterCamp, List<Monster>>();
 
         public static void InitializeCamps()
@@ -162,6 +166,7 @@ namespace MapScripts.Map1
                 monster.UpdateInitialLevel(averageLevel);
                 monster.Stats.Level = (byte)averageLevel;
                 Monster campMonster = monsterCamp.AddMonster(monster);
+                campMonster.ExperienceGiveRadius = HERO_EXP_RADIUS;
                 MonsterDataTable.UpdateStats(campMonster);
             }
         }

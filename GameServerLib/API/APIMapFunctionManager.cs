@@ -286,6 +286,8 @@ namespace LeagueSandbox.GameServer.API
             int damageBonus = 0, int healthBonus = 0, int initialLevel = 1
         )
         {
+            // faceDirection is the camp's look-at WORLD POINT (Lua CampFacePoints). The Monster ctor
+            // stores it as FacePoint (sent verbatim in S2C_CreateNeutral) and derives the heading.
             return new Monster(_game, name, model, position, faceDirection, monsterCamp, team, netId, spawnAnimation, isTargetable, ignoresCollision, null, aiScript, damageBonus, healthBonus, initialLevel);
         }
  

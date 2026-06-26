@@ -120,7 +120,7 @@ namespace GameServerLib.GameObjects
             var campMonster = new Monster
             (
                 _game, monster.Name, monster.Model, monster.Position,
-                monster.Direction, this, monster.Team, 0,
+                monster.FacePoint, this, monster.Team, 0,
                 monster.SpawnAnimation, monster.IsTargetable, monster.IgnoresCollision, null, aiscript,
                 monster.DamageBonus, monster.HealthBonus, monster.InitialLevel
             );
@@ -131,6 +131,8 @@ namespace GameServerLib.GameObjects
             Monsters.Add(campMonster);
             ApiEventManager.OnDeath.AddListener(campMonster, campMonster, OnMonsterDeath, true);
             _game.ObjectManager.AddObject(campMonster);
+            // (Spawn facing is carried by S2C_CreateNeutral.FaceDirectionPosition — see
+            // PacketNotifier.ConstructCreateNeutralPacket. No separate FaceDirection needed here.)
 
             IsAlive = true;
             foreach(TeamId team in _playerTeams)

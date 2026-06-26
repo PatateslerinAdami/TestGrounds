@@ -27,6 +27,10 @@ namespace CharScripts
         {
             var DragonKiller = deathData.Killer;
 
+            // 4.20 NeutralMinionSpawn.lua PredefinedCampKillEvents[DRAGON] = EVENT_ON_KILL_DRAGON:
+            // fire the world kill event so the client plays the dragon-kill announcement.
+            ApiGameEvents.AnnounceKillDragon(deathData);
+
             foreach (var player in GetAllPlayersFromTeam(deathData.Killer.Team))
             {
                 AddBuff("S5Test_DragonSlayerBuff", float.MaxValue, 1, null, player, deathData.Unit as Monster);

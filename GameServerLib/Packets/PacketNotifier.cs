@@ -150,7 +150,12 @@ namespace PacketDefinitions420
                 UniqueName = monster.Name,
                 Name = monster.Name,
                 SkinName = monster.Model,
-                FaceDirectionPosition = monster.Direction,
+                // FaceDirectionPosition is a WORLD LOOK-AT POINT — Riot's S2C_CreateNeutral carries the
+                // camp face point verbatim here (e.g. the wraith camp's (6552,48,5240) — replay-verified).
+                // monster.FacePoint holds exactly that (Lua CampFacePoints). (Earlier we wrongly passed
+                // monster.Direction, a normalized heading, so the client looked near the world origin →
+                // monsters faced "into the wall".)
+                FaceDirectionPosition = monster.FacePoint,
                 DamageBonus = monster.DamageBonus,
                 HealthBonus = monster.HealthBonus,
                 InitialLevel = monster.InitialLevel,
@@ -287,6 +292,9 @@ namespace PacketDefinitions420
             // real Direction (their spawn LookAt is not cleanly isolated in these replays — left untouched).
             // NOTE: LookAtType.Direction == 0, so our LookAtType byte already matched Riot; only the
             // position vector diverged. See docs/LANE_MINION_WIRE_VERIFICATION.md (D3).
+            // (Static jungle monsters orient via an explicit post-spawn S2C_FaceDirection, NOT this
+            // embedded LookAt field — the client does not honor the field on a never-moved unit. See
+            // MonsterCamp.AddMonster.)
             var lookAtDirection = (isChampion && o.Direction != Vector3.Zero) ? o.Direction : new Vector3(1, 0, 0);
 
             var enterVis = new OnEnterVisibilityClient
