@@ -272,7 +272,11 @@ namespace MapScripts.Map10
                 {
                     SpawnBarracks.Add(team, new Dictionary<Lane, MapObject>());
                 }
-                SpawnBarracks[team].Add(spawnBarrack.GetLaneID(), spawnBarrack);
+                // Lane from the spawn-barrack name's __L/__C/__R tag — Riot's single authoritative
+                // parser (Barracks::ComputeLane); matches GetSpawnBarrackLaneID used by the engine
+                // BarracksSpawnManager and by SetUpLaneMinion. (The spawn barracks are named
+                // __P_<team>_Spawn_Barracks__{L|R}01.)
+                SpawnBarracks[team].Add(spawnBarrack.GetSpawnBarrackLaneID(), spawnBarrack);
             }
         }
 
@@ -399,10 +403,19 @@ namespace MapScripts.Map10
                         AddProtection(inhibitor, false, inhibitorTurret);
                     }
 
-                    // Adds Protection to Turrets
+                    // Adds Protection to Turrets. On Twisted Treeline each lane has exactly two
+                    // turrets: the inner-type turret (L_02/R_02) is the OUTERMOST turret a minion
+                    // meets and must stay targetable from the start (no protection entry), while the
+                    // inhibitor turret (C_06/C_07) sits behind it and is protected until the inner
+                    // turret falls. Mirror of Map1's per-type chain, minus the OUTER tier TT lacks.
+                    // (The old loop gave every lane turret an INNER dependency, so the inner turret
+                    // depended on itself and never became targetable.)
                     foreach (var turret in TurretList[inhibitor.Team][inhibitor.Lane])
                     {
-                        AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.INNER_TURRET));
+                        if (turret.Type == TurretType.INHIBITOR_TURRET)
+                        {
+                            AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.INNER_TURRET));
+                        }
                     }
                 }
                 foreach (var turret in TurretList[InhibTeam][Lane.LANE_C])

@@ -23,7 +23,12 @@ namespace LeagueSandbox.GameServer.Content
         private readonly Dictionary<string, CharData> _charData = new Dictionary<string, CharData>();
         private readonly Dictionary<string, SpellData> _spellData = new Dictionary<string, SpellData>();
         private readonly Dictionary<string, NavigationGrid> _navGrids = new Dictionary<string, NavigationGrid>();
-        private readonly Dictionary<string, string> _mapData = new Dictionary<string, string>();
+        // Riot's asset/package lookup is case-insensitive (Windows-era engine), and room.dsc entries
+        // routinely disagree in case with the on-disk scene filenames (e.g. room.dsc references
+        // "orderShop01" but the file is "OrderShop01.sco.json"). On a case-sensitive filesystem a plain
+        // Dictionary would silently drop those objects (the Map10 Order shop was missing for exactly this
+        // reason). Match Riot by resolving names case-insensitively. Per-map scoped, so no collisions.
+        private readonly Dictionary<string, string> _mapData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly Game _game;
         private static ILog _logger = LoggerProvider.GetLogger();
 
