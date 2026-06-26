@@ -3,9 +3,13 @@
     public class ChampionVariables
     {
         /// <summary>
-        /// Gold granted on ambient gold tick
+        /// Gold granted on ambient gold tick. Default is the engine CVar default
+        /// (ai_AmbientGoldAmount.var = 8.0, functions.cpp:4403), NOT the SR value 9.5: per-map
+        /// Constants.var overrides it (SR=9.5, ARAM=22, Dominion=28), but Twisted Treeline (Map10)
+        /// omits the key entirely and so relies on this base default. Using 9.5 here would over-grant
+        /// gold on TT.
         /// </summary>
-        public float AmbientGoldAmount { get; set; } = 9.5f;
+        public float AmbientGoldAmount { get; set; } = 8.0f;
         /// <summary>
         /// Interval between ambient gold ticks
         /// </summary>
