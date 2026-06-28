@@ -4,7 +4,6 @@ using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -25,7 +24,9 @@ namespace Buffs
         private Buff _thisBuff;
         private Spell _spell;
         private AttackableUnit _boxUnit;
-        private SpellSector _fearZone;
+        // Server-side AreaTriggerSphere id (Riot AreaTriggerSphere). -1 = none. The box is stationary, so a
+        // fixed-center sphere at the box position is faithful (no owner-following needed).
+        private int _fearZoneId = -1;
         private float _manaTimer = 0f;
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
@@ -33,32 +34,30 @@ namespace Buffs
             _thisBuff = buff;
             _spell = ownerSpell;
             _boxUnit = unit;
-            
-            _fearZone = ownerSpell.CreateSpellSector(new SectorParameters
-            {
-                Type = SectorType.Area,
-                BindObject = unit,
-                Length = 200f,
-                Tickrate = 10,
-                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes,
-            });
-            ApiEventManager.OnSpellSectorHit.AddListener(this, _fearZone, OnFearZoneHit, false);
 
+            // Fear-arming zone as an AreaTriggerSphere instead of a SpellSector: the first enemy to ENTER
+            // the box's radius arms the fear (Riot AreaTriggerI::OnEnter — continuous presence detection).
+            // Radius 200 == the old SectorParameters.Length (SpellSector used Max(Length,Width) as radius).
+            _fearZoneId = CreateAreaTriggerSphere(unit.Position, 200f, onEnter: OnFearZoneEnter);
         }
-        public void OnFearZoneHit(SpellSector sector, AttackableUnit target)
+
+        private void OnFearZoneEnter(AttackableUnit target)
         {
-            if (sector == _fearZone && _boxUnit != null && !_boxUnit.IsDead)
+            // AreaTrigger fires for all units; filter to enemies (the old sector's OverrideFlags did this).
+            if (_boxUnit == null || _boxUnit.IsDead || target == null || target.Team == _boxUnit.Team)
             {
-                AddBuff("BoxFearAttack", 8f, 1, _spell, _boxUnit, _spell.CastInfo.Owner);
-                _boxUnit.RemoveBuff(_thisBuff);
+                return;
             }
+            AddBuff("BoxFearAttack", 8f, 1, _spell, _boxUnit, _spell.CastInfo.Owner);
+            _boxUnit.RemoveBuff(_thisBuff);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            if (_fearZone != null)
+            if (_fearZoneId >= 0)
             {
-                _fearZone.SetToRemove();
+                DeleteAreaTrigger(_fearZoneId);
+                _fearZoneId = -1;
             }
             TeamId[] validTeams = { TeamId.TEAM_BLUE, TeamId.TEAM_PURPLE, TeamId.TEAM_NEUTRAL };
 
@@ -69,7 +68,6 @@ namespace Buffs
                     _boxUnit.SetIsTargetableToTeam(team, true);
                 }
             }
-            ApiEventManager.OnSpellSectorHit.RemoveListener(this, _fearZone);
         }
 
         public void OnUpdate(float diff)

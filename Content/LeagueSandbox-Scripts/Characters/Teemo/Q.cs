@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -29,7 +28,7 @@ public class BlindingDart : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ap     = _teemo.Stats.AbilityPower.Total * 0.8f;
         var damage = 80f  + 45f + (spell.CastInfo.SpellLevel - 1) + ap;
         var duration   = 1.5f + 0.25f * (spell.CastInfo.SpellLevel - 1);

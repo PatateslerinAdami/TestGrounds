@@ -99,6 +99,12 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public ObjectManager ObjectManager { get; private set; }
         /// <summary>
+        /// Server-side AreaTrigger registry (Riot LoL::AreaTriggerManager): persistent geometric trigger
+        /// regions (sphere/wall) with OnEnter/OnExit/OnUpdate/OnDestroyMissile callbacks. NOT replicated.
+        /// Faithful replacement for the SpellSector invention — see docs/AREATRIGGER_REWRITE_PLAN.md.
+        /// </summary>
+        public GameObjects.SpellNS.AreaTriggers.AreaTriggerManager AreaTriggerManager { get; private set; }
+        /// <summary>
         /// Interface for all protection related functions.
         /// Protection is a mechanic which determines whether or not a unit is targetable.
         /// </summary>
@@ -181,6 +187,7 @@ namespace LeagueSandbox.GameServer
             PacketNotifier = new PacketNotifier(_packetServer.PacketHandlerManager, Map.NavigationGrid);
 
             ObjectManager = new ObjectManager(this);
+            AreaTriggerManager = new GameObjects.SpellNS.AreaTriggers.AreaTriggerManager(this);
             ProtectionManager = new ProtectionManager(this);
             ApiGameEvents.SetGame(this);
             ApiMapFunctionManager.SetGame(this, Map as MapScriptHandler);
@@ -608,6 +615,12 @@ namespace LeagueSandbox.GameServer
             using (Profiler.Scope("ObjectManager.Update"))
             {
                 ObjectManager.Update(diff);
+            }
+            // AreaTrigger regions (sphere/wall) — unit-scan + OnUpdate. Dormant (no-op) until a spell
+            // creates a trigger; ticked after objects so unit positions are current this frame.
+            using (Profiler.Scope("AreaTriggerManager.Update"))
+            {
+                AreaTriggerManager.Update(diff);
             }
             // Protection (TODO: Move this into ObjectManager).
             using (Profiler.Scope("ProtectionManager.Update"))

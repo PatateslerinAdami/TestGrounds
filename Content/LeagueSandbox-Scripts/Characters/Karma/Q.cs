@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -64,7 +63,7 @@ public class KarmaQMissile : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_karma, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
             var ap       = _karma.Stats.AbilityPower.Total * 0.6f;
             var dmg      = 80 + 45f * (_karma.GetSpell("KarmaQ").CastInfo.SpellLevel -1) + ap;
@@ -112,7 +111,7 @@ public class KarmaQMissileMantra : ISpellScript {
         ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);
     }
  
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_karma, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         _endPos      = target.Position;
         var bonusDmg = 25f + 50f * (_karma.GetSpell("KarmaMantra").CastInfo.SpellLevel -1);

@@ -388,6 +388,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// </summary>
         protected void PublishOnSpellMissileUpdate(float diff, Vector2 positionBeforeMove)
         {
+            // AreaTriggerWall (Windwall): a wall region may destroy this missile as it crosses (Riot
+            // AreaTriggerI::DestroysMissile, queried CENTRALLY from the missile path — replaces per-script
+            // GetMissiles() scans). Owner-team missiles are exempt (the team filter lives in the wall).
+            // Runs every tick after Move for all Line/Circle/homing missiles (the shared chokepoint).
+            if (_game.AreaTriggerManager.TryDestroyMissile(this))
+            {
+                SetToRemove();
+                return;
+            }
+
             float interval = SpellOrigin?.SpellData.LuaOnMissileUpdateDistanceInterval ?? 0f;
             if (interval <= 0f)
             {

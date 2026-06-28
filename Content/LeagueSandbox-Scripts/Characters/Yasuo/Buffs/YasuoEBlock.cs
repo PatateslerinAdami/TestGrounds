@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Linq;
@@ -19,7 +18,6 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffAddType = BuffAddType.REPLACE_EXISTING };
         public StatsModifier StatsModifier { get; private set; }
-        private SpellSector _targetZone;
         bool doSpin = false;
         ObjAIBase owner;
         Spell origSpell;
@@ -90,17 +88,15 @@ namespace Buffs
                 var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock); });
                 unit.RegisterTimer(timerAnm);
 
-                _targetZone = origSpell.CreateSpellSector(new SectorParameters
-                {
-                    Type = SectorType.Area, BindObject = owner, Length = 200f,
-                    Tickrate = 30, Lifetime = 2f, SingleTick = true,
-                    OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes,
-                });
-                ApiEventManager.OnSpellSectorHit.AddListener(this, _targetZone, OnTargetZoneHit, true);
+                // The old code used a SingleTick SpellSector purely as a "fire once if an enemy is within
+                // 200" gate, then re-queried the 200 range itself in the handler. Skip the entity and run
+                // the spin-damage directly — owner is at its post-dash position here, and DoSpinDamage
+                // already no-ops when no enemy is in range.
+                DoSpinDamage();
             }
         }
 
-        public void OnTargetZoneHit(SpellSector sector, AttackableUnit target)
+        private void DoSpinDamage()
         {
             var enemies = EnumerateValidUnitsInRange(owner, owner.Position, 200f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral).ToList();
             if (enemies.Count != 0)

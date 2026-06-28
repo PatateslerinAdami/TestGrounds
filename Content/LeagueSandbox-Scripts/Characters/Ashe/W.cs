@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -65,7 +64,7 @@ public class VolleyAttack : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!target.HasBuff("VolleyAttack")) {
             if (_ashe.GetSpell("FrostShot").CastInfo.SpellLevel >= 1) {
                 AddBuff("FrostArrow", 2f, 1, spell, target, _ashe);

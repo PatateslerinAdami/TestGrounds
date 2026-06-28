@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using static GameServerCore.Content.HashFunctions;
@@ -135,7 +134,7 @@ public class VarusQMissile : ISpellScript
         _source = new AbilityInfo(HashString("VarusQMissile"), HashString("VarusQ"));
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         if (!spell.SpellData.IsValidTarget(_varus, target)) return;
 

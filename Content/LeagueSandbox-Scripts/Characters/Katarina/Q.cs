@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -63,7 +62,7 @@ public class KatarinaQ : ISpellScript
         ApiEventManager.OnUpdateStats.AddListener(this, _katarina, OnStatsUpdate);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         var ap = _katarina.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
@@ -85,7 +84,7 @@ public class KatarinaQ : ISpellScript
         // applied. Our codebase has no shield-consume logic yet (see project_spell_shield_
         // system_deferred memory), so this is currently wire-fidelity only.
         AddBuff("KatarinaQMarkSpellShieldCheck", 0.25f, 1, spell, target, _katarina);
-        //AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
+        AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
     }
 
     private void OnStatsUpdate(AttackableUnit unit, float diff)

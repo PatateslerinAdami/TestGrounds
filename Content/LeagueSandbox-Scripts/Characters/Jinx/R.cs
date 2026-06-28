@@ -12,7 +12,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -128,7 +127,7 @@ public class JinxR : ISpellScript
         _boosted = true;
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         if (target is not Champion) return;
         var castPosition = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X,

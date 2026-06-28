@@ -3,7 +3,6 @@ using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Packets;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -267,7 +266,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
-        public void ApplyEffects(AttackableUnit u, SpellMissile m = null, SpellSector s = null)
+        public void ApplyEffects(AttackableUnit u, SpellMissile m = null)
         {
             if (!u.GetIsTargetableToTeam(CastInfo.Owner.Team))
             {
@@ -291,19 +290,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             else
             {
-                ApiEventManager.OnSpellHit.Publish(this, (u, m, s));
+                ApiEventManager.OnSpellHit.Publish(this, (u, m));
                 if (m != null)
                 {
                     ApiEventManager.OnSpellMissileHit.Publish(m, u);
                     // Drives the client's on-hit FX + WWise audio path (Spells/<name>/hit).
                     _game.PacketNotifier.NotifyS2C_LineMissileHitList(m, u);
                 }
-                if (s != null)
-                {
-                    ApiEventManager.OnSpellSectorHit.Publish(s, u);
-                }
-
-                ApiEventManager.OnBeingSpellHit.Publish(u, (this, m, s));
+                ApiEventManager.OnBeingSpellHit.Publish(u, (this, m));
             }
         }
 
@@ -775,6 +769,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if(SpellData.MaxAmmo > 1)
                 {
                     CurrentAmmo--;
+
+                    // Riot obj_AI_Base::ApplySpellCastCosts: on consuming a charge, arm the recharge
+                    // timer ONLY if no recharge is already in flight (an in-progress refill keeps
+                    // counting), then notify the client + scripts. Without arming the timer the
+                    // recharge tick (UpdateAmmo) would see CurrentAmmoCooldown <= 0 and refill the
+                    // charge on the very next tick.
+                    if (CurrentAmmoCooldown <= 0.0f)
+                    {
+                        CurrentAmmoCooldown = GetAmmoRechageTime();
+                    }
+                    _game.PacketNotifier.NotifyS2C_AmmoUpdate(this);
+                    ApiEventManager.OnUpdateAmmo.Publish(CastInfo.Owner, this);
                 }
                 Vector3 originalTarget = CastInfo.TargetPosition;
                 Vector3 originalTargetEnd = CastInfo.TargetPositionEnd;
@@ -1228,11 +1234,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CreateSpellMissile();
                 }
-
-                if (Script.ScriptMetadata.SectorParameters != null)
-                {
-                    CreateSpellSector();
-                }
             }
 
             return true;
@@ -1537,11 +1538,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (Script.ScriptMetadata.MissileParameters != null)
             {
                 CreateSpellMissile();
-            }
-
-            if (Script.ScriptMetadata.SectorParameters != null)
-            {
-                CreateSpellSector();
             }
 
             // Show the spell's popup message (localization key) as floating text over the caster
@@ -1977,85 +1973,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             return CreateSpellMissile(Script.ScriptMetadata.MissileParameters);
         }
 
-        /// <summary>
-        /// Creates a spell sector with the given parameters.
-        /// </summary>
-        /// <param name="parameters">Parameters of the sector.</param>
-        public SpellSector CreateSpellSector(SectorParameters parameters)
-        {
-            if (CastInfo.MissileNetID == 0)
-            {
-                return null;
-            }
-
-            var netId = CastInfo.MissileNetID;
-
-            if (_game.ObjectManager.GetObjectById(netId) != null)
-            {
-                netId = _game.NetworkIdManager.GetNewNetId();
-            }
-
-            SpellSector s = null;
-            var castInfoClone = CastInfo.Clone();
-
-            switch (parameters.Type)
-            {
-                case SectorType.Area:
-                    {
-                        s = new SpellSector(
-                            _game,
-                            parameters,
-                            this,
-                            castInfoClone,
-                            netId
-                        );
-                        break;
-                    }
-                case SectorType.Cone:
-                    {
-                        s = new SpellSectorCone(
-                            _game,
-                            parameters,
-                            this,
-                            castInfoClone,
-                            netId
-                        );
-                        break;
-                    }
-                case SectorType.Polygon:
-                    {
-                        s = new SpellSectorPolygon(
-                            _game,
-                            parameters,
-                            this,
-                            castInfoClone,
-                            netId
-                        );
-                        break;
-                    }
-                case SectorType.Ring:
-                    {
-                        // TODO
-                        break;
-                    }
-            }
-
-            _game.ObjectManager.AddObject(s);
-
-            ApiEventManager.OnCreateSector.Publish(this, s);
-
-            // TODO: Verify when NotifyForceCreateMissile should be used instead.
-
-            return s;
-        }
-
-        /// <summary>
-        /// Creates a spell sector using this spell's script for the parameters.
-        /// </summary>
-        public SpellSector CreateSpellSector()
-        {
-            return CreateSpellSector(Script.ScriptMetadata.SectorParameters);
-        }
 
         public float GetCooldown()
         {
@@ -2119,6 +2036,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
 
             _game.PacketNotifier.NotifyS2C_AmmoUpdate(this);
+            // Riot fires HandleOnAmmoUpdate(currentAmmo, slot) on every ammo-count change.
+            ApiEventManager.OnUpdateAmmo.Publish(CastInfo.Owner, this);
         }
 
         public float GetCurrentCastRange()

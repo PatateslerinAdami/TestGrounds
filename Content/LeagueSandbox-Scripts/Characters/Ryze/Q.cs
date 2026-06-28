@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -32,7 +31,7 @@ public class Overload : ISpellScript {
         ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ap     = _ryze.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var mana   = _ryze.Stats.ManaPoints.Total   * 0.065f;
         var dmg = 40f + 20f * (spell.CastInfo.SpellLevel - 1) + ap + mana;

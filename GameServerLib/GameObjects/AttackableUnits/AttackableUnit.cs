@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -758,7 +757,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // missiles/sectors/buildings, so those add only a near-zero slice.)
             using var _scope = Profiler.Scope("AttackableUnit.OnCollision", "pathing");
 
-            if (collider is SpellMissile || collider is SpellSector || collider is ObjBuilding || (collider is Region region && region.CollisionUnit == this))
+            if (collider is SpellMissile || collider is ObjBuilding || (collider is Region region && region.CollisionUnit == this))
             {
                 return;
             }
@@ -1983,7 +1982,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // 30u keeps the per-snap correction sub-perceptual for a minion-sized model while still
                 // far cheaper than the champion 8u (≈4 entries/list, per-frame batched). Tune down toward
                 // TIGHT_RESYNC if snaps are still visible, up if minion bandwidth becomes an issue.
-                const float MOVING_MINION_RESYNC = 30f;
+                // TIGHTENED 30u→12u (2026-06-28): the collision-log capture (collstats, solo Map 1) showed
+                // the moving-minion drift-resync releasing a median 33u / max 62u hard-snap at 3/s — i.e.
+                // resyncs fired right at the 30u cap, so the cap WAS the visible snap magnitude. A
+                // marching allied wave shoves its own members ~15u/tick (group push, 10.6/s) with no
+                // enemy present, so the drift is constant; 12u brings each released snap close to the
+                // champion floor (sub-perceptual for a minion model) at a modest packet cost (we batch
+                // per frame, and Fix 1 above cut the bulk of the redundant reanchors). Tune toward
+                // TIGHT_RESYNC if still visible, up if minion bandwidth becomes an issue.
+                const float MOVING_MINION_RESYNC = 12f;
                 bool stopped = Waypoints.Count <= 1;
                 float driftResyncThreshold = (this is Champion || stopped) ? TIGHT_RESYNC : MOVING_MINION_RESYNC;
                 if (_unreplicatedDrift.LengthSquared() > driftResyncThreshold * driftResyncThreshold)
@@ -2731,7 +2738,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// as a full-path WaypointGroup makes the client hard-snap to Waypoint[0] 10-30×/s
         /// (visible jitter). Continuation orders fold into the stream instead. Defaults true.
         /// </param>
-        public bool SetWaypoints(NavigationPath newWaypoints, bool isForced = false, bool broadcastImmediately = true)
+        public bool SetWaypoints(NavigationPath newWaypoints, bool isForced = false, bool broadcastImmediately = true,
+            string pathReason = null)
         {
             // Waypoints should always have an origin at the current position.
             // Dashes are excluded as their paths should be set before being applied.
@@ -2771,6 +2779,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 _movementUpdated = true;
                 FullPathBroadcastPending = true;
+
+                // Diagnostic (opt-in PATH_LOG): record the geometry of the path that just went on the
+                // wire so it can be diffed 1:1 against Riot via tools/minionroute.py. Only minions
+                // (the snap complaint) and only when actually broadcasting (matches the wire).
+                if (PathLogger.Enabled && this is Minion)
+                {
+                    var allyBodies = new List<Vector2>();
+                    float chord = Vector2.Distance(newWaypoints[0], newWaypoints[newWaypoints.Count - 1]);
+                    float queryR = chord * 0.5f + 250f;
+                    Vector2 mid = (newWaypoints[0] + newWaypoints[newWaypoints.Count - 1]) * 0.5f;
+                    foreach (var o in _game.Map.CollisionHandler.GetNearestObjects(
+                                 new System.Activities.Presentation.View.Circle(mid, queryR)))
+                    {
+                        if (o is Minion om && om != this && om.Team == Team && !om.IsDead)
+                        {
+                            allyBodies.Add(om.Position);
+                        }
+                    }
+                    PathLogger.Log(_game.GameTime, NetId, pathReason, newWaypoints, allyBodies);
+                }
             }
 
             return true;
@@ -2781,10 +2809,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Existing call sites that still build paths as <c>new List&lt;Vector2&gt; { ... }</c> keep
         /// compiling. Prefer the <see cref="NavigationPath"/> overload for new code.
         /// </summary>
-        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false, bool broadcastImmediately = true)
+        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false, bool broadcastImmediately = true,
+            string pathReason = null)
         {
             if (newWaypoints == null) return false;
-            return SetWaypoints(new NavigationPath(newWaypoints), isForced, broadcastImmediately);
+            return SetWaypoints(new NavigationPath(newWaypoints), isForced, broadcastImmediately, pathReason);
         }
 
         /// <summary>

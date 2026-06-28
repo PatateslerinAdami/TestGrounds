@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -80,7 +79,7 @@ public class MordekaiserNukeOfTheBeast : ISpellScript
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         var ap = _mordekaiser.Stats.AbilityPower.Total * 0.4f;
         var ad = _mordekaiser.Stats.AttackDamage.FlatBonus;

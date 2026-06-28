@@ -10,7 +10,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -91,7 +90,7 @@ public class ZedUltMissile : ISpellScript {
 
     public void OnSpellPostCast(Spell spell) { _zed.SetStatus(StatusFlags.Targetable, true); }
 
-    private void OnSpellHit(Spell spell, AttackableUnit unit, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit unit, SpellMissile missile) {
         missile.SetToRemove();
     }
 }

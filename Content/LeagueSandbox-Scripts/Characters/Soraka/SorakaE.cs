@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -30,8 +29,6 @@ namespace Spells
 
         Particle p1;
         Particle beam;
-        private SpellSector EZone;
-        private SpellSector EZoneEnd;
 
         Spell spell;
 
@@ -45,36 +42,26 @@ namespace Spells
             beam = AddParticle(owner, owner, "Soraka_Base_E_Beam.troy", Cursor, 1.5f); // TODO: make the beam shoot from her hand
             AddParticle(owner, null, "Soraka_Base_E_rune.troy", Cursor, 1.5f);
 
-            EZone = spell.CreateSpellSector(new SectorParameters
+            // Equinox = two timed snapshot AoEs at the cursor (silence now, snare after 1.5s) — NOT a
+            // lingering presence zone (the old sectors were SingleTick = one-shot). Resolve each phase inline
+            // with a range query at the cursor (radius 260 == old Max(Width,Length)). Self-contained (nothing
+            // listens to SorakaE's hits) + multi-phase, so the effect runs directly in the loop — no
+            // ApplyEffects/OnSpellHit indirection (which couldn't tell the two phases apart anyway).
+            var flags = SpellDataFlags.AffectEnemies | SpellDataFlags.IgnoreLaneMinion | SpellDataFlags.IgnoreEnemyMinion | SpellDataFlags.AffectHeroes;
+            foreach (var target in GetUnitsInRange(owner, Cursor, 260f, true, flags))
             {
-                Width = 260,
-                Length = 260,
-                SingleTick = true,
-                Lifetime = 1.5f,
-                Tickrate = 30,
-                CanHitSameTarget = false,
-                Type = SectorType.Area,
-                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.IgnoreLaneMinion | SpellDataFlags.IgnoreEnemyMinion | SpellDataFlags.AffectHeroes
-            });
-            ApiEventManager.OnSpellSectorHit.AddListener(this, EZone, EZoneHit, false);
+                EZoneHit(target);
+            }
 
             owner.RegisterTimer(new GameScriptTimer(1.5f, () =>
             {
-                EZoneEnd = spell.CreateSpellSector(new SectorParameters
+                foreach (var target in GetUnitsInRange(owner, Cursor, 260f, true, flags))
                 {
-                    Width = 260,
-                    Length = 260,
-                    SingleTick = true,
-                    Lifetime = 0.1f,
-                    Tickrate = 30,
-                    CanHitSameTarget = false,
-                    Type = SectorType.Area,
-                    OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.IgnoreLaneMinion | SpellDataFlags.IgnoreEnemyMinion | SpellDataFlags.AffectHeroes
-                });
-                ApiEventManager.OnSpellSectorHit.AddListener(this, EZoneEnd, EZoneEndHit, false);
+                    EZoneEndHit(target);
+                }
             }));
         }
-        public void EZoneHit(SpellSector sector, AttackableUnit target)
+        private void EZoneHit(AttackableUnit target)
         {
             var owner = spell.CastInfo.Owner;
             var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;
@@ -88,7 +75,7 @@ namespace Spells
             }
         }
 
-        public void EZoneEndHit(SpellSector sector, AttackableUnit target)
+        private void EZoneEndHit(AttackableUnit target)
         {
             var owner = spell.CastInfo.Owner;
             var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;

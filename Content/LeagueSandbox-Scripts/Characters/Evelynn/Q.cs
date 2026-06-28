@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -197,7 +196,7 @@ public class HateSpikeLineMissile : ISpellScript {
     public void OnSpellPostCast(Spell spell) {
     }
     
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (_targetsHit.Contains(target)) return;
         var mainSpell = _evelynn.GetSpell("EvelynnQ");
         AddParticleTarget(_evelynn, target, "Evelynn_Q_tar", target);

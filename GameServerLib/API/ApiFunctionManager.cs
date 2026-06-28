@@ -10,6 +10,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.AreaTriggers;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Inventory;
@@ -496,11 +497,32 @@ namespace LeagueSandbox.GameServer.API
 
         /// <summary>
         /// Returns the parent buff's stack count for the given name, or 0 if no such buff is active.
-        /// Mirrors Lua API <c>SpellBuffCount</c>.
+        /// Mirrors Lua API <c>SpellBuffCount</c> (2-arg, source-agnostic).
         /// </summary>
         public static int GetBuffStackCount(AttackableUnit unit, string buffName)
         {
             return unit.GetBuffWithName(buffName)?.StackCount ?? 0;
+        }
+
+        /// <summary>
+        /// Returns the total stacks of the named buff that originate from <paramref name="source"/>, or 0.
+        /// Mirrors Lua API <c>SpellBuffCount(unit, buffName, sourceUnit)</c> (3-arg, caster-filtered) —
+        /// e.g. BuildingBlocksBase.lua:1048 <c>SpellBuffCount(unit, Name, Attacker) &gt; 0</c>. The 2-arg
+        /// overload aggregates across all casters; this one only counts instances whose
+        /// <see cref="Buff.SourceUnit"/> matches, which matters for STACKS_AND_OVERLAPS buffs applied by
+        /// multiple casters (each application is a separate instance with its own source).
+        /// </summary>
+        public static int GetBuffStackCount(AttackableUnit unit, string buffName, ObjAIBase source)
+        {
+            int total = 0;
+            foreach (var b in unit.GetBuffsWithName(buffName))
+            {
+                if (b.SourceUnit == source)
+                {
+                    total += b.StackCount;
+                }
+            }
+            return total;
         }
 
         /// <summary>
@@ -602,6 +624,29 @@ namespace LeagueSandbox.GameServer.API
         public static void RemoveBuff(AttackableUnit target, string buff)
         {
             target.RemoveBuffsWithName(buff);
+        }
+
+        /// <summary>
+        /// Removes only the named buff instances on <paramref name="target"/> that originate from
+        /// <paramref name="source"/>, running each one's OnDeactivate. Mirrors Lua API
+        /// <c>SpellBuffRemove(unit, buffName, sourceUnit)</c> (3-arg, caster-filtered) —
+        /// e.g. BuildingBlocksBase.lua:2379 <c>SpellBuffRemove(unit, Name, Attacker)</c>. Unlike the 2-arg
+        /// overload (which strips ALL same-named instances regardless of caster), this leaves other casters'
+        /// instances intact — required for STACKS_AND_OVERLAPS debuffs shared by multiple casters.
+        /// </summary>
+        /// <param name="target">AI unit to remove buffs from.</param>
+        /// <param name="buff">Buff name to remove.</param>
+        /// <param name="source">Only instances whose <see cref="Buff.SourceUnit"/> equals this are removed.</param>
+        public static void RemoveBuff(AttackableUnit target, string buff, ObjAIBase source)
+        {
+            // Iterate a snapshot: DeactivateBuff mutates the underlying buff collections.
+            foreach (var b in target.GetBuffsWithName(buff).ToArray())
+            {
+                if (b.SourceUnit == source)
+                {
+                    b.DeactivateBuff();
+                }
+            }
         }
 
         /// <summary>
@@ -2061,8 +2106,13 @@ namespace LeagueSandbox.GameServer.API
                 return false;
             }
 
+            // Riot TargetHelper::ValidTargetCheck rejects when the target is untargetable globally OR to the
+            // caster's team. GetIsTargetableToTeam folds in BOTH (the global Targetable status flag AND the
+            // per-team IsTargetableToTeam), so check it instead of only the global flag — otherwise a unit
+            // that's only per-team-untargetable (e.g. the TT relic / its anchor: NonTargetableAll) still
+            // passes here and gets hit by AoE / cone spells (Annie W → GetUnitsHitBySpell → this filter).
             var affectUntargetable = (useFlags & SpellDataFlags.AffectUntargetable) != 0;
-            if (!affectUntargetable && (target.Status & StatusFlags.Targetable) == 0)
+            if (!affectUntargetable && !target.GetIsTargetableToTeam(self.Team))
             {
                 return false;
             }
@@ -3009,6 +3059,24 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// ACTOR-AWARE path for <paramref name="unit"/>: routes around other units that would block it
+        /// (the same A* the engine's attack-approach uses), unlike the terrain-only
+        /// <see cref="GetPath(Vector2,Vector2,float)"/> overload which walks straight through bodies.
+        /// <paramref name="skipLineOfSight"/> defaults true so the A* runs even when terrain-LOS is
+        /// clear — that is what makes a lane minion ROUTE AROUND an allied wave (Riot keeps ~33u
+        /// clearance, wire-measured) instead of issuing a straight line through it. Use for lane
+        /// forward-push / any "walk past bodies" movement.
+        /// </summary>
+        public static List<Vector2> GetPath(AttackableUnit unit, Vector2 to, bool skipLineOfSight = true)
+        {
+            if (unit == null)
+            {
+                return null;
+            }
+            return _game.Map.PathingHandler.GetPath(unit, to, skipLineOfSight: skipLineOfSight)?.ToList();
+        }
+
+        /// <summary>
         /// Cheap local window reachability check (A2 — S1:9069 / S4:1694). Returns true if
         /// <paramref name="to"/> is reachable from <paramref name="unit"/>'s current position
         /// within about ~4 cells, considering both static terrain and actor blocking. Use as a
@@ -3442,6 +3510,62 @@ namespace LeagueSandbox.GameServer.API
         public static List<SpellMissile> GetMissiles()
         {
             return _game.ObjectManager.GetAllMissiles();
+        }
+
+        // === AreaTrigger subsystem (Riot LoL::AreaTriggerManager) — faithful replacement for SpellSector.
+        // Server-internal geometric regions, NOT replicated. See docs/AREATRIGGER_REWRITE_PLAN.md. ===
+
+        /// <summary>
+        /// Creates a server-side circular trigger region (Riot AreaTriggerSphere). Callbacks fire per tick
+        /// for units inside (the script owns all gameplay logic). Returns the trigger id for Update/Delete.
+        /// </summary>
+        public static int CreateAreaTriggerSphere(Vector2 center, float radius,
+            Action<AttackableUnit> onEnter = null, Action<AttackableUnit> onExit = null,
+            Action<AttackableUnit> onUpdate = null, Action<SpellMissile> onDestroyMissile = null)
+        {
+            return _game.AreaTriggerManager.CreateSphere(center, radius, onEnter, onExit, onUpdate, onDestroyMissile);
+        }
+
+        /// <summary>
+        /// Like <see cref="CreateAreaTriggerSphere"/> but the region's center tracks <paramref name="follow"/>
+        /// every tick (Riot AreaTrigger attach-to-unit) — for owner-following zones (Fiddlesticks R Crowstorm).
+        /// Caller owns the lifetime (Delete on a timer / when the source ends).
+        /// </summary>
+        public static int CreateAreaTriggerSphereAttached(LeagueSandbox.GameServer.GameObjects.GameObject follow,
+            float radius, Action<AttackableUnit> onEnter = null, Action<AttackableUnit> onExit = null,
+            Action<AttackableUnit> onUpdate = null, Action<SpellMissile> onDestroyMissile = null)
+        {
+            return _game.AreaTriggerManager.CreateSphereAttached(follow, radius, onEnter, onExit, onUpdate, onDestroyMissile);
+        }
+
+        /// <summary>
+        /// Creates a server-side wall trigger region (Riot AreaTriggerWall — Windwall). The segment
+        /// [p1,p2] spans the wall width; <paramref name="thickness"/> is the catch band along travel.
+        /// When <paramref name="destroysMissiles"/>, crossing enemy missiles are destroyed centrally by the
+        /// missile path. Returns the trigger id.
+        /// </summary>
+        public static int CreateAreaTriggerWall(Vector2 p1, Vector2 p2, float thickness, bool destroysMissiles,
+            TeamId wallTeam, Action<AttackableUnit> onEnter = null, Action<AttackableUnit> onExit = null,
+            Action<AttackableUnit> onUpdate = null, Action<SpellMissile> onDestroyMissile = null)
+        {
+            return _game.AreaTriggerManager.CreateWall(p1, p2, thickness, destroysMissiles, wallTeam,
+                onEnter, onExit, onUpdate, onDestroyMissile);
+        }
+
+        /// <summary>Moves a wall trigger's endpoints (steered per tick by a moving-wall script).</summary>
+        public static void UpdateAreaTriggerWallEndpoints(int id, Vector2 p1, Vector2 p2)
+        {
+            if (_game.AreaTriggerManager.Find(id) is AreaTriggerWall wall)
+            {
+                wall.P1 = p1;
+                wall.P2 = p2;
+            }
+        }
+
+        /// <summary>Removes a trigger region (Riot AreaTriggerManager::Delete). No-op on unknown id.</summary>
+        public static void DeleteAreaTrigger(int id)
+        {
+            _game.AreaTriggerManager.Delete(id);
         }
 
         public static void InstantStopTest(AttackableUnit unit, bool forceClient = true, bool keepAnimating = false)

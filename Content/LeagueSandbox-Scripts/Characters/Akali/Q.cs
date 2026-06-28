@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -38,7 +37,7 @@ public class AkaliMota : ISpellScript {
     public void OnSpellCast(Spell spell) {
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var owner  = spell.CastInfo.Owner;
         var ap     = owner.Stats.AbilityPower.Total * 0.4f;
         var damage = 35f + 25 * (spell.CastInfo.SpellLevel - 1) + ap;

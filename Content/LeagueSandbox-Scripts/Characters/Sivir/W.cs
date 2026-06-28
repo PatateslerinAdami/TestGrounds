@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -51,7 +50,7 @@ public class SivirWAttack : ISpellScript
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnWAttackHit);
     }
 
-    private void OnWAttackHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnWAttackHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (missile == null || missile.HitCount <= 1) {
             return; // first hit = engine AutoAttackHit (full AA, crit, on-hits)
         }

@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -96,7 +95,7 @@ public class NamiW : ISpellScript {
 
     // One handler for every chain segment (first missiles AND bounces). The chain-wide
     // missile.HitCount is already incremented at hit time -> bounceIndex = HitCount - 1.
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         int bounceIndex = missile.HitCount - 1;
         if (target.Team == _nami.Team) {
             ApplyAllyHit(target, bounceIndex, spell);

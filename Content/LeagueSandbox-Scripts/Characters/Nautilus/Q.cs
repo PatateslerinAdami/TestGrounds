@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -121,7 +120,7 @@ public class NautilusAnchorDragMissile : ISpellScript
         }
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         var q = _owner.GetSpell("NautilusAnchorDrag");
         var damage = q.SpellData.EffectLevelAmount[1][q.CastInfo.SpellLevel]

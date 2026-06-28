@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -60,7 +59,7 @@ namespace Buffs
             }
         }
 
-        private void OnBeingSpellHit(AttackableUnit unit, Spell spell, SpellMissile missile, SpellSector sector)
+        private void OnBeingSpellHit(AttackableUnit unit, Spell spell, SpellMissile missile)
         {
             LoggerProvider.GetLogger().Warn($"HELLRRRO, {spell.CastInfo.SpellSlot}");
             if (spell.CastInfo.Owner == _buffRef.SourceUnit)

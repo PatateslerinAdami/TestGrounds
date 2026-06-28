@@ -32,7 +32,8 @@ namespace Spells
             if (Extensions.IsVectorWithinRange(ownerPos, spellPos, castrange))
             {
                 // Faithful Riot SpawnMinion params: the box is a rooted aggressive summon driven by its
-                // own AiScript (ShacoBoxAI does target selection; the shared AutoAttackComponent fires).
+                // own AiScript (ShacoBoxAI does target selection AND casts ShacoBoxSpell as its attack —
+                // the box has no basic auto-attack; its attack is a spell on the Attack1 animation).
                 // rooted = attacks in place, never chases (Riot spawns boxes/turrets/wards Rooted).
                 Minion newBox = AddMinion((Champion)owner, "ShacoBox", "ShacoBox", spellPos, owner.Team,
                     aiScript: "ShacoBoxAI", invulnerable: true, rooted: true);

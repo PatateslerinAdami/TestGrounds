@@ -23,7 +23,7 @@ internal class MordekaiserCOTGRevive : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _mordekaiser = ownerSpell.CastInfo.Owner;
-        //It should check if the unit is a zombie (Sion passive / Yorick R) and wait until the unit isn't anymore for then spawn the ghost and then deactivate itself.
+        //TODO: It should check if the unit is a zombie (Sion passive / Yorick R) and wait until the unit isn't anymore for then spawn the ghost and then deactivate itself.
         buff.DeactivateBuff();
     }
 

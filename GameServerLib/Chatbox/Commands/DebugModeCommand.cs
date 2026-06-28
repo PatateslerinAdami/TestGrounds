@@ -9,7 +9,6 @@ using System.Numerics;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 
 namespace LeagueSandbox.GameServer.Chatbox.Commands
 {
@@ -138,10 +137,6 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 else if (_debugMode == DebugMode.Projectiles)
                 {
                     DrawProjectiles(_userId);
-                }
-                else if (_debugMode == DebugMode.Sectors)
-                {
-                    DrawSectors(_userId);
                 }
                 else if (_debugMode == DebugMode.All)
                 {
@@ -347,76 +342,6 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                             var arrowParticleStart3 = new Particle(_game, null, arrowParticleEnd3Temp, new Vector2(current.X + dirTangent2.X, current.Y + dirTangent2.Y), "Global_Indicator_Line_Beam.troy", 1.0f, "", "", 0, missile.Direction, false, 0.1f);
                             _arrowParticlesList[missile.NetId].Add(arrowParticleStart3);
                             //_game.PacketNotifier.NotifyFXCreateGroup(arrowParticleStart3, userId);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Draws the effected area of all sectors
-        public void DrawSectors(int userId)
-        {
-            var tempObjects = Game.ObjectManager.GetObjects();
-
-            foreach (KeyValuePair<uint, GameObject> obj in tempObjects)
-            {
-                if (obj.Value is SpellSector sector)
-                {
-                    // Arbitrary ratio is required for the DebugCircle particle to look accurate
-                    var circlesize = _debugCircleScale * sector.CollisionRadius;
-                    if (sector.Parameters.Width < 5)
-                    {
-                        circlesize = _debugCircleScale * 35;
-                    }
-
-                    // Clear circle particles every draw in case the unit changes its position
-                    if (_circleParticles.ContainsKey(sector.NetId))
-                    {
-                        if (_circleParticles[sector.NetId] != null)
-                        {
-                            _circleParticles.Remove(sector.NetId);
-                        }
-                    }
-
-                    if (sector.CastInfo.Targets[0] != null || (sector.CastInfo.TargetPosition != Vector3.Zero && sector.CastInfo.TargetPositionEnd != Vector3.Zero))
-                    {
-                        // Clear arrow particles every draw in case the unit changes its waypoints
-                        if (_arrowParticlesList.ContainsKey(sector.NetId))
-                        {
-                            if (_arrowParticlesList[sector.NetId].Count != 0)
-                            {
-                                _arrowParticlesList[sector.NetId].Clear();
-                                _arrowParticlesList.Remove(sector.NetId);
-                            }
-                        }
-
-                        if (sector is SpellSectorPolygon polygon)
-                        {
-                            if (!_arrowParticlesList.ContainsKey(polygon.NetId))
-                            {
-                                _arrowParticlesList.Add(polygon.NetId, new List<Particle>());
-                            }
-
-                            var current = polygon.Position;
-                            var bindObj = polygon.Parameters.BindObject;
-                            var wpTarget = polygon.CastInfo.TargetPositionEnd;
-
-                            if (bindObj == null)
-                            {
-                                return;
-                            }
-
-                            var circleparticle = new Particle(_game, null, null, polygon.Position, "DebugCircle_green.troy", circlesize, "", "", 0, default, false, 0.1f);
-                            _circleParticles.Add(polygon.NetId, circleparticle);
-                            //_game.PacketNotifier.NotifyFXCreateGroup(circleparticle, userId);
-
-                            foreach (Vector2 vert in polygon.GetPolygonVertices())
-                            {
-                                var truePos = bindObj.Position + Extensions.Rotate(vert, -Extensions.UnitVectorToAngle(new Vector2(bindObj.Direction.X, bindObj.Direction.Z)) + 90f);
-                                var arrowParticleVert = new Particle(_game, null, null, truePos, "DebugArrow_green.troy", 0.5f, "", "", 0, bindObj.Direction, false, 0.1f);
-                                _arrowParticlesList[polygon.NetId].Add(arrowParticleVert);
-                                //_game.PacketNotifier.NotifyFXCreateGroup(arrowParticleVert, userId);
-                            }
                         }
                     }
                 }

@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
@@ -69,7 +68,7 @@ using GameServerCore.Packets.Enums;
 [OnSpellHit] - "ApplyEffects" function in Spell.
 [OnTakeDamage]
 [OnUpdateActions] - move order probably
-[OnUpdateAmmo]
+[OnUpdateAmmo] - spell ammo/charge count changed (recharge / restore / cast-consume); carries (owner, spell). (wired)
 [OnUpdateStats]
 [OnZombie]
  */
@@ -105,8 +104,8 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingHit
             = new Dispatcher<AttackableUnit, AttackableUnit>();
 
-        public static Dispatcher<AttackableUnit, Spell, SpellMissile, SpellSector> OnBeingSpellHit
-            = new Dispatcher<AttackableUnit, Spell, SpellMissile, SpellSector>();
+        public static Dispatcher<AttackableUnit, Spell, SpellMissile> OnBeingSpellHit
+            = new Dispatcher<AttackableUnit, Spell, SpellMissile>();
 
         public static Dispatcher<Buff> OnBuffDeactivated
             = new Dispatcher<Buff>();
@@ -119,9 +118,6 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<GameObject> OnCollisionTerrain
             = new Dispatcher<GameObject>();
-
-        public static Dispatcher<Spell, SpellSector> OnCreateSector
-            = new Dispatcher<Spell, SpellSector>();
 
         public static Dispatcher<ObjAIBase, DeathData> OnAssist
             = new Dispatcher<ObjAIBase, DeathData>();
@@ -242,8 +238,8 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell, float> OnSpellChannelUpdate
             = new Dispatcher<Spell, float>();
 
-        public static Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector> OnSpellHit
-            = new Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector>();
+        public static Dispatcher<Spell, AttackableUnit, SpellMissile> OnSpellHit
+            = new Dispatcher<Spell, AttackableUnit, SpellMissile>();
 
         public static Dispatcher<SpellMissile> OnSpellMissileEnd
             = new Dispatcher<SpellMissile>();
@@ -281,9 +277,6 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell, ChannelingStopSource> OnSpellChargeCancel
             = new Dispatcher<Spell, ChannelingStopSource>();
 
-        public static Dispatcher<SpellSector, AttackableUnit> OnSpellSectorHit
-            = new Dispatcher<SpellSector, AttackableUnit>();
-
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnTakeDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
@@ -317,6 +310,14 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<AttackableUnit, float> OnUpdateStats
             = new Dispatcher<AttackableUnit, float>();
+
+        // Fires when a spell's ammo (charge) count changes. Faithful to Riot's
+        // obj_AI_Base::HandleOnAmmoUpdate(numStacks=currentAmmoCount, spellSlot) → buff-script
+        // BuffOnUpdateAmmo (decomp HandleUpdateAmmoBuff(ownerID, stacks, spellSlot)). Published
+        // only on an actual count change — recharge (+1), restore, or cast-consume (-1) — never
+        // per-tick. The Spell argument carries the owner, slot (CastInfo.SpellSlot) and CurrentAmmo.
+        public static Dispatcher<ObjAIBase, Spell> OnUpdateAmmo
+            = new Dispatcher<ObjAIBase, Spell>();
 
         public static Dispatcher<Spell, SpellCastInfo> OnSpellPress
             = new Dispatcher<Spell, SpellCastInfo>();

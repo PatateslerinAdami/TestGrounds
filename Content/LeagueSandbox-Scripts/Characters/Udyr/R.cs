@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -60,7 +59,7 @@ public class UdyrPhoenixBreath : ISpellScript { //Check if use breath or missile
         ScriptMetadata.MissileParameters.OverrideEndPosition = end;
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_udyr, target,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;

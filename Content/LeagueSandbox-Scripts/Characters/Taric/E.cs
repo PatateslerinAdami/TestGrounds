@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -31,7 +30,7 @@ public class Dazzle : ISpellScript {
     public void OnSpellPostCast(Spell spell) {
     }
     
-    private void ApplyEffects(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void ApplyEffects(Spell spell, AttackableUnit target, SpellMissile missile) {
         const float fullDamageRange = 250f;
 
         var level = spell.CastInfo.SpellLevel;

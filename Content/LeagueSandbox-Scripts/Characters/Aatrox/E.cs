@@ -12,7 +12,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -168,7 +167,7 @@ public class AatroxEConeMissile : ISpellScript {
         AatroxECastTracker.OnMissileEnd(missile);
     }
 
-    public void OnHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    public void OnHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_aatrox, target,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral |
                            SpellDataFlags.AffectHeroes  | SpellDataFlags.AffectMinions)) return;
@@ -213,7 +212,7 @@ public class AatroxEConeMissile2 : ISpellScript {
         AatroxECastTracker.OnMissileEnd(missile);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_aatrox, target,
                            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral |
                            SpellDataFlags.AffectHeroes  | SpellDataFlags.AffectMinions)) return;

@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells
 {
@@ -60,7 +59,7 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
         }
 
-        private void OnSpellHit(Spell spell, AttackableUnit target,SpellMissile missile, SpellSector sector)
+        private void OnSpellHit(Spell spell, AttackableUnit target,SpellMissile missile)
         {
             AddParticle(_velkoz, default, "velkoz_base_e_explo.troy", missile.Position);
             var unitsInRange = GetUnitsInRange(_velkoz, missile.Position, 120f, true,

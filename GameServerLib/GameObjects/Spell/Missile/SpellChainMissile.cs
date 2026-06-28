@@ -163,7 +163,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                     // publishes OnBeingHit) and AutoAttackHit is first-hit-only. Publish
                     // OnSpellHit here so the spell script receives the bounce and applies
                     // its reduced damage.
-                    API.ApiEventManager.OnSpellHit.Publish(SpellOrigin, (TargetUnit, (SpellMissile)this, (Sector.SpellSector)null));
+                    API.ApiEventManager.OnSpellHit.Publish(SpellOrigin, (TargetUnit, (SpellMissile)this));
                 }
             }
 

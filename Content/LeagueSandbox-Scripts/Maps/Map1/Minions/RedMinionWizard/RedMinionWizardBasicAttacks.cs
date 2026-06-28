@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -31,7 +30,7 @@ public class Red_Minion_WizardBasicAttack : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
     }
 
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
     }
 }
 
@@ -53,7 +52,7 @@ public class Red_Minion_WizardBasicAttack2 : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
     }
 
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         
     }
 }

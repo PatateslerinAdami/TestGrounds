@@ -76,7 +76,7 @@ namespace AIScripts
             // HARDATTACK target is NOT dropped (that is the hard chase).
             if (CurrentState == AIState.AI_SOFTATTACK && c.TargetUnit != null && !c.TargetUnit.IsDead)
             {
-                float acqSq = c.Stats.AcquisitionRange.Total * c.Stats.AcquisitionRange.Total;
+                float acqSq = c.GetAcquisitionRange() * c.GetAcquisitionRange();
                 if (Vector2.DistanceSquared(c.Position, c.TargetUnit.Position) > acqSq)
                 {
                     c.CancelAutoAttack(reset: true, fullCancel: true);

@@ -6,8 +6,8 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Collections.Generic;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells
@@ -20,9 +20,12 @@ namespace Spells
             TriggersSpellCasts = true,
             ChannelDuration = 1.5f,
         };
+        // Per-unit last-damage time (ms) for the 0.5s Crowstorm tick cadence. OnUpdate carries no diff
+        // (Riot OnTrigger), so we pace against GameTime() exactly as Riot scripts do. Cleared per cast.
+        private readonly Dictionary<uint, float> _lastTickTime = new Dictionary<uint, float>();
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
         public void OnSpellPostChannel(Spell spell)
         {
@@ -48,22 +51,29 @@ namespace Spells
             AddParticle(owner, owner, "crowstorm_red_cas.troy", default, 5f, teamOnly: CustomConvert.GetEnemyTeam(owner.Team));
             AddBuff("Crowstorm", 5f, 1, spell, owner, owner);
 
-            spell.CreateSpellSector(new SectorParameters
-            {
-                Length = 600f, 
-                Tickrate = 2, 
-                CanHitSameTarget = true,
-                CanHitSameTargetConsecutively = true,
-                Type = SectorType.Area,
-                Lifetime = 5.0f,
-                BindObject = owner 
-            });
+            // Crowstorm damage as an owner-anchored AreaTriggerSphere (replaces SpellSector): while an enemy
+            // stands inside, OnUpdate fires per tick; CrowstormTick damages it every 0.5s (old Tickrate 2)
+            // paced via GameTime. Radius 600 == old Max(Length,Width). Removed after the 5s lifetime.
+            _lastTickTime.Clear();
+            int zoneId = CreateAreaTriggerSphereAttached(owner, 600f, onUpdate: u => CrowstormTick(spell, u));
+            owner.RegisterTimer(new GameScriptTimer(5.0f, () => DeleteAreaTrigger(zoneId)));
         }
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void CrowstormTick(Spell spell, AttackableUnit target)
         {
             var owner = spell.CastInfo.Owner;
+            if (target == null || !spell.SpellData.IsValidTarget(owner, target) || owner.Team == target.Team)
+            {
+                return;
+            }
 
-            if (!spell.SpellData.IsValidTarget(owner, target) || owner.Team == target.Team) return;
+            // 0.5s per-unit cadence (old Tickrate 2). OnUpdate fires every server tick; pace via GameTime.
+            float now = ApiMapFunctionManager.GameTime();
+            if (_lastTickTime.TryGetValue(target.NetId, out var last) && now - last < 500f)
+            {
+                return;
+            }
+            _lastTickTime[target.NetId] = now;
+
             float baseDamage = 125 + (100 * (spell.CastInfo.SpellLevel - 1));
             float apDamage = 0.45f * owner.Stats.AbilityPower.Total;
             float damagePerTick = (baseDamage + apDamage) / 2.0f;

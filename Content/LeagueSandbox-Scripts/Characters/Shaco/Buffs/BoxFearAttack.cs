@@ -34,9 +34,9 @@ namespace Buffs
             boxMinion.Stats.ManaPoints.BaseValue = 5.0f;
             boxMinion.Stats.CurrentMana = 5f;
 
-            // Target selection + firing is owned by ShacoBoxAI (the box's AiScript) + the shared
-            // AutoAttackComponent — this buff only marks the box "active" (ShacoBoxAI gates on it),
-            // applies the fear pulse below, and runs the mana/lifetime death in OnUpdate.
+            // Target selection + the ShacoBoxSpell attack-cast are owned by ShacoBoxAI (the box's
+            // AiScript) — this buff only marks the box "active" (ShacoBoxAI gates on it), applies the
+            // fear pulse below, and runs the mana/lifetime death in OnUpdate.
 
             var units = EnumerateValidUnitsInRange(boxMinion, boxMinion.Position, 500f, true,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |

@@ -14,7 +14,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -103,7 +102,7 @@ public class TalonRakeMissileOne : ISpellScript {
         }
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         // One blade hit per unit per outgoing pass — the set lives in the cast's shared
         // Variables bag (set up by TalonRake per cast), so all three blades of this cast
         // dedup against each other while overlapping casts stay independent.
@@ -184,7 +183,7 @@ public class TalonRakeMissileTwo : ISpellScript {
         ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnMissileEnd);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         // En-route hits come from the native line collision (the missile homes onto Talon
         // via LineMissileTrackUnits but still collides with valid units along the way).
         // Talon himself never passes IsValidTarget (ally), and the blade ends automatically

@@ -83,61 +83,48 @@ namespace Spells
             ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile, false);
         }
 
+        // Server-side AreaTriggerWall id (Riot AreaTriggerWall / Windwall). -1 = none.
+        int _wallId = -1;
+
         private void OnLaunchMissile(Spell spell, SpellMissile missile)
         {
             _wallWidth = 300f + (50f * (spell.CastInfo.SpellLevel - 1));
+
+            // Create the Windwall as an AreaTriggerWall instead of hand-scanning GetMissiles() every tick:
+            // the central missile path (SpellMissile.PublishOnSpellMissileUpdate -> AreaTriggerManager.
+            // TryDestroyMissile) destroys crossing enemy missiles. The segment [p1,p2] spans the wall width;
+            // thickness 60 (half=30) reproduces the old "CollisionRadius + 30" catch band exactly. We steer
+            // the endpoints each tick (OnMissileUpdate) and delete the wall on missile end.
+            var (p1, p2) = ComputeWallEndpoints(missile);
+            _wallId = CreateAreaTriggerWall(p1, p2, 60f, destroysMissiles: true, _owner.Team);
+
             ApiEventManager.OnSpellMissileUpdate.AddListener(this, missile, OnMissileUpdate, false);
+            ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);
         }
 
-        private void OnMissileUpdate(SpellMissile wallMissile, float diff)
+        private (Vector2 p1, Vector2 p2) ComputeWallEndpoints(SpellMissile wallMissile)
         {
             Vector2 wallPos = wallMissile.Position;
             Vector2 wallDir = new Vector2(wallMissile.Direction.X, wallMissile.Direction.Z);
-
             if (wallDir.LengthSquared() == 0)
             {
                 wallDir = new Vector2(_owner.Direction.X, _owner.Direction.Z);
             }
             wallDir = Vector2.Normalize(wallDir);
-
             Vector2 perp = new Vector2(-wallDir.Y, wallDir.X);
-
-            Vector2 p1 = wallPos + perp * (_wallWidth / 2f);
-            Vector2 p2 = wallPos - perp * (_wallWidth / 2f);
-
-            var allMissiles = GetMissiles();
-
-            foreach (var enemyMissile in allMissiles)
-            {
-                if (enemyMissile == null || enemyMissile.IsToRemove() || enemyMissile.Team == _owner.Team || enemyMissile == wallMissile)
-                    continue;
-
-                float distanceToWall = GetDistanceToSegment(enemyMissile.Position, p1, p2);
-                float hitThreshold = enemyMissile.CollisionRadius + 30.0f;
-
-                if (distanceToWall <= hitThreshold)
-                {
-                    enemyMissile.SetToRemove();
-
-                }
-            }
+            return (wallPos + perp * (_wallWidth / 2f), wallPos - perp * (_wallWidth / 2f));
         }
-        private float GetDistanceToSegment(Vector2 point, Vector2 segmentStart, Vector2 segmentEnd)
+
+        private void OnMissileUpdate(SpellMissile wallMissile, float diff)
         {
-            Vector2 v = segmentEnd - segmentStart;
-            Vector2 w = point - segmentStart;
+            var (p1, p2) = ComputeWallEndpoints(wallMissile);
+            UpdateAreaTriggerWallEndpoints(_wallId, p1, p2);
+        }
 
-            float c1 = Vector2.Dot(w, v);
-            if (c1 <= 0)
-                return Vector2.Distance(point, segmentStart);
-
-            float c2 = Vector2.Dot(v, v);
-            if (c2 <= c1)
-                return Vector2.Distance(point, segmentEnd);
-
-            float b = c1 / c2;
-            Vector2 closestPoint = segmentStart + v * b;
-            return Vector2.Distance(point, closestPoint);
+        private void OnMissileEnd(SpellMissile missile)
+        {
+            DeleteAreaTrigger(_wallId);
+            _wallId = -1;
         }
     }
 }

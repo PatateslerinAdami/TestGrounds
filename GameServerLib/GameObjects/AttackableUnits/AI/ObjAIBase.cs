@@ -1337,7 +1337,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         skipLineOfSight: actorAwareChase);
                     if (newWaypoints != null && newWaypoints.Count > 1)
                     {
-                        SetWaypoints(newWaypoints);
+                        SetWaypoints(newWaypoints, pathReason: "attack");
                     }
 
                     // Path to the attack target is blocked: the goal is unreachable, so the
@@ -2756,9 +2756,27 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// in-range target is attacked immediately without first walking toward the click) and during
         /// the outbound walk.
         /// </summary>
+        /// <summary>
+        /// Riot <c>obj_AI_Base::GetAcquisitionRange</c> (mac-decomp AIBase.cpp:2618): the radius within
+        /// which this unit auto-acquires targets. When charmed, Riot expands it to the global
+        /// <c>ar_AICharmedAcquisitionRange</c> (1000) — a charmed unit keeps engaging things along its
+        /// forced-walk path; otherwise it is the unit's acquisitionRange data field + modifiers
+        /// (= <see cref="Stats.AcquisitionRange"/>.Total). Riot's third branch (IsHoldingPosition →
+        /// attackRange) is handled script-side in HeroAI (a held champion re-gates acquisition to attack
+        /// range), so it is intentionally not folded in here.
+        /// </summary>
+        public float GetAcquisitionRange()
+        {
+            if (Status.HasFlag(StatusFlags.Charmed))
+            {
+                return LeagueSandbox.GameServer.Content.GlobalData.AttackRangeVariables.AICharmedAcquisitionRange;
+            }
+            return Stats.AcquisitionRange.Total;
+        }
+
         public AttackableUnit AcquireAttackMoveTarget()
         {
-            float range = Stats.AcquisitionRange.Total;
+            float range = GetAcquisitionRange();
             AttackableUnit best = null;
             float bestDistSq = range * range;
             foreach (var it in _game.ObjectManager.GetObjects())

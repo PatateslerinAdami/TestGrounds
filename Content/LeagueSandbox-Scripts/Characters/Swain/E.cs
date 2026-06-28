@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -37,7 +36,7 @@ public class SwainTorment : ISpellScript
         ApiEventManager.OnPreDealDamage.AddListener(this, owner, OnPreDealDamage);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         AddParticleTarget(_owner, target, "swain_torment_tar", target);
         AddBuff("SwainTorment", 4f, 1, spell, target, _owner);

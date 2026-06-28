@@ -13,7 +13,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net.Repository.Hierarchy;
@@ -127,7 +126,7 @@ public class TalonShadowAssaultMisOne : ISpellScript {
         ScriptMetadata.MissileParameters.OverrideEndPosition = end;
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
         var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
@@ -162,7 +161,7 @@ public class TalonShadowAssaultMisOneHalf : ISpellScript {
         ScriptMetadata.MissileParameters.OverrideEndPosition = end;
     }
     
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
         var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
@@ -196,7 +195,7 @@ public class TalonShadowAssaultMisTwo : ISpellScript {
         _spell = spell;
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
         var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");

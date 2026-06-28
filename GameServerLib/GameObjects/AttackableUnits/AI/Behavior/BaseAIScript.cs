@@ -410,7 +410,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         /// </summary>
         protected virtual AttackableUnit FindTargetInAcR()
         {
-            return FindTargetNear(Owner.Position, Owner.Stats.AcquisitionRange.Total);
+            return FindTargetNear(Owner.Position, Owner.GetAcquisitionRange());
         }
 
         /// <summary>
