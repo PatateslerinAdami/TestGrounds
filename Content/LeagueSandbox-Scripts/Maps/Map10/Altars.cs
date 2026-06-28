@@ -310,9 +310,10 @@ namespace MapScripts.Map10
             AltarFX(altar, GhostName(altar, team), ONESHOT_FX_LIFETIME);
             AltarChainFX(altar, $"TT_LockComplete_{TeamToken(team)}_{SideOf(altar)}", ONESHOT_FX_LIFETIME);
             AltarFX(altar, VoiceLineName(altar, altar.LastCapturer), ONESHOT_FX_LIFETIME);
-            // NOTE: no lock sound is played — 4.20 has NO dedicated altar-lock sound asset. TT_Audio-Alter_lock
-            // is an empty stub, and TT_Lock/TT_LockComplete + the chain audio emitters carry no sound (only the
-            // UNLOCK has a real audio troy, TT_Audio-Altar_<side>_Unlocked). The lock = chains visual + the VO.
+            // Note: the lock sound (event Play_sfx_TT_Alter_alterlocked) is embedded in the TT_Lock visual
+            // troy (sent below as the persistent chains). Our client does not play sound emitters embedded
+            // in visual troys (only standalone audio troys like TT_Audio-Altar play), so the lock sound is a
+            // known gap — there is no separate lock-audio packet on the wire to send (replay-verified).
 
             // Locked look: override the idle with the looping locked animation (wire: SetAnimStates
             // {"IDLE1" -> "LOCKLOOP1"} on capture) + the team's persistent lock chains + AltarLocked icon.

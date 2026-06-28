@@ -395,7 +395,11 @@ namespace PacketDefinitions420
                 TargetPositionZ = (short)((targetPos.Y - _navGrid.MapHeight / 2) / 2),
 
                 OwnerPositionX = (short)((ownerPos.X - _navGrid.MapWidth / 2) / 2),
-                OwnerPositionY = ownerPos.Y,
+                // Apply the same height override as Position/TargetPosition above (defaults to 0, so only
+                // FX that set it are affected). Riot's wire OwnerPositionY tracks the FX height, so without
+                // this the owner Y stays at the raw caster height (e.g. the TT altar's navgrid dais ~-37
+                // instead of the ground ~-128.8).
+                OwnerPositionY = ownerPos.Y + particle.OverrideTargetHeight,
                 OwnerPositionZ = (short)((ownerPos.Z - _navGrid.MapHeight / 2) / 2),
 
                 TimeSpent = particle.GetTimeAlive(),
