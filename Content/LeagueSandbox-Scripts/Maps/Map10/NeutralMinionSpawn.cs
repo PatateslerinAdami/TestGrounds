@@ -75,7 +75,10 @@ namespace MapScripts.Map10
             var healthPack = CreateJungleCamp(new Vector3(7711.15f, 60.0f, 6722.67f), groupNumber: 7, teamSideOfTheMap: TeamId.TEAM_UNKNOWN, campTypeIcon: "HealthPack", 95.0f * 1000);
             MonsterCamps.Add(healthPack, new List<Monster>
             {
-                CreateJungleMonster("TT_Relic7.1.1", "TT_Relic", new Vector2(7711.15f, 6722.67f), new Vector3(7711.15f, -112.716f, 6322.67f), healthPack)
+                // Not targetable and no collision: the relic is a walk-over pickup, so it must not be a
+                // spell target and must not block skillshots / movement (TT_RelicAura also clears Targetable,
+                // but collision + the pre-aura window need this set at spawn).
+                CreateJungleMonster("TT_Relic7.1.1", "TT_Relic", new Vector2(7711.15f, 6722.67f), new Vector3(7711.15f, -112.716f, 6322.67f), healthPack, isTargetable: false, ignoresCollision: true)
             });
 
             //Vilemaw

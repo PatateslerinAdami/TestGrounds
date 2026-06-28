@@ -484,6 +484,17 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Engine-clock time (milliseconds, same scale as <c>GameTime()</c>) at which the unit last took
+        /// real damage, or 0 if never. Mirrors Lua API <c>GetLastTookDamageTime</c>
+        /// (Riot GameObject::mLastTookDamageTime). Use the <c>GameTime() - GetLastTookDamageTime(unit)</c>
+        /// pattern for "time since last in combat" (out-of-combat regen, TaskDefendStructure).
+        /// </summary>
+        public static float GetLastTookDamageTime(AttackableUnit unit)
+        {
+            return unit.LastTookDamageTime;
+        }
+
+        /// <summary>
         /// Returns the parent buff's stack count for the given name, or 0 if no such buff is active.
         /// Mirrors Lua API <c>SpellBuffCount</c>.
         /// </summary>
@@ -961,11 +972,12 @@ namespace LeagueSandbox.GameServer.API
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
             uint? skinColorSourceNetID = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
-            bool sendIfOnScreenOrDiscard = false)
+            bool sendIfOnScreenOrDiscard = false, uint? packageHashOverride = null, bool sendUnbatched = false)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
+                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
+                packageHashOverride, sendUnbatched);
         }
 
         /// <summary>
@@ -991,12 +1003,157 @@ namespace LeagueSandbox.GameServer.API
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null, uint? skinColorSourceNetID = null,
-            float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false)
+            float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false,
+            uint? packageHashOverride = null, bool sendUnbatched = false)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
+                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
+                packageHashOverride, sendUnbatched);
             return p;
+        }
+
+        /// <summary>
+        /// Unified, Riot-faithful particle spawn — mirrors the engine's single <c>BBSpellEffectCreate</c>
+        /// building block (BBLuaConversionLibrary.lua:179/198, called ~1935x across S1). Riot has ONE
+        /// effect-create primitive whose <c>bindObject</c> / <c>targetObject</c> / <c>pos</c> /
+        /// <c>targetPos</c> / <c>orientTowards</c> inputs are all independent and optional; whether the FX
+        /// is unit-bound, target-bound or position-only follows from WHICH inputs are set, not from which
+        /// function you call. The older <see cref="AddParticlePos"/> / <see cref="AddParticle"/> /
+        /// <see cref="AddParticleTarget"/> overloads are a LeagueSandbox split whose parameter surfaces
+        /// drifted apart (e.g. AddParticlePos cannot set packageHashOverride/sendUnbatched). Prefer this
+        /// for new code and migrate old callers onto it.
+        ///
+        /// <para>Flag derivation matches the engine (replay + S1: scripts pass <c>Flags = 0</c>, the engine
+        /// derives the wire bits):</para>
+        /// <list type="bullet">
+        /// <item><c>UpdateOrientation</c> is set automatically whenever <paramref name="orientTowards"/> is
+        /// non-zero (replay: 100% of oriented FX carry it) — callers no longer have to remember it.</item>
+        /// <item><c>SimulateWhileOffScreen</c> is the baseline default (replay: 98% of FX groups).</item>
+        /// </list>
+        ///
+        /// <para>Riot params deliberately NOT exposed here are client-only render hints absent from the 4.x
+        /// FX_Create wire packet (SpecificUnitToExclude, FacesTarget, PersistsThroughReconnect, TimeoutInFOW,
+        /// HideFromSpectator, BindFlexToOwnerPAR) — exposing them would be silent no-ops.</para>
+        /// </summary>
+        /// <param name="effectName">Particle/troy name (Riot: EffectName).</param>
+        /// <param name="caster">Spawning unit (Riot: Owner). Used for package hash, default KeywordNetID, team.</param>
+        /// <param name="bindObject">Unit the FX is attached to (Riot: BindObject). Takes priority over targetObject for positioning.</param>
+        /// <param name="targetObject">Secondary bind/target unit (Riot: TargetObject).</param>
+        /// <param name="pos">Spawn position when no bind/target unit (Riot: Pos).</param>
+        /// <param name="targetPos">Aim/end position (Riot: TargetPos).</param>
+        /// <param name="orientTowards">Facing direction (Riot: OrientTowards); non-zero auto-sets UpdateOrientation.</param>
+        /// <param name="boneName">Attach bone on the bind object (Riot: BoneName).</param>
+        /// <param name="targetBoneName">Attach bone on the target object (Riot: TargetBoneName).</param>
+        /// <param name="scale">Effect scale (Riot: Scale).</param>
+        /// <param name="lifetime">Seconds the particle should live (server-side; Riot uses SpellEffectRemove).</param>
+        /// <param name="specificTeamOnly">Only team that may see the FX (Riot: SpecificTeamOnly).</param>
+        /// <param name="specificUnitOnly">Only unit that may see the FX (Riot: SpecificUnitOnly).</param>
+        /// <param name="specificUnitExclude">Unit barred from seeing the FX; everyone else sees it under normal FoW (Riot: SpecificUnitToExclude).</param>
+        /// <param name="flags">FX flags (Riot: Flags). UpdateOrientation is OR'd in automatically when oriented.</param>
+        /// <param name="followsGroundTilt">Tilt the FX along ground slope (Riot: FollowsGroundTilt).</param>
+        /// <param name="sendIfOnScreenOrDiscard">One-shot: only sent to recipients who can see it at creation (Riot: SendIfOnScreenOrDiscard).</param>
+        /// <param name="fowVisibilityRadius">Fog-of-war reveal radius (Riot: FOWVisibilityRadius).</param>
+        /// <param name="fowTeam">Which team's fog-of-war gates the FX (Riot: FOWTeam). TEAM_NEUTRAL = never gated (always shown); any other team = gated. Currently acted on as an on/off toggle; raw value stored on the particle.</param>
+        /// <param name="effectNameForEnemy">Alternate troy shown to the enemy team (Riot: EffectNameForOtherTeam).</param>
+        /// <param name="keywordObject">Object the FX inherits keyword/material overrides from (Riot: KeywordObject;
+        /// wire KeywordNetID = its NetId). Leave null for the replay-verified default of 0 (most FX, incl. altars,
+        /// send 0); pass the caster/owner explicitly only for the minority of spells that do so (e.g. Xerath).</param>
+        /// <param name="packageHashOverride">Overrides the FX_Create_Group package hash (sound-bank resolution).</param>
+        /// <param name="sendUnbatched">Send as its own FX_Create_Group packet (required for sound-carrying FX).</param>
+        /// <param name="ignoreCasterVisibility">Show even when the caster is not visible to the recipient.</param>
+        /// <param name="overrideTargetHeight">Additive height offset applied to the FX position.</param>
+        /// <param name="netId">Explicit NetID (0 = auto-assign).</param>
+        /// <param name="startFromTime">Spawn the FX pre-aged by this many seconds (Riot: StartFromTime /
+        /// SpellEffectCreateRecord.m_StartFromTime). The client fast-forwards the particle simulation by this
+        /// amount on create, so a persistent/looping effect appears already running instead of playing its
+        /// spawn burst. Travels on the wire as FXCreateData.TimeSpent. Default 0 = play from birth.</param>
+        public static Particle SpellEffectCreate(
+            string effectName,
+            GameObject caster = null,
+            GameObject bindObject = null,
+            GameObject targetObject = null,
+            Vector2? pos = null,
+            Vector2? targetPos = null,
+            Vector3 orientTowards = new Vector3(),
+            string boneName = "",
+            string targetBoneName = "",
+            float scale = 1.0f,
+            float lifetime = 1.0f,
+            TeamId specificTeamOnly = TeamId.TEAM_ALL,
+            GameObject specificUnitOnly = null,
+            GameObject specificUnitExclude = null,
+            FXFlags flags = FXFlags.SimulateWhileOffScreen,
+            bool followsGroundTilt = false,
+            bool sendIfOnScreenOrDiscard = false,
+            float fowVisibilityRadius = 0f,
+            TeamId fowTeam = TeamId.TEAM_UNKNOWN,
+            string effectNameForEnemy = null,
+            GameObject keywordObject = null,
+            uint? packageHashOverride = null,
+            bool sendUnbatched = false,
+            bool ignoreCasterVisibility = false,
+            float overrideTargetHeight = 0f,
+            uint netId = 0,
+            // Riot SpellEffectCreateRecord.m_StartFromTime: spawn the FX pre-aged by this many seconds
+            // (client fast-forwards the particle sim). Default 0 = play from birth as before.
+            float startFromTime = 0f)
+        {
+            // Engine-faithful flag derivation: the client only orients the FX when this bit is set,
+            // and Riot's engine sets it whenever an orientation vector is supplied (see summary).
+            var resolvedFlags = flags;
+            if (orientTowards.Length() > 0)
+            {
+                resolvedFlags |= FXFlags.UpdateOrientation;
+            }
+
+            // Riot's KeywordObject -> wire KeywordNetID (its NetId). Replay-verified default is 0 (the packet
+            // builder turns a null override into 0). Pass keywordObject only for the minority of spells that
+            // set it explicitly (e.g. Xerath beam/tar); leave it null otherwise.
+            uint? keywordNetIDOverride = keywordObject?.NetId;
+
+            // Riot's FOWTeam: a real team => the FX is fog-of-war gated; TEAM_NEUTRAL => always shown.
+            // We currently act on it via the on/off IsAffectedByFoW toggle; the raw team is stored below
+            // (default TEAM_UNKNOWN keeps the historical "gated" default).
+            bool affectedByFoW = fowTeam != TeamId.TEAM_NEUTRAL;
+
+            // One primitive, dispatched to the matching ctor by which inputs are present — identical
+            // position/bind resolution to the legacy overloads, just with the full parameter surface.
+            Particle particle;
+            if (targetObject != null)
+            {
+                particle = new Particle(_game, caster, bindObject, targetObject, effectName, scale,
+                    boneName, targetBoneName, netId, orientTowards, followsGroundTilt, lifetime,
+                    specificTeamOnly, specificUnitOnly, resolvedFlags, ignoreCasterVisibility,
+                    overrideTargetHeight, effectNameForEnemy, keywordNetIDOverride, fowVisibilityRadius,
+                    affectedByFoW, sendIfOnScreenOrDiscard, packageHashOverride, sendUnbatched, specificUnitExclude,
+                    startFromTime);
+            }
+            else if (bindObject != null)
+            {
+                particle = new Particle(_game, caster, bindObject, targetPos ?? pos ?? bindObject.Position,
+                    effectName, scale, boneName, targetBoneName, netId, orientTowards, followsGroundTilt,
+                    lifetime, specificTeamOnly, specificUnitOnly, resolvedFlags, ignoreCasterVisibility,
+                    overrideTargetHeight, effectNameForEnemy, keywordNetIDOverride, fowVisibilityRadius,
+                    affectedByFoW, sendIfOnScreenOrDiscard, packageHashOverride, sendUnbatched, specificUnitExclude,
+                    startFromTime);
+            }
+            else
+            {
+                var startPos = pos ?? caster?.Position ?? Vector2.Zero;
+                var endPos = targetPos ?? startPos;
+                particle = new Particle(_game, caster, startPos, endPos, effectName, scale, boneName,
+                    targetBoneName, netId, orientTowards, followsGroundTilt, lifetime, specificTeamOnly,
+                    specificUnitOnly, resolvedFlags, ignoreCasterVisibility, overrideTargetHeight,
+                    effectNameForEnemy, keywordNetIDOverride, fowVisibilityRadius, affectedByFoW,
+                    sendIfOnScreenOrDiscard, packageHashOverride, sendUnbatched, specificUnitExclude,
+                    startFromTime);
+            }
+
+            // Capture the raw FOWTeam for fidelity (no packet/audience effect today; gating is via
+            // affectedByFoW above). Safe post-construction since nothing reads it during the build.
+            particle.FOWTeam = fowTeam;
+            return particle;
         }
 
         /// <summary>
@@ -1026,6 +1183,15 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="isVisible">Whether or not this minion should be visible.</param>
         /// <param name="aiPaused">Whether or not this minion's AI is inactive.</param>
         /// <returns>New Minion instance.</returns>
+        // Mirrors Riot's SpawnMinion BuildingBlock (BBLuaConversionLibrary.lua:227, 4.20-verified):
+        // SpawnMinion(Name, Skin, AiScript, Pos, Team, Stunned, Rooted, Silenced, Invulnerable, MagicImmune,
+        // IgnoreCollision, GoldRedirectTarget). `model`=Name, `skinId`=Skin (4.20 wire SkinID is an int),
+        // and the spawn-time status flags + AiScript + gold-redirect now map 1:1. `name`/`targetable`/
+        // `targetingFlags`/`visibilityOwner`/`isVisible`/`aiPaused`/`useSpells`/`spawnBitfieldExtra` are
+        // LeagueSandbox plumbing. There is deliberately NO `isWard` param — like Riot, ward-ness is
+        // data-driven (a unit IS a ward iff its CharData carries the `Ward` UnitTag; see Minion ctor /
+        // reference_unit_tags_model). New params default to the prior behaviour (no AI = EmptyAIScript =
+        // Riot idle.lua; no status; no redirect), so existing callers are unaffected.
         public static Minion AddMinion
         (
             ObjAIBase owner,
@@ -1036,18 +1202,36 @@ namespace LeagueSandbox.GameServer.API
             int skinId = 0,
             bool ignoreCollision = false,
             bool targetable = true,
-            bool isWard = false,
             SpellDataFlags targetingFlags = 0,
             ObjAIBase visibilityOwner = null,
             bool isVisible = true,
             bool aiPaused = true,
             bool useSpells = true,
-            byte spawnBitfieldExtra = 0
+            byte spawnBitfieldExtra = 0,
+            // --- Riot SpawnMinion parity ---
+            string aiScript = "",
+            bool rooted = false,
+            bool stunned = false,
+            bool silenced = false,
+            bool invulnerable = false,
+            bool magicImmune = false,
+            AttackableUnit goldRedirectTarget = null
         )
         {
-            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable,
-                isWard, visibilityOwner, enableScripts: useSpells);
+            var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable, visibilityOwner, enableScripts: useSpells, AIScript: aiScript);
             m.Stats.IsTargetableToTeam = targetingFlags;
+            // Spawn-time status (Riot SpawnMinion Stunned/Rooted/Silenced/Invulnerable/MagicImmune): set
+            // BEFORE AddObject so the unit's initial replicated Status carries them (no 1-frame window of
+            // it un-rooted/targetable). These are PERMANENT spawn properties with no backing buff — e.g. a
+            // stationary box/ward/turret is Rooted so it attacks in place and never chases. SetStatus only
+            // mutates internal state + recomputes (no packet), so it is safe before the object is added.
+            // M2 Phase 3: these spawn-time CC properties are capability disables (Riot has no Stunned/Rooted/
+            // Silenced flag): root = can't move, stun = can't move/attack/cast, silence = can't cast.
+            if (rooted) m.SetStatus(StatusFlags.CanMove, false);
+            if (stunned) m.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false);
+            if (silenced) m.SetStatus(StatusFlags.CanCast, false);
+            if (invulnerable) m.SetStatus(StatusFlags.Invulnerable, true);
+            if (magicImmune) m.SetStatus(StatusFlags.MagicImmune, true);
             // Set the extra-bitfield byte BEFORE AddObject — AddObject synchronously broadcasts
             // the spawn packet via the visibility pipeline, so any setter called after returns
             // here would only mutate server state and never reach the wire.
@@ -1056,6 +1240,13 @@ namespace LeagueSandbox.GameServer.API
             if (owner != null)
             {
                 m.SetVisibleByTeam(owner.Team, isVisible);
+            }
+            // GoldRedirectTarget (Riot SpawnMinion GoldRedirectObj): set AFTER AddObject — assigning it
+            // broadcasts PKT_UpdateGoldRedirectTarget (0x7), which references the minion's NetId, so the
+            // unit must already be spawned. Only when provided (the setter always emits a packet).
+            if (goldRedirectTarget != null)
+            {
+                m.GoldRedirectTarget = goldRedirectTarget;
             }
 
             m.PauseAI(aiPaused);
@@ -2803,16 +2994,6 @@ namespace LeagueSandbox.GameServer.API
         public static bool TeamHasVision(TeamId team, GameObject unit)
         {
             return _game.ObjectManager.TeamHasVisionOn(team, unit);
-        }
-
-        /// <summary>
-        /// Returns wether or not an unit is protected from attacks (Monstly used to check tower protection)
-        /// </summary>
-        /// <param name="unit"></param>
-        /// <returns></returns>
-        public static bool UnitIsProtectionActive(AttackableUnit unit)
-        {
-            return _game.ProtectionManager.IsProtectionActive(unit);
         }
 
         /// <summary>

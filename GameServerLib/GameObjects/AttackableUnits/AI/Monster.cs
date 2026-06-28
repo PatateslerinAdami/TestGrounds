@@ -38,7 +38,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             (
                 game, null, position, model, name,
                 netId, team, 0, ignoresCollision, isTargetable,
-                false, null, stats, aiScript, damageBonus, healthBonus, initialLevel
+                null, stats, aiScript, damageBonus, healthBonus, initialLevel
             )
         {
             Camp = monsterCamp;

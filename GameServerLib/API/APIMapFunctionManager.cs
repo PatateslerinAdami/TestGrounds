@@ -49,6 +49,21 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Registers an engine-driven capture point on <paramref name="altar"/> (Twisted Treeline
+        /// altar / Dominion control point). The altar's PrimaryAbilityResource (mana, max =
+        /// <paramref name="goal"/>) becomes the replicated capture meter. Returns the
+        /// <see cref="CapturePoint"/> so the map script can subscribe to OnCaptured/OnUnlocked.
+        /// 4.20 TT values (wire-derived): goal 60000, neutral 40000, fill 2400/s, decay 214/s, lock 90000ms, unlock 180000ms.
+        /// The meter is a tug-of-war: BLUE pushes the PAR up to goal, PURPLE down to the mirrored value;
+        /// it rests at neutralValue (so the altar isn't one team's colour at the start).
+        /// </summary>
+        public static CapturePoint AddCapturePoint(AttackableUnit altar, float goal, float neutralValue, float fillRate,
+            float decayRate, float lockDuration, float captureRadius, float unlockTime)
+        {
+            return _map.CapturePointManager.AddCapturePoint(altar, goal, neutralValue, fillRate, decayRate, lockDuration, captureRadius, unlockTime);
+        }
+
+        /// <summary>
         /// Updates a team's Dragon Slayer stack count on all clients' HUD (S2C_TeamUpdateDragonBuffCount).
         /// Call once per dragon kill with the killing team's new total.
         /// </summary>
@@ -216,10 +231,10 @@ namespace LeagueSandbox.GameServer.API
         public static Minion CreateMinion(
             string name, string model, Vector2 position, ObjAIBase owner = null, uint netId = 0,
             TeamId team = TeamId.TEAM_NEUTRAL, int skinId = 0, bool ignoreCollision = false,
-            bool isTargetable = false, bool isWard = false, string aiScript = "", int damageBonus = 0,
+            bool isTargetable = false, string aiScript = "", int damageBonus = 0,
             int healthBonus = 0, int initialLevel = 1)
         {
-            var m = new Minion(_game, owner, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, isWard, null, null, aiScript, damageBonus, healthBonus, initialLevel);
+            var m = new Minion(_game, owner, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, null, null, aiScript, damageBonus, healthBonus, initialLevel);
             _game.ObjectManager.AddObject(m);
             return m;
         }
@@ -227,10 +242,10 @@ namespace LeagueSandbox.GameServer.API
         public static Minion CreateMinionTemplete(
             string name, string model, Vector2 position, uint netId = 0,
             TeamId team = TeamId.TEAM_NEUTRAL, int skinId = 0, bool ignoreCollision = false,
-            bool isTargetable = false, bool isWard = false, string aiScript = "", int damageBonus = 0,
+            bool isTargetable = false, string aiScript = "", int damageBonus = 0,
             int healthBonus = 0, int initialLevel = 1)
         {
-            return new Minion(_game, null, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, isWard, null, null, aiScript, damageBonus, healthBonus, initialLevel);
+            return new Minion(_game, null, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, null, null, aiScript, damageBonus, healthBonus, initialLevel);
         }
  
         /// <summary>

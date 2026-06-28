@@ -22,18 +22,26 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        Buff thisBuff;
-        Particle particle;
+        private Buff thisBuff;
+        private Particle particle;
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            thisBuff  = buff;
+            thisBuff = buff;
 
             if (unit is Champion champ)
             {
-                particle = AddParticleTarget(unit, unit, "NeutralMonster_buf_blue_defense", unit, buff.Duration);
-                // TODO: Separate Mana and PAR stat mods (energy is modified differently from Mana, same with other types)
-                StatsModifier.ManaRegeneration.FlatBonus += 5 + unit.Stats.ManaPoints.Total * 0.05f;
-                StatsModifier.CooldownReduction.FlatBonus += 0.1f;
+                if (champ.HasPARType(PrimaryAbilityResourceType.MANA))
+                {
+                    particle = AddParticleTarget(unit, unit, "NeutralMonster_buf_blue_defense", unit, buff.Duration);
+                    StatsModifier.ManaRegeneration.FlatBonus += 5 + unit.Stats.ManaPoints.Total * 0.05f;
+                    StatsModifier.CooldownReduction.FlatBonus += 0.1f;
+                }
+                else if (champ.HasPARType(PrimaryAbilityResourceType.Energy))
+                {
+                    particle = AddParticleTarget(unit, unit, "NeutralMonster_buf_blue_defense", unit, buff.Duration);
+                }
+
                 unit.AddStatModifier(StatsModifier);
             }
             else
@@ -92,7 +100,6 @@ namespace Buffs
 
         public void OnUpdate(float diff)
         {
-
         }
     }
 }

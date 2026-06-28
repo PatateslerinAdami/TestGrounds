@@ -97,6 +97,7 @@ namespace MapScripts.Map10
         {
             LevelScriptObjects.OnMatchStart();
             NeutralMinionSpawn.InitializeCamps();
+            Altars.Initialize();
         }
 
         //This function gets executed every server tick

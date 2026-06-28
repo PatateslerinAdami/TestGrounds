@@ -51,11 +51,12 @@ using GameServerCore.Packets.Enums;
 [OnMoveSuccess]
 [OnNearbyDeath]
 [OnPathToTargetBlocked]
+[OnCancelAttack] - in-progress auto-attack windup cancelled; carries AutoAttackStopReason. (wired)
 [OnPreAttack]
-[OnPreDamage]
+[OnPreDamage] - raw pre-mitigation damage; scripts may modify DamageData.Damage. (wired)
 [OnPreDealDamage]
-[OnPreMitigationDamage]
 [OnPreTakeDamage]
+(OnPreMitigationDamage was an S1-only hook; in 4.20 it no longer exists — merged into OnPreDamage.)
 [OnReconnect]
 [OnResurrect]
 [OnSpellCast] - start casting
@@ -94,7 +95,7 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
-        // Unused
+        // Fires when primary ability resource (mana/energy/etc.) is added; published from AttackableUnit.
         public static Dispatcher<AttackableUnit, AttackableUnit> OnAddPAR
             = new Dispatcher<AttackableUnit, AttackableUnit>();
 
@@ -203,6 +204,23 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<ObjAIBase, Spell> OnPreAttack
             = new DataOnlyDispatcher<ObjAIBase, Spell>();
 
+        /// <summary>
+        /// Riot OnCancelAttack: fires on the attacking unit when an in-progress auto-attack windup is
+        /// cancelled, carrying the <see cref="AutoAttackStopReason"/> (Moving / TargetLost / OtherImmediately / …).
+        /// Decomp: BuffScriptInstance::HandleOnCancelAttack(obj_AI_Base*, AutoAttackStopReason).
+        /// </summary>
+        public static DataOnlyDispatcher<ObjAIBase, AutoAttackStopReason> OnCancelAttack
+            = new DataOnlyDispatcher<ObjAIBase, AutoAttackStopReason>();
+
+        /// <summary>
+        /// Riot 4.20 OnPreDamage: fires on the RAW (pre-mitigation) damage, before Armor/MR is applied.
+        /// Scripts may modify <c>DamageData.Damage</c> here and the engine mitigates the modified value.
+        /// Published for both attacker- and target-side buffs. (Riot also priority-orders this via
+        /// OnPreDamagePriority — not yet wired; see docs/DAMAGE_PIPELINE_FAITHFUL_PLAN.md P3.)
+        /// </summary>
+        public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreDamage
+            = new DataOnlyDispatcher<AttackableUnit, DamageData>();
+
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreDealDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
@@ -269,14 +287,16 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnTakeDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
-        public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnReceiveHeal 
+        public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnHeal 
             = new DataOnlyDispatcher<AttackableUnit, HealData>();
         
         public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnCastHeal 
             = new DataOnlyDispatcher<AttackableUnit, HealData>();
 
-        public static DataOnlyDispatcher<ObjAIBase, AttackableUnit> OnTargetLost
-            = new DataOnlyDispatcher<ObjAIBase, AttackableUnit>();
+        // Riot OnTargetLost(reason, unit): callback gets (owner, lostUnit, reason). LostVisibility drives
+        // the champion go-to-last-known re-acquisition (docs/LOST_TARGET_REACQUISITION_PLAN.md).
+        public static Dispatcher<ObjAIBase, AttackableUnit, TargetLostReason> OnTargetLost
+            = new Dispatcher<ObjAIBase, AttackableUnit, TargetLostReason>();
 
         public static Dispatcher<ObjAIBase, Emotions> OnEmote
             = new Dispatcher<ObjAIBase, Emotions>();
@@ -558,6 +578,15 @@ namespace LeagueSandbox.GameServer.API
             protected override void Call(Action<Data> callback)
             {
                 callback(_data);
+            }
+        }
+
+        public class
+            Dispatcher<Source, D1, D2> : VariableDispatcherBase<Source, (D1, D2), Action<Source, D1, D2>>
+        {
+            protected override void Call(Action<Source, D1, D2> callback)
+            {
+                callback(_source, _data.Item1, _data.Item2);
             }
         }
 

@@ -33,7 +33,7 @@ namespace CharScripts
 
             foreach (var player in GetAllPlayersFromTeam(deathData.Killer.Team))
             {
-                AddBuff("S5Test_DragonSlayerBuff", float.MaxValue, 1, null, player, deathData.Unit as Monster);
+                AddBuff("S5Test_DragolayerBuff", float.MaxValue, 1, null, player, deathData.Unit as Monster);
             }
 
             foreach (var unit in EnumerateUnitsInRange(deathData.Unit.Position, 1000f, true))

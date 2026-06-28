@@ -50,6 +50,12 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <see cref="Update"/>. See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
         /// </summary>
         public BarracksSpawnManager BarracksSpawnManager { get; private set; }
+        /// <summary>
+        /// Engine-side capture-point driver (Twisted Treeline altars / Dominion control points).
+        /// Capture points are registered by the content map script once the altar units exist; ticked
+        /// from <see cref="Update"/>. See project_tt_altars_420.
+        /// </summary>
+        public CapturePointManager CapturePointManager { get; private set; }
         public uint ScriptNameHash { get; private set; }
         public IEventSource ParentScript => null;
 
@@ -121,6 +127,11 @@ namespace LeagueSandbox.GameServer.Handlers
                 BarracksSpawnManager?.Update(diff);
             }
 
+            using (Profiler.Scope("CapturePointManager.Update", "scripts"))
+            {
+                CapturePointManager?.Update(diff);
+            }
+
             using (Profiler.Scope("Surrenders.Update"))
             {
                 foreach (var surrender in Surrenders.Values)
@@ -154,6 +165,10 @@ namespace LeagueSandbox.GameServer.Handlers
             {
                 BarracksSpawnManager.Init(barrackObjects);
             }
+
+            // Capture points (TT altars) are registered by the content map script once the altar units
+            // are spawned; the manager just needs to exist to receive them and tick.
+            CapturePointManager = new CapturePointManager(_game);
 
             try
             {
