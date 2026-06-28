@@ -47,11 +47,11 @@ namespace Spells
             // flags 0x30 (UpdateOrientation | SimulateWhileOffScreen) — replay-verified: Riot
             // always sets the GivenDirection bit so the client uses the OrientationVector. The
             // default (SimulateWhileOffScreen only) dropped it.
-            // skinColorSourceNetID: 0 — replay-verified the endindicator carries no skin-color
-            // source (m_KeywordObjectID=0); it's a generic ground indicator, not caster-tinted.
+            // KeywordNetID=0 (replay-verified: generic ground indicator, no skin-color source,
+            // m_KeywordObjectID=0) is now the wire default — no explicit override needed.
             var endIndicator = AddParticlePos(owner, "velkoz_base_q_endindicator.troy", targetPos, targetPos,
                 lifetime: 1.5f, direction: direction3D, overrideTargetHeight: 100,
-                flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen, skinColorSourceNetID: 0);
+                flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
             // Stash in the shared per-cast bag so VelkozQMissile.OnMissileEnd can kill it the
             // moment the bolt reaches the endpoint. Replay: Riot FX_Kills the indicator on
             // Q-end (~0.65s, variable — hit/max-range/recast), NOT a fixed timer; the 1.5s

@@ -392,13 +392,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             var status = CastInfo.Owner.Status;
 
-            if (status.HasFlag(StatusFlags.Charmed)
-             || status.HasFlag(StatusFlags.Feared)
-             || status.HasFlag(StatusFlags.Stunned)
-             || status.HasFlag(StatusFlags.Suppressed)
-             || status.HasFlag(StatusFlags.Taunted)
-             || (CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Disarmed) || !status.HasFlag(StatusFlags.CanAttack)))
-             || (!CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Silenced) || !status.HasFlag(StatusFlags.CanCast))))
+            // M2 Phase 3: CC clears the relevant capability (BuffType.ToCapabilityDisable) — an in-progress
+            // AA is interrupted when CanAttack clears, a spell cast when CanCast clears. (Taunt disables cast
+            // but not attack, so a taunted unit keeps auto-attacking — faithful.)
+            if ((CastInfo.IsAutoAttack && !status.HasFlag(StatusFlags.CanAttack))
+             || (!CastInfo.IsAutoAttack && !status.HasFlag(StatusFlags.CanCast)))
             {
                 ResetSpellCast();
                 return true;
@@ -644,6 +642,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         CastInfo.Owner.FaceDirection(new Vector3(dirTemp.X, 0, dirTemp.Y), false);
                     }
                 }
+            }
+            else if (CastInfo.IsAutoAttack
+                     && !SpellData.Flags.HasFlag(SpellDataFlags.InstantCast)
+                     && !SpellData.CanMoveWhileChanneling
+                     && CastInfo.Owner.MovementParameters == null
+                     && !CastInfo.Owner.IsPathEnded())
+            {
+                // Riot StopActor on auto-attack windup (decomp Spellbook.cpp:705 / AIBase.cpp:1501): when
+                // the windup begins the unit plants in place — its path is cleared and a Stop is sent to
+                // clients. Without this the client keeps walking the stale chase path while the swing
+                // animation plays ("sliding forward during the attack" when the target runs away). This
+                // is the same sliding fix already applied to movement-locking SPELL casts in the branch
+                // above; an auto-attack is excluded from that branch (it is cancelable while winding up,
+                // CantCancelWhileWindingUp=false), so it needs its own stop here.
+                //
+                // Unlike a real spell cast we deliberately do NOT set OrderType.CastSpell: the attack
+                // must leave the move order intact so the engine re-chases a fleeing target between
+                // swings (stutter-step), and so a fresh move order during the windup still cancels the
+                // attack (orb-walk). Dash guard (MovementParameters == null) mirrors the spell branch.
+                CastInfo.Owner.StopMovement(MoveStopReason.Finished);
             }
 
             // If we are supposed to automatically cast a skillshot for this spell, then calculate the proper end position before casting.
@@ -1311,14 +1329,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
-            // TODO: Verify if Taunted should be handled by the Taunt buff script instead.
-            var status = CastInfo.Owner.Status;
-            if (status.HasFlag(StatusFlags.Charmed)
-            || status.HasFlag(StatusFlags.Feared)
-            || status.HasFlag(StatusFlags.Silenced)
-            || status.HasFlag(StatusFlags.Stunned)
-            || status.HasFlag(StatusFlags.Suppressed)
-            || status.HasFlag(StatusFlags.Taunted))
+            // M2 Phase 3: a channel is a cast — cast-disabling CC (charm/fear/silence/stun/suppress/taunt)
+            // clears the CanCast capability (BuffType.ToCapabilityDisable). Query the CC BUFFS directly via
+            // IsUnderCastDisablingCC, NOT the raw !CanCast flag: Channel() imperatively clears CanCast as its
+            // OWN action-lock (Spell.cs Channel(): SetStatus(CanCast,false)), so checking the flag would make
+            // every channel self-cancel on its first tick (StunnedOrSilencedOrTaunted) instantly.
+            if (CastInfo.Owner.IsUnderCastDisablingCC)
             {
                 CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.StunnedOrSilencedOrTaunted);
                 return;
@@ -1464,6 +1480,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CastInfo.Owner.HasMadeInitialAttack = true;
                 }
+
+                // (Former attack winddown chase-lock removed 2026-06-25: per the AA-speed wiki the WINDDOWN
+                // is FREE movement — only the WINDUP locks the unit. Holding the unit still for the whole
+                // recovery delayed the chase by ~the remaining cooldown, so the swing visibly "played
+                // through" while the unit should already be running. The post-windup re-chase no longer
+                // slides because we now send the client an NPC_InstantStop_Attack the moment it disengages
+                // to chase, see ObjAIBase.UpdateTarget — that stops the client's autonomous swing loop, so
+                // a server-side hold is unnecessary.)
                 // Note: `CharData.PostAttackMoveDelay` is loaded for forward-compat but NOT
                 // wired here — verified 2026-05-10 that S4 client doesn't consume this field
                 // (literal "PostAttack" doesn't appear in S4 decomp; CharacterData reader uses

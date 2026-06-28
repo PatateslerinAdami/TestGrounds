@@ -44,7 +44,7 @@ public class AatroxPassiveDeath : IBuffGameScript {
         SetStatus(_aatrox,       StatusFlags.Invulnerable, true);
         SetStatus(_aatrox, StatusFlags.CanMove,       false);
         SetStatus(_aatrox, StatusFlags.CanAttack,   false);
-        SetStatus(_aatrox, StatusFlags.Stunned,     true);
+        SetStatus(_aatrox, StatusFlags.CanCast,     false); // (was Stunned; CanMove/CanAttack already off) — M2
         _aatrox.Stats.CurrentHealth = 1f;
         var passiveActivateParticle = _aatrox.SkinID switch {
             1 => "Aatrox_Skin01_Passive_Death_Activate",
@@ -70,7 +70,7 @@ public class AatroxPassiveDeath : IBuffGameScript {
         SetStatus(_aatrox,       StatusFlags.Invulnerable, false);
         SetStatus(_aatrox, StatusFlags.Targetable, true);
         SetStatus(_aatrox, StatusFlags.CanAttack, true);
-        SetStatus(_aatrox, StatusFlags.Stunned,   false);
+        SetStatus(_aatrox, StatusFlags.CanCast,   true); // (was Stunned) — M2
         var passiveEndParticle = _aatrox.SkinID switch {
             1 => "Aatrox_Skin01_Passive_Death_End",
             2 => "Aatrox_Skin02_Passive_Death_End",

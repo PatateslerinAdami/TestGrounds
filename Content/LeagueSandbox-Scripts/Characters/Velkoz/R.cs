@@ -126,9 +126,8 @@ namespace Spells
             // ownerPos auto-resolves to marker.GetPosition3D() via the smart default in
             // ConstructFXCreateGroupPacket: TargetObject is null (2-arg AddParticle), so it
             // falls through to BindObject = marker. No script-side override needed.
-            // keywordNetIDOverride MUST stay as ctor param — set after construction wouldn't
-            // affect the FX_Create_Group bytes since the packet is built synchronously inside
-            // Particle.ctor → AddObject and cached in the per-recipient batch.
+            // KeywordNetID=0 (wire-documented above) is now the builder default — no override needed
+            // (previously the caster-default sent Vel'Koz here, diverging from the replay).
             var offMapTarget = new Vector2(-367f, -421f); // int16-encodes to (-3679,-3706)
             _beamEnd = AddParticle(_owner, _laserTarget, "Velkoz_Base_R_Beam_End.troy", offMapTarget,
                 lifetime: 2.6f, followGroundTilt: true);

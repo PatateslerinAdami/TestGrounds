@@ -1,3 +1,4 @@
+using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
@@ -20,11 +21,13 @@ namespace AIScripts
             AIScriptMetaData.HandlesCallsForHelp = false;
         }
 
-        // FindTargetInAcRWithFilter(AI_TARGET_MINIONS): minions only — champions, turrets, inhibitor
-        // and nexus are never candidates for a Baron minion's acquisition scan.
+        // FindTargetInAcRWithFilter(AI_TARGET_MINIONS): only units carrying the `Minion` UnitTag — exactly
+        // Riot's tag-class filter. Tag-based (not `target is Minion`): the C# type Minion also covers jungle
+        // monsters (Monster : Minion), wards and pets, which the `Minion` tag correctly excludes (a jungle
+        // monster is "Monster | Monster_Large", a ward is "Ward").
         protected override bool IsAcquirableTarget(AttackableUnit target)
         {
-            return target is Minion;
+            return target.UnitTags.HasTag(UnitTag.Minion);
         }
 
         // BaronMinionAI.lua OnCollisionEnemy is a no-op (returns without engaging).

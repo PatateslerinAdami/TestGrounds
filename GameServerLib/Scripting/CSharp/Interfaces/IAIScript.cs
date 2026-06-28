@@ -18,5 +18,11 @@ namespace GameServerCore.Scripting.CSharp
         void OnCallForHelp(AttackableUnit attacker, AttackableUnit victium)
         {
         }
+
+        // Riot's forced/important Call For Help (DamageEffect::ForceCallForHelp). Only Turret.lua reacts
+        // (focus-lock = tower-dive aggro); default is a no-op for every other archetype.
+        void OnReceiveImportantCallForHelp(AttackableUnit attacker, AttackableUnit victium)
+        {
+        }
     }
 }

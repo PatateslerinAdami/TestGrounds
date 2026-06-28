@@ -48,6 +48,8 @@ namespace AIScripts
         protected override void OnActivateBehavior()
         {
             // The pet brain owns combat selection — the engine must not also auto-acquire for it.
+            // Auto-attack firing is driven by the shared AutoAttackComponent (toggles by range against the
+            // pet's selected target). Covers UncontrollablePet / YorickPHPet too.
             Owner.ScriptOwnsCombatSelection = true;
 
             NetSetState(AIState.AI_PET_IDLE);
@@ -67,6 +69,17 @@ namespace AIScripts
                 Owner.SetTargetUnit(null, true);
                 NetSetState(AIState.AI_PET_IDLE);
             });
+        }
+
+        // State-gated auto-attack (option C, Pet.lua TimerFindEnemies → the engine swings only while in a
+        // pet ATTACKING state). Permits the six AI_PET_*ATTACK* states (IsAttackingState) plus AI_TAUNTED
+        // (taunt forces the pet onto the taunter via the CrowdControlComponent). Behaviour-identical: every
+        // non-attacking pet state clears the target (Stand/Follow/MoveToPoint → SetTargetUnit(null)) and the
+        // attacking states set it (Engage/SetTargetNoChase), so target-set ⟺ attacking state; this just makes
+        // firing state-driven. Inherited by UncontrollablePet / YorickPHPet (same state machine).
+        public override bool AutoAttackStatePermits()
+        {
+            return IsAttackingState(CurrentState) || CurrentState == AIState.AI_TAUNTED;
         }
 
         // ---- Pet.lua OnOrder: translate the player's pet command into a pet state ----

@@ -44,9 +44,55 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public CharData CharData { get; }
         /// <summary>
+        /// This unit's classification tags (Champion / Minion / Monster / Ward / Structure_* …), read from
+        /// character data. Convenience accessor over <see cref="CharData"/>.UnitTags; query with the
+        /// UnitTagExtensions (HasTag / ContainsAny / ContainsAll). See reference_unit_tags_model.
+        /// </summary>
+        public UnitTag UnitTags => CharData.UnitTags;
+        /// <summary>
+        /// Epic monsters (Baron Nashor, Dragon, Rift Herald) reject all crowd-control EFFECTS — keyed off
+        /// the <see cref="UnitTag.Monster_Epic"/> tag, NOT a tenacity/data field. Replay-verified model
+        /// (4.20 SR replays): the generic stun/slow/silence buff DOES get added to the epic (BuffAdd2 sent
+        /// at full duration from champion casters — Riot does NOT block at application), but the unit is
+        /// never actually CC'd in-game. So the buff object stays (FX/DoT/stat-mods/duration), and only its
+        /// CONTROL effect is rejected. Drives the CC-status suppression in <see cref="RecomputeBuffEffects"/>
+        /// (stun/root/charm/fear/taunt/silence/suppress/sleep/disarm/nearsight never latch) and, with
+        /// <see cref="IsDisplacementImmune"/>, blocks external forced movement. The slow effect (a MoveSpeed
+        /// stat-mod, not a status flag) is rejected separately via <see cref="Stats.ImmuneToSlow"/>.
+        /// See reference_epic_monster_cc_immunity.
+        /// </summary>
+        public bool IsCrowdControlImmune => UnitTags.HasTag(UnitTag.Monster_Epic);
+        /// <summary>
+        /// Riot CharData "Imobile" flag (byte-verified for Baron/Dragon, Immobile=1): this unit cannot be
+        /// displaced by EXTERNAL forced movement (knockup / knockback / pull). Self-initiated dashes are
+        /// unaffected. Data-driven, so any unit with Imobile=1 is displacement-immune, not only epics.
+        /// </summary>
+        public bool IsDisplacementImmune => CharData.Immobile;
+        /// <summary>
+        /// Whether this unit replicates with the PAR (PrimaryAbilityResource) Map-bucket layout: MaxMP/MP
+        /// prepended to the Map bucket (var0/var1) with MoveSpeed/scale/targetability shifted +2, and pulled
+        /// out of Local1 (ActionState shifts 7→5). Riot keys this off the per-unit AlwaysUpdatePAR flag
+        /// (mMinionFlags &amp; 8). Replay-verified (4.20): on Twisted Treeline EVERY minion-class unit (lane
+        /// minions, jungle camps, capture altars, relics) uses the PAR layout, whereas on Summoner's Rift the
+        /// same unit types are non-PAR (scale stays at Map var3). Because TT lane minions reuse the shared
+        /// Blue/Red_Minion data (so the flag can't live purely in per-unit data without breaking SR), we OR
+        /// the data flag with the TT map (Map10). Sending the wrong layout makes the client read
+        /// mIsTargetableToTeamFlags as the model scale → giant unit. See project_replication_visibility_scoping.
+        /// </summary>
+        public bool UsesParReplication => CharData.AlwaysUpdatePAR || _game.Map.Id == 10;
+        /// <summary>
         /// Whether or not this Unit is dead. Refer to TakeDamage() and Die().
         /// </summary>
         public bool IsDead { get; protected set; }
+        /// <summary>
+        /// Engine-clock time (<see cref="Game.GameTime"/>, milliseconds) at which this unit last took
+        /// real (post-mitigation > 0) damage. Mirrors Riot's <c>GameObject::mLastTookDamageTime</c>
+        /// (GameObject.h:84) read via the Lua <c>GetLastTookDamageTime</c> API. Pair with
+        /// <c>ApiFunctionManager.GameTime()</c> for the elapsed-since-combat pattern
+        /// (<c>GetTime() - GetLastTookDamageTime()</c>, e.g. out-of-combat regen / TaskDefendStructure).
+        /// Defaults to 0 (never damaged).
+        /// </summary>
+        public float LastTookDamageTime { get; protected set; }
         /// <summary>
         /// Number of minions this Unit has killed. Unused besides in replication which is used for packets, refer to NotifyOnReplication in PacketNotifier.
         /// </summary>
@@ -122,6 +168,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // current position, so collision drift is folded into small periodic corrections
         // instead of accumulating into one visible snap).
         private float _traveledSinceLastSync;
+        // Time (ms) since the last movement broadcast — drives the stopped-unit position keepalive
+        // (Riot re-broadcasts a standing unit's IDENTICAL position ~every 0.8s; see Move()).
+        private float _timeSinceLastSync;
         // True when the waypoint LIST itself changed since the last broadcast (new order/path)
         // — the next WaypointGroup then carries the full route (client path-preview needs it;
         // Riot's occasional long lists, max 20, are these). Keepalives/drift corrections with
@@ -190,21 +239,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
-        public StatusFlags Status { get; private set; }
-        // Base layer of the action-state. Non-capability flags keep plain set/clear bitfield
-        // semantics; the default-ON capability flags (mirrors Riot's CharacterState::RefCountedState)
-        // are ref-counted DISABLE-holds instead, so overlapping imperative SetStatus(cap, false)
-        // holds compose correctly — one source releasing its hold must not re-enable the capability
-        // while another source still holds it disabled (the Xerath-Q-lockout overlap class of bug).
-        // Immovable is intentionally NOT ref-counted here: it is default-OFF (enable-hold polarity,
-        // opposite to CanX) and has no callers; it stays a plain flag.
-        private StatusFlags _nonCapabilityBase = 0;
-        private int _disableCanMove;
-        private int _disableCanAttack;
-        private int _disableCanCast;
-        private int _disableCanMoveEver;
-        private const StatusFlags CapabilityMask =
-            StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMoveEver;
+        /// <summary>
+        /// The unit's action-state bitmask. Read-only facade over <see cref="_characterState"/> (Riot's
+        /// ref-counted CharacterState model); mutate via <see cref="SetStatus"/> / RecomputeBuffEffects.
+        /// </summary>
+        public StatusFlags Status => _characterState.Status;
+        // Ref-counted action-state backing (mirrors Riot CharacterState): capability disable-holds + plain
+        // bits + buff layer. M2 rebuild Phase 1 — see docs/M2_CHARACTERSTATE_REBUILD_PLAN.md.
+        private readonly CharacterState _characterState = new CharacterState();
 
         /// <summary>
         /// Speed scale Riot's server applies while traversing a force-move (the "reduceSpeedSlightly"
@@ -213,8 +255,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// time an effect to a force-move's landing use ApiFunctionManager.GetForceMoveTravelTime.
         /// </summary>
         public const float ForceMoveSpeedScale = 0.99f;
-        private StatusFlags _buffEffectsToEnable = 0;
-        private StatusFlags _buffEffectsToDisable = 0;
 
         /// <summary>
         /// Parameters of any forced movements (dashes) this unit is performing.
@@ -249,7 +289,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         /// TODO: Move this to GameObject.
         public IconInfo IconInfo { get; protected set; }
-        public override bool IsAffectedByFoW => true;
+        /// <summary>
+        /// When true, this unit ignores fog-of-war: permanently visible to and spawned for both teams,
+        /// like a structure (BaseTurret/ObjBuilding). Used by always-visible objective units such as the
+        /// Twisted Treeline Shadow Altars (TT_Buffplat) — they are Minions but, like Riot's altars, must
+        /// never be fog-gated (otherwise they only render when a champion is standing on them). Default
+        /// false → normal AttackableUnit fog behaviour. IsAffectedByFoW=false alone forces the unit
+        /// visible/spawned, so SpawnShouldBeHidden is not consulted in that case.
+        /// </summary>
+        public bool AlwaysVisible { get; set; } = false;
+        /// <summary>
+        /// Non-zero = this unit drives a flex particle (e.g. the TT altar capture circle) from its PAR.
+        /// The S2C_AttachFlexParticle (flexID 0, cpIndex 0, this attach type) is sent right after the
+        /// unit's spawn, per recipient (see NotifyEnterTeamVision). Wire: TT altars use attach type 3
+        /// (PAR-driven, NO S2C_HandleCapturePointUpdate — that 0xD3/capture-point path is Dominion-only).
+        /// 0 = no flex particle.
+        /// </summary>
+        public uint CaptureCircleFlexAttachType { get; set; } = 0;
+        /// <summary>
+        /// The unit's currently-active animation-state overrides (anim class -> override anim). Exposed
+        /// so spawn delivery can re-send them to a recipient that wasn't connected when SetAnimStates was
+        /// called (e.g. the TT altar's start-locked LOCKLOOP1 override, set at OnMatchStart before any
+        /// client has the unit). See NotifyEnterTeamVision's AlwaysVisible branch.
+        /// </summary>
+        public IReadOnlyDictionary<string, string> ActiveAnimOverrides => animOverrides;
+        public override bool IsAffectedByFoW => !AlwaysVisible;
         public override bool SpawnShouldBeHidden => true;
 
         private bool _teleportedDuringThisFrame = false;
@@ -768,6 +832,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // accumulated drift is now reflected on the client.
                 _unreplicatedDrift = Vector2.Zero;
                 _traveledSinceLastSync = 0f;
+                _timeSinceLastSync = 0f;
                 FullPathBroadcastPending = false;
             }
             _movementUpdated = false;
@@ -1065,7 +1130,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             };
 
             ApiEventManager.OnCastHeal.Publish(healer, data);
-            ApiEventManager.OnReceiveHeal.Publish(this, data);
+            ApiEventManager.OnHeal.Publish(this, data);
 
             var amountToApply = Math.Max(0.0f, data.HealAmount);
             var previousHealth = Stats.CurrentHealth;
@@ -1090,7 +1155,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Attacker = attacker,
                 Target = this,
                 Damage = damage,
-                PostMitigationDamage = Stats.GetPostMitigationDamage(damage, type, attacker),
+                // PostMitigationDamage is computed in the central TakeDamage sink (mitigation moved there).
                 DamageSource = source,
                 DamageType = type,
                 DamageResultType = damageText
@@ -1136,6 +1201,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="damageText">Type of damage the damage text should be.</param>
         public virtual void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
+            // Riot OnPreDamage: fires on the RAW damage BEFORE mitigation. Scripts may modify
+            // damageData.Damage here (the engine mitigates the modified value below). Published for both
+            // attacker- and target-side buffs.
+            ApiEventManager.OnPreDamage.Publish(damageData.Attacker, damageData);
+            ApiEventManager.OnPreDamage.Publish(damageData.Target, damageData);
+
+            // Armor/MR mitigation lives HERE in the central damage sink, not at DamageData construction.
+            // Placed after OnPreDamage (pre-mitigation) but before the on-hit / OnPreDeal/Take hooks so
+            // those observe the mitigated value (same as the old construction-time behaviour).
+            damageData.PostMitigationDamage = Stats.GetPostMitigationDamage(damageData.Damage, damageData.DamageType, damageData.Attacker);
+
             var targetIsWard = damageData.Target is Minion { IsWard: true };
             if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
@@ -1207,6 +1283,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             damageData.PostMitigationDamage = postMitigationDamage;
             Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
+
+            // Riot GameObject::mLastTookDamageTime: stamp the engine clock whenever real damage lands.
+            // Drives the Lua GetLastTookDamageTime / out-of-combat "time since combat" pattern.
+            if (postMitigationDamage > 0.0f)
+            {
+                LastTookDamageTime = _game.GameTime;
+            }
 
             if (attacker != null && attacker.Team != Team && postMitigationDamage > 0.0f)
             {
@@ -1406,78 +1489,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="enabled">Whether or not to enable the flag.</param>
         public void SetStatus(StatusFlags status, bool enabled)
         {
-            // Capability bits are ref-counted disable-holds (default ON); all other bits are plain
-            // set/clear. Dispatch per-bit because callers pass multi-bit masks mixing the two (e.g.
-            // the constructor enables CanAttack|CanCast|CanMove|CanMoveEver|Targetable in one call).
-            // SetStatus(StatusFlags.None, true) sets zero bits → pure recompute trigger (used by
-            // UpdateBuffs / SetForceMovementState); the per-flag checks below are simply skipped.
-            if ((status & StatusFlags.CanMove) != 0) _disableCanMove = RefHold(_disableCanMove, enabled);
-            if ((status & StatusFlags.CanAttack) != 0) _disableCanAttack = RefHold(_disableCanAttack, enabled);
-            if ((status & StatusFlags.CanCast) != 0) _disableCanCast = RefHold(_disableCanCast, enabled);
-            if ((status & StatusFlags.CanMoveEver) != 0) _disableCanMoveEver = RefHold(_disableCanMoveEver, enabled);
-
-            StatusFlags otherBits = status & ~CapabilityMask;
-            if (otherBits != 0)
-            {
-                if (enabled)
-                {
-                    _nonCapabilityBase |= otherBits;
-                }
-                else
-                {
-                    _nonCapabilityBase &= ~otherBits;
-                }
-            }
-
-            StatusFlags effectiveBase = ComputeEffectiveBase();
-            Status = (
-                effectiveBase
-                & ~_buffEffectsToDisable
-            )
-            | _buffEffectsToEnable;
-
+            // Capability bits (CanMove/Attack/Cast/MoveEver) are ref-counted disable-holds; all other bits
+            // are plain set/clear. The CharacterState backing handles the per-bit dispatch + recompute; we
+            // then re-derive the replicated ActionState. SetStatus(StatusFlags.None, true) sets zero bits →
+            // a pure recompute trigger (used by UpdateBuffs / SetForceMovementState).
+            _characterState.Set(status, enabled);
             UpdateActionState();
-        }
-
-        // Adjust a capability disable-hold counter. enable=true releases one hold (clamped at 0 —
-        // this clamp is LOAD-BEARING: the constructor and PlayerManager enable capabilities before
-        // any disable exists, so an over-release must stay at 0 and leave the capability enabled).
-        // enable=false adds a hold. The capability is enabled iff its counter is 0.
-        private static int RefHold(int count, bool enable)
-        {
-            if (enable)
-            {
-                return count > 0 ? count - 1 : 0;
-            }
-            return count + 1;
-        }
-
-        // The base-layer status: non-capability bits as-is, plus each default-ON capability iff it
-        // currently has no active disable-hold (counter == 0). Replaces the old single
-        // _statusBeforeApplyingBuffEfects bitfield, invisibly to the buff/dash layers and all readers.
-        private StatusFlags ComputeEffectiveBase()
-        {
-            StatusFlags b = _nonCapabilityBase;
-            if (_disableCanMove == 0) b |= StatusFlags.CanMove;
-            if (_disableCanAttack == 0) b |= StatusFlags.CanAttack;
-            if (_disableCanCast == 0) b |= StatusFlags.CanCast;
-            if (_disableCanMoveEver == 0) b |= StatusFlags.CanMoveEver;
-            return b;
         }
 
         void UpdateActionState()
         {
             // CallForHelpSuppressor
             Stats.SetActionState(ActionState.CAN_ATTACK, Status.HasFlag(StatusFlags.CanAttack));
-            bool canCast = Status.HasFlag(StatusFlags.CanCast)
-                && !Status.HasFlag(StatusFlags.Charmed)
-                && !Status.HasFlag(StatusFlags.Feared)
-                && !Status.HasFlag(StatusFlags.Silenced)
-                && !Status.HasFlag(StatusFlags.Sleep)
-                && !Status.HasFlag(StatusFlags.Stunned)
-                && !Status.HasFlag(StatusFlags.Suppressed)
-                && !Status.HasFlag(StatusFlags.Taunted);
-            Stats.SetActionState(ActionState.CAN_CAST, canCast);
+            // M2 Phase 3: cast-disabling CC clears the CanCast capability (BuffType.ToCapabilityDisable),
+            // so CAN_CAST mirrors the capability directly — Riot's wire representation (replay-verified).
+            Stats.SetActionState(ActionState.CAN_CAST, Status.HasFlag(StatusFlags.CanCast));
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
             Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
             Stats.SetActionState(ActionState.CHARMED, Status.HasFlag(StatusFlags.Charmed));
@@ -1516,32 +1542,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             Stats.SetActionState(ActionState.TAUNTED, Status.HasFlag(StatusFlags.Taunted));
 
-            Stats.SetActionState(
-                ActionState.CAN_NOT_MOVE,
-                !Status.HasFlag(StatusFlags.CanMove)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || Status.HasFlag(StatusFlags.Feared)
-                || Status.HasFlag(StatusFlags.Immovable)
-                || Status.HasFlag(StatusFlags.Netted)
-                || Status.HasFlag(StatusFlags.Rooted)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-                || Status.HasFlag(StatusFlags.Taunted)
-            );
-
-            Stats.SetActionState(
-                ActionState.CAN_NOT_ATTACK,
-                !Status.HasFlag(StatusFlags.CanAttack)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || Status.HasFlag(StatusFlags.Disarmed)
-                || Status.HasFlag(StatusFlags.Feared)
-                // TODO: Verify
-                || Status.HasFlag(StatusFlags.Pacified)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-            );
+            // M2 Phase 2 (replay-verified 2026-06-27): Riot's wire conveys temporary "can't move/attack" by
+            // CLEARING the CAN_MOVE/CAN_ATTACK bits — it NEVER sets CAN_NOT_MOVE/CAN_NOT_ATTACK for CC (decoded
+            // real champion ActionState: stun/sleep/etc. = 0x800000, all positive caps cleared, no CAN_NOT_*
+            // bit). CC now clears the CAN_MOVE/CAN_ATTACK/CAN_CAST capability bits (via BuffType.
+            // ToCapabilityDisable in RecomputeBuffEffects), so those bits already carry it. CAN_NOT_MOVE is
+            // reserved for PERMANENT immobility (CanMoveEver=false: turrets/structures); CAN_NOT_ATTACK has no
+            // permanent source and is never set (matches Riot).
+            Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
+            Stats.SetActionState(ActionState.CAN_NOT_ATTACK, false);
         }
 
         void UpdateBuffs(float diff)
@@ -1571,56 +1580,87 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Called per tick from <see cref="UpdateBuffs"/> AND right after a buff activates
         /// (Buff.ActivateBuff) so newly-applied CC takes effect the same tick (no activation latency).
         /// </summary>
-        // Movement-DISABLING crowd control (the unit cannot move at all — these are the CC flags
-        // CanMove() blocks on). Fear/Charm/Taunt are intentionally excluded: the AI DRIVES movement
-        // for those (flee/pull/walk-to), so they must NOT be auto-stopped.
-        private const StatusFlags MoveDisablingCC =
-            StatusFlags.Stunned | StatusFlags.Rooted | StatusFlags.Sleep
-            | StatusFlags.Suppressed | StatusFlags.Netted;
+        // True iff an active buff imposes a MOVEMENT-disabling crowd control (stun / snare / sleep /
+        // suppress — their BuffType.ToCapabilityDisable includes CanMove). Deliberately CC-only: it
+        // EXCLUDES the imperative cast/channel/dash self-locks (which also clear the CanMove capability
+        // but are NOT CC buffs) and charm/fear/taunt (AI-driven movement, no CanMove disable). Used by the
+        // pathing chokepoint, which must gate move-broadcast under CC but keep combat re-pathing during
+        // casts/windups. Epics (Baron/Dragon) reject CC, so it's false for them. M2 Phase 3 replacement for
+        // the old MoveDisablingCC flag mask.
+        private bool IsUnderMoveDisablingCC =>
+            !IsCrowdControlImmune
+            && BuffList.Exists(b => b.BuffType.ToCapabilityDisable().HasFlag(StatusFlags.CanMove));
 
-        // Attack-DISABLING crowd control (the unit cannot auto-attack — mirrors the CC set CanAttack()
-        // blocks on). A hard CC from this set landing mid-windup cancels the basic attack (no damage).
-        // Silence/Snare are NOT here: a silenced/rooted unit can still auto-attack, so a swing continues.
-        private const StatusFlags AttackDisablingCC =
-            StatusFlags.Charmed | StatusFlags.Disarmed | StatusFlags.Feared
-            | StatusFlags.Pacified | StatusFlags.Sleep | StatusFlags.Stunned | StatusFlags.Suppressed;
+        // True iff an active buff imposes a CAST-disabling crowd control (stun / silence / suppress /
+        // charm / fear / taunt — their BuffType.ToCapabilityDisable includes CanCast). Deliberately
+        // CC-only: it EXCLUDES the imperative cast/channel self-locks — Channel() clears the CanCast
+        // capability as its OWN action-lock (Spell.Channel: SetStatus(CanCast,false)) but is NOT a CC
+        // buff — so a channel never cancels on its own lock. CanCast-bit mirror of IsUnderMoveDisablingCC;
+        // used by ChannelCancelCheck. Epics (Baron/Dragon) reject CC, so it's false for them.
+        internal bool IsUnderCastDisablingCC =>
+            !IsCrowdControlImmune
+            && BuffList.Exists(b => b.BuffType.ToCapabilityDisable().HasFlag(StatusFlags.CanCast));
 
         internal void RecomputeBuffEffects()
         {
             StatusFlags before = Status;
 
-            _buffEffectsToEnable = 0;
-            _buffEffectsToDisable = 0;
+            StatusFlags buffEnable = 0;
+            StatusFlags buffDisable = 0;
+
+            // Epic monsters (Baron/Dragon) reject the CC EFFECT while still receiving the buff OBJECT —
+            // the model the wire forced us to: replay shows the generic stun/slow/silence BuffAdd2 DOES land
+            // on SRU_Baron/SRU_Dragon netIDs at full duration (so Riot does NOT block at application), yet
+            // they are never actually CC'd in-game. So Riot adds the buff (FX/DoT/stat-mods/duration tracking)
+            // and rejects the control effect internally. We mirror that here: the buff stays in BuffList and
+            // still sends NPC_BuffAdd2, but its BuffType-derived CC status flag (stun/root/charm/fear/taunt/
+            // silence/suppress/sleep/disarm/nearsight) is never latched, so BaseAIScript's flag-poll never
+            // raises OnFear/Charm/TauntBegin → no CC movement. SLOW is a MoveSpeed stat-mod (ToStatusFlag
+            // == None), handled separately in Stats. See reference_epic_monster_cc_immunity.
+            bool ccImmune = IsCrowdControlImmune;
 
             foreach (Buff buff in BuffList)
             {
-                _buffEffectsToEnable |= buff.StatusEffectsToEnable;
-                _buffEffectsToEnable |= buff.BuffType.ToStatusFlag();
-                _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+                buffEnable |= buff.StatusEffectsToEnable;
+                if (!ccImmune)
+                {
+                    buffEnable |= buff.BuffType.ToStatusFlag();
+                    // Faithful 4.20 (M2 Phase 2): CC clears the CAN_MOVE/CAN_ATTACK/CAN_CAST capability bits
+                    // (replay-verified — Riot never sets CAN_NOT_MOVE/CAN_NOT_ATTACK). Aggregated here so
+                    // overlapping CC stays union/longest-duration safe. ToStatusFlag still carries the real
+                    // Riot state bits (Charmed/Feared/Taunted/Sleep/Suppressed/NearSighted) during migration.
+                    buffDisable |= buff.BuffType.ToCapabilityDisable();
+                }
+                buffDisable |= buff.StatusEffectsToDisable;
             }
 
             // If the effect should be enabled, it overrides disable.
-            _buffEffectsToDisable &= ~_buffEffectsToEnable;
+            buffDisable &= ~buffEnable;
 
-            // Recompute Status from the new masks (StatusFlags.None sets no base bits).
-            SetStatus(StatusFlags.None, true);
+            // Push the new buff layer into the CharacterState backing, then re-derive the replicated
+            // ActionState (the old SetStatus(None, true) recompute trigger, now explicit).
+            _characterState.SetBuffEffects(buffEnable, buffDisable);
+            UpdateActionState();
 
             // Auto-stop when a movement-disabling CC becomes NEWLY active (Riot: getting stunned/rooted/
             // etc. halts you). CanMove() already gates the server-side Move(), but the CLIENT keeps
             // predicting along the last waypoints until told to stop — so clear the path + broadcast.
             // Fires once on the transition; skipped while dashing (forced movement owns the unit) so it
             // doesn't fight a dash, and skipped if already path-ended. Replaces the per-buff StopMovement.
-            StatusFlags newlyDisabling = Status & MoveDisablingCC & ~before;
-            if (newlyDisabling != 0 && MovementParameters == null && !IsPathEnded())
+            // M2 Phase 3: CC now clears the CanMove capability, so "newly move-disabled" = the CanMove bit
+            // just went set→clear. (Also fires for cast/channel self-locks that clear CanMove, but those
+            // already StopMovement, so the extra call is a harmless no-op.)
+            bool newlyMoveDisabled = before.HasFlag(StatusFlags.CanMove) && !Status.HasFlag(StatusFlags.CanMove);
+            if (newlyMoveDisabled && MovementParameters == null && !IsPathEnded())
             {
                 StopMovement();
             }
 
             // A hard attack-disabling CC landing mid-windup cancels the basic attack (no damage) —
-            // LoL's auto-attack windup-cancel. Fires on the transition; the windup-state check +
-            // uncancellable-swing guard live in ObjAIBase.CancelAutoAttackIfWindingUp.
-            StatusFlags newlyAttackDisabling = Status & AttackDisablingCC & ~before;
-            if (newlyAttackDisabling != 0 && this is ObjAIBase aiUnit)
+            // LoL's auto-attack windup-cancel. Fires on the CanAttack set→clear transition; the windup-state
+            // check + uncancellable-swing guard live in ObjAIBase.CancelAutoAttackIfWindingUp.
+            bool newlyAttackDisabled = before.HasFlag(StatusFlags.CanAttack) && !Status.HasFlag(StatusFlags.CanAttack);
+            if (newlyAttackDisabled && this is ObjAIBase aiUnit)
             {
                 aiUnit.CancelAutoAttackIfWindingUp();
             }
@@ -1989,8 +2029,36 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // Affordable since GetCenteredWaypoints caps non-champion lists at 4 entries.
                 const float CHAMPION_KEEPALIVE = 57f;
                 _traveledSinceLastSync += originalDelta.Length();
+                _timeSinceLastSync += delta;
                 float keepaliveDist = this is Champion ? CHAMPION_KEEPALIVE : 100f;
                 if (Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
+                {
+                    _movementUpdated = true;
+                }
+                // STOPPED-UNIT POSITION KEEPALIVE (replay-verified, NOT in the visible decomp — the
+                // server-side movement encoders are stubbed there, but the 4.17 wire shows a STANDING
+                // unit re-broadcasting its BYTE-IDENTICAL position ~every 0.8s, not just on change).
+                // Our drift-resync above only fires when a stopped unit's position actually moves
+                // (>threshold), so a PERFECTLY stationary unit went silent. During an auto-attack windup
+                // the server holds the unit fixed (position delta 0) — with no re-anchor the client
+                // drifts forward on the attack animation's root-motion ("slides toward the target while
+                // charging the swing", melee monster repro). Re-affirming the stop position on Riot's
+                // ~0.8s cadence pins the client. Time-gated (not distance), so it fires even at zero
+                // drift; per-frame batching folds all standing units into one WaypointGroup.
+                const float STOPPED_KEEPALIVE_MS = 800f;
+                // EXCLUDE units in their client-autonomous auto-attack loop. A lane minion / jungle
+                // monster (obj_AI_Minion) is put into a hardcode-attack state by the single
+                // Basic_Attack_Pos packet, then re-fires its swing CLIENT-SIDE with NO further server
+                // packets (see Spell.cs AA block). Sending it a movement WaypointGroup mid-attack —
+                // even a same-position keepalive — breaks the client out of that loop and restarts the
+                // attack animation, which presented as melee attack animations flickering in/out and
+                // landing off-sync on AncientGolem / Lizard Elder. Riot never re-broadcasts position to
+                // an autonomously-attacking unit; the stopped keepalive is for genuinely IDLE units.
+                // HasMadeInitialAttack stays true for the whole locked-on engagement; IsAttacking covers
+                // the very first windup before it flips.
+                bool inAutonomousAttackLoop = this is Minion minion
+                    && (minion.IsAttacking || minion.HasMadeInitialAttack);
+                if (Waypoints.Count <= 1 && _timeSinceLastSync >= STOPPED_KEEPALIVE_MS && !inAutonomousAttackLoop)
                 {
                     _movementUpdated = true;
                 }
@@ -2681,7 +2749,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // walking into melee). Fear/Charm/Taunt are not in the mask — the AI drives that movement.
             if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position
                 || (!isForced && !CanChangeWaypoints())
-                || (!isForced && (Status & MoveDisablingCC) != 0))
+                || (!isForced && IsUnderMoveDisablingCC))
             {
                 return false;
             }
@@ -2742,6 +2810,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             ResetWaypoints();
+
+            // Riot OnStopMove: a stop COMMAND was just executed on a moving unit (we passed the
+            // already-stopped / forced-movement early-returns above). Emit-only for now (E2,
+            // docs/AI_EVENT_AUDIT.md) — no subscriber → 0 behaviour change.
+            if (this is ObjAIBase aiStopUnit && aiStopUnit.AIScript is AI.Behavior.BaseAIScript stopScript)
+            {
+                stopScript.Emit(AI.Behavior.AIEvent.OnStopMove);
+            }
+
             if (networked)
             {
                 // Bug fix: Set only the flag; DO NOT make a direct Notify call.
@@ -3479,6 +3556,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
         {
+            // Displacement immunity: a unit flagged Imobile (Baron/Dragon) or an epic monster cannot be
+            // displaced by an EXTERNAL force (knockup/knockback/pull). A self-initiated dash (caster == this)
+            // is the unit moving itself and stays allowed.
+            if (caster != null && caster != this && (IsDisplacementImmune || IsCrowdControlImmune))
+            {
+                return;
+            }
+
             if (MovementParameters != null)
             {
                 SetForceMovementState(false, MoveStopReason.ForceMovement);
@@ -3502,14 +3587,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
-            // POSTPONE_CURRENT_ORDER + an active plain MoveTo: snapshot the move destination (last
+            // POSTPONE_CURRENT_ORDER + an active walk-to-point: snapshot the move destination (last
             // waypoint) NOW, before SetWaypoints below clears it. Re-issued at dash-end (ObjAIBase
-            // .SetForceMovementState) so the unit resumes walking to it — AttackTo resumes on its own (the
-            // TargetUnit survives), but a MoveTo's destination only lives in Waypoints. See P1b / the
-            // forced-movement plan.
+            // .SetForceMovementState) so the unit resumes walking to it — an AttackTo (and a TARGETED
+            // move-to-cast, which tracks PostponedCastTarget) resumes on its own by re-chasing, but a
+            // destination-only order's point lives solely in Waypoints. Covers a plain MoveTo AND a
+            // POSITIONAL move-to-cast (TempCastSpell with NO cast target).
+            //
+            // TargetUnit == null gate (P5 chase-decouple): a CHASING unit has a TargetUnit and resumes via
+            // the chase (its _chaseIntent + TargetUnit survive the dash). The decouple leaves MoveOrder
+            // STALE during a chase (it may read MoveTo for a unit that engaged mid-move), so without this
+            // gate a chasing unit would wrongly snapshot a move-dest and the dash-end MoveTo re-issue would
+            // clear _chaseIntent (dropping the chase). Positional move-to-cast also has TargetUnit == null,
+            // so it still snapshots. See P1b / the forced-movement plan.
             Vector2 postponedMoveDest = Vector2.Zero;
             if (movementOrdersType == ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
-                && this is ObjAIBase moverSelf && moverSelf.MoveOrder == OrderType.MoveTo
+                && this is ObjAIBase moverSelf
+                && moverSelf.TargetUnit == null
+                && (moverSelf.MoveOrder == OrderType.MoveTo
+                    || (moverSelf.MoveOrder == OrderType.TempCastSpell && moverSelf.PostponedCastTarget == null))
                 && Waypoints != null && Waypoints.Count > 1 && !IsPathEnded())
             {
                 postponedMoveDest = Waypoints[Waypoints.Count - 1];

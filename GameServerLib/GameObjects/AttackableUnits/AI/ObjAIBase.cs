@@ -56,6 +56,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         internal readonly List<AssistMarker> EnemyAssistMarkers = new List<AssistMarker>();
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
+
+        // Lost-target "go to last known location" (Riot BASEAITASK_GotoUnitsLastSpot_Attack, Champion-only).
+        // Set when a hard-engaged champion's target leaves vision (TargetLostReason.LostVisibility); the
+        // active TargetUnit is still cleared, but the lost unit + its last-seen position are remembered so
+        // the AI can walk there and re-acquire on sight. Consumed by the GetLostTargetIfVisible / IsTargetLost
+        // primitives + HeroAI (P2/P3, docs/LOST_TARGET_REACQUISITION_PLAN.md).
+        private AttackableUnit _lostTargetUnit;
+        private Vector2 _lostTargetLastKnownPosition;
+
         /// <summary>
         /// Game-time (ms) at which the post-attack movement-issue lockout expires. Set by
         /// `Spell.FinishCasting` for AA when <see cref="CharData.PostAttackMoveDelay"/> &gt; 0.
@@ -64,6 +73,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// stat. Most champions have PostAttackMoveDelay = 0 → no lockout, no behavior change.
         /// </summary>
         private float _postAttackMoveLockEndsMs;
+
         private bool _skipNextAutoAttack;
         // Re-path throttle for the chase branch of RefreshWaypoints: the full A* + GetClosestAttackPoint
         // recompute is skipped while we already have a live path toward roughly the same target spot.
@@ -93,6 +103,46 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // consumed (published as OnPathToTargetBlocked) at the top of the next Update so the AI
         // reacts without re-entering the pathing pass. See ApiEventManager.OnPathToTargetBlocked.
         private bool _pathToTargetBlocked;
+
+        // CHASE INTENT (Order/State-Split P5 decouple — docs/AI_ORDER_STATE_SPLIT_PLAN.md): "is this unit
+        // actively chasing/tracking its TargetUnit" = Riot's Actor.TrackUnitID concept, conceptually distinct
+        // from TargetUnit (the attack target) and from MoveOrder (the input order). RefreshWaypoints reads
+        // THIS to decide chase-vs-stand instead of MoveOrder==AttackTo. SLICE 2 (explicit field, still
+        // behaviour-neutral): kept in sync with the AttackTo order in UpdateMoveOrder — every AttackTo-set
+        // goes through there (the player attack-order AND the engine auto-engage). The only direct MoveOrder
+        // assignments are ctor-time MoveTo/Hold/Stop (LaneMinion/Minion), where this is already false → no
+        // staleness. A later slice sets it DIRECTLY on combat-engage, decoupling it from the MoveOrder=AttackTo
+        // mutation, after which MoveOrder stops being the combat-movement driver.
+        private bool _chaseIntent;
+        protected bool ChaseIntent => _chaseIntent;
+
+        // ORDER STATUS (IssueOrders state machine, S2 — docs/ISSUE_ORDERS_STATE_MACHINE_PLAN.md): Riot's
+        // order_status_e lifecycle (CLEAR/PENDING/POSTPONED/EXECUTED) tracked by IssueOrders::savedOrderStatus.
+        // PHASE 1 (neutral scaffold): set on UpdateMoveOrder (PENDING) + SetSpellToCast (POSTPONED = move-to-
+        // cast). Nothing reads it for control yet → 0 behaviour change. Phase 2 adds TryToExecuteOrder/
+        // ExecuteOrder/RouteOrder so non-executable orders actually wait as POSTPONED + retry per tick.
+        public OrderState OrderStatus { get; private set; } = OrderState.Clear;
+
+        // Saved-order record mirroring Riot IssueOrders::savedOrderPos / savedOrderObj (the order command
+        // itself ≡ our MoveOrder = savedOrderCmd). Recorded by HandleNewOrder at the issue point. NOT read
+        // for control in Phase 2 — Phase 3's per-tick RouteOrder retry of a POSTPONED order re-reads these
+        // to re-execute it. Kept here purely as the faithful saved-order tuple until then.
+        private Vector2 _savedOrderPos = Vector2.Zero;
+        private AttackableUnit _savedOrderObj;
+
+        // Postponed move-to-cast target (Riot mPostponedSpell.mTargetID / a TEMP_CASTSPELL order's
+        // savedOrderObj), kept SEPARATE from the attack target (TargetUnit ≈ Riot mEnemyID). A TARGETED
+        // move-to-cast stores its target HERE — not in TargetUnit — so the caster chases it to cast range
+        // while the cast target NEVER becomes an auto-attack target (the AutoAttackComponent fires off
+        // TargetUnit only). Riot does the same: PostponeSpell sets mPostponedSpell but never SetEnemyID, so
+        // the auto-attack (which reads mEnemyID) ignores it. Cleared together with SpellToCast in
+        // SetSpellToCast(null) (cast finished or cancelled). Null = no pending targeted move-to-cast.
+        public AttackableUnit PostponedCastTarget { get; private set; }
+
+        // The unit currently being chased/tracked (Riot Actor.TrackUnitID): the attack TargetUnit normally,
+        // the postponed cast target during a targeted move-to-cast. RefreshWaypoints chases THIS. Equals
+        // TargetUnit whenever no move-to-cast is pending, so the normal chase path is unchanged.
+        private AttackableUnit ChaseTrackUnit => PostponedCastTarget ?? TargetUnit;
 
         // ---------------- Crowd-control movement plumbing (B.1) ----------------
         // Riot's model: a CC buff only sets the status FLAG; the per-unit AI script drives the
@@ -183,6 +233,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// selection isn't done twice. Non-HeroAI units (bots/pets) keep the engine path until migrated.
         /// </summary>
         public bool ScriptOwnsCombatSelection { get; set; }
+
+        // The script-controlled auto-attack toggle (TurnOnAutoAttack/TurnOffAutoAttack — Riot's "target
+        // set" != auto-fire). The engine only swings while this is on for the current target; the shared
+        // AutoAttackComponent (attached to every BaseAIScript) drives it by range. P5.6 removed the former
+        // `ScriptOwnsAutoAttack` compat flag — every archetype is migrated, so the toggle is now the
+        // universal gate and the legacy "auto-fire on target+range" path is gone. Per-swing timing stays
+        // engine-owned once toggled on. _autoAttackEnabledTarget pins the toggle to a specific unit so a
+        // stale enable can't fire at a newly-set target the script hasn't turned on yet.
+        private bool _autoAttackEnabled;
+        private AttackableUnit _autoAttackEnabledTarget;
 
         private AttackableUnit _goldRedirectTarget;
         /// <summary>
@@ -575,7 +635,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             var damage = Stats.AttackDamage.Total;
 
-            // Apply crit BEFORE building damageData, so PostMitigationDamage is correct too
+            // Apply crit to the raw Damage BEFORE building damageData, so the sink mitigates the crit-inclusive value
             bool isCrit = wireHitResult.HasValue
                 ? wireHitResult.Value == HitResult.HIT_Critical
                 : IsNextAutoCrit;
@@ -590,7 +650,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Attacker = this,
                 Target = target,
                 Damage = damage,
-                PostMitigationDamage = target.Stats.GetPostMitigationDamage(damage, DamageType.DAMAGE_TYPE_PHYSICAL, this),
+                // PostMitigationDamage is computed in the central TakeDamage sink (mitigation moved there).
                 DamageSource = DamageSource.DAMAGE_SOURCE_ATTACK,
                 DamageType = DamageType.DAMAGE_TYPE_PHYSICAL,
                 DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
@@ -606,12 +666,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || (Status.HasFlag(StatusFlags.CanMove) && Status.HasFlag(StatusFlags.CanMoveEver)
                 && (MoveOrder != OrderType.CastSpell && _castingSpell == null)
                 && (ChannelSpell == null || (ChannelSpell != null && ChannelSpell.SpellData.CanMoveWhileChanneling))
-                && (!IsAttacking || !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
-                && !(Status.HasFlag(StatusFlags.Netted)
-                || Status.HasFlag(StatusFlags.Rooted)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)));
+                && (!IsAttacking || !AutoAttackSpell.SpellData.CantCancelWhileWindingUp));
+                // M2 Phase 3: movement-disabling CC (stun/root/net/sleep/suppress) now clears the CanMove
+                // capability via BuffType.ToCapabilityDisable, so the explicit CC-flag list is gone.
         }
 
         public override bool CanChangeWaypoints()
@@ -637,6 +694,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _postAttackMoveLockEndsMs = _game.GameTime + delaySec * 1000f;
         }
 
+
         public bool CanIssueMoveOrders()
         {
             if (IsDead)
@@ -654,22 +712,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (!Status.HasFlag(StatusFlags.CanMoveEver))
                 return false;
 
-            // Reject move-order issuance under any movement-disabling CC. Rooted/Netted (snare/net) must
-            // be listed explicitly: unlike Stun/Suppress, a snare does NOT clear the CanMove CAPABILITY
-            // flag (only the CanMove() METHOD checks the Rooted CC flag), so without these a move order
-            // issued mid-snare passed CanIssueMoveOrders, got accepted by HandleMove and BROADCAST to the
-            // client — the client then walked the path while the server-side Move() (which honors Rooted)
-            // held position, desyncing until the next sync snapped it back (the "kept walking while
-            // snared, snapped back ~root-duration later" bug). Mirrors the CanMove() move-disabling set.
-            if (Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Rooted)
-                || Status.HasFlag(StatusFlags.Netted)
+            // Reject move-order issuance under any movement-disabling CC. Stun/snare/net/sleep/suppress
+            // clear the CanMove CAPABILITY (BuffType.ToCapabilityDisable), so !CanMove covers them. Charm/
+            // fear/taunt are listed explicitly: they do NOT clear CanMove (the AI drives the unit — flee /
+            // walk to charmer / walk to taunter), but the PLAYER still must not be able to issue move orders.
+            if (!Status.HasFlag(StatusFlags.CanMove)
                 || Status.HasFlag(StatusFlags.Feared)
                 || Status.HasFlag(StatusFlags.Taunted)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || !Status.HasFlag(StatusFlags.CanMove))
+                || Status.HasFlag(StatusFlags.Charmed))
                 return false;
 
             return true;
@@ -680,16 +730,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <returns></returns>
         public bool CanAttack()
         {
-            // TODO: Verify if all cases are accounted for.
+            // M2 Phase 3: attack-disabling CC (stun/disarm/charm/fear/sleep/suppress) clears the CanAttack
+            // capability via BuffType.ToCapabilityDisable, so it's covered by the CanAttack bit alone.
             return Status.HasFlag(StatusFlags.CanAttack)
-                && !Status.HasFlag(StatusFlags.Charmed)
-                && !Status.HasFlag(StatusFlags.Disarmed)
-                && !Status.HasFlag(StatusFlags.Feared)
-                // TODO: Verify
-                && !Status.HasFlag(StatusFlags.Pacified)
-                && !Status.HasFlag(StatusFlags.Sleep)
-                && !Status.HasFlag(StatusFlags.Stunned)
-                && !Status.HasFlag(StatusFlags.Suppressed)
                 && _castingSpell == null
                 && ChannelSpell == null;
         }
@@ -700,18 +743,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="spell">Spell to check.</param>
         public bool CanCast(Spell spell = null)
         {
-            // TODO: Verify if all cases are accounted for.
+            // M2 Phase 3: cast-disabling CC (stun/silence/charm/fear/sleep/suppress/taunt) clears the
+            // CanCast capability via BuffType.ToCapabilityDisable, so it's covered by the CanCast bit alone.
             return ApiEventManager.OnCanCast.Publish(this, spell)
                 && Status.HasFlag(StatusFlags.CanCast)
-                && !Status.HasFlag(StatusFlags.Charmed)
-                && !Status.HasFlag(StatusFlags.Feared)
-                // TODO: Verify what pacified is
-                && !Status.HasFlag(StatusFlags.Pacified)
-                && !Status.HasFlag(StatusFlags.Silenced)
-                && !Status.HasFlag(StatusFlags.Sleep)
-                && !Status.HasFlag(StatusFlags.Stunned)
-                && !Status.HasFlag(StatusFlags.Suppressed)
-                && !Status.HasFlag(StatusFlags.Taunted)
                 && _castingSpell == null
                 && (ChannelSpell == null || (ChannelSpell != null && !ChannelSpell.SpellData.CantCancelWhileChanneling))
                 && (!IsAttacking || (IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp));
@@ -803,11 +838,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override bool Move(float diff)
         {
-            // If we have waypoints, but our move order is one of these, we shouldn't move.
+            // If we have waypoints, but our move order is one of these, we shouldn't move — UNLESS the
+            // unit is actively chasing/tracking a target (ChaseIntent). The chase-decouple (P5) put the
+            // chase on _chaseIntent over an UNCHANGED MoveOrder, mirroring Riot's movement loop which
+            // follows Actor.TrackUnitID order-independently. So an engine-engaged chase that started from
+            // an idle / stop / taunt order (MoveOrder left stale) must still walk its chase path; gating
+            // these orders on !ChaseIntent keeps the no-move behaviour for genuinely non-chasing units.
+            // CastSpell stays an UNCONDITIONAL movement lock (never move mid-cast, even while tracking).
             if (MoveOrder == OrderType.CastSpell
-                || MoveOrder == OrderType.OrderNone
-                || MoveOrder == OrderType.Stop
-                || MoveOrder == OrderType.Taunt)
+                || ((MoveOrder == OrderType.OrderNone
+                     || MoveOrder == OrderType.Stop
+                     || MoveOrder == OrderType.Taunt)
+                    && !ChaseIntent))
             {
                 return false;
             }
@@ -827,8 +869,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="silent">Suppresses the <c>NPC_InstantStop_Attack</c> wire broadcast while
         /// keeping the server-side state reset. Use when the caller wants to do its own scope/timing
         /// for the ISA packet (e.g. blink-spells that gate ISA on whether an AA-windup was active).</param>
-        public void CancelAutoAttack(bool reset, bool fullCancel = false, bool silent = false)
+        public void CancelAutoAttack(bool reset, bool fullCancel = false, bool silent = false,
+            AutoAttackStopReason reason = AutoAttackStopReason.OtherImmediately, bool respectWindupLock = false)
         {
+            // Riot OnCancelAttack: fires when an in-progress auto-attack WINDUP is cancelled (the swing
+            // hadn't connected yet). Captured before the state is reset below; gated on STATE_CASTING so a
+            // cleanup call on an idle unit (or a repeated cancel) doesn't spuriously fire.
+            bool wasWindingUp = AutoAttackSpell != null && AutoAttackSpell.State == SpellState.STATE_CASTING;
+
+            // Riot IsCancelBlockedShared: a swing flagged CantCancelWhileWindingUp cannot be INTERRUPTED
+            // mid-windup — it runs to its damage point. Opt-in (respectWindupLock) so only genuine interrupt
+            // cancels (CC, target-lost) honour it; AA-reset / override-setup / death-teardown still proceed
+            // (Riot's ForceStop bypass). No state touched and no OnCancelAttack fired — nothing was cancelled.
+            if (respectWindupLock && wasWindingUp && AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                return;
+
             AutoAttackSpell.SetSpellState(SpellState.STATE_READY);
             if (reset)
             {
@@ -841,7 +896,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsAttacking = false;
                 HasMadeInitialAttack = false;
             }
-            if ((reset || fullCancel) && !silent) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+            // forceClient for client-autonomous units (Minion/Monster): their attack loop runs on the
+            // client with no server packets and no self-cancel (AIMinionClient.cpp), so a non-forced stop
+            // is ignored while the loop is active → the swing keeps animating with no damage. Forcing it
+            // breaks the hardcode-attack state. Champions are server-driven per swing, so the default
+            // (non-forced) stop is correct for them.
+            if ((reset || fullCancel) && !silent)
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, forceClient: this is Minion);
+
+            if (wasWindingUp)
+                ApiEventManager.OnCancelAttack.Publish(this, reason);
         }
 
         /// <summary>
@@ -895,6 +959,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
         )
         {
+            // Displacement immunity (see AttackableUnit.ServerForceLinePath): an Imobile/epic unit cannot be
+            // pulled/dragged by an external follow-force. A self-initiated follow-dash (caster == this) passes.
+            if (caster != null && caster != this && (IsDisplacementImmune || IsCrowdControlImmune))
+            {
+                return;
+            }
+
             if (MovementParameters != null)
             {
                 SetForceMovementState(false, MoveStopReason.ForceMovement);
@@ -970,7 +1041,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 else if (ordersType == ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
                          && postponedMoveDest != Vector2.Zero)
                 {
-                    // Resume the pre-dash plain MoveTo (Riot ORDER_STATUS_POSTPONED re-execute). The
+                    // Resume the pre-dash walk-to-point (Riot ORDER_STATUS_POSTPONED re-execute). The
                     // destination was snapshotted at dash-begin because it lived in Waypoints, which the
                     // dash cleared. AttackTo needs no snapshot — its TargetUnit survives and the brain
                     // re-acquires. SetWaypoints marks _movementUpdated so the resumed path broadcasts.
@@ -978,7 +1049,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     if (path != null && path.Count > 1)
                     {
                         SetWaypoints(path);
-                        UpdateMoveOrder(OrderType.MoveTo, true);
+                        // Re-issue as the SAME order kind that was postponed: a positional move-to-cast
+                        // (TempCastSpell with an active SpellToCast and no cast target — option A) must stay
+                        // TempCastSpell so the UpdateTarget retry still fires the cast at cursor range after
+                        // the dash; re-issuing MoveTo here would silently drop the postponed cast. A plain
+                        // MoveTo resumes as MoveTo. (Only positional reaches here — targeted move-to-cast
+                        // never snapshots a destination, it re-chases PostponedCastTarget.)
+                        UpdateMoveOrder(
+                            SpellToCast != null && PostponedCastTarget == null
+                                ? OrderType.TempCastSpell
+                                : OrderType.MoveTo,
+                            true);
                     }
                 }
             }
@@ -1020,49 +1101,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 travelTime,
                 lockActions
             );
-        }
-
-        /// <summary>
-        /// Automatically paths this AI to a favorable auto attacking position. 
-        /// Used only for Minions currently.
-        /// </summary>
-        /// <returns></returns>
-        /// TODO: Move this to Minion? It isn't used anywhere else.
-        /// TODO: Re-implement this for LaneMinions and add a patience or distance threshold so they don't follow forever.
-        public bool RecalculateAttackPosition()
-        {
-            // If we are already where we should be, which means we are in attack range, then keep our current position.
-            if (TargetUnit == null || TargetUnit.IsDead || Vector2.DistanceSquared(Position, TargetUnit.Position) <= Stats.Range.Total * Stats.Range.Total)
-            {
-                return false;
-            }
-
-            var nearestObjects = _game.Map.CollisionHandler.GetNearestObjects(new Circle(Position, DETECT_RANGE));
-
-            foreach (var gameObject in nearestObjects)
-            {
-                var unit = gameObject as AttackableUnit;
-                if (unit == null ||
-                    unit.NetId == NetId ||
-                    unit.IsDead ||
-                    Vector2.DistanceSquared(Position, TargetUnit.Position) > DETECT_RANGE * DETECT_RANGE
-                )
-                {
-                    continue;
-                }
-
-                var closestPoint = GameServerCore.Extensions.GetClosestCircleEdgePoint(Position, gameObject.Position, gameObject.PathfindingRadius);
-
-                // If this unit is colliding with gameObject
-                if (GameServerCore.Extensions.IsVectorWithinRange(closestPoint, Position, PathfindingRadius))
-                {
-                    var exitPoint = GameServerCore.Extensions.GetCircleEscapePoint(Position, PathfindingRadius + 1, gameObject.Position, gameObject.PathfindingRadius);
-                    SetWaypoints(new List<Vector2> { Position, exitPoint });
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         /// <summary>
@@ -1124,12 +1162,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // (minions clumping / ranged into melee), so the CC block lives only in SetWaypoints.
 
             if (TargetUnit != null && _castingSpell == null && ChannelSpell == null
-                && MoveOrder != OrderType.AttackTo && MoveOrder != OrderType.Hold)
+                && !ChaseIntent && MoveOrder != OrderType.Hold)
             {
-                // Hold excluded: a Holding unit keeps its target but must NOT be auto-promoted to
-                // AttackTo (which would make it chase). Hold holds ground; the in-range auto-attack
-                // branch still fires.
-                UpdateMoveOrder(OrderType.AttackTo, true);
+                // Combat-engage: the engine acquired (or kept) an attack target on a unit that is not
+                // already chasing, so raise the explicit chase-intent DIRECTLY instead of mutating
+                // MoveOrder to AttackTo. This is the Order/State-split decouple (P5): MoveOrder stays the
+                // ORDER the player/script issued (MoveTo lane-push, AttackMove, OrderNone idle) while
+                // _chaseIntent — Riot's Actor.TrackUnitID "follow this unit" flag — carries the chase, so
+                // the engine no longer overloads the player-order enum as its combat driver. Explicit
+                // player/script AttackTo still flows through UpdateMoveOrder (which sets _chaseIntent in
+                // sync), so this only adds the ENGINE-initiated engage that minions/monsters rely on.
+                // Hold excluded: a Holding unit keeps its target but must NOT chase; the in-range
+                // auto-attack branch still fires.
+                _chaseIntent = true;
+            }
+
+            // The attack-chase ends when its target is gone: clear the chase-intent so the underlying
+            // order (AttackMove / MoveTo lane-push / idle) resumes its own path instead of lingering
+            // "in chase" with nothing to chase (Riot reverts AI_ATTACKTO → the prior state on target
+            // loss). Scoped to attack-chase (PostponedCastTarget == null); a postponed targeted
+            // move-to-cast keeps its own retry/clear. Explicit player/script AttackTo also lands here,
+            // but its target-dead end-state is identical (idle) so this only clears the otherwise-stale
+            // flag — no behaviour change for explicit orders.
+            if (_chaseIntent && PostponedCastTarget == null && (TargetUnit == null || TargetUnit.IsDead))
+            {
+                _chaseIntent = false;
             }
 
             if (SpellToCast != null)
@@ -1140,43 +1197,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             Vector2 targetPos = Vector2.Zero;
 
-            if (MoveOrder == OrderType.AttackTo
-                && TargetUnit != null
-                && !TargetUnit.IsDead)
+            // The chased unit is the attack target normally, or the postponed cast target during a targeted
+            // move-to-cast (Riot Actor.TrackUnitID). Equals TargetUnit when no move-to-cast is pending, so
+            // the normal chase is unchanged; during move-to-cast TargetUnit is null and this is the cast target.
+            var chaseUnit = ChaseTrackUnit;
+
+            if (ChaseIntent
+                && chaseUnit != null
+                && !chaseUnit.IsDead)
             {
-                targetPos = TargetUnit.Position;
+                targetPos = chaseUnit.Position;
             }
 
-            if (MoveOrder == OrderType.AttackMove
-                || MoveOrder == OrderType.AttackTerrainOnce
-                || MoveOrder == OrderType.AttackTerrainSustained
-                && !IsPathEnded())
-            {
-                targetPos = Waypoints.LastOrDefault();
-
-                if (targetPos == Vector2.Zero)
-                {
-                    // Neither AttackTo nor AttackMove (etc.) were successful.
-                    return;
-                }
-            }
-
-            // If the target is already in range, stay where we are.
-            if (MoveOrder == OrderType.AttackMove
-                && targetPos != Vector2.Zero
-                && MovementParameters == null
-                && Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange
-                && _autoAttackCurrentCooldown <= 0)
-            {
-                UpdateMoveOrder(OrderType.Stop, true);
-            }
-            // No TargetUnit
-            else if (targetPos == Vector2.Zero)
+            // No chase target → nothing to move toward here. (P5 chase-decouple: RefreshWaypoints is now
+            // PURELY the chase executor — it follows the tracked unit set above, ≈ Riot Actor::
+            // TrackTargetUnit. The former a-move / attack-terrain handling here — targetPos = Waypoints.last
+            // + the in-range settle `UpdateMoveOrder(Stop)` — was the pre-decouple engine a-move DRIVER and
+            // is now removed: a-move/attack-terrain walk their Waypoints via Move(), and their arrival /
+            // acquire is owned by the per-archetype scripts (HeroAI clears AttackMoveDestination on
+            // IsPathEnded; minions forward-nav), mirroring Hero.lua TimerDistanceScan → NetSetState(AI_STANDING)
+            // on arrival. The blocks were unreachable for MoveOrder==AttackMove anyway (RefreshWaypoints is
+            // only called with a TargetUnit → auto-promote raises ChaseIntent → not the a-move branch, or with
+            // SpellToCast → MoveOrder==TempCastSpell). This removes the last engine MoveOrder mutation in the
+            // chase path → MoveOrder is now purely the wire-input order, _chaseIntent (≈ TrackUnitID) the chase.
+            if (targetPos == Vector2.Zero)
             {
                 return;
             }
 
-            if (MoveOrder == OrderType.AttackTo && targetPos != Vector2.Zero)
+            if (ChaseIntent && targetPos != Vector2.Zero)
             {
                 // In attack range → STOP and attack in place; out of range → chase to the distinct
                 // GetClosestAttackPoint cell.
@@ -1224,7 +1273,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // approach on the 0.25s brain sweep / on target drift, so this is both cheaper and
                     // closer to client behavior.
                     bool needRepath = IsPathEnded()
-                        || _repathTargetNetId != TargetUnit.NetId
+                        || _repathTargetNetId != chaseUnit.NetId
                         || float.IsNaN(_repathTargetPos.X)
                         || Vector2.DistanceSquared(_repathTargetPos, targetPos) > REPATH_TARGET_DRIFT * REPATH_TARGET_DRIFT;
                     if (!needRepath)
@@ -1238,7 +1287,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // MIN_CHASE_REPATH_MS so we commit to the routed path instead of re-routing every
                     // tick around moving allies (the client-side wobble). A target switch or >75u drift
                     // skips this and recomputes now.
-                    bool sameTargetSameSpot = _repathTargetNetId == TargetUnit.NetId
+                    bool sameTargetSameSpot = _repathTargetNetId == chaseUnit.NetId
                         && !float.IsNaN(_repathTargetPos.X)
                         && Vector2.DistanceSquared(_repathTargetPos, targetPos) <= REPATH_TARGET_DRIFT * REPATH_TARGET_DRIFT;
                     if (this is LaneMinion && sameTargetSameSpot
@@ -1247,19 +1296,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         return;
                     }
                     _lastChaseRepathMs = _game.GameTime;
-                    _repathTargetNetId = TargetUnit.NetId;
+                    _repathTargetNetId = chaseUnit.NetId;
                     _repathTargetPos = targetPos;
 
                     Vector2 pathDestination = targetPos;
                     bool gotAttackPoint = false;
                     Vector2 recommended = targetPos;
-                    if (TargetUnit != null)
+                    if (chaseUnit != null)
                     {
                         gotAttackPoint = _game.Map.PathingHandler.GetClosestAttackPoint(
-                            this, TargetUnit, idealRange, out recommended, out _, out _);
+                            this, chaseUnit, idealRange, out recommended, out _, out _);
                         pathDestination = gotAttackPoint
                             ? recommended
-                            : _game.Map.PathingHandler.GetAttackStandPosition(this, TargetUnit, idealRange);
+                            : _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange);
                     }
 
                     if (!_game.Map.PathingHandler.IsWalkable(pathDestination, PathfindingRadius))
@@ -2028,9 +2077,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (s == null)
             {
+                // Clearing the postponed cast (Riot ClearPostponedSpells → savedOrderCmd=NONE +
+                // ORDER_STATUS_CLEAR + savedOrderObj=0). Drop the separate cast target here too — this is
+                // the single point where a move-to-cast ends (cast finished via Spell.FinishCasting, or
+                // cancelled via a new order), so the targeted/positional retry can't re-fire afterwards.
+                if (OrderStatus == OrderState.Postponed)
+                {
+                    OrderStatus = OrderState.Clear;
+                }
+                PostponedCastTarget = null;
                 return;
             }
 
+            // Positional move-to-cast: walk toward the cursor point. (location and unit are mutually
+            // exclusive across the callers — targeted passes location=Zero+unit, positional passes
+            // location+no unit.)
             if (location != Vector2.Zero)
             {
                 var exit = _game.Map.NavigationGrid.GetClosestTerrainExit(location, PathfindingRadius);
@@ -2044,20 +2105,48 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     SetWaypoints(new List<Vector2> { Position, exit });
                 }
-
-                UpdateMoveOrder(OrderType.MoveTo, true);
             }
 
+            // Move-to-cast keeps the cast target SEPARATE from the attack target (faithful Riot: PostponeSpell
+            // stores mPostponedSpell.mTargetID and never SetEnemyID). So clear any prior ATTACK target — the
+            // caster must not auto-attack while running to cast range — and store the cast target (targeted;
+            // null for positional) in the dedicated postpone field. Set BEFORE the order so the ChaseIntent
+            // derivation in UpdateMoveOrder (which keys a TempCastSpell chase on PostponedCastTarget != null)
+            // sees it: targeted → ChaseIntent true (chase to cast range); positional → false (walks waypoints).
+            SetTargetUnit(null, true);
+            PostponedCastTarget = unit;
+
+            // IssueOrders S2 Phase 3 (P3a): a postponed cast is an AI_TEMP_CASTSPELL order (Riot
+            // PostponeSpell: orders.setOrder(AI_TEMP_CASTSPELL) + PostponeOrder). This replaces the former
+            // AttackTo (targeted) / MoveTo (positional) order reuse, so those values no longer leak into the
+            // move-to-cast path. The UpdateTarget retry now gates on MoveOrder == TempCastSpell.
+            UpdateMoveOrder(OrderType.TempCastSpell, true);
+
+            // A targeted move-to-cast must re-path toward the cast target NOW, not finish a previously
+            // ordered MoveTo path first. Unlike positional (which sets fresh waypoints above), targeted sets
+            // none and relies on the RefreshWaypoints chase — whose re-path throttle would otherwise keep
+            // following the stale path until it ends (no path-end / same target NetID), so the champion only
+            // turned toward the target after reaching the old click destination. Invalidate the throttle to
+            // force the chase recompute, exactly as HandleMove does for a fresh attack order.
             if (unit != null)
             {
-                // Unit targeted.
-                SetTargetUnit(unit, true);
-                UpdateMoveOrder(OrderType.AttackTo, true);
+                ForceChaseRepath();
             }
-            else
+
+            // Preserve the positional side-effect exactly: the former MoveTo ran through UpdateMoveOrder's
+            // ClearQueuedSpell branch; AttackTo (targeted) did NOT. TempCastSpell is in neither list, so
+            // replicate the queue-clear for the positional case to keep behaviour identical. (This
+            // positional-only queue clear is a latent asymmetry inherited from the MoveTo reuse — preserved
+            // deliberately for 0 behaviour change; revisit as its own decision.)
+            if (location != Vector2.Zero)
             {
-                SetTargetUnit(null, true);
+                ClearQueuedSpell();
             }
+
+            // PostponeOrder: an out-of-range cast → POSTPONED (overrides the PENDING the UpdateMoveOrder
+            // above set). Phase 3 keeps the retry in UpdateTarget (driven off MoveOrder == TempCastSpell);
+            // routing it through RouteOrder (P3b) is deferred — unverifiable from decomp/lua/replay.
+            OrderStatus = OrderState.Postponed;
         }
 
         /// <summary>
@@ -2195,15 +2284,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return false;
             }
 
-            if (!Status.HasFlag(StatusFlags.CanCast)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || Status.HasFlag(StatusFlags.Feared)
-                || Status.HasFlag(StatusFlags.Pacified)
-                || Status.HasFlag(StatusFlags.Silenced)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-                || Status.HasFlag(StatusFlags.Taunted))
+            // M2 Phase 3: cast-disabling CC clears the CanCast capability (BuffType.ToCapabilityDisable).
+            if (!Status.HasFlag(StatusFlags.CanCast))
             {
                 return false;
             }
@@ -2261,7 +2343,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <see cref="RetargetAttackToWithHandoff"/>.</para>
         /// </summary>
         /// <param name="target">Unit to target.</param>
-        public void SetTargetUnit(AttackableUnit target, bool networked = false)
+        /// <param name="networked">Whether to broadcast the target change.</param>
+        /// <param name="lostReason">When clearing the target (target==null), why it was lost — carried with OnTargetLost.</param>
+        public void SetTargetUnit(AttackableUnit target, bool networked = false,
+            TargetLostReason lostReason = TargetLostReason.Cleared)
         {
             if (TargetUnit == target)
             {
@@ -2271,10 +2356,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             bool isSwitchBetweenTargets = target != null && TargetUnit != null;
             if (target == null && TargetUnit != null)
             {
-                ApiEventManager.OnTargetLost.Publish(this, TargetUnit);
+                ApiEventManager.OnTargetLost.Publish(this, (TargetUnit, lostReason));
             }
 
             TargetUnit = target;
+            // Acquiring a fresh target abandons any remembered "lost" target (go-to-last-known).
+            if (target != null)
+            {
+                _lostTargetUnit = null;
+            }
 
             if (isSwitchBetweenTargets)
             {
@@ -2495,7 +2585,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void LateUpdate(float diff)
         {
-            if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.GetIsTargetableToTeam(Team))
+            // Drop a target that is no longer targetable by this unit (Riot IsTargetableByUnit:
+            // global + per-team, plus minion ward/acquirable gates), keeping the useable exception
+            // (wards/plants have their own rules). The prior condition (`!global && perTeam`) could
+            // never be true — GetIsTargetableToTeam already returns false when the global flag is
+            // clear — so it never dropped anything.
+            if (TargetUnit != null && !TargetUnit.IsTargetableByUnit(this))
             {
                 if (TargetUnit.CharData.IsUseable)
                 {
@@ -2523,6 +2618,47 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // Call For Help broadcast, driven by the real 4.20 cfh_* constants (Map Constants.var).
             var cfh = LeagueSandbox.GameServer.Content.GlobalData.CallForHelpVariables;
 
+            // Important / forced Call For Help — the turret focus-lock (tower-dive aggro). Decomp:
+            // DamageEffect::ForceCallForHelp (DamageCallback.h:0x56) routed to a turret-only handler
+            // (Turret.lua OnReceiveImportantCallForHelp). Triggered explicitly by a script-set flag, or
+            // implicitly when an enemy champion damages an allied champion (the established tower-dive
+            // rule; user-chosen predicate, see docs/TURRET_AI_PORT_PLAN.md §3/§6). Idempotent on the
+            // turret side (PutTargetInTargetList dedupes), so this is NOT throttled by cfh_* — it runs
+            // BEFORE the regular cfh_Delay gate below. Only allied turrets in range react; every other
+            // archetype's handler is a no-op.
+            if (damageData.ForceCallForHelp || (attacker is Champion && this is Champion))
+            {
+                float importantHearSq = cfh.Radius * cfh.Radius;
+                foreach (var it in _game.ObjectManager.GetObjects())
+                {
+                    if (it.Value is not BaseTurret turret
+                        || turret.IsDead
+                        || turret.Team != Team
+                        || !turret.AIScript.AIScriptMetaData.HandlesCallsForHelp)
+                    {
+                        continue;
+                    }
+
+                    // Pre-gate by the turret's own attack range + cfh_TurretRadius so a turret across
+                    // the map doesn't lock; the script re-checks ObjectInAttackRange before adding.
+                    float engageRange = turret.Stats.Range.Total + cfh.TurretRadius;
+                    if (Vector2.DistanceSquared(turret.Position, attacker.Position) > engageRange * engageRange)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        using var _scope = Profiler.Scope($"script:{turret.AIScript.GetType().Name}.OnReceiveImportantCallForHelp", "scripts");
+                        turret.AIScript.OnReceiveImportantCallForHelp(attacker, this);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Error(null, e);
+                    }
+                }
+            }
+
             // cfh_Delay: a unit issues a Call For Help at most once per Delay seconds (not every
             // damage tick).
             if (_game.GameTime - _lastCallForHelpIssuedMs < cfh.Delay * 1000f)
@@ -2542,6 +2678,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     || u.IsDead
                     || u.Team != Team
                     || !u.AIScript.AIScriptMetaData.HandlesCallsForHelp)
+                {
+                    continue;
+                }
+
+                // Turret AND lane-minion aggro rule: they only answer a regular Call For Help when the
+                // VICTIM is an allied CHAMPION (defend the champion). Attacking an allied LANE MINION must
+                // NOT pull the wave / the tower onto the attacker — replay-verified (28 4.20 replays): of
+                // 325 minion→champion attacks, the vast majority were already on the champion or spontaneous
+                // (proximity); only ~6% even coincided with the champion having just hit an allied minion,
+                // and those are ambiguous re-targets — so champ-attacks-lane-minion is NOT a meaningful
+                // wave-aggro trigger. Lane minions keep their normal nearest-front targeting; the
+                // champion-on-champion dive routes through the important CFH (force-flagged →
+                // OnReceiveImportantCallForHelp / turretTargetList sticky-lock). NOTE the type test is
+                // LaneMinion-specific: jungle monsters (Monster : Minion, NOT LaneMinion) must still answer
+                // a camp-mate's CFH (camp-assist, victim = monster), and pets (Pet : Minion) are unaffected.
+                if ((u is BaseTurret || u is LaneMinion) && this is not Champion)
                 {
                     continue;
                 }
@@ -2612,7 +2764,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             foreach (var it in _game.ObjectManager.GetObjects())
             {
                 if (!(it.Value is AttackableUnit u) || u.IsDead || u.Team == Team
-                    || !u.Status.HasFlag(StatusFlags.Targetable))
+                    || !u.IsTargetableByUnit(this))
                 {
                     continue;
                 }
@@ -2642,6 +2794,94 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Riot TurnOnAutoAttack(target): the script enables auto-attacking the given unit. This only
+        /// flips the toggle — the engine still owns per-swing timing (windup → fire → cooldown) and only
+        /// swings when the target is also in range with the cooldown ready (see UpdateTarget). Idempotent:
+        /// safe to call every tick while in range; it never resets a committed windup.
+        /// </summary>
+        public void TurnOnAutoAttack(AttackableUnit target)
+        {
+            _autoAttackEnabled = true;
+            _autoAttackEnabledTarget = target;
+        }
+
+        /// <summary>
+        /// Riot TurnOffAutoAttack(stopReason): the script disables auto-attacking. Moving / TargetLost
+        /// cancel an in-progress windup (you left range / the target is gone) but let a connected swing
+        /// finish; OtherImmediately is a hard cancel (CC / halt).
+        /// </summary>
+        public void TurnOffAutoAttack(AutoAttackStopReason reason)
+        {
+            _autoAttackEnabled = false;
+            _autoAttackEnabledTarget = null;
+
+            if (reason == AutoAttackStopReason.OtherImmediately)
+            {
+                CancelAutoAttack(reset: true, fullCancel: true, reason: reason);
+            }
+            else if ((reason == AutoAttackStopReason.Moving || reason == AutoAttackStopReason.TargetLost)
+                     && IsAttacking && !HasAutoAttacked)
+            {
+                // Cancel only an un-connected windup; a swing that already landed finishes its animation.
+                CancelAutoAttack(reset: true, reason: reason);
+            }
+        }
+
+        /// <summary>
+        /// Whether the engine may START a new auto-attack swing this tick. The engine only swings while the
+        /// script (via the shared AutoAttackComponent) has TurnOnAutoAttack'd the CURRENT target — Riot's
+        /// "target set != auto-fire". P5.6: this is now the universal gate (the legacy "auto-fire on
+        /// target+range" path and the ScriptOwnsAutoAttack compat flag were removed once every archetype
+        /// was migrated). A unit with no AutoAttackComponent (e.g. EmptyAIScript summons = Riot idle.lua)
+        /// never gets the toggle turned on, so it never auto-attacks — the faithful passive-summon default.
+        /// </summary>
+        private bool AutoAttackTogglePermits()
+        {
+            return _autoAttackEnabled && _autoAttackEnabledTarget == TargetUnit;
+        }
+
+        /// <summary>
+        /// Riot IsTargetLost: this unit has a remembered "lost" target — a unit that left vision while the
+        /// unit was hard-engaged (TargetLostReason.LostVisibility). It walks to that target's last-known
+        /// position (<see cref="LostTargetLastKnownPosition"/>) and re-acquires on sight
+        /// (<see cref="GetLostTargetIfVisible"/>). Cleared when a fresh target is acquired (SetTargetUnit).
+        /// Champion-only in practice. See docs/LOST_TARGET_REACQUISITION_PLAN.md.
+        /// </summary>
+        public bool IsTargetLost()
+        {
+            return _lostTargetUnit != null;
+        }
+
+        /// <summary>
+        /// Riot GetLostTargetIfVisible: returns the remembered lost target IFF it is alive and visible to
+        /// this unit's team again (re-acquire on sight), else null. Pure query — re-targeting the returned
+        /// unit via SetTargetUnit is what clears the lost state.
+        /// </summary>
+        public AttackableUnit GetLostTargetIfVisible()
+        {
+            if (_lostTargetUnit != null && !_lostTargetUnit.IsDead && _lostTargetUnit.IsVisibleByTeam(Team))
+            {
+                return _lostTargetUnit;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The frozen last-seen position of the lost target — the go-to-last-known destination. Valid while
+        /// <see cref="IsTargetLost"/> is true.
+        /// </summary>
+        public Vector2 LostTargetLastKnownPosition => _lostTargetLastKnownPosition;
+
+        /// <summary>
+        /// Abandon the remembered lost target — called when the unit arrives at the last-known position
+        /// without re-sighting it, or when a new player order takes over the pursuit.
+        /// </summary>
+        public void ClearLostTarget()
+        {
+            _lostTargetUnit = null;
+        }
+
+        /// <summary>
         /// Updates this AI's current target and attack actions depending on conditions such as crowd control, death state, vision, distance to target, etc.
         /// Used for both auto and spell attacks.
         /// </summary>
@@ -2660,7 +2900,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 if ((IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp) || HasMadeInitialAttack)
                 {
-                    CancelAutoAttack(!HasAutoAttacked, true);
+                    CancelAutoAttack(!HasAutoAttacked, true, reason: AutoAttackStopReason.TargetLost);
                 }
                 // Attack-move resume on target loss is now the HeroAI script's job (it owns the a-move
                 // state machine via _aiState == AI_SOFTATTACK; see HeroAI.OnTick). Non-HeroAI units
@@ -2671,16 +2911,42 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // StatusFlags.Targetable=false. Inverted from the prior condition (`Targetable=false &&
             // IsUseable=true` would never trigger for normal champions/minions, so a turret kept
             // attacking a champion in an untargetable revive state, e.g. Aatrox passive).
-            else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && !TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
+            else if (TargetUnit.IsDead || (!TargetUnit.IsTargetableByUnit(this) && !TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
             {
                 // If the attack already connected (e.g. HasAutoAttacked), let the animation
                 // finish instead of cancelling it mid-animation.
                 if (IsAttacking && !HasAutoAttacked)
                 {
-                    CancelAutoAttack(true, true);
+                    CancelAutoAttack(true, true, reason: AutoAttackStopReason.TargetLost, respectWindupLock: true);
                 }
 
-                SetTargetUnit(null, true);
+                // Classify why the target became invalid (Riot OnTargetLost reason).
+                TargetLostReason lostReason;
+                if (TargetUnit.IsDead)
+                {
+                    lostReason = TargetLostReason.Death;
+                }
+                else if (!TargetUnit.IsTargetableByUnit(this) && !TargetUnit.CharData.IsUseable)
+                {
+                    lostReason = TargetLostReason.Untargetable;
+                }
+                else
+                {
+                    // Alive + targetable, only out of this team's vision → go-to-last-known (Champion-only).
+                    // The active target is still cleared below; the lost unit + last-seen position are
+                    // remembered for the re-acquire primitives + HeroAI. Only HARD engagements are pursued
+                    // (Hero.lua: state != AI_SOFTATTACK) — a soft/attack-move-acquired target is not chased
+                    // into the fog. So the soft/hard gate lives here, making IsTargetLost() mean "hard target
+                    // lost to vision".
+                    lostReason = TargetLostReason.LostVisibility;
+                    if (this is Champion && GetAIState() != AIState.AI_SOFTATTACK)
+                    {
+                        _lostTargetUnit = TargetUnit;
+                        _lostTargetLastKnownPosition = TargetUnit.Position;
+                    }
+                }
+
+                SetTargetUnit(null, true, lostReason);
                 return;
             }
             // Soft-attack drop (a-move target leaving acquisition range) is now handled by HeroAI.OnTick
@@ -2695,10 +2961,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // — that constant belongs to GetClosestAttackPoint's close-walk scan instead.
                 float cancelBuffer = LeagueSandbox.GameServer.Content.GlobalData.AttackRangeVariables.StopAttackRangeModifier;
                 float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius + cancelBuffer;
+                // Minions/monsters auto-attack CLIENT-AUTONOMOUSLY (obj_AI_Minion::UpdatePimpl): once a swing
+                // starts, the client always COMPLETES it in place — it has no "target left range" cancel
+                // (AIMinionClient.cpp:134-187, no movement/abort path). If the SERVER cancels the windup
+                // mid-flight because the target kited out of range + StopAttackRangeModifier, it clears the
+                // cooldown and immediately re-enters the chase while the client is still animating that swing
+                // → the unit slides forward during the swing (the "looped-attack-then-target-exits" slide,
+                // verified t=32567/34334). So for client-autonomous units the windup must run to its damage
+                // point (FinishCasting engages the winddown lock), then chase cleanly. Champions/turrets keep
+                // the cancel (they are server-driven per swing and orb-walk-cancel via explicit move orders).
                 if (Vector2.Distance(TargetUnit.Position, Position) > maxCancelRange
-                        && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                        && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp
+                        && this is not Minion)
                 {
-                    CancelAutoAttack(!HasAutoAttacked, true);
+                    CancelAutoAttack(!HasAutoAttacked, true, reason: AutoAttackStopReason.Moving);
                 }
 
                 if (AutoAttackSpell.State == SpellState.STATE_READY)
@@ -2709,32 +2985,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             var idealRange = Stats.Range.Total;
-            if (SpellToCast != null && !IsAttacking && (TargetUnit == null || SpellToCast.SpellData.IsValidTarget(this, TargetUnit)))
-            {
-                // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
-                idealRange = SpellToCast.GetCurrentCastRange();
-
-                // Move-to-cast retry re-aims at CursorPos — the original click — not the
-                // (possibly clamped/snapped) TargetPosition. Mirrors Riot PostponedSpell::Postpone
-                // (AIBase.cpp:394, mTargetPos = ci.CursorPos): a spell cast out of range stores the
-                // cursor point and re-issues the cast at it once the caster reaches range.
-                if (MoveOrder == OrderType.AttackTo
-                    && TargetUnit != null
-                    && Vector2.DistanceSquared(TargetUnit.Position, SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
-                {
-                    SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z), TargetUnit);
-                }
-                else if (MoveOrder == OrderType.MoveTo
-                        && Vector2.DistanceSquared(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
-                {
-                    SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z));
-                }
-                else
-                {
-                    RefreshWaypoints(idealRange);
-                }
-            }
-            else
+            // P3b: the per-tick postponed-cast retry is the named TryToExecutePostponedOrders — Riot's
+            // server-side obj_AI_Base::TryToExecutePostponedOrders, confirmed (byte-matched client symbols)
+            // to be driven from the AI update tick (the client has ZERO callers — only the input-driven
+            // HandleNewOrder runs there). Returns true if it handled a postponed out-of-range cast this
+            // tick; otherwise fall through to normal combat.
+            if (!TryToExecutePostponedOrders())
             {
                 // TODO: Verify if there are any other cases we want to avoid.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
@@ -2763,7 +3019,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                             // Stops us from continuing to move towards the target.
                             RefreshWaypoints(idealRange);
 
-                            if (CanAttack())
+                            // The chase-stop above is the engine executor (always runs while in range);
+                            // STARTING a swing additionally requires the script's auto-attack toggle to be
+                            // ON for this target (set by the shared AutoAttackComponent). Riot: "target set"
+                            // != auto-fire. (P5.6: this toggle is the sole gate — legacy auto-fire removed.)
+                            if (CanAttack() && AutoAttackTogglePermits())
                             {
                                 IsNextAutoCrit = RollAutoAttackCrit(TargetUnit);
                                 IsNextAutoMiss = RollAutoAttackMiss(TargetUnit);
@@ -2809,6 +3069,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     }
                     else
                     {
+                        // OUT of engage range — about to chase. A client-autonomous unit (minion/monster)
+                        // that has an active auto-attack loop (HasMadeInitialAttack) keeps re-swinging IN
+                        // PLACE on the client with no further server packets and NO cancel of its own (decomp
+                        // AIMinionClient.cpp:134-187 — the client never stops attacking on range loss). If we
+                        // start moving it without telling the client, it keeps playing the swing animation
+                        // (no server damage) while sliding after the target, then snaps on the next sync —
+                        // the "charges its attack while chasing / plays-through-instead-of-running" desync.
+                        // So the instant the unit leaves attack range (this branch) we send the client an
+                        // NPC_InstantStop_Attack to break its hardcode-attack state, THEN chase. Sent here at
+                        // idealRange (not the wider disengage range) so the swing cancels the moment the run
+                        // begins — there is no separate hold. forceClient=true forces the stop even mid-loop.
+                        // HasMadeInitialAttack is cleared so re-entering range sends a fresh Basic_Attack_Pos
+                        // (target re-acquire) and the loop resumes. (We are never IsAttacking here — the
+                        // IsAttacking branch above returns first — so this never interrupts a committed windup.)
+                        if (this is Minion && HasMadeInitialAttack)
+                        {
+                            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, isSummonerSpell: false,
+                                keepAnimating: false, destroyMissile: false, overrideVisibility: false, forceClient: true);
+                            HasMadeInitialAttack = false;
+                        }
                         RefreshWaypoints(idealRange);
                     }
                 }
@@ -2849,6 +3129,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             MoveOrder = order;
 
+            // Keep the explicit chase-intent in sync with the chase-bearing orders. AttackTo chases its
+            // target; a TARGETED TempCastSpell (move-to-cast onto a unit) likewise tracks the cast target
+            // (PostponedCastTarget) while the cast is postponed (Riot's Chase + POSTPONED at once). A
+            // POSITIONAL TempCastSpell (no cast target) walks to a point → no chase. A later slice sets
+            // _chaseIntent directly on combat-engage so the engine no longer reuses MoveOrder for "chasing".
+            _chaseIntent = order == OrderType.AttackTo
+                || (order == OrderType.TempCastSpell && PostponedCastTarget != null);
+
+            // IssueOrders S2 Phase 2: the order-status lifecycle is NOT driven here anymore. UpdateMoveOrder
+            // is called both at the issue point (player order) AND by internal execution-time mutations
+            // (RefreshWaypoints auto-promote to AttackTo, Spell.cs post-attack/cast-end restore, ctor) — the
+            // latter are not "new orders" in Riot's sense. The PENDING→EXECUTED lifecycle now lives at the
+            // single issue point (HandleNewOrder, called from HandleMove); the move-to-cast postpone stays in
+            // SetSpellToCast (→ POSTPONED). Still 0 behaviour change (nothing reads OrderStatus for control).
+
             if ((MoveOrder == OrderType.OrderNone
                 || MoveOrder == OrderType.Stop
                 || MoveOrder == OrderType.PetHardStop)
@@ -2874,13 +3169,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             // Order/State coherence for HeroAI champions (P4 part B, P5 prep): the internal Hold-setters
             // (Spell.cs cast/channel/charge end → Hold "stand" fallback) set MoveOrder without touching
-            // _aiState, leaving it stale. Sync it to AI_IDLE ("standing, idle, no auto-acquire") which
-            // matches the Hold gate. The PLAYER Hold path overwrites this with AI_STANDING right after
-            // via HeroAI.OnOrder (HandleMove calls UpdateMoveOrder BEFORE IssueOrder), so only the
-            // internal Hold-setters land on AI_IDLE. No behaviour change today (neither AI_IDLE nor the
-            // prior stale state fires a HeroAI OnTick branch, and idle-acquire stays gated by Hold) —
-            // it just keeps the state honest. Gated to HeroAI champions so the minion/monster/pet/bot
-            // state machines (which read _aiState too) are untouched.
+            // _aiState, leaving it stale. Sync it to AI_IDLE ("idle, no auto-acquire"). The PLAYER Hold
+            // path overwrites this with AI_HARDIDLE right after via HeroAI.OnOrder (HandleMove calls
+            // UpdateMoveOrder BEFORE IssueOrder), so only the internal Hold-setters land on AI_IDLE — and
+            // HeroAI's Hold OnTick branch is gated on AI_HARDIDLE(_ATTACKING), so an internal-Hold AI_IDLE
+            // does NOT acquire/attack (preserved). No behaviour change today; keeps the state honest.
+            // Gated to HeroAI champions so the minion/monster/pet/bot state machines are untouched.
             if (MoveOrder == OrderType.Hold && ScriptOwnsCombatSelection)
             {
                 _aiState = AIState.AI_IDLE;
@@ -2905,10 +3199,143 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Whether the saved order can be carried out right now (Riot <c>IssuerInterface::
+        /// TryToExecuteOrder</c>, called by <see cref="HandleNewOrder"/> and the per-tick
+        /// <see cref="RouteOrder"/>). Riot's <c>obj_AI_Base</c> base returns false and lets each
+        /// archetype override the "can I execute" test; for US the orders routed through
+        /// <see cref="HandleNewOrder"/> (Move/Attack/Hold/Stop) are already applied synchronously by
+        /// the caller (HandleMove builds the path / sets the target), so they are immediately
+        /// executable → true. The move-to-cast postpone is handled separately via
+        /// <see cref="SetSpellToCast"/> → POSTPONED. Phase 4 adds the real CC/cast gate here.
+        /// </summary>
+        public virtual bool TryToExecuteOrder()
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// Marks the saved order as carried out (Riot <c>obj_AI_Base::ExecuteOrder(IssueOrders&amp;)</c>,
+        /// which in 4.17 is purely the <c>NotifyExecuted</c> status advance — the actual move/attack work
+        /// lives elsewhere, NOT in this method). NotifyExecuted semantics: advance to EXECUTED unless an
+        /// active POSTPONE owns the order (POSTPONED with a real order command stays POSTPONED so the
+        /// move-to-cast retry isn't clobbered). The real execution still lives in HandleMove /
+        /// RefreshWaypoints this phase; this only advances the status.
+        /// </summary>
+        public virtual void ExecuteOrder()
+        {
+            if (OrderStatus != OrderState.Postponed || MoveOrder == OrderType.OrderNone)
+            {
+                OrderStatus = OrderState.Executed;
+            }
+        }
+
+        /// <summary>
+        /// Issue point for a fresh order (Riot <c>IssueOrders::HandleNewOrder</c>): records the saved-order
+        /// tuple (command ≡ <see cref="MoveOrder"/>, set by the caller's UpdateMoveOrder; position + target
+        /// here), marks it PENDING, then tries to execute it immediately — executable → ExecuteOrder
+        /// (EXECUTED), otherwise it stays PENDING for a later <see cref="RouteOrder"/> retry. This is the
+        /// status machine ONLY; it is intentionally separate from the <see cref="IssueOrder"/> → OnOrder
+        /// script channel (Riot's HandleNewOrder likewise contains no script callback). Returns true if the
+        /// order executed this call.
+        /// </summary>
+        public bool HandleNewOrder(OrderType order, AttackableUnit target, Vector2 pos)
+        {
+            // setOrder(order, pos, obj) → records the saved tuple + PENDING. The command itself is the
+            // MoveOrder the caller already set via UpdateMoveOrder; we only record pos/obj + the status.
+            _savedOrderObj = target;
+            _savedOrderPos = pos;
+            OrderStatus = OrderState.Pending;
+
+            if (TryToExecuteOrder())
+            {
+                ExecuteOrder();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Per-tick retry of the saved order (Riot <c>IssueOrders::RouteOrder</c>): re-mark PENDING and
+        /// try to execute. Defined here for Phase 2 completeness but NOT yet driven per tick — Phase 3
+        /// wires the POSTPONED move-to-cast retry through it (replacing the ad-hoc SpellToCast retry in
+        /// UpdateTarget). Returns true if the order executed this call.
+        /// </summary>
+        public bool RouteOrder()
+        {
+            OrderStatus = OrderState.Pending;
+            if (TryToExecuteOrder())
+            {
+                ExecuteOrder();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Per-tick retry of a postponed out-of-range cast (move-to-cast) — Riot's server-side
+        /// <c>obj_AI_Base::TryToExecutePostponedOrders(bool)</c>, called from the AI update tick. Confirmed
+        /// server-side + per-tick by the decompiler: the byte-matched client symbols for this and RouteOrder
+        /// have ZERO callers (the client only runs the input-driven HandleNewOrder; the per-tick client
+        /// Update merely reads order status to toggle AIManager's AI_WaitForCmd, never executes/retries). So
+        /// the postponed re-cast is strictly server-side, and this is where Riot put it.
+        ///
+        /// Reads the postponed spell (<see cref="SpellToCast"/> + its CursorPos / <see cref="PostponedCastTarget"/>),
+        /// re-checks cast range, and re-issues the cast once in range — targeted via PostponedCastTarget,
+        /// positional via the stored CursorPos (Riot PostponedSpell stores mTargetPos = ci.CursorPos) — and
+        /// chases toward cast range otherwise. Returns true if a postponed cast was handled this tick (the
+        /// caller then skips normal combat selection); false if there is none / it cannot run now (no
+        /// SpellToCast, mid-attack, or the cast target went invalid).
+        ///
+        /// Behaviour-identical to the former inline UpdateTarget block (P3a, in-game verified); P3b only
+        /// NAMES + relocates it to match Riot's structure. The exact server body is NOT byte-matched — this
+        /// is built to the confirmed ROLE using our working P3a logic, not reconstructed from unmatched code.
+        /// </summary>
+        private bool TryToExecutePostponedOrders()
+        {
+            if (SpellToCast == null || IsAttacking
+                || !(PostponedCastTarget == null
+                     || (!PostponedCastTarget.IsDead && SpellToCast.SpellData.IsValidTarget(this, PostponedCastTarget))))
+            {
+                return false;
+            }
+
+            // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
+            float idealRange = SpellToCast.GetCurrentCastRange();
+
+            // Re-aim at CursorPos — the original click — not the (possibly clamped/snapped) TargetPosition.
+            // Targeted (PostponedCastTarget != null) vs positional (== null) is distinguished by the cast
+            // target (kept separate from the attack TargetUnit — option A). PostponedCastTarget is NOT
+            // cleared here — the cast may still be winding up (re-entry casts are rejected while casting);
+            // it is dropped together with SpellToCast in SetSpellToCast(null) at FinishCasting.
+            if (MoveOrder == OrderType.TempCastSpell
+                && PostponedCastTarget != null
+                && Vector2.DistanceSquared(PostponedCastTarget.Position, SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
+            {
+                SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z), PostponedCastTarget);
+            }
+            else if (MoveOrder == OrderType.TempCastSpell
+                    && PostponedCastTarget == null
+                    && Vector2.DistanceSquared(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
+            {
+                SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z));
+            }
+            else
+            {
+                RefreshWaypoints(idealRange);
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Routes an incoming order to this unit's AI script so it can translate it into AI state
         /// (Order/State split Phase 1, docs/AI_ORDER_STATE_SPLIT_PLAN.md). Legacy IAIScript AIs and
         /// BaseAIScript AIs that don't override OnOrder are unaffected (no-op default), so this is
         /// purely additive — the order's movement is still applied by the existing caller (HandleMove).
+        ///
+        /// NOTE: this is the SCRIPT-reaction channel, distinct from <see cref="HandleNewOrder"/> (the
+        /// IssueOrders status machine). Riot keeps them separate too — its <c>HandleNewOrder</c> contains
+        /// no OnOrder callback. (Naming caveat: Riot's <c>obj_AI_Base::IssueOrder</c> is the order FUNNEL —
+        /// clamp + path-build + HandleNewOrder — which is our HandleMove, not this method.)
         /// </summary>
         public void IssueOrder(OrderType order, AttackableUnit target, Vector2 pos)
         {

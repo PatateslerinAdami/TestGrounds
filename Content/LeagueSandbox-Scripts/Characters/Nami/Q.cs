@@ -46,7 +46,7 @@ public class NamiQ : ISpellScript {
                 break;
         }
 
-        var bubbleMinion = AddMinion(_nami, "TestCubeRender10Vision", "bubble", _endPos, _nami.Team, 0, true, true, false, isVisible: false);
+        var bubbleMinion = AddMinion(_nami, "TestCubeRender10Vision", "bubble", _endPos, _nami.Team, 0, true, true, isVisible: false);
         HideHealthBar(bubbleMinion);
         // Replay-verified (ec72643482, 93 Q casts): Riot casts NamiQMissile as a REAL spell —
         // CastSpellAns(NamiQMissile, slot 50, targets=1) + ForceCreateMissile in the SAME tick

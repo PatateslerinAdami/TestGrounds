@@ -37,5 +37,13 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// Unit that will receive the damage.
         /// </summary>
         public AttackableUnit Target { get; set; }
+        /// <summary>
+        /// Forces an "important" Call For Help on this damage (Riot DamageEffect::ForceCallForHelp,
+        /// DamageCallback.h:0x56) — routed to <see cref="GameServerCore.Scripting.CSharp.IAIScript.OnReceiveImportantCallForHelp"/>
+        /// in addition to the regular Call For Help. Drives the turret focus-lock (tower-dive aggro).
+        /// A spell/buff script can set this to force the lock; champion-vs-champion damage triggers it
+        /// implicitly regardless (see ObjAIBase.TakeDamage).
+        /// </summary>
+        public bool ForceCallForHelp { get; set; }
     }
 }

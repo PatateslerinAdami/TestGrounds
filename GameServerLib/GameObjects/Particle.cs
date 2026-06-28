@@ -58,6 +58,21 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public uint? KeywordNetIDOverride { get; set; }
 
+        /// <summary>
+        /// Overrides the FX_Create_Group PackageHash (default = caster's object hash). Some effects resolve
+        /// their embedded sound bank by the particle's own package hash, not the caster's — e.g. the TT altar
+        /// chains (TT_Lock) whose lock sound only plays with the wire-exact package hash.
+        /// </summary>
+        public uint? PackageHashOverride { get; set; }
+
+        /// <summary>
+        /// When true this particle is sent as its OWN FX_Create_Group packet instead of being bundled with
+        /// other same-tick particles. The client only plays one embedded sound per FX_Create_Group packet, so
+        /// any sound-carrying effect (e.g. the TT altar TT_Lock lock sound, the spirit VO) must not share a
+        /// packet with another sound effect — Riot sends each as its own packet.
+        /// </summary>
+        public bool SendUnbatched { get; set; }
+
         public Vector2 StartPosition { get; private set; }
 
         /// <summary>
@@ -97,6 +112,21 @@ namespace LeagueSandbox.GameServer.GameObjects
         public GameObject SpecificUnit { get; }
 
         /// <summary>
+        /// A unit that must NOT see this particle (Riot's BBSpellEffectCreate SpecificUnitToExclude).
+        /// Inverse of <see cref="SpecificUnit"/>: every other valid recipient still sees it, subject
+        /// to normal fog-of-war. Server-side audience filter only — not a wire field.
+        /// </summary>
+        public GameObject SpecificUnitExclude { get; }
+
+        /// <summary>
+        /// Riot's BBSpellEffectCreate FOWTeam value (which team's fog-of-war gates this FX;
+        /// TEAM_NEUTRAL = not gated). We currently act on it only as the on/off
+        /// <see cref="IsAffectedByFoW"/> toggle (gated == FOWTeam != TEAM_NEUTRAL); the raw team is
+        /// captured here for fidelity / future per-team gating. Defaults to TEAM_NEUTRAL.
+        /// </summary>
+        public TeamId FOWTeam { get; set; } = TeamId.TEAM_NEUTRAL;
+
+        /// <summary>
         /// Whether or not the particle should be titled along the ground towards its end position.
         /// </summary>
         public bool FollowsGroundTilt { get; }
@@ -128,9 +158,17 @@ namespace LeagueSandbox.GameServer.GameObjects
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
             uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
-            bool sendIfOnScreenOrDiscard = false)
+            bool sendIfOnScreenOrDiscard = false, uint? packageHashOverride = null, bool sendUnbatched = false,
+            GameObject specificUnitExclude = null, float startFromTime = 0f)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
+            // Riot SpellEffectCreateRecord.m_StartFromTime: spawn the particle pre-aged by this many
+            // seconds. _currentTime feeds FXCreateData.TimeSpent (PacketNotifier via GetTimeAlive()),
+            // which the client applies as UpdateFastForward. Must be set before AddObject — the
+            // FX_Create_Group packet is built synchronously there.
+            _currentTime = startFromTime;
+            PackageHashOverride = packageHashOverride;
+            SendUnbatched = sendUnbatched;
             _affectedByFoW = affectedByFoW;
             SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
             VisionRadius = fowVisionRadius;
@@ -145,6 +183,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             Lifetime = lifetime;
             SpecificTeam = teamOnly;
             SpecificUnit = unitOnly;
+            SpecificUnitExclude = specificUnitExclude;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
@@ -176,9 +215,17 @@ namespace LeagueSandbox.GameServer.GameObjects
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
             uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
-            bool sendIfOnScreenOrDiscard = false)
+            bool sendIfOnScreenOrDiscard = false, uint? packageHashOverride = null, bool sendUnbatched = false,
+            GameObject specificUnitExclude = null, float startFromTime = 0f)
             : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
+            // Riot SpellEffectCreateRecord.m_StartFromTime: spawn the particle pre-aged by this many
+            // seconds. _currentTime feeds FXCreateData.TimeSpent (PacketNotifier via GetTimeAlive()),
+            // which the client applies as UpdateFastForward. Must be set before AddObject — the
+            // FX_Create_Group packet is built synchronously there.
+            _currentTime = startFromTime;
+            PackageHashOverride = packageHashOverride;
+            SendUnbatched = sendUnbatched;
             _affectedByFoW = affectedByFoW;
             SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
             VisionRadius = fowVisionRadius;
@@ -199,6 +246,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             Lifetime = lifetime;
             SpecificTeam = teamOnly;
             SpecificUnit = unitOnly;
+            SpecificUnitExclude = specificUnitExclude;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
@@ -232,9 +280,17 @@ namespace LeagueSandbox.GameServer.GameObjects
             FXFlags flags = FXFlags.UpdateOrientation, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
             uint? keywordNetIDOverride = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
-            bool sendIfOnScreenOrDiscard = false)
+            bool sendIfOnScreenOrDiscard = false, uint? packageHashOverride = null, bool sendUnbatched = false,
+            GameObject specificUnitExclude = null, float startFromTime = 0f)
             : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
+            // Riot SpellEffectCreateRecord.m_StartFromTime: spawn the particle pre-aged by this many
+            // seconds. _currentTime feeds FXCreateData.TimeSpent (PacketNotifier via GetTimeAlive()),
+            // which the client applies as UpdateFastForward. Must be set before AddObject — the
+            // FX_Create_Group packet is built synchronously there.
+            _currentTime = startFromTime;
+            PackageHashOverride = packageHashOverride;
+            SendUnbatched = sendUnbatched;
             _affectedByFoW = affectedByFoW;
             SendIfOnScreenOrDiscard = sendIfOnScreenOrDiscard;
             VisionRadius = fowVisionRadius;
@@ -251,6 +307,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             Lifetime = lifetime;
             SpecificTeam = teamOnly;
             SpecificUnit = unitOnly;
+            SpecificUnitExclude = specificUnitExclude;
             FollowsGroundTilt = followGroundTilt;
             Flags = flags;
             IgnoreCasterVisibility = ignoreCasterVisibility;
@@ -298,6 +355,12 @@ namespace LeagueSandbox.GameServer.GameObjects
         public bool IsAudienceVisibleToRecipient(TeamId team, int userId)
         {
             if (SpecificTeam != TeamId.TEAM_ALL && team != SpecificTeam)
+            {
+                return false;
+            }
+
+            // SpecificUnitToExclude: this recipient is barred even if everything else would allow it.
+            if (SpecificUnitExclude is Champion excluded && excluded.ClientId == userId)
             {
                 return false;
             }

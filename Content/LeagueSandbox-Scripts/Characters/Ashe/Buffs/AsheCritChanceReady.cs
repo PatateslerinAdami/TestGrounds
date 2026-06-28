@@ -42,7 +42,8 @@ public class AsheCritChanceReady : IBuffGameScript {
         _consumed = true;
         var focus = _ashe?.GetBuffWithName("Focus");
         if (focus != null) {
-            var resetStacks = (int) MathF.Round(_baseCrit * 100f);
+            // Riot MO_ROUND = floor(x + 0.5) (round-half-up), NOT C#'s banker's rounding — diverges at x.5.
+            var resetStacks = (int) GameMaths.MathOps.RoundHalfUp(_baseCrit * 100f);
             resetStacks = Math.Clamp(resetStacks, 0, focus.MaxStacks);
             focus.SetStacks(resetStacks);
         }

@@ -35,7 +35,15 @@ namespace LeagueSandbox.GameServer.Content
         public float ArmorPerLevel { get; private set; } = 1.0f;
         public float AttackCastTime { get; private set; } = 0.0f;
         public float AttackDelayCastOffsetPercent { get; private set; } = 0.0f;
-        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
+        // Riot default = 1.0 (NOT 0): the auto-attack WINDUP fully scales with attack speed. This is the
+        // ratio in Spell::ComputeCharacterAttackCastDelay's Lerp(unscaledWindup, AS-scaledWindup, ratio):
+        // 1 = windup shrinks with AS like everyone expects; <1 keeps it partly unscaled (Kalista 0.5,
+        // Thresh 0.25 — they specify it). Standard ADCs (Caitlyn/Jinx/Tristana/Ezreal) OMIT the field and
+        // rely on this default. With the old 0.0 default their server windup stayed at the slow base value
+        // while the client scaled it down → at high attack speed the server launched the missile/dealt the
+        // hit visibly late (desync vs the client's missile). Champions that genuinely want an unscaled
+        // windup set 0 explicitly.
+        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 1.0f;
         public float AttackDelayOffsetPercent { get; private set; } = 0.0f;
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
@@ -68,7 +76,9 @@ namespace LeagueSandbox.GameServer.Content
         public float CooldownSpellSlot { get; private set; } = 0.0f;
         public float CritDamageBonus { get; private set; } = 2.0f;
         public float CritAttackDelayCastOffsetPercent { get; private set; } = 0.0f;
-        public float CritAttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
+        // Riot default = 1.0 (crit-attack windup scales with attack speed too); same reasoning as the
+        // non-crit AttackDelayCastOffsetPercentAttackSpeedRatio above.
+        public float CritAttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 1.0f;
         public float CritAttackDelayOffsetPercent { get; private set; } = 0.0f;
         // S4 default 2.0 (CharacterData.cpp:1008 loads every non-base slot incl. crit
         // with the 2.0 catch-all default). The crit walk's first slot always catches.

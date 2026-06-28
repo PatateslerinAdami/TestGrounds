@@ -40,12 +40,36 @@ namespace AIScripts
         protected override void OnActivateBehavior()
         {
             Owner.ScriptOwnsCombatSelection = true;
+            // Auto-attack firing is driven by the shared AutoAttackComponent against the task-selected
+            // target (tasks set the enemy via SetTargetUnit; the component fires once in range).
             NetSetState(AIState.AI_IDLE);
 
             // Delayed init (Riot TimerHackDelayedInit, 1s, one-shot) — build the task set once the map is up.
             InitTimer("BotDelayedInit", 1.0f, false, BuildTasks);
             // Scheduler tick (Bot.lua TimerUpdate). 0.25s = Riot's decision cadence.
             InitTimer("BotSchedule", 0.25f, true, RunScheduler);
+        }
+
+        // State-gated auto-attack (option C): the bot only swings while a task has it in an ATTACK state
+        // with a real combat target — AI_ATTACK (TaskKillMinion / TaskKillTower), AI_ATTACK_HERO
+        // (TaskKillHero), or AI_TAUNTED (taunt onto the taunter via CrowdControlComponent). NOT a no-op:
+        // unlike the other archetypes, the bot's move helper SetStateAndMove (MoveToPoint) does NOT clear
+        // TargetUnit, so a stale target could previously make the bot auto-attack while WANDERING (AI_MOVE),
+        // PUSHING (AI_SOFTATTACK = move toward the lane, no combat target intended) or RETREATING
+        // (AI_RETREAT). This gate suppresses that — a pushing/retreating bot no longer clings to a stale
+        // target; actual combat runs through the AI_ATTACK(_HERO) tasks. (AI_SOFTATTACK is a move-to-point
+        // push state here, NOT an attack state — distinct from HeroAI where SOFTATTACK does attack.)
+        public override bool AutoAttackStatePermits()
+        {
+            switch (CurrentState)
+            {
+                case AIState.AI_ATTACK:
+                case AIState.AI_ATTACK_HERO:
+                case AIState.AI_TAUNTED:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         // Bot.lua TimerHackDelayedInit: assemble the task list. First slice = the two singletons that

@@ -41,7 +41,9 @@ internal class ElixirOfRuin : IBuffGameScript {
         StatsModifier.HealthPoints.FlatBonus = SelfHealthBonus;
         unit.AddStatModifier(StatsModifier);
         unit.Stats.CurrentHealth += SelfHealthBonus;
-        ApiEventManager.OnDealDamage.AddListener(this, unit, OnDealDamage);
+        // OnPreDealDamage (not OnDealDamage): OnDealDamage fires AFTER the HP subtraction, so the bonus
+        // was added too late and never reached health. OnPreDealDamage fires before HP (after mitigation).
+        ApiEventManager.OnPreDealDamage.AddListener(this, unit, OnPreDealDamage);
         RefreshSiegeCommanderAura();
     }
 
@@ -58,7 +60,7 @@ internal class ElixirOfRuin : IBuffGameScript {
         RefreshSiegeCommanderAura();
     }
 
-    private void OnDealDamage(DamageData data) {
+    private void OnPreDealDamage(DamageData data) {
         if (!IsValidTarget(_owner, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets)) return;
         data.PostMitigationDamage +=
             data.Target.Stats.GetPostMitigationDamage(data.Damage * TowerDamageBonusPct, data.DamageType, data.Attacker);

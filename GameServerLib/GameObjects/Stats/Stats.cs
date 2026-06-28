@@ -79,6 +79,15 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public uint EvolvePoints { get; set; }
         public uint EvolveFlags { get; set; }
         public float SlowResistPercent { get; set; }
+        /// <summary>
+        /// Epic-monster slow rejection (Baron/Dragon, Monster_Epic tag). Slows are a MoveSpeed stat-mod,
+        /// not a status flag, so they bypass the BuffType CC-flag suppression in AttackableUnit
+        /// .RecomputeBuffEffects — this flag rejects their movespeed effect in CalculateTrueMoveSpeed.
+        /// The slow buff object is still added (BuffAdd2 sent, replay-faithful); only its speed effect is
+        /// nullified, matching Riot's "buff added, internal CC rejected" model. See
+        /// reference_epic_monster_cc_immunity.
+        /// </summary>
+        public bool ImmuneToSlow { get; set; }
         public float MultiplicativeSpeedBonus { get; set; }
         // Slow registry: every active slow keyed by its StatsModifier instance (reference
         // identity this is robust against equal percentages from different buffs and against the
@@ -155,6 +164,9 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public void LoadStats(CharData charData)
         {
+            // Epic monsters reject the slow EFFECT (tag-derived, same source as AttackableUnit
+            // .IsCrowdControlImmune); the slow buff still applies, only its movespeed reduction is nullified.
+            ImmuneToSlow = charData.UnitTags.HasTag(UnitTag.Monster_Epic);
             AcquisitionRange.BaseValue = charData.AcquisitionRange;
             AttackDamagePerLevel.BaseValue = charData.DamagePerLevel;
             Armor.BaseValue = charData.Armor;
@@ -544,7 +556,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             return magicResist * percentMagicMultiplier * percentBonusMagicMultiplier - flatMagicPenetration;
         }
 
-        private static float GetMitigationMultiplier(float resistance)
+        // internal (not private) so the test assembly can pin the Riot armor/MR mitigation curve directly.
+        internal static float GetMitigationMultiplier(float resistance)
         {
             if (resistance >= 0.0f)
             {
@@ -602,7 +615,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             speed = speed * (1 + MoveSpeed.PercentBonus) * (1 + MultiplicativeSpeedBonus);
 
-            if (_slows.Count > 0)
+            if (_slows.Count > 0 && !ImmuneToSlow)
             {
                 // Stage 1: named-effect dedup: the same effect never stacks with itself,
                 // not even from different casters (wiki: Exhaust re-apply = duration reset

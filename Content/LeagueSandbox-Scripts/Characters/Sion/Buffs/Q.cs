@@ -24,7 +24,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Stunned, true);
+            unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false); // stun
             float knockupDuration = buff.Variables.GetFloat("KnockupTime", 0.5f);
 
             float desiredHeight = 8.0f;
@@ -37,7 +37,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Stunned, false);
+            unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, true); // un-stun
         }
 
         public void OnUpdate(float diff)

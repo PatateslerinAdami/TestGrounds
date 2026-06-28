@@ -370,7 +370,17 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         // just cleared. UpdateMoveOrder(Hold) then clears the path (StopMovement) but
                         // keeps the target; the AI's auto-promote + idle-acquire guards keep it from
                         // chasing/acquiring. Net: keep attacking an in-range target, don't follow it.
-                        var holdTarget = u ?? champion.ConsumeRecentStopClearedTarget(250f);
+                        //
+                        // GATED on the client "Auto Attack" (AutoAcquireTarget) option: Hold's
+                        // attack-in-place is the same in-place auto-attack the idle-acquire guard runs, so
+                        // it's controlled by the same option. With the option OFF, do NOT restore — leave
+                        // the target the leading Stop cleared, so Hold behaves exactly like Stop (stand,
+                        // never auto-attack). An explicit target carried on the Hold packet (u, normally
+                        // absent) is still honoured regardless. The HeroAI Hold re-acquire (AI_HARDIDLE
+                        // branch) is already option-gated, so nothing re-grabs a target when the option is off.
+                        var holdTarget = u ?? (champion.AutoAcquireTargetEnabled
+                            ? champion.ConsumeRecentStopClearedTarget(250f)
+                            : null);
                         if (holdTarget != null)
                         {
                             champion.SetTargetUnit(holdTarget, true);
@@ -406,6 +416,13 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     && req.OrderType != OrderType.PetHardReturn && req.OrderType != OrderType.PetHardStop)
                 {
                     champion.IssueOrder(req.OrderType, u, req.Position);
+
+                    // IssueOrders S2 Phase 2: drive the order-status lifecycle through HandleNewOrder (Riot's
+                    // status machine: setOrder → PENDING → TryToExecuteOrder ? ExecuteOrder (EXECUTED)). This
+                    // is the single issue point. The path/target work above is Riot's IssueOrder FUNNEL (=
+                    // this HandleMove); HandleNewOrder is the separate status step, distinct from the
+                    // IssueOrder→OnOrder script channel just above. Nothing reads OrderStatus yet → neutral.
+                    champion.HandleNewOrder(req.OrderType, u, req.Position);
                 }
                 else if (pet != null)
                 {
@@ -414,6 +431,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     // The legacy IAIScript Pet.cs is not a BaseAIScript, so IssueOrder is a no-op for it
                     // (it keeps using its OnUnitUpdateMoveOrder listener) — behaviour-neutral until P-B.
                     pet.IssueOrder(req.OrderType, u, req.Position);
+                    // Status machine runs on the PET (its own IssueOrders), mirroring Riot's pet.IssueOrder
+                    // → pet.orders.HandleNewOrder. Neutral (unread).
+                    pet.HandleNewOrder(req.OrderType, u, req.Position);
                 }
             }
 

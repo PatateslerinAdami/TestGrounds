@@ -35,7 +35,7 @@ namespace Spells
         public void OnSpellPostCast(Spell spell)
         {
             
-            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, false, isVisible: false);
+            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, isVisible: false);
             HideHealthBar(hiddenMinion);
             SpellCast(_velkoz, 2, SpellSlotType.ExtraSlots, true, hiddenMinion, Vector2.Zero);
             AddParticlePos(_velkoz, "Velkoz_Base_E_AOE_green.troy", _endPos, _endPos, lifetime: 0.8f, enemyParticle: "Velkoz_Base_E_AOE_red.troy");

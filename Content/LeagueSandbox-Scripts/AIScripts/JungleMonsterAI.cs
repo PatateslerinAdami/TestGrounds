@@ -60,6 +60,10 @@ namespace AIScripts
                 return;
             }
 
+            // Firing driven by the shared AutoAttackComponent, not the engine's auto-fire-on-target.
+            // Retreat() clears the target (SetTargetUnit(null) → no fire while leashing/retreating); while
+            // engaged it always wants to attack its in-range target. Engine idealRange swing gate unchanged.
+
             _leashedPos = _monster.Position;
             // NOTE: do NOT capture the spawn orientation here. OnActivate runs inside the ObjAIBase
             // base ctor, BEFORE the Monster ctor applies FaceDirection(faceDirection) — Direction is
@@ -95,6 +99,19 @@ namespace AIScripts
                 _leashedOrientation = _monster.Direction;
                 _leashOrientationCaptured = true;
             }
+        }
+
+        // State-gated auto-attack (option C, Leashed.lua TimerAttack → TurnOnAutoAttack): a jungle
+        // monster only swings while ENGAGED — AI_ATTACK (woken / camp-assist / re-acquired target) or
+        // AI_TAUNTED (taunt onto the taunter via CrowdControlComponent). Every engage sets the target via
+        // SetStateAndCloseToTarget(AI_ATTACK,…) (state+target atomically), and AI_RETREAT clears the target
+        // (so no swing while leashing), so this is behaviour-identical: the dormant camp sits in AI_ATTACK
+        // with NO target (RoamState Inactive) → no fire; fear/flee/charm/retreat carry no target. Gate just
+        // makes firing state-driven instead of target+range driven.
+        public override bool AutoAttackStatePermits()
+        {
+            return CurrentState == AIState.AI_ATTACK
+                || CurrentState == AIState.AI_TAUNTED;
         }
 
         // ---------------- Helpers ----------------
@@ -333,7 +350,7 @@ namespace AIScripts
         // ---------------- Target maintenance ----------------
 
         // Leashed.lua TimerAttack (every tick): keep a valid target; range-based auto-attack on/off is
-        // engine-driven (target + AttackTo), so this only re-acquires when the target is gone.
+        // driven by the shared AutoAttackComponent (P5), so this only re-acquires when the target is gone.
         private void TimerAttack()
         {
             if (_monster == null || _monster.IsDead
@@ -376,7 +393,7 @@ namespace AIScripts
         }
 
         // Engine dropped our target (died / invalid) — re-acquire immediately.
-        private void OnOwnerTargetLost(AttackableUnit lostTarget)
+        private void OnOwnerTargetLost(ObjAIBase owner, AttackableUnit lostTarget, TargetLostReason reason)
         {
             if (_monster == null || _monster.IsDead || CurrentState == AIState.AI_HALTED)
             {

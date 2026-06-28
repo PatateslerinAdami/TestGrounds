@@ -116,7 +116,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             // MoveOrder == MoveTo) and fights the flee movement — the "unit with auto-attack on won't
             // run away" bug. Client orders are already blocked while feared (CanIssueMoveOrders), so
             // the target stays cleared for the duration.
-            _owner.CancelAutoAttack(reset: true, fullCancel: true);
+            _owner.CancelAutoAttack(reset: true, fullCancel: true, respectWindupLock: true);
             _owner.SetTargetUnit(null);
 
             Drive();
@@ -152,7 +152,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             // its CC state, so it stays paused for the taunt and resumes on end with no extra handler.
             if (_ai.NonAggressiveTaunt)
             {
-                _owner.CancelAutoAttack(reset: true, fullCancel: true);
+                _owner.CancelAutoAttack(reset: true, fullCancel: true, respectWindupLock: true);
                 _owner.SetTargetUnit(null);
                 _owner.StopMovement();
                 return;
@@ -181,7 +181,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             _mode = Mode.Charm;
             _reissueInterval = CHARM_REISSUE_INTERVAL;
             _sinceReissue = 0f;
-            _owner.CancelAutoAttack(reset: true, fullCancel: true);
+            _owner.CancelAutoAttack(reset: true, fullCancel: true, respectWindupLock: true);
             _owner.SetTargetUnit(null);
             Drive();
         }

@@ -31,7 +31,7 @@ internal class GuardianAngel : IBuffGameScript
         SetStatus(unit, StatusFlags.CanCast, false);
         SetStatus(unit, StatusFlags.Targetable, false);
         SetStatus(unit, StatusFlags.Invulnerable, true);
-        SetStatus(unit, StatusFlags.Stunned, true);
+        // (CanMove/CanAttack/CanCast already disabled above = the stasis lock; no separate Stunned flag — M2)
         unit.StopMovement();
     }
 
@@ -42,7 +42,6 @@ internal class GuardianAngel : IBuffGameScript
         SetStatus(unit, StatusFlags.CanCast, true);
         SetStatus(unit, StatusFlags.Targetable, true);
         SetStatus(unit, StatusFlags.Invulnerable, false);
-        SetStatus(unit, StatusFlags.Stunned, false);
         AddBuff("HasBeenRevived", 300f, 1, ownerSpell, unit, null);
         AddParticleTarget(unit, unit, "GuardianAngel_tar.troy", unit);
         AddParticleTarget(unit, unit, "GuardianAngel_cas.troy", unit);

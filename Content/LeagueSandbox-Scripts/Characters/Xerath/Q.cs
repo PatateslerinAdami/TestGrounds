@@ -288,9 +288,11 @@ namespace Spells
             // to both PositionY and TargetPositionY (Riot splits them) — minor wire
             // mismatch but visually equivalent.
             const float beamElevation = 185f;
+            // Keyword=caster: replay 1050f59b shows all 117 beam packets carry KeywordNetID=Xerath.
+            // Now that the wire default is 0, Xerath opts in explicitly.
             AddParticlePos(_xerath, "xerath_base_q_beam.troy", _startPos, _end,
                 lifetime: BeamLifetimeSeconds, overrideTargetHeight: beamElevation,
-                bone: "ROOT", targetBone: "TOP");
+                bone: "ROOT", targetBone: "TOP", skinColorSourceNetID: _xerath.NetId);
 
             // Release the cast-recovery lockout (mirrors the disable above; no Rooted to clear).
             _xerath.SetStatus(StatusFlags.CanMove, true);
@@ -313,7 +315,9 @@ namespace Spells
                 var ap = owner.Stats.AbilityPower.Total * owner.Spells[0].SpellData.Coefficient;
                 var damage = 80 + 40 * (owner.Spells[0].CastInfo.SpellLevel - 1) + ap;
                 
-                AddParticleTarget(_xerath, unit, "xerath_base_q_tar.troy", unit, lifetime: 3.0f);
+                // Keyword=caster: replay shows the tar packets carry KeywordNetID=Xerath (wire default is now 0).
+                AddParticleTarget(_xerath, unit, "xerath_base_q_tar.troy", unit, lifetime: 3.0f,
+                    skinColorSourceNetID: _xerath.NetId);
                 
                 unit.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false,
                     _spell);

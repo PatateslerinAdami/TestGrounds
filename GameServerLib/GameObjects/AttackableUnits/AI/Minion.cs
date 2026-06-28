@@ -93,7 +93,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             int skinId = 0,
             bool ignoreCollision = false,
             bool targetable = true,
-            bool isWard = false,
             ObjAIBase visibilityOwner = null,
             Stats stats = null,
             string AIScript = "",
@@ -101,12 +100,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             int healthBonus = 0,
             int initialLevel = 1,
             bool enableScripts = true
-        ) : base(game, model, name, 40, position, 1100, skinId, netId, team, stats, AIScript, enableScripts)
+            // collisionRadius = 0 → ObjAIBase falls through to CharData.GameplayCollisionRadius (Riot's
+            // gameplay radius: lane minions 48/65, monsters 75-120, e.g. AncientGolem 100). This radius
+            // drives BOTH unit-vs-unit collision AND auto-attack range (PathingHandler). Previously
+            // hardcoded 40, which made every minion/monster physically smaller than Riot — a big monster
+            // (golem r=100) was pulled ~60u deeper before attacking than the client (which knows r=100)
+            // expects, producing a forward "slide" into the target during the attack windup. The 40 default
+            // still applies as a fallback when GameplayCollisionRadius is missing (ObjAIBase ctor).
+            // Terrain pathing/stuck behaviour is unaffected (that uses PathfindingRadius =
+            // CharData.PathfindingCollisionRadius, loaded separately).
+        ) : base(game, model, name, 0, position, 1100, skinId, netId, team, stats, AIScript, enableScripts)
         {
             Owner = owner;
 
             IsLaneMinion = false;
-            IsWard = isWard;
+            // Ward-ness is data-driven, exactly like Riot: a unit IS a ward iff its CharData carries the
+            // `Ward` UnitTag (SightWard/VisionWard/GhostWard/YellowTrinket*/KalistaSpawn), regardless of how
+            // it was spawned — Riot's SpawnMinion has no "isWard" param. See reference_unit_tags_model.
+            IsWard = UnitTags.HasTag(UnitTag.Ward);
             IgnoresCollision = ignoreCollision;
             if (IgnoresCollision)
             {

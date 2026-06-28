@@ -69,7 +69,7 @@ public class VayneTumble : ISpellScript {
     private void OnMoveSuccess(AttackableUnit owner, ForceMovementParameters parameters) {
         if (owner != _vayne || !_tumbleDashPending) return;
         _tumbleDashPending = false;
-        AddBuff("VayneTumble", 6f, 1, _tumbleSpell, _vayne, _vayne);
+        AddBuff("VayneTumbleBonus", 6f, 1, _tumbleSpell, _vayne, _vayne);
     }
 
     private void OnMoveFailure(AttackableUnit owner, ForceMovementParameters parameters) {

@@ -336,6 +336,13 @@ namespace LeagueSandbox.GameServer
                 shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
                     nearSighted ? UnitHasVisionOn(champion, obj, nearSighted) : obj.IsVisibleByTeam(champion.Team)
                 );
+
+                // SpecificUnitToExclude: hide from the excluded recipient even if FoW would show it.
+                if (shouldBeVisibleForPlayer && obj is Particle excludeParticle
+                    && excludeParticle.SpecificUnitExclude is Champion excluded && excluded.ClientId == cid)
+                {
+                    shouldBeVisibleForPlayer = false;
+                }
             }
 
             obj.Sync(cid, team, shouldBeVisibleForPlayer, forceSpawn);

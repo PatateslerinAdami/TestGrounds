@@ -22,7 +22,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            buff.SetStatusEffect(StatusFlags.Stunned, true);
+            buff.SetStatusEffect(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false); // stun via buff layer — M2
             unit.IconInfo.ChangeBorder("Teleport", "AscWarp");
             AddParticleTarget(unit, unit, "Global_Asc_teleport", unit, buff.Duration);
         }

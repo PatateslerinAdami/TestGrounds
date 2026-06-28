@@ -55,6 +55,11 @@ namespace AIScripts
                 return;
             }
 
+            // Firing is driven by the shared AutoAttackComponent (in attack range → on, past cancel range
+            // → off), not by the engine auto-firing on "target set". This script keeps SELECTION + chase
+            // intent only. The engine's idealRange swing gate (ChasingAttackRangePercent) is unchanged, so
+            // WHERE it fires is identical.
+
             InitTimer("TimerFindEnemies", DELAY_FIND_ENEMIES, true, TimerFindEnemies);
             InitTimer("TimerMoveForward", 0f, true, TimerMoveForward);
             InitTimer("TimerAntiKite", 4f, false, TimerAntiKite);
@@ -89,6 +94,20 @@ namespace AIScripts
         private bool CanAggro()
         {
             return _minion.RoamState == MinionRoamState.Hostile;
+        }
+
+        // State-gated auto-attack (option C, Minion.lua/Aggro.lua TimerFindEnemies → TurnOnAutoAttack):
+        // a lane minion only swings while ENGAGED — AI_ATTACKMOVE_ATTACKING (acquired / CFH / collision /
+        // taunt-end target) or AI_TAUNTED (taunt forces it onto the taunter via the CrowdControlComponent).
+        // While pushing (AI_ATTACKMOVESTATE) or idle it has no engaged target, so this gates OUT the
+        // "stale target still set while walking" case (it re-engages → ATTACKMOVE_ATTACKING on the next
+        // 0.25s sweep before swinging). Every attack path sets the target via SetStateAndCloseToTarget(
+        // AI_ATTACKMOVE_ATTACKING, …) — state + target atomically — so this is behaviour-identical in active
+        // combat. Inherited by BaronMinionAI (same state machine). Charm carries no target → never fires.
+        public override bool AutoAttackStatePermits()
+        {
+            return CurrentState == AIState.AI_ATTACKMOVE_ATTACKING
+                || CurrentState == AIState.AI_TAUNTED;
         }
 
         // ---------------- Timers (Minion.lua) ----------------
@@ -317,7 +336,7 @@ namespace AIScripts
 
         // Aggro.lua OnTargetLost: the engine dropped our target (died / went invalid) — re-acquire
         // immediately instead of waiting for the next 0.25s tick.
-        private void OnOwnerTargetLost(AttackableUnit lostTarget)
+        private void OnOwnerTargetLost(ObjAIBase owner, AttackableUnit lostTarget, TargetLostReason reason)
         {
             if (_minion == null || _minion.IsDead || IsCrowdControlled())
             {

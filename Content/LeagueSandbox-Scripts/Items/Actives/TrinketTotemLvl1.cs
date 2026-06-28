@@ -42,7 +42,7 @@ public class TrinketTotemLvl1 : ISpellScript {
             truecoords = current + range;
         } else { truecoords = cursor; }
 
-        _ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true, true);
+        _ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true);
         _ward.Stats.ManaPoints.BaseValue = duration;
         _ward.Stats.CurrentMana          = duration;
         AddParticle(owner, _ward, "TrinketOrbLvl1Audio", _ward.Position);

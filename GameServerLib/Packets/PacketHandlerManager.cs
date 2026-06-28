@@ -285,6 +285,17 @@ namespace PacketDefinitions420
             return peerInfo?.Team ?? TeamId.TEAM_NEUTRAL;
         }
 
+        /// <summary>
+        /// Whether <paramref name="userId"/> is the player who controls <paramref name="unit"/>. Used to gate
+        /// the owner-only replication bucket (CLIENT_ONLY: gold / cooldowns / mana costs), which Riot sends
+        /// only to the owning player (replay-verified). Only a champion has a controlling player; for every
+        /// other unit type this returns false (they carry no owner-only replication data anyway).
+        /// </summary>
+        public bool IsOwnedByPlayer(LeagueSandbox.GameServer.GameObjects.AttackableUnits.AttackableUnit unit, int userId)
+        {
+            return unit != null && _playerManager.GetPeerInfo(userId)?.Champion == unit;
+        }
+
         // -------- Net-thread receive path --------
         // HandleNetworkPacket is the entry point invoked by the network
         // thread's HostService loop. It does Blowfish decrypt + RequestConvertor

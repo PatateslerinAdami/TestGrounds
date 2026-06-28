@@ -74,9 +74,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// </summary>
         public float[] SampledHeights { get; private set; }
         /// <summary>
-        /// Grid of hints.
-        /// Function likely related to pathfinding.
-        /// Currently Unused.
+        /// Grid of pathfinding hint nodes. Used by the hint-cost A* path (see GetCost / HintNodes).
         /// </summary>
         public NavigationHintGrid HintGrid { get; private set; }
         /// <summary>

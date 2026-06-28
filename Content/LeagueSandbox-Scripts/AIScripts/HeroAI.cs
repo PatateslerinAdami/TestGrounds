@@ -37,11 +37,26 @@ namespace AIScripts
                 NetSetState(AIState.AI_IDLE);
             });
 
+            // Lost-target re-acquisition (Hero.lua OnReachedDestinationForGoingToLastLocation): the champion
+            // walked to a hard target's last-known position without re-sighting it → give up and idle (the
+            // OnTick idle-acquire then resumes normal target selection). The walk + resume-on-sight are
+            // driven in OnTick from Owner.IsTargetLost(). See docs/LOST_TARGET_REACQUISITION_PLAN.md.
+            Subscribe(AIEvent.OnReachedDestinationForGoingToLastLocation, _ =>
+            {
+                Owner.ClearLostTarget();
+                NetSetState(AIState.AI_IDLE);
+            });
+
             // Order/State split Phase 2: the champion brain owns combat SELECTION (Hero.lua
             // TimerDistanceScan): idle auto-acquire + attack-move acquire / soft-drop / resume. The
             // matching engine UpdateTarget blocks are skipped for HeroAI units; the engine keeps only
             // the EXECUTION (chase the set target to range + auto-attack).
             Owner.ScriptOwnsCombatSelection = true;
+            // Auto-attack firing is driven by the shared AutoAttackComponent (attached by BaseAIScript): it
+            // toggles the swing on/off by range against the player-/scan-selected target. The engine fires
+            // only when the toggle is on, never merely because a target is in range. Orb-walk / stutter-step
+            // are unaffected (move-/CC-driven windup cancels are separate); the engine's idealRange geometry
+            // still binds WHERE the swing fires.
 
             NetSetState(AIState.AI_IDLE);
         }
@@ -79,24 +94,28 @@ namespace AIScripts
                 NetSetState(AIState.AI_ATTACKMOVESTATE);
             }
 
-            // Hold position (AI_STANDING): the champion holds its EXACT position and never moves — it
-            // does not chase and does not walk to close a gap (unlike Hero.lua's AI_STANDING soft-chase;
-            // our H/Hold maps to a pure hold). With the "Auto Attack" option on it auto-attacks any
-            // enemy already within auto-ATTACK range: keep the current target while it is in range, else
-            // grab the nearest enemy already in attack range. MoveOrder stays Hold, so the engine
-            // attacks in place (RefreshWaypoints is suppressed for Hold) but never issues a chase.
-            // (H = "don't move but fight"; S/Stop = "cancel all" — handled separately as AI_HARDIDLE.)
-            if (CurrentState == AIState.AI_STANDING)
+            // Hold position (player H): the champion holds its EXACT position and never moves — it does
+            // not chase and does not walk to close a gap. Hold is the ORDER (MoveOrder == Hold ⇒ Riot
+            // IsHoldingPosition), NOT an AI state; the state is the turret-like stationary-attacker pair
+            // AI_HARDIDLE ↔ AI_HARDIDLE_ATTACKING (NOT AI_STANDING, which is Riot's soft-idle). With the
+            // "Auto Attack" option on it auto-attacks any enemy already within auto-ATTACK range: keep the
+            // current target while in range, else grab the nearest enemy already in attack range. MoveOrder
+            // stays Hold, so the engine attacks in place (RefreshWaypoints suppressed for Hold) but never
+            // chases. Gated on the AI_HARDIDLE(_ATTACKING) state alongside MoveOrder==Hold so the internal
+            // cast/channel-end Hold fallbacks (which land on AI_IDLE via UpdateMoveOrder, not HARDIDLE) keep
+            // their no-acquire behaviour. (S/Stop = "cancel all" = AI_HARDIDLE but MoveOrder==Stop ⇒ excluded.)
+            if (c.MoveOrder == OrderType.Hold
+                && (CurrentState == AIState.AI_HARDIDLE || CurrentState == AIState.AI_HARDIDLE_ATTACKING))
             {
                 if (c.AutoAcquireTargetEnabled && c.CanAttack())
                 {
                     // Engine attack-range test (ObjAIBase.UpdateTarget: Range.Total + both radii).
                     float aaRange = c.Stats.Range.Total + c.CollisionRadius;
-                    bool currentInRange = c.TargetUnit != null && !c.TargetUnit.IsDead
+                    bool inRange = c.TargetUnit != null && !c.TargetUnit.IsDead
                         && c.TargetUnit.Team != c.Team
                         && Vector2.DistanceSquared(c.Position, c.TargetUnit.Position)
                            <= (aaRange + c.TargetUnit.CollisionRadius) * (aaRange + c.TargetUnit.CollisionRadius);
-                    if (!currentInRange)
+                    if (!inRange)
                     {
                         // The nearest enemy in acquisition range is the nearest enemy overall, so if it
                         // is not within attack range no other one is either. Never acquire beyond attack
@@ -108,8 +127,13 @@ namespace AIScripts
                         {
                             // Keep MoveOrder == Hold: the engine auto-attacks it in place, no chase.
                             c.SetTargetUnit(nearest, true);
+                            inRange = true;
                         }
                     }
+                    // Reflect attacking-status in the state (turret HARDIDLE ↔ HARDIDLE_ATTACKING). Today
+                    // behaviour-neutral (auto-attack is still TargetUnit-driven); this readies the C
+                    // state-gate (AI_HARDIDLE_ATTACKING is an auto-attack-permitting state, AI_HARDIDLE not).
+                    NetSetState(inRange ? AIState.AI_HARDIDLE_ATTACKING : AIState.AI_HARDIDLE);
                 }
                 return;
             }
@@ -117,6 +141,26 @@ namespace AIScripts
             // The engine executes the chase while a target is set; selection only runs with no target.
             if (c.TargetUnit != null)
             {
+                return;
+            }
+
+            // Lost-target re-acquisition (Hero.lua go-to-last-known). The engine remembered a HARD target
+            // that left vision (Owner.IsTargetLost(); soft-acquired targets are excluded engine-side): walk
+            // to its last-known position, resume the hard chase the moment it reappears, and give up on
+            // arrival (OnReachedDestinationForGoingToLastLocation → IDLE). Runs before idle-acquire so the
+            // champion pursues the lost target instead of grabbing a new one.
+            if (c.IsTargetLost())
+            {
+                AttackableUnit seen = c.GetLostTargetIfVisible();
+                if (seen != null)
+                {
+                    SetStateAndCloseToTarget(AIState.AI_HARDATTACK, seen);
+                    return;
+                }
+                if (CurrentState != AIState.AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION)
+                {
+                    SetStateAndMove(AIState.AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION, c.LostTargetLastKnownPosition);
+                }
                 return;
             }
 
@@ -140,6 +184,9 @@ namespace AIScripts
                 else if (nextTarget != null)
                 {
                     c.SetTargetUnit(nextTarget, true);
+                    // Attack-move acquired a target → soft attack (so the C state-gate permits the swing
+                    // and the soft-drop above applies). Matches the dest != Zero branch's SOFTATTACK.
+                    NetSetState(AIState.AI_SOFTATTACK);
                 }
                 return;
             }
@@ -165,6 +212,33 @@ namespace AIScripts
             {
                 c.SetTargetUnit(idleTarget, true);
                 c.UpdateMoveOrder(OrderType.AttackTo, true);
+                // Enter an attack state so the auto-attack state-gate (option C) permits the swing — this
+                // acquire previously left _aiState at AI_IDLE while attacking. AI_HARDATTACK matches the
+                // hard AttackTo chase set just above (no soft-drop). (Hero.lua idle-acquire uses SOFTATTACK
+                // = soft/droppable; our hard variant is a pre-existing divergence, not changed here.)
+                NetSetState(AIState.AI_HARDATTACK);
+            }
+        }
+
+        // State-gated auto-attack (option C, Hero.lua TimerCheckAttack): the champion only auto-attacks
+        // while in an ATTACKING state — right-click hard attack (AI_HARDATTACK), attack-move / idle
+        // acquired (AI_SOFTATTACK), Hold attacking in place (AI_HARDIDLE_ATTACKING), or a taunt
+        // (AI_TAUNTED). Charm (AI_CHARMED) carries no target so it never fires, but is listed to match
+        // Hero.lua's attack-state set. Every champion auto-attack path is made to enter one of these
+        // states (OnOrder + OnTick acquires), so this gates OUT only the "target set but not engaged"
+        // cases (Riot: a target merely set — e.g. a HUD selection or a move-to-cast — does not auto-fire).
+        public override bool AutoAttackStatePermits()
+        {
+            switch (CurrentState)
+            {
+                case AIState.AI_HARDATTACK:
+                case AIState.AI_SOFTATTACK:
+                case AIState.AI_HARDIDLE_ATTACKING:
+                case AIState.AI_TAUNTED:
+                case AIState.AI_CHARMED:
+                    return true;
+                default:
+                    return false;
             }
         }
 
@@ -174,6 +248,10 @@ namespace AIScripts
         // brain to read _aiState; Phase 4/5 retire MoveOrder as the behaviour driver.
         public override void OnOrder(OrderType order, AttackableUnit target, Vector2 pos)
         {
+            // Any explicit player order overrides an in-progress go-to-last-known pursuit (otherwise the
+            // remembered lost target would re-trigger the walk next OnTick and fight the new order).
+            Owner.ClearLostTarget();
+
             switch (order)
             {
                 // Explicit attack-on-unit (and taunt) = hard chase (does not drop out of range).
@@ -189,9 +267,14 @@ namespace AIScripts
                 case OrderType.MoveTo:
                     NetSetState(AIState.AI_MOVE);
                     break;
-                // Hold: stand still (never move/chase); auto-attack any enemy within attack range.
+                // Hold (player H): stand still (never move/chase); auto-attack any enemy in attack range.
+                // Hold is an ORDER concept (MoveOrder == Hold ⇒ Riot obj_AI_Hero::IsHoldingPosition checks
+                // savedOrderCmd == AI_HOLD), NOT an AI state — so it uses the turret-like stationary-attacker
+                // state AI_HARDIDLE (↔ AI_HARDIDLE_ATTACKING while attacking, set in OnTick), the same pair
+                // Turret.lua uses. It deliberately does NOT use AI_STANDING: in Hero.lua AI_STANDING is the
+                // post-combat soft-idle that auto-acquires → SOFTATTACK, a different concept.
                 case OrderType.Hold:
-                    NetSetState(AIState.AI_STANDING);
+                    NetSetState(AIState.AI_HARDIDLE);
                     break;
                 // Stop: clear target and idle (no acquire).
                 case OrderType.Stop:

@@ -40,7 +40,7 @@ public class TrundleCircle : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        _pillar = AddMinion(_trundle, "TrundleWall", "IcePillar", _end, _trundle.Team, _trundle.SkinID, false, false,
+        _pillar = AddMinion(_trundle, "TrundleWall", "IcePillar", _end, _trundle.Team, _trundle.SkinID, false, 
                             false,
                             SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
                             SpellDataFlags.AffectEnemies, isVisible: true);

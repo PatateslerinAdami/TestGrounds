@@ -94,7 +94,7 @@ internal class ZedUltDash : IBuffGameScript {
         _zedRShadowHandler?.SpawnShadow(_zed.Position, _target.Position);
         HideHealthBar(_zed, -1, true);
         _zed.UpdateMoveOrder(OrderType.Stop);
-        _zed.SetStatus(StatusFlags.Rooted,     true);
+        _zed.SetStatus(StatusFlags.CanMove,    false); // (was Rooted) — M2
         _zed.SetStatus(StatusFlags.Ghosted,    true);
         _zed.SetStatus(StatusFlags.Targetable, false);
         _zed.SetStatus(StatusFlags.CanAttack, false);
@@ -181,7 +181,7 @@ internal class ZedUltDash : IBuffGameScript {
         RemoveBuff(_zed, "ZedDashCloneMaker");
         _zed.SetStatus(StatusFlags.NoRender, false);
         HideHealthBar(_zed, -1, false);
-        _zed.SetStatus(StatusFlags.Rooted, false);
+        _zed.SetStatus(StatusFlags.CanMove, true); // (was Rooted) — M2
         if (!_zed.IsDead) {
             _zed.SetStatus(StatusFlags.Targetable, true);
             _zed.SetStatus(StatusFlags.CanAttack, true);

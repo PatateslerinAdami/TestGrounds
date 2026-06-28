@@ -59,6 +59,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             // types (Riot's model). Added before OnActivateBehavior so its event subscriptions run
             // first (CC drives, then the concrete AI re-acquires on CC-end). See CrowdControlComponent.
             AddComponent(new CrowdControlComponent());
+            // P5 (docs/AI_COMBAT_EXECUTION_SPLIT_PLAN.md): the shared auto-attack toggle driver — the sole
+            // auto-attack path since P5.6 (legacy engine auto-fire removed). Inert until the host has an
+            // enemy target, so non-combat AIs never fire. After CC so a taunt-set target is visible to it
+            // the same tick.
+            AddComponent(new AutoAttackComponent());
             OnActivateBehavior();
             Emit(AIEvent.ComponentInit);
         }
@@ -108,6 +113,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             OnCallForHelpBehavior(attacker, victim);
         }
 
+        public void OnReceiveImportantCallForHelp(AttackableUnit attacker, AttackableUnit victim)
+        {
+            Emit(AIEvent.OnReceiveImportantCallForHelp, attacker);
+            OnImportantCallForHelpBehavior(attacker, victim);
+        }
+
         // ---------------- Subclass hooks ----------------
 
         /// <summary>Called once on activation — register components and init state here.</summary>
@@ -128,6 +139,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         protected virtual void OnDecisionTick(float diff) { }
 
         protected virtual void OnCallForHelpBehavior(AttackableUnit attacker, AttackableUnit victim) { }
+
+        protected virtual void OnImportantCallForHelpBehavior(AttackableUnit attacker, AttackableUnit victim) { }
 
         /// <summary>
         /// Force the decision sweep to run on the next tick instead of waiting for the 0.25s timer
@@ -152,6 +165,32 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
             PollCCFlag(current, StatusFlags.Feared, AIEvent.OnFearBegin, AIEvent.OnFearEnd);
             PollCCFlag(current, StatusFlags.Charmed, AIEvent.OnCharmBegin, AIEvent.OnCharmEnd);
             _lastCC = current & CC_FLAGS;
+
+            // Riot OnCanMove / OnCanAttack: emit when the capability transitions disabled→enabled (a
+            // move/attack-disabling CC just ended — stun/root/silence/sleep/suppress, which since M2 clear
+            // these capability bits). Emit-only for now (E1, docs/AI_EVENT_AUDIT.md): no subscriber yet, so
+            // 0 behaviour change; the re-acquire reaction + reevaluation are wired with the chase decouple.
+            PollCapabilityRegain(current, StatusFlags.CanMove, AIEvent.OnCanMove, ref _lastCanMove);
+            PollCapabilityRegain(current, StatusFlags.CanAttack, AIEvent.OnCanAttack, ref _lastCanAttack);
+
+            // Riot OnStoppedMoving: emit on the moving→path-ended edge (unit finished its path / arrived).
+            // Emit-only (E2): no subscriber yet → 0 behaviour change. OnStopMove (the stop-COMMAND event) is
+            // emitted separately from AttackableUnit.StopMovement. (A commanded stop trips both, like Riot.)
+            bool pathEnded = Owner.IsPathEnded();
+            if (pathEnded && !_lastPathEnded)
+            {
+                Emit(AIEvent.OnStoppedMoving);
+
+                // Riot OnReachedDestinationForGoingToLastLocation: arrived at a lost target's last-known
+                // position without re-sighting it (Hero.lua → IDLE + rescan). Emit-only for now (P2): the
+                // HeroAI subscriber + the GOING_TO_LAST move are wired in P3 — see
+                // docs/LOST_TARGET_REACQUISITION_PLAN.md.
+                if (CurrentState == AIState.AI_ATTACK_GOING_TO_LAST_KNOWN_LOCATION)
+                {
+                    Emit(AIEvent.OnReachedDestinationForGoingToLastLocation);
+                }
+            }
+            _lastPathEnded = pathEnded;
         }
 
         private void PollCCFlag(StatusFlags current, StatusFlags flag, AIEvent begin, AIEvent end)
@@ -165,6 +204,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
 
             Emit(now ? begin : end);
             RequestReevaluation();
+        }
+
+        // Capability default-ON, so start "enabled"; a unit that spawns CC'd just sees enabled→... never a
+        // spurious regain. Emit on the disabled→enabled edge only (Riot OnCanMove/OnCanAttack semantics).
+        private bool _lastCanMove = true;
+        private bool _lastCanAttack = true;
+        // Units spawn idle (path-ended), so start true → no spurious OnStoppedMoving before the first move.
+        private bool _lastPathEnded = true;
+
+        private void PollCapabilityRegain(StatusFlags current, StatusFlags cap, AIEvent regained, ref bool last)
+        {
+            bool now = current.HasFlag(cap);
+            if (now && !last)
+            {
+                Emit(regained);
+            }
+            last = now;
         }
 
         // ---------------- Components (AddComponent) ----------------
@@ -377,7 +433,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
                     continue;
                 }
 
-                if (!u.IsVisibleByTeam(Owner.Team) || !u.Status.HasFlag(StatusFlags.Targetable) || IsIgnored(u))
+                // Targetability matches Riot's obj_AI_Minion::IsTargetableByUnit / ValidTargetCheck:
+                // global + per-team targetability, plus (when the acquirer is a minion) the minion
+                // gates — wards and non-minion-acquirable units are skipped. So an alive-but-
+                // untargetable-to-this-team structure (e.g. mid-respawn) and wards are both excluded.
+                if (!u.IsVisibleByTeam(Owner.Team) || !u.IsTargetableByUnit(Owner) || IsIgnored(u))
                 {
                     continue;
                 }
@@ -461,6 +521,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         public virtual void OnOrder(OrderType order, AttackableUnit target, Vector2 pos)
         {
         }
+
+        /// <summary>
+        /// Whether this unit's CURRENT AI state permits the auto-attack to fire (Riot's state-gated
+        /// auto-attack: Hero.lua TimerCheckAttack only swings in AI_SOFTATTACK/HARDATTACK/TAUNTED/CHARMED;
+        /// Turret.lua in AI_HARDIDLE_ATTACKING; etc.). Read by the shared <see cref="AutoAttackComponent"/>
+        /// before it toggles the swing on, so a target merely being set + in range no longer fires the
+        /// attack unless the per-archetype brain has actually entered an attacking state.
+        ///
+        /// Default = true (the legacy "target + range ⇒ attack" behaviour) so this is behaviour-neutral
+        /// until an archetype opts in by overriding it with its own attacking-state set. Migrated per
+        /// archetype, each verified in-game (docs/ISSUE_ORDERS_STATE_MACHINE_PLAN.md, option C).
+        /// </summary>
+        public virtual bool AutoAttackStatePermits() => true;
 
         // movement/target/order API. NetSetState changes state without (re)issuing a move order.
 

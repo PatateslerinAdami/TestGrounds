@@ -25,8 +25,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             if (req.TimeLastClient > req.TimeLastServer)
             {
                 var peerInfo = _playerManager.GetPeerInfo(userId);
-                var msg = $"Client {peerInfo.ClientId} sent an invalid heartbeat - Timestamp error (diff: {diff})";
-                _logger.Warn(msg);
+                //var msg = $"Client {peerInfo.ClientId} sent an invalid heartbeat - Timestamp error (diff: {diff})";
+                //_logger.Warn(msg);
             }
 
             // Reply with SyncSimTimeFinalS2C (0x76) so the client refines its latency average + clock

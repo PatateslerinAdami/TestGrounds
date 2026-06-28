@@ -374,12 +374,11 @@ namespace PacketDefinitions420
             {
                 higherValue = higherValue + particle.OverrideTargetHeight;
             }
-            // KeywordNetID: replay-verified (Xerath replay 1050f59b, all 117 beam packets +
-            // tar packets) Riot always sets this to the caster's NetId. Acts as a back-pointer
-            // to the spell-caster for client-side particle bookkeeping. Fall back to 0 when
-            // there's no caster (e.g. global/level FX). Some Vel'Koz R FX explicitly write 0
-            // even with a caster present — opt-in via KeywordNetIDOverride.
-            uint keywordNetID = particle.KeywordNetIDOverride ?? (particle.Caster?.NetId ?? 0);
+            // KeywordNetID: replay-verified default is 0, NOT the caster. Across the TT replays 66250 FX
+            // carry KeywordNetID=0 even with a caster present vs only 13125 == caster; the caster cases are
+            // spells that pass a KeywordObject explicitly (e.g. Xerath beam/tar). So default to 0 and let
+            // scripts opt into a caster/keyword via KeywordNetIDOverride (skinColorSourceNetID / keywordObject).
+            uint keywordNetID = particle.KeywordNetIDOverride ?? 0;
 
             var fxData1 = new FXCreateData
             {
@@ -440,7 +439,14 @@ namespace PacketDefinitions420
                 FXCreateData = fxDataList
             };
 
-            if (particle.Caster != null && particle.Caster is ObjAIBase o)
+            if (particle.PackageHashOverride.HasValue)
+            {
+                // Some FX (e.g. TT altar particles) resolve their embedded sound bank by the particle's
+                // own package hash, not the caster's object hash — wire-verified pkgHash that the script
+                // supplies verbatim.
+                fxGroupData1.PackageHash = particle.PackageHashOverride.Value;
+            }
+            else if (particle.Caster != null && particle.Caster is ObjAIBase o)
             {
                 fxGroupData1.PackageHash = o.GetObjHash();
             }
@@ -3267,12 +3273,16 @@ namespace PacketDefinitions420
             if (u.Replication != null)
             {
                 u.Replication.Update();
+                // Owner-only bucket (CLIENT_ONLY) goes only to the controlling player. userId < 0 is a
+                // broadcast to all-in-vision (multiple non-owner recipients) → never include it there; the
+                // owner receives it via the per-player held path each tick. (H5 owner-scoping.)
+                bool includeOwnerOnly = userId >= 0 && _packetHandlerManager.IsOwnedByPlayer(u, userId);
                 var us = new OnReplication()
                 {
                     SyncID = (uint)PacketExtensions.WireSyncID,
                     // TODO: Support multi-unit replication creation (perhaps via a separate function which takes in a list of units).
                     ReplicationData = new List<ReplicationData>(1){
-                        u.Replication.GetData(partial)
+                        u.Replication.GetData(partial, includeOwnerOnly)
                     }
                 };
                 var channel = Channel.CHL_LOW_PRIORITY;
@@ -5586,11 +5596,16 @@ namespace PacketDefinitions420
                 // replicated mMoveSpeed ever (group3 is never re-sent because a lane minion's speed/size
                 // never CHANGE, so per-tick dirty-tracking emits only group1 CurHP). Restored to match Riot.
                 // See docs/LANE_MINION_WIRE_VERIFICATION.md (D4).
+                // Owner-only bucket (CLIENT_ONLY) is included only when this snapshot targets the controlling
+                // player directly (single-userId path). The team broadcast goes to multiple non-owner players,
+                // so it omits CLIENT_ONLY; the owner still receives gold/cooldowns via the per-tick held path.
+                // (H5 owner-scoping.)
+                bool includeOwnerOnly = userId >= 0 && _packetHandlerManager.IsOwnedByPlayer(u, userId);
                 OnReplication us = new OnReplication()
                 {
                     SyncID = (uint)PacketExtensions.WireSyncID,
                     ReplicationData = new List<ReplicationData>(1){
-                        u.Replication.GetData(false)
+                        u.Replication.GetData(false, includeOwnerOnly)
                     }
                 };
 
@@ -5612,6 +5627,93 @@ namespace PacketDefinitions420
                         _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
                     }
                 }
+
+                // Always-visible objective units (e.g. Twisted Treeline altars) must additionally be
+                // entered into the team's visibility (S2C_OnEnterTeamVisibility, 0xE0) right after their
+                // spawn, so the client renders them THROUGH fog. The per-client 0xBA alone leaves a
+                // minion fog-hidden whenever the player has no actual vision of it; the 0xE0 is what
+                // marks it team-visible. Wire-verified: the altar receives 0xE0 for both teams and never
+                // a leave (0xE1). Scoped to AlwaysVisible so normal units (correctly fogged) are unaffected.
+                if (u.AlwaysVisible)
+                {
+                    var teamVisPacket = ConstructOnEnterTeamVisibilityPacket(u, team);
+                    if (userId < 0)
+                    {
+                        _packetHandlerManager.BroadcastPacketTeam(team, teamVisPacket.GetBytes(), Channel.CHL_S2C);
+                    }
+                    else
+                    {
+                        _packetHandlerManager.SendPacket(userId, teamVisPacket.GetBytes(), Channel.CHL_S2C);
+                    }
+
+                    // Heading for a static always-visible unit (TT altar): a never-moving unit has no
+                    // movement path to convey orientation, and SpawnMinionS2C carries no facing field, so
+                    // Riot sends a S2C_FaceDirection that FOLLOWS the spawn — per recipient, as the unit
+                    // enters their vision. Mirror that here (the unit's Direction was set at creation),
+                    // instead of an arbitrary post-spawn timer. Without it the client shows the (1,0,0)
+                    // sentinel heading.
+                    if (u.Direction != System.Numerics.Vector3.Zero)
+                    {
+                        var facePacket = new S2C_FaceDirection
+                        {
+                            SenderNetID = u.NetId,
+                            Direction = u.Direction,
+                            DoLerpTime = false,
+                            LerpTime = 0.08333f
+                        };
+                        if (userId < 0)
+                        {
+                            _packetHandlerManager.BroadcastPacketTeam(team, facePacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                        else
+                        {
+                            _packetHandlerManager.SendPacket(userId, facePacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                    }
+
+                    // Capture-progress flex particle (TT altar circle): attach it right after the spawn,
+                    // per recipient. Wire (replay): AttachFlexParticle(netId, flexID 0, cpIndex 0,
+                    // attachType 3) — the circle fills from the unit's replicated PAR, with NO
+                    // S2C_HandleCapturePointUpdate (the 0xD3 capture-point-attach path is Dominion-only).
+                    if (u.CaptureCircleFlexAttachType != 0)
+                    {
+                        var flexPacket = new AttachFlexParticleS2C
+                        {
+                            NetID = u.NetId,
+                            ParticleFlexID = 0,
+                            CpIndex = 0,
+                            ParticleAttachType = u.CaptureCircleFlexAttachType
+                        };
+                        if (userId < 0)
+                        {
+                            _packetHandlerManager.BroadcastPacketTeam(team, flexPacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                        else
+                        {
+                            _packetHandlerManager.SendPacket(userId, flexPacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                    }
+
+                    // Persistent animation-state overrides (e.g. the TT altar's start-locked LOCKLOOP1):
+                    // re-send them on spawn so a recipient that wasn't connected when SetAnimStates ran
+                    // still gets the current state. Without this the altar shows IDLE1 instead of locked.
+                    if (u.ActiveAnimOverrides.Count > 0)
+                    {
+                        var animPacket = new S2C_SetAnimStates
+                        {
+                            SenderNetID = u.NetId,
+                            AnimationOverrides = new System.Collections.Generic.Dictionary<string, string>(u.ActiveAnimOverrides)
+                        };
+                        if (userId < 0)
+                        {
+                            _packetHandlerManager.BroadcastPacketTeam(team, animPacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                        else
+                        {
+                            _packetHandlerManager.SendPacket(userId, animPacket.GetBytes(), Channel.CHL_S2C);
+                        }
+                    }
+                }
             }
             else //if(obj is IRegion || obj is ISpellMissile || obj is ILevelProp || obj is IParticle)
             {
@@ -5620,7 +5722,8 @@ namespace PacketDefinitions420
                 // instead of broadcasting it immediately. NotifyFXCreateGroupBatch flushes
                 // these as ONE FX_Create_Group per recipient at end-of-tick this is matching Riot's
                 // wire pattern where multiple same-tick particles share one packet.
-                if (obj is Particle && spawnPacket is FX_Create_Group fxgPacket
+                if (obj is Particle batchParticle && !batchParticle.SendUnbatched
+                    && spawnPacket is FX_Create_Group fxgPacket
                     && fxgPacket.FXCreateGroup.Count > 0)
                 {
                     if (userId < 0)
@@ -5804,7 +5907,10 @@ namespace PacketDefinitions420
         public void HoldReplicationDataUntilOnReplicationNotification(AttackableUnit u, int userId, bool partial = true)
         {
             u.Replication.Update();
-            var data = u.Replication.GetData(partial);
+            // CLIENT_ONLY (gold/cooldowns/mana costs) only to the controlling player; allies and enemies get
+            // every other bucket but not that one (replay-verified owner-scoping, H5). This path is per-player.
+            bool includeOwnerOnly = _packetHandlerManager.IsOwnedByPlayer(u, userId);
+            var data = u.Replication.GetData(partial, includeOwnerOnly);
 
             List<ReplicationData> list = null;
             if (!_heldReplicationData.TryGetValue(userId, out list))

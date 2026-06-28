@@ -187,6 +187,9 @@ namespace LeagueSandbox.GameServer.Content
         public string PointEffectName { get; set; } = "";
         //RangeIndicatorTextureName
         public string RequiredUnitTags { get; set; } = "";
+        // Parsed bitmask of RequiredUnitTags (set in Load). A spell with required tags can only target a
+        // unit carrying AT LEAST ONE of them (ContainsAny). UnitTag.None = no tag requirement.
+        public UnitTag RequiredUnitTagsMask { get; private set; } = UnitTag.None;
         public string SelectionPreference { get; set; } = "";
         //Sound_CastName
         //Sound_HitName
@@ -236,7 +239,13 @@ namespace LeagueSandbox.GameServer.Content
                 overrideTargetable = true;
             }
 
-            if (!target.Status.HasFlag(StatusFlags.Targetable) && target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
+            // Riot TargetHelper::ValidTargetCheck: reject when the target is untargetable EITHER globally OR
+            // to the caster's team (unless an override flag applies). GetIsTargetableToTeam already folds in
+            // the global Targetable status flag (returns false if it's clear), so !GetIsTargetableToTeam ==
+            // (!IsTargetable || !IsTargetableToTeam) — Riot's exact condition. (The old check ANDed the global
+            // flag with GetIsTargetableToTeam, which already includes it, so it was always false → dead code,
+            // letting untargetable units through to AoE/spell hit-detection.)
+            if (!target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
             {
                 return false;
             }
@@ -313,6 +322,18 @@ namespace LeagueSandbox.GameServer.Content
                         valid = false;
                     }
                 }
+            }
+
+            // RequiredUnitTags (Riot): when set, the target must carry AT LEAST ONE of the listed tags —
+            // the data string is an OR-list (ContainsAny). E.g. Smite = "Monster_Large | Monster_Epic |
+            // Minion" so base Smite can't hit champions (the Duel/Ganker upgrades add Champion); Teleport =
+            // "Minion | Structure | Ward | Special_TeleportTarget". Tags come from target.CharData.UnitTags
+            // (server-internal classification; see reference_unit_tags_model). overrideFlags doesn't affect
+            // this — it's an intrinsic target-class gate, not a per-cast affect flag.
+            if (valid && RequiredUnitTagsMask != UnitTag.None
+                && !target.UnitTags.ContainsAny(RequiredUnitTagsMask))
+            {
+                valid = false;
             }
 
             return valid;
@@ -564,6 +585,17 @@ namespace LeagueSandbox.GameServer.Content
             PointEffectName = file.GetString("SpellData", "PointEffectName", PointEffectName);
             //RangeIndicatorTextureName
             RequiredUnitTags = file.GetString("SpellData", "RequiredUnitTags", RequiredUnitTags);
+            // Parse the pipe-separated tag list to a bitmask once (same convention as CharData.UnitTags).
+            // Unrecognised tokens (e.g. an unregistered tag) fail TryParse and are skipped — matching the
+            // 4.20 ParseUnitTagFlags, which ignores tags not in the registry.
+            RequiredUnitTagsMask = UnitTag.None;
+            foreach (var tag in RequiredUnitTags.Split(" | "))
+            {
+                if (System.Enum.TryParse(tag, out UnitTag parsedTag))
+                {
+                    RequiredUnitTagsMask |= parsedTag;
+                }
+            }
             SelectionPreference = file.GetString("SpellData", "SelectionPreference", SelectionPreference);
             //Sound_CastName
             //Sound_HitName

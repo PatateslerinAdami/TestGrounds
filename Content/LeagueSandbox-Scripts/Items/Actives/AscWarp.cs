@@ -30,7 +30,7 @@ namespace ItemSpells
                 if ((unit as Minion).Name != "AscWarpIcon") continue;
                 AddBuff("AscWarp", 3.5f, 1, spell, spell.CastInfo.Owner, spell.CastInfo.Owner);
                 var minion = AddMinion(owner, "TestCubeRender10Vision", "k", start, team: owner.Team, targetable: false,
-                    isVisible: false, skinId: owner.SkinID, isWard: true);
+                    isVisible: false, skinId: owner.SkinID);
                 //NotifySpawnBroadcast(minion);
                 AddBuff("AscWarpTarget", 3.5f, 1, spell, minion, owner);
             }
