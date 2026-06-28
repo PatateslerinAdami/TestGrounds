@@ -39,17 +39,20 @@ public class AhriFoxFire : ISpellScript {
         if (facing.LengthSquared() <= float.Epsilon) facing = new Vector2(1.0f, 0.0f);
         facing = Vector2.Normalize(facing);
 
-        var baseAngle = MathF.Atan2(facing.Y, facing.X);
+        // S1 places the three orbs at facing +45° / +165° / +285° (BBGetPointByUnitFacingOffset,
+        // Distance 150) — a 120° spacing rotated 45° off the facing vector.
+        var baseAngle = MathF.Atan2(facing.Y, facing.X) + MathF.PI / 4.0f;
         var deltaAngle = MathF.Tau / OrbCount;
-        
+
         for (var i = 0; i < OrbCount; i++) {
             var angle = baseAngle + i * deltaAngle;
             var orbPos = _ahri.Position + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * OrbRadius;
-            
-            
-            List<CastTarget> targets = new List<CastTarget>();
-            targets.Add(new CastTarget(_ahri, HitResult.HIT_Normal));
-            SpellCast(_ahri, 2, SpellSlotType.ExtraSlots, orbPos, orbPos, true, _ahri.Position, targets,
+
+            // Faithful to S1 (BBSpellCast TargetVar=Attacker, OverrideCastPosVar=Point): the orb
+            // orbits the cast TARGET (Ahri, tracked live) and spawns at the override-cast point.
+            // The circle-missile engine reads the orbit center from Targets[0] and the radius/phase
+            // from the launch (= override-cast) position relative to it.
+            SpellCast(_ahri, 2, SpellSlotType.ExtraSlots, true, _ahri, orbPos,
                       overrideForceLevel: spell.CastInfo.SpellLevel);
         }
     }
@@ -77,11 +80,23 @@ public class AhriFoxFireMissile : ISpellScript {
 
     private void OnUpdateMissile(SpellMissile missile, float diff)
     {
-        var unitsInRange = EnumerateValidUnitsInRange(_ahri, missile.Position, 750f, true, 
+        // S1 AhriFoxFireMissile.SpellOnMissileUpdateBuildingBlocks gates the seek behind a
+        // per-orb counter: it bumps SpellVars.Ready each update tick (paced by the spell's
+        // LuaOnMissileUpdateDistanceInterval = 75u) and only starts looking for a target once
+        // Ready >= 3 — so each orb orbits Ahri for ~3 intervals (~225u of arc) before it can
+        // launch. Each orb is its own cast, so the counter lives on the orb's own CastInfo.
+        var ready = missile.CastInfo.Variables.GetInt("Ready") + 1;
+        missile.CastInfo.Variables.Set("Ready", ready);
+        if (ready < 3) return;
+
+        // S1 scan radius is 650 (the BBForNClosestVisibleUnitsInTargetArea Range, not the
+        // ini CastRadius of 710). Champion-first / nearest ordering reproduces S1's two-phase
+        // "enemy heroes first, then any unit" priority in a single pass.
+        var unitsInRange = EnumerateValidUnitsInRange(_ahri, missile.Position, 650f, true,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)
             .OrderByDescending(unit => unit is Champion).ThenBy(unit => Vector2.DistanceSquared(missile.Position, unit.Position)).ToList();
         if (unitsInRange.Count == 0) return;
-        
+
         SpellCast(_ahri, 3, SpellSlotType.ExtraSlots, true, unitsInRange.First(), missile.Position);
         var foxFireBuff = _ahri.GetBuffWithName("AhriFoxFire");
         if (foxFireBuff != null)
@@ -119,6 +134,17 @@ public class AhriFoxFireMissileTwo : ISpellScript {
         var mainSpell = _ahri.GetSpell("AhriFoxFire");
         var ap = _ahri.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient;
         var damage = mainSpell.SpellData.EffectLevelAmount[1][mainSpell.CastInfo.SpellLevel] + ap;
+
+        // S1 AhriFoxFireMissileTwo.TargetExecuteBuildingBlocks: the FIRST foxfire to hit a target
+        // deals full damage; every subsequent foxfire on the SAME target deals half. The S1 reduced
+        // values {20,35,50,65,80}+0.1875·AP are exactly half of the full {40,70,100,130,160}+0.375·AP,
+        // so the rule is a clean ×0.5. "Already hit" is tracked with an AhriFoxFireMissileTwo buff on
+        // the target (resolves to BuffScriptEmpty — presence is all we need).
+        if (target.HasBuff("AhriFoxFireMissileTwo")) {
+            damage *= 0.5f;
+        } else {
+            AddBuff("AhriFoxFireMissileTwo", 6f, 1, spell, target, _ahri);
+        }
 
         AddParticleTarget(_ahri, target, "Ahri_FoxFire_tar", target);
         target.TakeDamage(_ahri, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);

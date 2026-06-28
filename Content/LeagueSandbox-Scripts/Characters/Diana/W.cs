@@ -45,11 +45,11 @@ public class DianaOrbs : ISpellScript {
         for (var i = 0; i < OrbCount; i++) {
             var angle = baseAngle + i * deltaAngle;
             var orbPos = owner.Position + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * OrbRadius;
-            
-            
-            List<CastTarget> targets = new List<CastTarget>();
-            targets.Add(new CastTarget(owner, HitResult.HIT_Normal));
-            SpellCast(owner, 3, SpellSlotType.ExtraSlots, orbPos, orbPos, true, owner.Position, targets,
+
+            // Self-orbit cast: the orb orbits the cast TARGET (Diana, tracked live) and spawns at
+            // the override-cast point. The circle-missile engine reads the orbit center from
+            // Targets[0] and the radius/phase from the launch (= override-cast) position.
+            SpellCast(owner, 3, SpellSlotType.ExtraSlots, true, owner, orbPos,
                       overrideForceLevel: spell.CastInfo.SpellLevel);
         }
     }

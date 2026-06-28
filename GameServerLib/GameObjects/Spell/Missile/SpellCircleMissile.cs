@@ -37,11 +37,32 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             _circleAngularVelocity = SpellOrigin.SpellData.CircleMissileAngularVelocity;
             _circleRadialVelocity = SpellOrigin.SpellData.CircleMissileRadialVelocity;
 
-            _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
-            var circleReferenceEnd = overrideEndPos != default
-                ? overrideEndPos
-                : new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
-            var circleOffset = circleReferenceEnd - _circleCenter;
+            // Orbit-center derivation, faithful to obj_SpellCircleMissile::OnCreate:
+            //   mRotateCenterPosition = targetObj ? targetObj->GetPosition() : TargetPos
+            //   mRotateRadius = |Position - mRotateCenterPosition|   (Position = the spawn point)
+            //   mRotatePhase  = atan2(diff.z, diff.x)
+            // i.e. Riot reads the orbit CENTER from the cast target (Targets[0]) and anchors
+            // the radius/phase off the missile's spawn position. Self-orbit casts (Ahri W,
+            // Diana W) therefore pass the orb point as the override-cast (= spawn/launch)
+            // position and themselves as the target.
+            Vector2 circleOffset;
+            if (TargetUnit != null)
+            {
+                _circleCenter = TargetUnit.Position;
+                var spawn = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+                circleOffset = spawn - _circleCenter;
+            }
+            else
+            {
+                // No target unit: orbit a fixed point (center = launch position, radius/phase
+                // toward the cast end position). Covers Varus Q's radial arrow and zero-velocity
+                // attachment missiles that have no tracked anchor.
+                _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+                var circleReferenceEnd = overrideEndPos != default
+                    ? overrideEndPos
+                    : new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
+                circleOffset = circleReferenceEnd - _circleCenter;
+            }
 
             if (circleOffset.LengthSquared() <= float.Epsilon)
             {
