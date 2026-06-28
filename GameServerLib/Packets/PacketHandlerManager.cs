@@ -58,6 +58,9 @@ namespace PacketDefinitions420
             // Opt-in collision-push diagnostic (server-vs-client divergence magnitude). Set
             // COLLISION_LOG to a path (or "1" for ./collisionlog.jsonl). See CollisionLogger.
             CollisionLogger.Enable(Environment.GetEnvironmentVariable("COLLISION_LOG"));
+            // Opt-in issued-path geometry diagnostic (chord/lookahead/detour/body-clearance, diffable
+            // against Riot via tools/minionroute.py). Set PATH_LOG to a path (or "1"). See PathLogger.
+            PathLogger.Enable(Environment.GetEnvironmentVariable("PATH_LOG"));
             _gameConvertorTable = new Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor>();
             _loadScreenConvertorTable = new Dictionary<LoadScreenPacketID, RequestConvertor>();
             _fallbackConvertorTable = new Dictionary<GamePacketID, RequestConvertor>();

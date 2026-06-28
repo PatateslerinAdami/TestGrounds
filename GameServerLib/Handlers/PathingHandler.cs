@@ -133,7 +133,7 @@ namespace LeagueSandbox.GameServer.Handlers
             var rerouted = GetPath(obj, goal);
             if (rerouted != null && rerouted.Count >= 2)
             {
-                obj.SetWaypoints(rerouted);
+                obj.SetWaypoints(rerouted, pathReason: "reroute");
                 return;
             }
 
@@ -155,7 +155,7 @@ namespace LeagueSandbox.GameServer.Handlers
                 }
             }
 
-            obj.SetWaypoints(newPath);
+            obj.SetWaypoints(newPath, pathReason: "reroute-trunc");
         }
 
         /// <summary>
@@ -466,6 +466,15 @@ namespace LeagueSandbox.GameServer.Handlers
             // the wave (the failure of the earlier unconstrained spiral, clash7: melee teleported
             // across the wave + dropped their target). The spiral already prefers the cell closest
             // to THIS attacker, so co-attacking units fan onto distinct near-side cells.
+            //
+            // NOTE 2026-06-28: tried REMOVING this whole block (it is an invention vs the decomp's
+            // single pre-path end-cell spiral) to kill a small "snap toward an ally on arrival" — but
+            // it REGRESSED HARD in-game (attacking minions converge on one stand point → stack → the
+            // actor-aware forward push then routes the stacked group around each other → paths cross,
+            // glitch, teleport, + A* cost spike → lag). So this spiral is LOAD-BEARING anti-stacking,
+            // not pure decoration. Reverted. The proper fix for the arrival snap is to compute the
+            // stand cell ONCE per (re)acquire and CACHE it (not per chase needRepath), so it stops
+            // shifting with live ally motion WITHOUT losing the spread — a bigger change, deferred.
             Vector2 fromTargetToAttacker = attacker.Position - projected;
             // Band max sits HALF A CELL inside the attack range, not AT it: the chase→settle handoff
             // in RefreshWaypoints settles only when the arrived unit is within idealRange (== this
