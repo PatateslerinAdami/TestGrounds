@@ -1254,6 +1254,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
             _channelStatusLockApplied = false;
+            // _channelStatusLockApplied is set ONLY when Channel() actually applied the holds
+            // (charge OR CantCancelWhileChanneling), so release exactly what was taken — keeps the
+            // ref-counted disable-holds balanced regardless of why they were applied.
             CastInfo.Owner.SetStatus(StatusFlags.CanCast, true);
             CastInfo.Owner.SetStatus(StatusFlags.CanAttack, true);
             if (!SpellData.CanMoveWhileChanneling)
@@ -1278,18 +1281,36 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Engine channel/charge action-lock, applied from SpellData. Capability bits are
             // ref-counted disable-holds, so this adds its OWN hold (released in
             // ReleaseChannelStatusLock on every channel-end path) and never clobbers concurrent CC
-            // like a stun. You can never attack or cast OTHER spells during a channel/charge; the
-            // charge spell's own recast is exempt because it arrives via the charge-update packet
-            // (UpdateCharge), not the CanCast-gated cast pipeline. CanMoveWhileChanneling=0 also
-            // disables movement (StopMovement + CanMove hold); =1 leaves movement enabled.
-            CastInfo.Owner.SetStatus(StatusFlags.CanCast, false);
-            CastInfo.Owner.SetStatus(StatusFlags.CanAttack, false);
-            if (!SpellData.CanMoveWhileChanneling)
+            // like a stun.
+            //
+            // The full action-lock (CanCast/CanAttack off, and CanMove off when !CanMoveWhileChanneling)
+            // applies ONLY when the player is COMMITTED for the duration:
+            //   - CHARGE spells: the recast arrives via UpdateCharge (not the CanCast-gated cast pipeline),
+            //     so other casts/attacks stay blocked.
+            //   - UNCANCELLABLE channels (CantCancelWhileChanneling=1, e.g. Pantheon E): fully locked, the
+            //     channel runs its whole duration and the client must not predict movement/cast.
+            // A CANCELLABLE channel (CantCancelWhileChanneling=0, e.g. Katarina R, Yi Meditate) takes NO
+            // capability holds: it is cancelled BY a cast/attack/move INPUT (ChannelCancelCheck), so those
+            // inputs must be allowed to register — a CanMove hold would make CanIssueMoveOrders()
+            // (ObjAIBase.cs:726) reject the move and the channel could never be move-cancelled. Its no-move
+            // is still enforced engine-side by CanMove()'s ChannelSpell clause (ObjAIBase.cs:671), so it
+            // only needs StopMovement(). Verified vs S1 lua: NO channel script self-locks movement — the
+            // no-move + commit behavior is purely data-driven (CanMoveWhileChanneling / CantCancelWhileChanneling).
+            if (IsChargeSpell || SpellData.CantCancelWhileChanneling)
+            {
+                CastInfo.Owner.SetStatus(StatusFlags.CanCast, false);
+                CastInfo.Owner.SetStatus(StatusFlags.CanAttack, false);
+                if (!SpellData.CanMoveWhileChanneling)
+                {
+                    CastInfo.Owner.StopMovement();
+                    CastInfo.Owner.SetStatus(StatusFlags.CanMove, false);
+                }
+                _channelStatusLockApplied = true;
+            }
+            else if (!SpellData.CanMoveWhileChanneling)
             {
                 CastInfo.Owner.StopMovement();
-                CastInfo.Owner.SetStatus(StatusFlags.CanMove, false);
             }
-            _channelStatusLockApplied = true;
 
             // Route to charge or channel events. IsChargeSpell covers JSON UseChargeChanneling=1
             // AND script-side ScriptMetadata.ChargeDuration > 0.

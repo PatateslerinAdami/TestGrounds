@@ -43,7 +43,13 @@ namespace AIScripts
         // issued forward segment here; the remainder of the (actor-aware) route is re-issued via
         // IsPathEnded each segment. Kept a touch above Riot's median so the refresh cadence isn't
         // tighter than the nav-point advance.
-        private const float MAX_ROLL_LEN = 350f;
+        // Raised 350→700 (2026-06-30): with TERRAIN-ONLY forward paths the issued line is shape-stable
+        // (terrain doesn't move), so it never goes stale and there is no reason to re-issue often. A
+        // longer rolling segment HALVES the WaypointGroup rate — each re-issue hard-snaps the client to
+        // wp0 and resets its local collision separation, so fewer re-issues let the client de-clump a
+        // stacked wave between snaps (the residual "wuselig" look). (Under the old actor-routed path
+        // this had to stay short because the bend went stale as neighbours moved.)
+        private const float MAX_ROLL_LEN = 700f;
         // Within this of a FINAL (non-advancing) target — turret / nexus cap — stop re-issuing so the
         // minion settles instead of churning a fresh path per tick (Riot NavPointManager::IsStillOldPosition).
         // Small enough not to cut the rolling refresh mid-segment (which fires while the target is still far).
@@ -55,7 +61,7 @@ namespace AIScripts
         // forward while pushing, before any combat"; the server-side nav log shows NO stall, so it is
         // purely client path-starvation). Keeping ~175u of path ahead at all times means the client
         // never reaches the end → no stutter. Must be < MAX_ROLL_LEN and > ARRIVE_STOP.
-        private const float REISSUE_LOOKAHEAD = 175f;
+        private const float REISSUE_LOOKAHEAD = 300f;
 
         private LaneMinion _minion;
         private Vector2 _lastOrderedWaypoint = new Vector2(float.NaN, float.NaN);
@@ -469,16 +475,21 @@ namespace AIScripts
                 // Diagnostic reason for PATH_LOG: which clause opened the gate.
                 string reason = _lastOrderedWaypoint != target ? "fwd:target"
                     : (_minion.IsPathEnded() ? "fwd:pathend" : "fwd:lookahead");
-                // ACTOR-AWARE path so the push routes AROUND allied bodies (Riot keeps ~33u clearance,
-                // wire-measured) instead of the terrain-only straight line that ran THROUGH the wave —
-                // the measured clr=0 / "minions can't path past a group of allied minions" bug, which
-                // also defeated both collision responders (the steer needs n>=3, the position-push
-                // needs Waypoints.Count>=4; a straight n=2 path got neither). Then TRUNCATE to a short
-                // rolling segment (~MAX_ROLL_LEN): the truncated prefix keeps the A* route SHAPE
-                // (including the body-routing bend) but only sends its head, and IsPathEnded re-issues
-                // the next segment as the minion advances — matching Riot's short ~277u rolling cadence
-                // instead of one 1459u line that goes stale (re-path teleport).
-                List<Vector2> full = GetPath(_minion, target)
+                // TERRAIN-ONLY path (Riot-faithful, replay-verified 2026-06-30): the lane walk issues a
+                // straight path to the next nav point, routing around TERRAIN only — NOT around allied
+                // bodies. Riot's wire proves this: in a stacked wave 72% of minion paths are n=1 (a single
+                // "walk to X" waypoint) and only 13% are n>=3; the real client de-clumps the pile locally
+                // with its OWN collision sim. Our previous full actor-blocking (ignoreTargetRadius:0)
+                // re-routed a differently-bent A* path around the SHIFTING neighbours on every re-issue
+                // (measured 51% n>=3 vs Riot 17%, n=4 25% vs 4.6%); the client hard-snaps to each new wp0
+                // (ActorClient.cpp:169) → the "wusseln" / slide-together / weird-path artifacts the wire
+                // capture flagged. A terrain-only line to a FIXED nav point is shape-stable across
+                // re-issues (terrain doesn't move) → wp0 just advances with the minion, no snap. Then
+                // TRUNCATE to a short rolling segment so a long lane leg still refreshes via IsPathEnded
+                // as the minion advances. (Server-side de-clumping isn't lost faithfully: the steer
+                // returns early for n=2 and the push needs Count>=4 — exactly Riot's gating — so straight
+                // lane walks rely on client separation just like Riot's do.)
+                List<Vector2> full = GetPath(_minion.Position, target)
                                      ?? new List<Vector2> { _minion.Position, target };
                 List<Vector2> path = TruncatePath(full, MAX_ROLL_LEN);
                 _minion.SetWaypoints(path, pathReason: reason);

@@ -524,42 +524,76 @@ namespace LeagueSandbox.GameServer.Handlers
                 }
             }
             // Body diameter + one cell gap → a visible "bit more" fan beyond just non-overlap. Tunable.
-            float standClearance = attacker.PathfindingRadius * 4f + _map.NavigationGrid.CellSize;
-            float standClearanceSq = standClearance * standClearance;
+            float fullClearance = attacker.PathfindingRadius * 4f + _map.NavigationGrid.CellSize;
 
-            recommendedAttackPos = SetToNearestGetToAbleCell(
-                attacker, recommendedAttackPos, attacker.PathfindingRadius,
-                cellAccept: c =>
-                {
-                    // Reject the far hemisphere (behind the target relative to the attacker).
-                    if (Vector2.Dot(c - projected, fromTargetToAttacker) < 0f)
+            // GRACEFUL-DEGRADE (2026-06-29): try progressively smaller ally-clearance levels and keep
+            // the cell with the MOST clearance found. The single-level spiral fell back to the
+            // CONVERGING natural point whenever no cell achieved the full body-gap — exactly the dense
+            // co-located case (a whole wave re-acquiring the same target while stacked) → clr≈3 hard
+            // stacks. Relaxing the target gap (140→84→49u) lets the spiral find a less-overlapping
+            // reachable cell instead of giving up onto the pile. No faithful Riot mechanism exists for
+            // the co-located case (Riot avoids co-location upstream via continuous client-side
+            // separation, which we can't reproduce), so this is the pragmatic mitigation.
+            Vector2 naturalStand = recommendedAttackPos;
+            Vector2 bestStand = naturalStand;
+            float bestClearSq = MinAllyDistSq(naturalStand, allyClear);
+            foreach (float frac in StandClearanceFracs)
+            {
+                float curClearSq = (fullClearance * frac) * (fullClearance * frac);
+                Vector2 cand = SetToNearestGetToAbleCell(
+                    attacker, naturalStand, attacker.PathfindingRadius,
+                    cellAccept: c =>
                     {
-                        return false;
-                    }
-                    // Keep the cell inside the usable attack band so the relocation can't push the
-                    // unit out of range (→ target re-acquire) or onto the target's footprint.
-                    float dT = Vector2.DistanceSquared(c, projected);
-                    if (dT < standBandMinSq || dT > standBandMaxSq)
-                    {
-                        return false;
-                    }
-                    // Clearance from other allied minions → spread + open side (lane minions only).
-                    for (int i = 0; i < allyClear.Count; i++)
-                    {
-                        if (Vector2.DistanceSquared(c, allyClear[i]) < standClearanceSq)
+                        // Reject the far hemisphere (behind the target relative to the attacker).
+                        if (Vector2.Dot(c - projected, fromTargetToAttacker) < 0f)
                         {
                             return false;
                         }
-                    }
-                    return true;
-                },
-                // Prefer the free cell ALONG the attacker's approach line, not merely the nearest:
-                // the last/most-constrained minion then sidesteps minimally onto its OWN side past
-                // its leaders, instead of crossing the formation to a closer sideways cell (which made
-                // A* route it the long way around both leaders / pass on the wrong side).
-                preferOnAxis: true);
+                        // Keep the cell inside the usable attack band (in range, off the footprint).
+                        float dT = Vector2.DistanceSquared(c, projected);
+                        if (dT < standBandMinSq || dT > standBandMaxSq)
+                        {
+                            return false;
+                        }
+                        return MinAllyDistSq(c, allyClear) >= curClearSq;
+                    },
+                    // Prefer the free cell ALONG the attacker's approach line, not merely the nearest:
+                    // the last/most-constrained minion then sidesteps minimally onto its OWN side past
+                    // its leaders, instead of crossing the formation to a closer sideways cell.
+                    preferOnAxis: true);
+                float candClearSq = MinAllyDistSq(cand, allyClear);
+                if (candClearSq > bestClearSq)
+                {
+                    bestClearSq = candClearSq;
+                    bestStand = cand;
+                }
+                // Satisfied this clearance level → good enough, stop relaxing.
+                if (candClearSq >= curClearSq)
+                {
+                    break;
+                }
+            }
+            recommendedAttackPos = bestStand;
             canReachCloseSpot = true;
             return true;
+        }
+
+        // Graceful-degrade clearance levels (fractions of the full body-gap) for the attack-stand
+        // spiral: try the full gap first, then relax so a dense co-located cluster still gets the
+        // least-overlapping reachable cell instead of falling back to the converging natural point.
+        private static readonly float[] StandClearanceFracs = { 1.0f, 0.6f, 0.35f };
+
+        /// <summary>Min squared distance from <paramref name="p"/> to any position in
+        /// <paramref name="others"/>; <see cref="float.MaxValue"/> if the list is empty.</summary>
+        private static float MinAllyDistSq(Vector2 p, List<Vector2> others)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i < others.Count; i++)
+            {
+                float d = Vector2.DistanceSquared(p, others[i]);
+                if (d < best) best = d;
+            }
+            return best;
         }
 
         /// <summary>

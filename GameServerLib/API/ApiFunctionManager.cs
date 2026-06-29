@@ -3066,13 +3066,15 @@ namespace LeagueSandbox.GameServer.API
         /// clearance, wire-measured) instead of issuing a straight line through it. Use for lane
         /// forward-push / any "walk past bodies" movement.
         /// </summary>
-        public static List<Vector2> GetPath(AttackableUnit unit, Vector2 to, bool skipLineOfSight = true)
+        public static List<Vector2> GetPath(AttackableUnit unit, Vector2 to, bool skipLineOfSight = true,
+            float ignoreTargetRadius = -1f)
         {
             if (unit == null)
             {
                 return null;
             }
-            return _game.Map.PathingHandler.GetPath(unit, to, skipLineOfSight: skipLineOfSight)?.ToList();
+            return _game.Map.PathingHandler.GetPath(unit, to, skipLineOfSight: skipLineOfSight,
+                ignoreTargetRadius: ignoreTargetRadius)?.ToList();
         }
 
         /// <summary>

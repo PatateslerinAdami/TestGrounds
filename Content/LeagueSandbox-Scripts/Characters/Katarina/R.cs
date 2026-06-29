@@ -63,13 +63,8 @@ namespace Spells
             _spell = spell;
         }
 
-        public void OnSpellChannel(Spell spell)
+        public void OnSpellCast(Spell spell)
         {
-            _periodicTicker.Reset();
-            SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
-            AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
-
-            // Lock | NoBlend; the replay value also carried bit 7, which is unread client-side junk.
             const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
             {
@@ -77,7 +72,16 @@ namespace Spells
                 case 7:  PlayAnimation(_katarina, "Spell4", timeScale: 0.2f, speedScale: 1f, flags: spell4Flags); break;
             }
         }
-        
+
+        public void OnSpellChannel(Spell spell)
+        {
+            _periodicTicker.Reset();
+            SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
+            AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
+
+            
+        }
+
         public void OnSpellChannelUpdate(Spell spell, float diff)
         {
             var ticks = _periodicTicker.ConsumeTicks(diff, 250f, true, 1, 10);
