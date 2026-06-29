@@ -567,7 +567,8 @@ namespace LeagueSandbox.GameServer
                 return false;
             }
 
-            // Dead units should never provide vision.
+            // Dead units should never provide vision. (Zombies have IsDead=false under Model B, so
+            // they remain live vision providers until their real death — no special-casing needed.)
             if (p is AttackableUnit observerUnit && observerUnit.IsDead)
             {
                 return false;

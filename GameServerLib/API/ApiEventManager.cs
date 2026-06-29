@@ -70,7 +70,7 @@ using GameServerCore.Packets.Enums;
 [OnUpdateActions] - move order probably
 [OnUpdateAmmo] - spell ammo/charge count changed (recharge / restore / cast-consume); carries (owner, spell). (wired)
 [OnUpdateStats]
-[OnZombie]
+[OnZombie] - death produced a zombie (BecomeZombie); unit stays in world until EndZombie(). (wired)
  */
 
 namespace LeagueSandbox.GameServer.API
@@ -127,6 +127,14 @@ namespace LeagueSandbox.GameServer.API
 
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnDeath
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
+
+        // Fires when a death produces a ZOMBIE rather than a normal death (DeathData.BecomeZombie
+        // set during the OnDeath pass). Faithful to Riot's BuffOnZombieBuildingBlocks (decomp:
+        // obj_AI_Base::DoDeath sets bZombie=true → buff OnZombie hooks). The zombie unit stays in
+        // the world (not removed) and acts until a script calls EndZombie() — e.g. Karthus
+        // DeathDefied: OnDeath arms BecomeZombie, OnZombie grants the 7s keep-casting buff.
+        public static Dispatcher<AttackableUnit, DeathData> OnZombie
+            = new Dispatcher<AttackableUnit, DeathData>();
 
         public static DataOnlyDispatcher<ObjAIBase, DamageData> OnHitUnit
             = new DataOnlyDispatcher<ObjAIBase, DamageData>();

@@ -314,10 +314,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (RespawnTimer > 0)
             {
                 RespawnTimer -= diff;
-                if (RespawnTimer <= 0)
-                {
-                    Respawn();
-                }
+            }
+            // Respawn when the timer expires. During the zombie phase IsDead is false (Model B), so a
+            // zombie never respawns mid-phase; EndZombie() sets IsDead=true at the real death and the
+            // (already counted-down) timer then completes here. The timer runs from death to match
+            // the client HUD.
+            if (IsDead && RespawnTimer <= 0)
+            {
+                Respawn();
             }
 
             if (_championHitFlagTimer > 0)
@@ -340,6 +344,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public void Respawn()
         {
+            // Safety: clear any lingering zombie state so a respawned champion is never a zombie.
+            IsZombie = false;
+            _zombieDeath = null;
             var spawnPos = GetRespawnPosition();
             SetPosition(spawnPos);
             float parToRestore = 0;
@@ -463,13 +470,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // Dead champions may still shop (recall-less fountain shopping): force-enable the shop so
             // the location gate is bypassed. Re-disabled on respawn. See docs/SHOP_PACKETS_PLAN.md.
             Shop.SetShopState(true, true);
-            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
-                ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
-                : 100.0f;
             ChampStats.Deaths++;
 
             _game.ObjectManager.StopTargeting(this);
             SetForceMovementState(false, MoveStopReason.Death);
+            // Stop and clear the current path (Riot DoDeath zeroes Velocity + AI_actor.HandleDeath).
+            // Without this a champion that dies mid-move keeps sliding to its last waypoint — visible
+            // for zombies (Karthus Death Defied), which stay in the world instead of being removed.
+            StopMovement(MoveStopReason.Death);
+            // OnDeath before the zombie decision (Riot DoDeath ordering) so a death-reactive buff
+            // (Karthus DeathDefied) can arm data.BecomeZombie from its OnDeath handler.
             ApiEventManager.OnDeath.Publish(data.Unit, data);
             data.Unit.SetStatus(StatusFlags.Ghosted, true);
 
@@ -483,9 +493,62 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 ChampionDeathHandler.ProcessKill(data);
             }
 
-            _game.PacketNotifier.NotifyNPC_Hero_Die(data);
+            // Kill credit fires immediately (the killing blow earns the kill even if the victim
+            // lingers as a zombie).
             EventHistory.Clear();
             ApiEventManager.OnKill.Publish(data.Killer, data);
+
+            // Replay-verified (Karthus rlp f3ad103e): the die packet + death timer are sent AT death
+            // with the real respawn duration — even for a zombie. The client keeps the model and
+            // champion indicator and skips ONLY the death animation when BecomeZombie is set
+            // (AIHeroClient::DoDeath gates those on !bBecomeZombie) while still showing the death
+            // screen + death timer. The earlier model/HP-bar loss was a NEGATIVE DeathDuration
+            // (RespawnTimer was still -1 when the packet was sent), which the client treats as a
+            // completed/forced death. Set a valid respawn time first.
+            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
+                ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
+                : 100.0f;
+
+            if (data.BecomeZombie)
+            {
+                // Zombie champion (Karthus Death Defied). Model B (faithful to Riot DoDeath, which
+                // sets bZombie but NOT the dead flag): a zombie is NOT counted as dead — clear IsDead
+                // so it behaves like a live unit (moves, holds vision, is targetable) until its real
+                // death in EndZombie(). The die packet + death timer were already sent above; the
+                // respawn countdown runs from here but Respawn() only fires once IsDead is true again.
+                IsZombie = true;
+                IsDead = false;
+                _zombieDeath = data;
+                ApiEventManager.OnZombie.Publish(data.Unit, data);
+            }
+
+            _game.PacketNotifier.NotifyNPC_Hero_Die(data);
+        }
+
+        /// <summary>
+        /// Ends a zombie champion's phase (deferred from <see cref="Die"/>) and starts the real
+        /// respawn countdown. Champions are never SetToRemove'd, so this overrides the base
+        /// removal-based <see cref="AttackableUnit.EndZombie"/>.
+        /// </summary>
+        public override void EndZombie()
+        {
+            if (!IsZombie)
+            {
+                return;
+            }
+
+            // The zombie truly dies now: clear the zombie state and set IsDead so the (already
+            // running) respawn countdown can complete in OnUpdate.
+            IsZombie = false;
+            IsDead = true;
+            _zombieDeath = null;
+
+            // Replay-verified (Karthus rlp f3ad103e): at the zombie→real-death boundary the server
+            // sends NPC_ForceDead (0x1B). That drives the client's DoForceDead → SetDeathScreen(true)
+            // + the HUD death timer (with the remaining respawn duration). The BecomeZombie die packet
+            // sent at Die() only puts the client into the controllable zombie state; THIS is what
+            // flips it into the real grey-screen death.
+            _game.PacketNotifier.NotifyNPC_ForceDead(this, RespawnTimer / 1000f);
         }
 
         private T CreateEventForHistory<T>(AttackableUnit source, IEventSource sourceScript) where T: ArgsForClient, new()

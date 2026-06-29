@@ -661,6 +661,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override bool CanMove()
         {
+            // Zombies (Karthus Death Defied etc.) move via the normal branch below — under Model B a
+            // zombie has IsDead=false, so no special-casing is needed here. Death does not clear the
+            // CanMove capability (only CC does), so a script opts a zombie OUT by clearing CanMove.
             return (!IsDead
                 && MovementParameters != null)
                 || (Status.HasFlag(StatusFlags.CanMove) && Status.HasFlag(StatusFlags.CanMoveEver)
@@ -673,6 +676,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override bool CanChangeWaypoints()
         {
+            // Under Model B a zombie has IsDead=false, so !IsDead already permits re-pathing it.
             return !IsDead
                 && (MovementParameters == null || (MovementParameters != null && MovementParameters.FollowNetID != 0))
                 && _castingSpell == null
@@ -697,6 +701,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public bool CanIssueMoveOrders()
         {
+            // Under Model B a zombie has IsDead=false, so it passes this gate by default and may be
+            // ordered to move. A script clearing the CanMove capability (immobile ghosts, e.g.
+            // Karthus) is still rejected by the CanMove check further down.
             if (IsDead)
                 return false;
 

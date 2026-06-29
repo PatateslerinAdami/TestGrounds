@@ -84,6 +84,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public bool IsDead { get; protected set; }
         /// <summary>
+        /// Whether this unit is currently a ZOMBIE — dead but still acting (Karthus Death Defied,
+        /// Sion/Yorick revive phases, dead-turret husks). Faithful to Riot's AttackableUnit::bZombie
+        /// / IsZombie(). Set by <see cref="Die"/> when the death arms <see cref="DeathData.BecomeZombie"/>;
+        /// cleared by <see cref="EndZombie"/> when the keep-alive expires (→ real death). Model B,
+        /// faithful to Riot DoDeath (sets bZombie but NOT the dead flag): a zombie has
+        /// <see cref="IsDead"/> == FALSE and behaves like a live unit — the two are orthogonal Riot
+        /// states (CO_IS_DEAD vs CO_IS_DEAD_OR_ZOMBIE).
+        /// </summary>
+        public bool IsZombie { get; protected set; }
+        /// <summary>
+        /// ALIVE / ZOMBIE / DEAD, mirroring Riot's CreateHeroDeathState wire enum.
+        /// </summary>
+        public HeroDeathState DeathState => IsZombie ? HeroDeathState.ZOMBIE
+            : IsDead ? HeroDeathState.DEAD : HeroDeathState.ALIVE;
+        /// <summary>
+        /// Death data captured when this unit entered the zombie state, replayed by
+        /// <see cref="EndZombie"/> to finalize the real death.
+        /// </summary>
+        protected DeathData _zombieDeath;
+        /// <summary>
         /// Engine-clock time (<see cref="Game.GameTime"/>, milliseconds) at which this unit last took
         /// real (post-mitigation > 0) damage. Mirrors Riot's <c>GameObject::mLastTookDamageTime</c>
         /// (GameObject.h:84) read via the Lua <c>GetLastTookDamageTime</c> API. Pair with
@@ -1302,12 +1322,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
             ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
             
-            if (!IsDead && Stats.CurrentHealth <= 0)
+            // A zombie sits at 0 HP but is NOT dead (Model B: IsDead=false while IsZombie). Guard
+            // against re-triggering Die() when it takes further damage — its real death is driven by
+            // EndZombie() (the keep-alive expiry), not by another health-cross-zero.
+            if (!IsDead && !IsZombie && Stats.CurrentHealth <= 0)
             {
                 IsDead = true;
                 _death = new DeathData
                 {
-                    BecomeZombie = false, // TODO: Unhardcode
+                    // Default false; a death-reactive buff arms this from its OnDeath handler during
+                    // Die() (Riot: BecomeZombie var set in BuffOnDeath → bZombie). See the zombie
+                    // branch in Die() / OnZombie.
+                    BecomeZombie = false,
                     DieType = 0, // TODO: Unhardcode
                     Unit = this,
                     Killer = attacker,
@@ -1354,14 +1380,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ExitStealth();
             //_game.ObjectManager.RefreshUnitVision(this);
             _game.ObjectManager.StopTargeting(this);
+            // Stop + clear the path on death (Riot DoDeath zeroes Velocity). Matters for zombies,
+            // which stay in the world rather than being removed — otherwise they keep sliding to
+            // their last waypoint.
+            StopMovement(MoveStopReason.Death);
 
-            if (!IsToRemove())
-            {
-                _game.PacketNotifier.NotifyS2C_NPC_Die_MapView(data);
-            }
-
-            SetToRemove();
-
+            // Riot obj_AI_Base::DoDeath fires HandleDeath (EVENT_ON_DIE + buff OnDeath hooks) BEFORE
+            // the zombie-vs-death decision, so a death-reactive buff (e.g. Karthus DeathDefied) can
+            // arm data.BecomeZombie from its OnDeath handler. The actual removal / zombie branch runs
+            // further down, after the non-persist buff cull.
             ApiEventManager.OnDeath.Publish(data.Unit, data);
 
             // PersistsThroughDeath (buff side): the holder's death removes every buff that is NOT
@@ -1418,7 +1445,58 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 champion.OnKill(data);
             }
 
+            // Zombie-vs-death decision (Riot DoDeath), AFTER the non-persist buff cull above so the
+            // keep-alive buff added by an OnZombie handler survives. A zombie stays in the world
+            // (no SetToRemove) and keeps acting until a script calls EndZombie().
+            if (data.BecomeZombie)
+            {
+                // Model B (faithful to Riot DoDeath: bZombie set, dead flag NOT): a zombie is NOT
+                // counted as dead — clear IsDead so it behaves like a live unit until EndZombie().
+                // Only the SERVER-side removal is deferred; the death is still announced immediately
+                // below (NotifyDeath carries the BecomeZombie bit, so the client keeps the actor).
+                IsZombie = true;
+                IsDead = false;
+                _zombieDeath = data;
+                ApiEventManager.OnZombie.Publish(data.Unit, data);
+            }
+            else
+            {
+                if (!IsToRemove())
+                {
+                    _game.PacketNotifier.NotifyS2C_NPC_Die_MapView(data);
+                }
+                SetToRemove();
+            }
+
             _game.PacketNotifier.NotifyDeath(data);
+        }
+
+        /// <summary>
+        /// Ends the zombie phase started by <see cref="Die"/> and finalizes the real death. Called by
+        /// the script owning the zombie's keep-alive once it expires (e.g. Karthus DeathDefiedBuff
+        /// OnDeactivate). Riot exposes no observable server-side bZombie=false — the zombie ends by
+        /// re-death when the keep-alive lapses; this replays the deferred removal/notify.
+        /// </summary>
+        public virtual void EndZombie()
+        {
+            if (!IsZombie)
+            {
+                return;
+            }
+
+            // The zombie truly dies now: clear the zombie state and set IsDead (the unit was a live
+            // zombie, IsDead=false). Death was already announced at Die() (NotifyDeath, with the
+            // zombie bit); this performs the deferred server-side removal + map-view cleanup.
+            IsZombie = false;
+            IsDead = true;
+            var data = _zombieDeath ?? _death;
+            _zombieDeath = null;
+
+            if (data != null && !IsToRemove())
+            {
+                _game.PacketNotifier.NotifyS2C_NPC_Die_MapView(data);
+            }
+            SetToRemove();
         }
 
         /// <summary>

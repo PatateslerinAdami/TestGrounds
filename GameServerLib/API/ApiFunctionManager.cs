@@ -2133,7 +2133,7 @@ namespace LeagueSandbox.GameServer.API
             var isMonster = target is Monster;
 
             var notAffectSelf = (useFlags & SpellDataFlags.NotAffectSelf) != 0;
-            //var notAffectZombie = (useFlags & SpellDataFlags.NotAffectZombie) != 0;
+            var notAffectZombie = (useFlags & SpellDataFlags.NotAffectZombie) != 0;
             var affectNotPet = (useFlags & SpellDataFlags.AffectNotPet) != 0;
             var ignoreLaneMinion = (useFlags & SpellDataFlags.IgnoreLaneMinion) != 0;
             var ignoreAllyMinion = (useFlags & SpellDataFlags.IgnoreAllyMinion) != 0;
@@ -2141,8 +2141,7 @@ namespace LeagueSandbox.GameServer.API
             var ignoreClones = (useFlags & SpellDataFlags.IgnoreClones) != 0;
 
             if ((notAffectSelf && isSelf)
-                // TODO: Replace this fallback once explicit zombie-state tracking exists.
-                //|| (notAffectZombie && target.IsDead)
+                || (notAffectZombie && target.IsZombie)
                 || (affectNotPet && isPet) // TODO: Verify
                 || (ignoreLaneMinion && isLaneMinion)
                 || (ignoreAllyMinion && sameTeam && isMinion)
