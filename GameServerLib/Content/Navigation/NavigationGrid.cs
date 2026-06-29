@@ -573,8 +573,15 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// recovery so a wedged unit routes AROUND the bodies that wedged it instead of getting the
         /// LOS-straight n=2 path back into them. Requires <paramref name="actorBlocked"/> to be set
         /// for the actor-aware smoothing to keep the bend.</param>
-        public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null, Vector2? movementHint = null, bool skipLineOfSight = false)
+        public NavigationPath GetPath(Vector2 from, Vector2 to, float distanceThreshold = 0, bool useFastPath = false, ActorBlockedPredicate actorBlocked = null, Vector2? movementHint = null, bool skipLineOfSight = false, float ignoreTargetRadius = -1f)
         {
+            // ignoreTargetRadius (world units) → near-goal actor-blocking exemption radius in cell²
+            // units for ExpandStep. -1 keeps the default fixed 2-cell exemption; 0 forces full
+            // actor-blocking right up to the goal (decomp ignoreTargetRadiusForBuild=0 when the attack
+            // target cell was relocated). See the nearGoal block in ExpandStep.
+            float ignoreTargetCellsSq = ignoreTargetRadius < 0f
+                ? -1f
+                : (ignoreTargetRadius / CellSize) * (ignoreTargetRadius / CellSize);
             // Core A* funnel — every server path computation lands here. Tagged "pathing" so a
             // Perfetto trace shows GetPath call-count and self-time per tick. If this dominates a
             // tick, the cost is the bidirectional A* (and, when actorBlocked != null, the per-cell
@@ -836,7 +843,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         ref goalReached, ref meetingCell, ref meetingPoppedCell,
                         actorBlocked, cellFrom, cellTo, hintCell,
                         ref pathFromBothDirections, ref worstCostF, ref worstCostB,
-                        maxSteps - steps, TRAVEL_FACTOR
+                        maxSteps - steps, TRAVEL_FACTOR, ignoreTargetCellsSq
                     );
                     popCountF++;
                 }
@@ -855,7 +862,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                         ref goalReached, ref meetingCell, ref meetingPoppedCell,
                         actorBlocked, cellFrom, cellTo, hintCell,
                         ref pathFromBothDirections, ref worstCostF, ref worstCostB,
-                        maxSteps - steps, TRAVEL_FACTOR
+                        maxSteps - steps, TRAVEL_FACTOR, ignoreTargetCellsSq
                     );
                     popCountB++;
                 }
@@ -1012,7 +1019,8 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             ref float worstCostF,
             ref float worstCostB,
             int remainingSteps,
-            float travelFactor)
+            float travelFactor,
+            float ignoreTargetCellsSq)
         {
             // Dequeue from the popped direction's heap (scheduler picked one in GetPath).
             var open = forward ? openF : openB;
@@ -1240,7 +1248,18 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
                         int dxGoal = neighborCell.Locator.X - actorRefGoal.Locator.X;
                         int dyGoal = neighborCell.Locator.Y - actorRefGoal.Locator.Y;
-                        bool nearGoal = dxGoal * dxGoal + dyGoal * dyGoal <= 4;
+                        // NEAR-GOAL actor-blocking exemption. Default (ignoreTargetCellsSq < 0): the
+                        // fixed 2-cell² radius — lets a path reach INTO a target whose own cell is
+                        // actor-blocked (attack-target reachability). When the caller threads an
+                        // explicit ignoreTargetRadius (>= 0), use it instead — this is the decomp's
+                        // `ignoreTargetRadiusForBuild` (NavGrid::GetClosestAttackPoint): it is 0 when
+                        // the target END cell was relocated off an occupied cell, which forces FULL
+                        // actor-blocking near the goal so co-attacking units route AROUND each other
+                        // onto DISTINCT stand cells (the real Riot attacker-spread mechanism), instead
+                        // of all pathing straight onto the same in-range spot.
+                        bool nearGoal = ignoreTargetCellsSq < 0f
+                            ? (dxGoal * dxGoal + dyGoal * dyGoal <= 4)
+                            : (dxGoal * dxGoal + dyGoal * dyGoal <= ignoreTargetCellsSq);
 
                         // arrivalCost = world-unit g-cost to the cell being expanded FROM (thisG is
                         // in cell-step units; ×CellSize → world). The predicate divides by maxSpeed

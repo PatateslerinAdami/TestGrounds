@@ -187,13 +187,13 @@ namespace LeagueSandbox.GameServer.Handlers
         /// and the path lands at the closest reachable cell.
         /// </summary>
         public NavigationPath GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true,
-            bool skipLineOfSight = false)
+            bool skipLineOfSight = false, float ignoreTargetRadius = -1f)
         {
             bool useFastPath = obj is ObjAIBase ai && ai.UsesFastPath;
             float radius = usePathingRadius ? obj.PathfindingRadius : 0f;
             var actorBlocked = BuildActorBlockedPredicate(obj);
             return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked,
-                ENABLE_MOVEMENT_HINT_PENALTY ? ComputeMovementHint(obj) : null, skipLineOfSight);
+                ENABLE_MOVEMENT_HINT_PENALTY ? ComputeMovementHint(obj) : null, skipLineOfSight, ignoreTargetRadius);
         }
 
         // DISABLED 2026-06-07 (in-game regression): penalizing the cell directly ahead by +100
@@ -389,7 +389,20 @@ namespace LeagueSandbox.GameServer.Handlers
             Vector2 end = SetToNearestGetToAbleCell(attacker, projected,
                 attacker.PathfindingRadius, ignoreTargetRadius, effectiveRange);
 
-            var path = GetPath(attacker, end);
+            // Decomp ignoreTargetRadiusForBuild (NavGrid::GetClosestAttackPoint): if the get-to-able
+            // snap RELOCATED the target cell (it was occupied — which is the always-case when attacking
+            // a unit, since the enemy sits on it), the path build runs with FULL actor-blocking near the
+            // goal (ignoreTargetRadius = 0). That makes co-attacking minions route AROUND each other to
+            // DISTINCT stand cells instead of all pathing onto the same in-range spot (the real Riot
+            // attacker-spread mechanism — measured: our casters spent 7.1% of time stacked <20u vs Riot
+            // 2.8%, because we previously always used the fixed near-goal exemption here). Only when the
+            // target cell was NOT relocated do we keep the in-range exemption (= ignoreTargetRadius).
+            var endCell = _map.NavigationGrid.TranslateToNavGrid(end);
+            var projCell = _map.NavigationGrid.TranslateToNavGrid(projected);
+            bool endRelocated = (short)endCell.X != (short)projCell.X || (short)endCell.Y != (short)projCell.Y;
+            float ignoreTargetRadiusForBuild = endRelocated ? 0f : ignoreTargetRadius;
+
+            var path = GetPath(attacker, end, ignoreTargetRadius: ignoreTargetRadiusForBuild);
             if (path == null || path.Count < 2)
             {
                 return false;
