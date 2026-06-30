@@ -38,6 +38,9 @@ namespace LeagueSandbox.GameServer.API
         // Required variables.
         private static Game _game;
         private static ILog _logger = LoggerProvider.GetLogger();
+        // RNG source for area/point helpers (BBGetRandomPointInArea*). Matches the per-class
+        // "static readonly Random" convention used elsewhere in the server.
+        private static readonly Random _random = new Random();
 
         /// <summary>
         /// Converts the given string of hex values into an array of bytes.
@@ -398,6 +401,45 @@ namespace LeagueSandbox.GameServer.API
             }
 
             return pos + (dir * distance);
+        }
+
+        /// <summary>
+        /// Returns a random point inside the ring centered on <paramref name="center"/> bounded by
+        /// <paramref name="innerRadius"/> and <paramref name="radius"/>. Mirrors Riot's
+        /// GetRandomAreaPoint (LuaBuildingBlockHelper.cpp): the radius is drawn LINEARLY in
+        /// [innerRadius, radius] (NOT area-uniform — no sqrt, so points cluster toward the center)
+        /// and the angle uniformly in [0, 2π). When innerRadius == radius the result lies exactly on
+        /// a circle of that radius. The engine works on the X/Z ground plane, which maps to our
+        /// Vector2 X/Y.
+        /// </summary>
+        /// <param name="center">Center of the area.</param>
+        /// <param name="radius">Outer radius.</param>
+        /// <param name="innerRadius">Inner radius (0 = full disc). Must be &lt;= radius.</param>
+        /// <returns>A random Vector2 point within the ring.</returns>
+        public static Vector2 GetRandomPointInArea(Vector2 center, float radius, float innerRadius = 0f)
+        {
+            // Riot hard-asserts innerRadius <= radius; clamp defensively instead of crashing.
+            if (innerRadius > radius)
+            {
+                innerRadius = radius;
+            }
+
+            float r = innerRadius + (radius - innerRadius) * (float)_random.NextDouble();
+            float angle = (float)(_random.NextDouble() * Math.PI * 2.0);
+            return center + new Vector2(r * (float)Math.Cos(angle), r * (float)Math.Sin(angle));
+        }
+
+        /// <summary>
+        /// BBGetRandomPointInAreaUnit: a random point in the ring around <paramref name="target"/>'s
+        /// position. See <see cref="GetRandomPointInArea"/> for the distribution.
+        /// </summary>
+        /// <param name="target">Unit the area is centered on.</param>
+        /// <param name="radius">Outer radius.</param>
+        /// <param name="innerRadius">Inner radius (0 = full disc). Must be &lt;= radius.</param>
+        /// <returns>A random Vector2 point within the ring around the unit.</returns>
+        public static Vector2 GetRandomPointInAreaUnit(GameObject target, float radius, float innerRadius = 0f)
+        {
+            return GetRandomPointInArea(target.Position, radius, innerRadius);
         }
 
         /// <summary>
@@ -2428,7 +2470,7 @@ namespace LeagueSandbox.GameServer.API
         // BBKnockback is vestigial for SR, so ForceMoveAway is a force-move too. These replace the old
         // `ForceMovement(...)` overloads (deleted P4) — ForceMove/ForceMoveToUnit expose the full
         // primitive surface (gravity, resolve/ForceMovementType, keepFacing, lockActions, orders,
-        // backDistance, travelTime, ignoreTerrain), so no separate raw escape hatch is needed.
+        // moveBackBy, travelTime, ignoreTerrain), so no separate raw escape hatch is needed.
         // ===================================================================================
 
         /// <summary>
@@ -2448,17 +2490,24 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="facing">FACE_MOVEMENT_DIRECTION vs KEEP_CURRENT_FACING (Riot MovementOrdersFacing).</param>
         /// <param name="orders">What happens to the target's order when the knockback ends.</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        /// <param name="awayFrom">Optional position to push away FROM, overriding <paramref name="source"/>'s live
+        /// position for the DIRECTION only (source is still used for immunity/attribution). Pass this when the
+        /// source has moved onto the target by the time of the knockback (e.g. Alistar W: the caster charges onto
+        /// the target, so its live position is degenerate — supply the cast-origin instead). null = derive from
+        /// source.Position (the default).</param>
         public static void ForceMoveAway(AttackableUnit target, AttackableUnit source, float distance, float speed,
             float gravity = 0f, ForceMovementType resolve = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersFacing facing = ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
-            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string movementName = "")
+            ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string movementName = "",
+            Vector2? awayFrom = null)
         {
             if (target == null || source == null || speed <= 0f)
             {
                 return;
             }
 
-            var dir = target.Position - source.Position;
+            var anchor = awayFrom ?? source.Position;
+            var dir = target.Position - anchor;
             if (dir == Vector2.Zero)
             {
                 dir = new Vector2(0, 1);
@@ -2492,12 +2541,17 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="ignoreTerrain">Skip the terrain-exit clamp (e.g. blink-style dashes).</param>
         /// <param name="orders">What happens to the unit's order when the dash ends.</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
+        /// <param name="idealDistance">Riot BBMove <c>IdealDistance</c>: when &gt; 0, travel exactly this many units
+        /// along the direction to <paramref name="dest"/> instead of the geometric distance to it (aim = dest,
+        /// length = idealDistance). 0 = use the full distance to dest.</param>
+        /// <param name="moveBackBy">Riot BBMove <c>MoveBackBy</c>: pull the endpoint back toward the start by this
+        /// many units (positive = stop short, negative = overshoot).</param>
         public static void ForceMove(AttackableUnit unit, Vector2 dest, float speed, float gravity = 0f,
             ForceMovementType resolve = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersFacing facing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
             bool lockActions = true, bool ignoreTerrain = false,
             ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
-            string movementName = "")
+            string movementName = "", float idealDistance = 0f, float moveBackBy = 0f)
         {
             if (unit == null || speed <= 0f)
             {
@@ -2506,19 +2560,20 @@ namespace LeagueSandbox.GameServer.API
 
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
             unit.ServerForceLinePath(dest, speed, gravity, keepFacing, lockActions, movementName, unit,
-                ignoreTerrain, movementType: resolve, movementOrdersType: orders);
+                ignoreTerrain, movementType: resolve, movementOrdersType: orders,
+                idealDistance: idealDistance, moveBackBy: moveBackBy);
         }
 
         /// <summary>
         /// Force-move of <paramref name="unit"/> that follows a (possibly moving) <paramref name="target"/>,
         /// re-targeting each tick. Engine follow-unit-path (the real "dash to moving unit" — Lee Sin Q2,
-        /// Skarner R). <paramref name="backDistance"/> stops short of/behind the target;
+        /// Skarner R). <paramref name="moveBackBy"/> stops short of/behind the target;
         /// <paramref name="travelTime"/> &gt; 0 gives fixed-time arrival.
         /// </summary>
         /// <param name="unit">Unit performing the dash.</param>
         /// <param name="target">Unit to follow.</param>
         /// <param name="speed">Force-move speed in units/second.</param>
-        /// <param name="backDistance">Distance to stop short of (positive) / behind (negative) the target.</param>
+        /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: distance to stop short of (positive) / behind (negative) the target.</param>
         /// <param name="travelTime">Max seconds to follow before stopping (0 = until reached / max distance).</param>
         /// <param name="followMaxDistance">Max distance to follow before giving up (0 = unlimited).</param>
         /// <param name="gravity">Arc gravity; 0 = flat.</param>
@@ -2527,7 +2582,7 @@ namespace LeagueSandbox.GameServer.API
         /// mid-dash (e.g. Thresh's lantern-pull dash).</param>
         /// <param name="orders">What happens to the unit's order when the dash ends.</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>
-        public static void ForceMoveToUnit(ObjAIBase unit, AttackableUnit target, float speed, float backDistance = 0f,
+        public static void ForceMoveToUnit(ObjAIBase unit, AttackableUnit target, float speed, float moveBackBy = 0f,
             float travelTime = 0f, float followMaxDistance = 0f, float gravity = 0f,
             ForceMovementOrdersFacing facing = ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
             bool lockActions = true, ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
@@ -2539,7 +2594,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
-            unit.ServerForceFollowUnitPath(target, speed, gravity, keepFacing, followMaxDistance, backDistance,
+            unit.ServerForceFollowUnitPath(target, speed, gravity, keepFacing, followMaxDistance, moveBackBy,
                 travelTime, lockActions, movementName, unit, orders);
         }
 

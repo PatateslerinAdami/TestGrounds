@@ -947,7 +947,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="gravity">How much gravity the unit will experience when above the ground while dashing.</param>
         /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before dashing.</param>
         /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the Target before stopping the dash or reaching to the Target.</param>
-        /// <param name="backDistance">Unknown parameter.</param>
+        /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of the followed unit (positive) or overshoot past it (negative).</param>
         /// <param name="travelTime">Total time (in seconds) the dash will follow the GameObject before stopping or reaching the Target.</param>
         /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
@@ -958,7 +958,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             float gravity = 0,
             bool keepFacingLastDirection = true,
             float followTargetMaxDistance = 0,
-            float backDistance = 0,
+            float moveBackBy = 0,
             float travelTime = 0,
             bool lockActions = true,
             string movementName = "",
@@ -993,7 +993,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 KeepFacingDirection = keepFacingLastDirection,
                 FollowNetID = target.NetId,
                 FollowDistance = followTargetMaxDistance,
-                FollowBackDistance = backDistance,
+                MoveBackBy = moveBackBy,
                 FollowTravelTime = travelTime,
                 MovementName = movementName,
                 MovementOrdersType = movementOrdersType,
@@ -1008,7 +1008,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // Dashes go over WaypointGroupWithSpeed (0x64) like ServerForceLinePath — replay-verified as
             // Riot's ONLY dash wire (0x64 ×13849 across 38 replays). The previous WaypointListHeroWithSpeed
             // (0x83) is sent 0× by Riot. The follow-target tracking is carried by the SpeedParams the
-            // builder reads from MovementParameters (FollowNetID/FollowDistance/FollowBackDistance/
+            // builder reads from MovementParameters (FollowNetID/FollowDistance/MoveBackBy/
             // FollowTravelTime), set above — so no params are lost by dropping the explicit-arg overload.
             _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
             // NOTE: do NOT send MovementDriverReplication (0x3C) here. A follow-target dash replicates
@@ -1081,7 +1081,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="gravity">How much gravity the unit will experience when above the ground while lunging.</param>
         /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before lunging.</param>
         /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the target before stopping or reaching the target.</param>
-        /// <param name="backDistance">Additional stopping distance from the target.</param>
+        /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of (positive) / overshoot past (negative) the target.</param>
         /// <param name="travelTime">Total time (in seconds) the lunge may follow the target before stopping.</param>
         /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// <param name="movementType">Force movement type. Included for API compatibility.</param>
@@ -1092,7 +1092,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             float gravity = 0,
             bool keepFacingLastDirection = true,
             float followTargetMaxDistance = 0,
-            float backDistance = 0,
+            float moveBackBy = 0,
             float travelTime = 0,
             bool lockActions = false,
             ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE
@@ -1104,7 +1104,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 gravity,
                 keepFacingLastDirection,
                 followTargetMaxDistance,
-                backDistance,
+                moveBackBy,
                 travelTime,
                 lockActions
             );

@@ -68,9 +68,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public float FollowDistance { get; set; }
         /// <summary>
-        /// Distance ahead of the FollowNetID to travel after reaching it.
+        /// Riot <c>MoveBackBy</c> (BBMoveToUnit): how far to stop short of the followed unit (positive)
+        /// or overshoot past it (negative). Subtracted from the distance-to-target each tick.
         /// </summary>
-        public float FollowBackDistance { get; set; }
+        public float MoveBackBy { get; set; }
         /// <summary>
         /// Maximum amount of time to follow the FollowNetID.
         /// </summary>

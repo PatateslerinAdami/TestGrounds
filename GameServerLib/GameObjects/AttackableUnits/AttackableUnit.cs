@@ -1798,7 +1798,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     return frameTime;
                 }
                 dir = unitToFollow.Position - Position;
-                distToDest = Math.Max(0, dir.Length() - MP.FollowBackDistance);
+                distToDest = Math.Max(0, dir.Length() - MP.MoveBackBy);
                 if (MP.FollowDistance > 0)
                 {
                     distRemaining = MP.FollowDistance - MP.PassedDistance;
@@ -3653,15 +3653,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// use the ForceMove / ForceMoveAway verbs in ApiFunctionManager, not this directly.
         /// NOTE: in Riot the dash params live on the NavigationPath; here they're on MovementParameters.
         /// </summary>
-        /// <param name="endPos">Position to end the dash at.</param>
+        /// <param name="endPos">Position to end the dash at. With <paramref name="idealDistance"/> &gt; 0 this is
+        /// treated as the AIM point (direction only); the actual travel length comes from idealDistance.</param>
         /// <param name="speed">Amount of units the dash should travel in a second (movespeed).</param>
         /// <param name="gravity">Optionally how much gravity the unit will experience when above the ground while dashing.</param>
         /// <param name="keepFacingLastDirection">Whether or not the AI unit should face the direction they were facing before the dash.</param>
         /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
+        /// <param name="idealDistance">Riot BBMove/BBMoveAway <c>IdealDistance</c>: when &gt; 0, the dash travels exactly
+        /// this many units along the direction to <paramref name="endPos"/> instead of the geometric distance to it
+        /// (decouples aim direction from travel length). 0 = use the full distance to endPos.</param>
+        /// <param name="moveBackBy">Riot BBMove/BBMoveToUnit <c>MoveBackBy</c>: pull the endpoint back toward the start
+        /// by this many units (positive = stop short of the target, negative = overshoot past it). Applied after
+        /// idealDistance and before terrain resolution.</param>
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
+        public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, float idealDistance = 0.0f, float moveBackBy = 0.0f)
         {
             // Displacement immunity: a unit flagged Imobile (Baron/Dragon) or an epic monster cannot be
             // displaced by an EXTERNAL force (knockup/knockback/pull). A self-initiated dash (caster == this)
@@ -3674,6 +3681,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (MovementParameters != null)
             {
                 SetForceMovementState(false, MoveStopReason.ForceMovement);
+            }
+
+            // IdealDistance / MoveBackBy (Riot BBMove/BBMoveAway endpoint resolution): both reshape how far
+            // along the aim direction the dash ends up. IdealDistance (when > 0) REPLACES the geometric
+            // distance to endPos with a fixed planned travel length, decoupling direction (endPos = aim point)
+            // from magnitude. MoveBackBy then pulls the endpoint back toward the start (positive = stop short,
+            // negative = overshoot). Resolved here, before the terrain clamping below, so FIRST_WALL_HIT /
+            // GetClosestTerrainExit act on the final intended endpoint.
+            if (idealDistance > 0.0f || moveBackBy != 0.0f)
+            {
+                var aimDir = endPos - Position;
+                float dirLen = aimDir.Length();
+                if (dirLen > 0.0f)
+                {
+                    var unitDir = aimDir / dirLen;
+                    float travelLen = idealDistance > 0.0f ? idealDistance : dirLen;
+                    travelLen -= moveBackBy;
+                    if (travelLen < 0.0f)
+                    {
+                        travelLen = 0.0f;
+                    }
+                    endPos = Position + unitDir * travelLen;
+                }
             }
 
             // FIRST_WALL_HIT: clamp the destination to the last walkable cell along the ray so the
@@ -3733,7 +3763,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 KeepFacingDirection = keepFacingLastDirection,
                 FollowNetID = 0,
                 FollowDistance = 0,
-                FollowBackDistance = 0,
+                MoveBackBy = 0,
                 FollowTravelTime = 0,
                 MovementName = movementName,
                 MovementOrdersType = movementOrdersType,

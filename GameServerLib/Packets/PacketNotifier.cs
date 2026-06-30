@@ -6011,7 +6011,7 @@ namespace PacketDefinitions420
         /// <param name="keepFacingLastDirection">Optionally whether or not the unit should maintain the direction they were facing before dashing.</param>
         /// <param name="target">Optional GameObject to follow.</param>
         /// <param name="followTargetMaxDistance">Optional maximum distance the unit will follow the Target before stopping the dash or reaching to the Target.</param>
-        /// <param name="backDistance">Optional unknown parameter.</param>
+        /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of (positive) / overshoot past (negative) the target.</param>
         /// <param name="travelTime">Optional total time the dash will follow the GameObject before stopping or reaching the Target.</param>
         /// TODO: Implement ForceMovement class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void NotifyWaypointListWithSpeed
@@ -6022,7 +6022,7 @@ namespace PacketDefinitions420
             bool keepFacingLastDirection = false,
             GameObject target = null,
             float followTargetMaxDistance = 0,
-            float backDistance = 0,
+            float moveBackBy = 0,
             float travelTime = 0
         )
         {
@@ -6036,7 +6036,7 @@ namespace PacketDefinitions420
                 Facing = keepFacingLastDirection,
                 FollowNetID = 0,
                 FollowDistance = followTargetMaxDistance,
-                FollowBackDistance = backDistance,
+                MoveBackBy = moveBackBy,
                 FollowTravelTime = travelTime
             };
 

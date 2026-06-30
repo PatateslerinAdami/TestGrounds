@@ -235,7 +235,7 @@ namespace PacketDefinitions420
                     Facing = unit.MovementParameters.KeepFacingDirection,
                     FollowNetID = unit.MovementParameters.FollowNetID,
                     FollowDistance = unit.MovementParameters.FollowDistance,
-                    FollowBackDistance = unit.MovementParameters.FollowBackDistance,
+                    MoveBackBy = unit.MovementParameters.MoveBackBy,
                     FollowTravelTime = unit.MovementParameters.FollowTravelTime
                 }
             };
