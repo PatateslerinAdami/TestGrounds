@@ -53,8 +53,9 @@ public class Headbutt : ISpellScript {
     {
         if (parameters.MovementName != "headbuttDash") return;
         if (!IsUnitInRange(_target, unit.Position, 400f, true)) return;
+        AddParticleTarget(_alistar, _target, "HeadButt_tar", _target);
         var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
-        var dmg = _spell.SpellData.EffectLevelAmount[2][_alistar.Stats.Level] + ap;
+        var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
         _target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
             DamageResultType.RESULT_NORMAL);
         var buffVars = new BuffVariables();

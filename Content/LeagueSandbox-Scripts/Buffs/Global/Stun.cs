@@ -24,9 +24,6 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             stun = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
-            // Stunned is DERIVED from BuffType.STUN (AttackableUnit.RecomputeBuffEffects) — no manual
-            // SetStatus, so overlapping stuns compose correctly (clears only when the last expires).
-            unit.StopMovement();
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

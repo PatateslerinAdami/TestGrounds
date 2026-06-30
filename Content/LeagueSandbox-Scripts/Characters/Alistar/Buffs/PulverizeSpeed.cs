@@ -15,28 +15,38 @@ namespace Buffs
 {
     internal class PulverizeSpeed : IBuffGameScript
     {
+
         private ObjAIBase _alistar;
-        private AttackableUnit _target;
+        private Spell _spell;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.INTERNAL,
+            BuffType = BuffType.KNOCKUP,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1,
+            IsNonDispellable = false
         };
-
         public StatsModifier StatsModifier { get; private set; }
-
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _alistar = ownerSpell.CastInfo.Owner;
-            buff.Variables.Get("target", _target);
-            ApiEventManager.OnMoveBegin.AddListener(this, _alistar, OnMoveBegin);
-            //ForceMove(unit, _target.Position,10, 20, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, orders: ForceMovementOrdersType.CANCEL_ORDER);
+            _spell = ownerSpell;
+            var bouncePos = GetRandomPointInAreaUnit(unit, 10, 10f);
+            ApiEventManager.OnMoveEnd.AddListener(this, unit, OnMoveEnd);
+            ForceMove(unit, bouncePos,10f, 20f, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, orders: ForceMovementOrdersType.CANCEL_ORDER, idealDistance: 10f, movementName: "pulverize");
         }
 
-        private void OnMoveBegin(AttackableUnit unit, ForceMovementParameters parameters)
+        private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters)
         {
-            
+            if (parameters.MovementName != "pulverize") return;
+            var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+            var dmg = _spell.SpellData.EffectLevelAmount[2][_alistar.Stats.Level] + ap;
+            unit.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                DamageResultType.RESULT_NORMAL);
+            AddBuff("Pulverize", 0.5f, 1, _spell, unit, _alistar);
+        }
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            ApiEventManager.RemoveAllListenersForOwner(this);
         }
     }
 }

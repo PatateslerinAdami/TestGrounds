@@ -34,10 +34,16 @@ public class Pulverize : ISpellScript {
 
     public void OnSpellPostCast(Spell spell)
     {
+        AddParticleTarget(_alistar, _alistar, "Pulverize_cas", _alistar);
+        AddParticleTarget(_alistar, _alistar, "Pulverize_cas3", _alistar);
+        var ap = _alistar.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
         var unitsInRange = GetUnitsInRange(_alistar, _alistar.Position, 375f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
         foreach (var unit in unitsInRange)
         {
-            AddBuff("Pulverize", 1f, 1, spell, unit, _alistar);
+            AddBuff("PulverizeSpeed", 1f, 1, spell, unit, _alistar);
+            unit.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                DamageResultType.RESULT_NORMAL);
         }
     }
 }
