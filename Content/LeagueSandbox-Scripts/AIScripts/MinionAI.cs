@@ -1,117 +1,124 @@
 ﻿using GameServerCore.Enums;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
 using GameServerCore.Scripting.CSharp;
-using System.Linq;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using GameServerCore.Scripting.CSharp.BehaviorTree;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace AIScripts
 {
     public class MinonAI : IAIScript
     {
         public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData();
-        Minion minion;
-        internal const float DETECT_RANGE = 475.0f;
+        private Minion _minion;
+        private Node _behaviorTree;
+        private float _thinkTimer = 0f;
 
         public void OnActivate(ObjAIBase owner)
         {
-            minion = owner as Minion;
+            _minion = owner as Minion;
+
+            _behaviorTree = new Selector(
+                new Sequence(
+                    new ActionNode(CheckHasTarget),
+                    new ActionNode(OrderAttackTarget)
+                ),
+                new ActionNode(ScanForTargets),
+                new ActionNode(FollowWaypoints)
+            );
         }
 
         public void OnUpdate(float diff)
         {
-            if (!minion.IsDead)
-            {
-                if (minion.MovementParameters != null || minion.IsAIPaused())
-                {
-                    return;
-                }
+            if (_minion.IsDead || _minion.IsAIPaused()) return;
 
-                AIMove();
+            _thinkTimer += diff;
+            if (_thinkTimer >= 250f)
+            {
+                _thinkTimer = 0f;
+                _behaviorTree.Evaluate();
             }
         }
 
-        protected bool ScanForTargets()
+        private NodeState CheckHasTarget()
         {
-            if (minion.TargetUnit != null && !minion.TargetUnit.IsDead)
-            {
-                return true;
-            }
-
-            AttackableUnit nextTarget = null;
-            var nextTargetPriority = 14;
-            var nearestObjects = GetUnitsInRange(
-                minion,
-                minion.Position,
-                minion.Stats.Range.Total,
-                true,
-                SpellDataFlags.AffectEnemies
-                | SpellDataFlags.AffectMinions
-                | SpellDataFlags.AffectHeroes
-                | SpellDataFlags.AffectTurrets
-            );
-            //Find target closest to max attack range.
-            foreach (var it in nearestObjects.OrderBy(x =>
-                         Vector2.DistanceSquared(minion.Position, x.Position) -
-                         (minion.Stats.Range.Total * minion.Stats.Range.Total)))
-            {
-                if (!(it is AttackableUnit u)
-                    || u.IsDead
-                    || u.Team == minion.Team
-                    || Vector2.DistanceSquared(minion.Position, u.Position) > DETECT_RANGE * DETECT_RANGE
-                    || !u.IsVisibleByTeam(minion.Team)
-                    || !u.Status.HasFlag(StatusFlags.Targetable)
-                    || UnitIsProtectionActive(u))
-                {
-                    continue;
-                }
-
-                var priority = (int)minion.ClassifyTarget(u); // get the priority.
-                if (priority < nextTargetPriority) // if the priority is lower than the target we checked previously
-                {
-                    nextTarget = u; // make it a potential target.
-                    nextTargetPriority = priority;
-                }
-            }
-
-            if (nextTarget != null) // If we have a target
-            {
-                // Set the new target and refresh waypoints
-                minion.SetTargetUnit(nextTarget, true);
-
-                return true;
-            }
-
-            return false;
+            if (_minion.TargetUnit != null && !_minion.TargetUnit.IsDead) return NodeState.Success;
+            _minion.SetTargetUnit(null, true);
+            return NodeState.Failure;
         }
 
-        public virtual bool AIMove()
+        private NodeState OrderAttackTarget()
         {
-            if (ScanForTargets()) // returns true if we have a target
-            {
-                if (!minion.RecalculateAttackPosition())
-                {
-                    KeepFocusingTarget(); // attack/follow target
-                }
-
-                return false;
-            }
-
-            return true;
+            if (_minion.MoveOrder != OrderType.AttackTo) _minion.UpdateMoveOrder(OrderType.AttackTo);
+            return NodeState.Success;
         }
 
-        protected void KeepFocusingTarget()
+        private NodeState ScanForTargets()
         {
-            if (minion.IsAttacking && (minion.TargetUnit == null || minion.TargetUnit.IsDead ||
-                                       Vector2.DistanceSquared(minion.Position, minion.TargetUnit.Position) >
-                                       minion.Stats.Range.Total * minion.Stats.Range.Total))
-                // If target is dead or out of range
+            var potentialTargets = ApiFunctionManager.GetUnitsInRange(_minion, _minion.Position, _minion.Stats.AcquisitionRange.Total, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets);
+
+            AttackableUnit bestTarget = null;
+            int bestPriority = (int)ClassifyUnit.DEFAULT;
+            int bestAttackers = int.MaxValue;
+            float bestDistSq = _minion.Stats.AcquisitionRange.Total * _minion.Stats.AcquisitionRange.Total;
+
+            foreach (var u in potentialTargets)
             {
-                minion.CancelAutoAttack(false, true);
-                minion.SetTargetUnit(null, true);
+                if (u.Status.HasFlag(StatusFlags.Targetable) && !ApiFunctionManager.UnitIsProtectionActive(u))
+                {
+                    int priority = (int)_minion.ClassifyTarget(u);
+                    float distSq = Vector2.DistanceSquared(_minion.Position, u.Position);
+                    int attackers = ApiFunctionManager.CountUnitsAttackingUnit(u);
+
+                    if (attackers >= 4) priority += 10;
+
+                    bool isBetterTarget = false;
+
+                    if (bestTarget == null) isBetterTarget = true;
+                    else if (priority < bestPriority) isBetterTarget = true;
+                    else if (priority == bestPriority)
+                    {
+                        if (attackers < bestAttackers) isBetterTarget = true;
+                        else if (attackers == bestAttackers && distSq < bestDistSq) isBetterTarget = true;
+                    }
+
+                    if (isBetterTarget)
+                    {
+                        bestTarget = u;
+                        bestPriority = priority;
+                        bestAttackers = attackers;
+                        bestDistSq = distSq;
+                    }
+                }
             }
+
+            if (bestTarget != null)
+            {
+                _minion.SetTargetUnit(bestTarget, true);
+                return NodeState.Success;
+            }
+
+            return NodeState.Failure;
+        }
+
+        private NodeState FollowWaypoints()
+        {
+            if (_minion.Waypoints.Count > 1 && _minion.MoveOrder != OrderType.MoveTo)
+            {
+                _minion.UpdateMoveOrder(OrderType.MoveTo);
+                return NodeState.Running;
+            }
+            else if (_minion.Waypoints.Count <= 1 && _minion.MoveOrder != OrderType.Stop)
+            {
+                _minion.UpdateMoveOrder(OrderType.Stop);
+            }
+
+            return NodeState.Success;
         }
     }
 }

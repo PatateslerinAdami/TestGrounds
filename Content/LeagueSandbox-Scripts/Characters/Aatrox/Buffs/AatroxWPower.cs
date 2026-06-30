@@ -1,92 +1,100 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using log4net.Repository.Hierarchy;
+using System.Collections.Generic;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Buffs;
+namespace Buffs
+{
+    class AatroxWPower : IBuffGameScript
+    {
+        private ObjAIBase _owner;
+        public Particle weaponGlow;
 
-public class AatroxWPower : IBuffGameScript {
-    private ObjAIBase _aatrox;
-    private Spell     _spell;
+        private static readonly Dictionary<int, string> skins = new()
+        {
+            { 0, "Aatrox_Base_W_" },
+            { 1, "Aatrox_Skin01_W_" },
+            { 2, "Aatrox_Skin02_W_" }
+        };
 
-    private Particle _weaponGlowParticle;
-    private string   _weaponGlow, _weaponGlowR;
-    
-    
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_ENCHANCER,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
-    };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
+        {
+            BuffType = BuffType.AURA,
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            MaxStacks = 1,
+        };
 
-    public StatsModifier StatsModifier { get; } = new();
+        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _spell  = ownerspell;
-        _aatrox = ownerspell?.CastInfo?.Owner;
-        if (_aatrox == null) return;
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            _owner = ownerSpell.CastInfo.Owner;
+            SetSpell(_owner, "AatroxW2", SpellSlotType.SpellSlots, 1);
+            _owner.GetSpell("AatroxW2").SetSpellToggle(true);
+            ApiEventManager.OnLaunchAttack.AddListener(this, _owner, OnAttack);
 
-        switch (_aatrox.SkinID) {
-            case 1:
-                _weaponGlow  = "Aatrox_Skin01_W_WeaponPower";
-                _weaponGlowR = "Aatrox_Skin01_W_WeaponPowerR";
-                break;
-            case 2:
-                _weaponGlow  = "Aatrox_Skin02_W_WeaponPower";
-                _weaponGlowR = "Aatrox_Skin02_W_WeaponPowerR";
-                break;
-            default:
-                _weaponGlow  = "Aatrox_Base_W_WeaponPower";
-                _weaponGlowR = "Aatrox_Base_W_WeaponPowerR";
-                break;
+            weaponGlow = AddParticleTarget(_owner, _owner, skins[_owner.SkinID] + "WeaponPower", _owner, bone: "weapon");
+            weaponGlow.isInfinite = true;
+
+            ClearOverrideAnimation(unit, "Attack3", "AatroxW");
+            ClearOverrideAnimation(unit, "Attack6", "AatroxW");
+
+            if (_owner.hitCount == 2)
+            {
+                AddBuff("AatroxWONHPowerBuff", 1f, 1, ownerSpell, _owner, _owner, true);
+            }
         }
 
-        RemoveBuff(_aatrox, "AatroxWLife");
-        _weaponGlowParticle = AddParticleTarget(_aatrox, _aatrox, _aatrox.HasBuff("AatroxR") ? _weaponGlowR : _weaponGlow, _aatrox, buff.Duration, bone: "weapon");
-        ApiEventManager.OnAllowAddBuff.AddListener(this, _aatrox, OnAddBuff);
-        RegisterCurrentRBuffEndListener();
-    }
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            ApiEventManager.OnLaunchAttack.RemoveListener(this, _owner);
+            weaponGlow.SetToRemove();
+            if (_owner.GetBuffWithName("AatroxWONHPowerBuff") is Buff a)
+            {
+                a.DeactivateBuff();
+            }
+        }
 
-    private bool OnAddBuff(AttackableUnit applier, AttackableUnit target, Buff buff) {
-        if (_aatrox == null || buff == null) return true;
-        if (buff.Name is not "AatroxR") return true;
-        RemoveParticle(_weaponGlowParticle);
-        _weaponGlowParticle = AddParticleTarget(_aatrox, _aatrox, _weaponGlowR, _aatrox, -1f, bone: "weapon");
-        ApiEventManager.OnBuffDeactivated.AddListener(this, buff, OnBuffEnd);
-        return true;
-    }
-
-    private void OnBuffEnd(Buff buff) {
-        if (_aatrox == null) return;
-        RemoveParticle(_weaponGlowParticle);
-        _weaponGlowParticle = AddParticleTarget(_aatrox, _aatrox, _weaponGlow, _aatrox, -1f, bone: "weapon");
-        ApiEventManager.OnBuffDeactivated.RemoveListener(this);
-    }
-
-    private void RegisterCurrentRBuffEndListener() {
-        if (_aatrox == null) return;
-        var rBuff = _aatrox.GetBuffWithName("AatroxR");
-        if (rBuff != null) {
-            ApiEventManager.OnBuffDeactivated.AddListener(this, rBuff, OnBuffEnd);
+        private void OnAttack(Spell spell)
+        {
+            _owner.hitCount++;
+            if (_owner.hitCount == 2)
+            {
+                AddBuff("AatroxWONHPowerBuff", 1f, 1, spell, _owner, _owner, true);
+            }
+            if (_owner.hitCount >= 3)
+            {
+                _owner.hitCount = 0;
+                if (_owner.GetBuffWithName("AatroxWONHPowerBuff") is Buff a)
+                {
+                    a.DeactivateBuff();
+                }
+            }
         }
     }
-    
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-        ApiEventManager.RemoveAllListenersForOwner(this);
-        RemoveParticle(_weaponGlowParticle);
-        if (_aatrox == null || _spell == null) return;
-        if (!_aatrox.HasBuff("AatroxWONHPowerBuff") || _aatrox.GetBuffsWithName("AatroxW").Count != 2) return;
-        RemoveBuff(_aatrox,"AatroxWONHPowerBuff");
-        AddBuff("AatroxWONHLifeBuff", 25000f, 1, _spell, _aatrox, _aatrox, true);
+
+    class AatroxWONHPowerBuff : IBuffGameScript
+    {
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
+        {
+            BuffType = BuffType.AURA,
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            MaxStacks = 1,
+        };
+
+        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
+
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            var owner = ownerSpell.CastInfo.Owner;
+            owner.SetAutoAttackSpell(owner.HasBuff("AatroxR") ? "AatroxBasicAttack6" : "AatroxBasicAttack3", false);
+        }
     }
-    
 }

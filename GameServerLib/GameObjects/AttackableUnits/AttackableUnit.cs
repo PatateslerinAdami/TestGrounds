@@ -133,6 +133,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private Dictionary<string, List<AnimOverrideInfo>> _animOverrideStack;
         private Dictionary<string, string> animOverrides;
 
+        private int _unstoppableModifiers = 0;
+        public bool IsUnstoppable => _unstoppableModifiers > 0 || (MovementParameters != null && MovementParameters.IsUnstoppable);
+        public void SetUnstoppable(bool isUnstoppable)
+        {
+            if (isUnstoppable) _unstoppableModifiers++;
+            else _unstoppableModifiers--;
+        }
         public AttackableUnit(
             Game game,
             string model,
@@ -1111,10 +1118,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private float DashMove(float frameTime)
         {
             var MP = MovementParameters;
-            Vector2 dir;
-            float distToDest;
+            Vector2 dir = Vector2.Zero;
+            float distToDest = 0;
             float distRemaining = float.PositiveInfinity;
-            float timeRemaining = float.PositiveInfinity;
+            float timeRemainingMs = float.PositiveInfinity;
+
+            if (MP.Duration > 0)
+            {
+                timeRemainingMs = (MP.Duration * 1000f) - MP.ElapsedTime;
+            }
+
             if (MP.FollowNetID > 0)
             {
                 GameObject unitToFollow = _game.ObjectManager.GetObjectById(MP.FollowNetID);
@@ -1131,48 +1144,84 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 if (MP.FollowTravelTime > 0)
                 {
-                    timeRemaining = MP.FollowTravelTime - MP.ElapsedTime;
+                    timeRemainingMs = Math.Min(timeRemainingMs, (MP.FollowTravelTime * 1000f) - MP.ElapsedTime);
                 }
             }
             else
             {
                 if (Waypoints == null || Waypoints.Count <= 1)
                 {
-                    SetDashingState(false, MoveStopReason.ForceMovement);
-                    return frameTime;
+                    if (MP.Duration > 0 && timeRemainingMs > 0)
+                    {
+                        distToDest = 0; 
+                    }
+                    else
+                    {
+                        SetDashingState(false, MoveStopReason.ForceMovement);
+                        return frameTime;
+                    }
                 }
-
-                dir = Waypoints[1] - Position;
-                if (float.IsNaN(dir.X) || float.IsNaN(dir.Y) || float.IsInfinity(dir.X) || float.IsInfinity(dir.Y))
+                else
                 {
-                    SetDashingState(false, MoveStopReason.ForceMovement);
-                    return frameTime;
+                    dir = Waypoints[1] - Position;
+                    if (float.IsNaN(dir.X) || float.IsNaN(dir.Y) || float.IsInfinity(dir.X) || float.IsInfinity(dir.Y))
+                    {
+                        SetDashingState(false, MoveStopReason.ForceMovement);
+                        return frameTime;
+                    }
+                    distToDest = dir.Length();
                 }
-                distToDest = dir.Length();
             }
+
             distRemaining = Math.Min(distToDest, distRemaining);
 
-            float time = Math.Min(frameTime, timeRemaining);
-            float speed = MP.PathSpeedOverride * 0.001f;
-            float distPerFrame = speed * time;
-            float dist = Math.Min(distPerFrame, distRemaining);
-            if (dir != Vector2.Zero)
+            float timeMs = Math.Min(frameTime, timeRemainingMs);
+            float speed = MP.PathSpeedOverride * 0.001f; 
+            float distPerFrame = speed * timeMs;
+            float dist = 0;
+
+            if (speed > 0)
             {
-                Position += Vector2.Normalize(dir) * dist;
+                dist = Math.Min(distPerFrame, distRemaining);
+                if (dir != Vector2.Zero && dist > 0)
+                {
+                    Position += Vector2.Normalize(dir) * dist;
+                }
             }
 
-            if (distRemaining <= distPerFrame)
+            bool finished = false;
+            float leftoverTimeMs = 0;
+
+            if (MP.Duration > 0)
+            {
+                if (timeRemainingMs <= frameTime)
+                {
+                    finished = true;
+                    leftoverTimeMs = frameTime - timeRemainingMs;
+                }
+            }
+            else
+            {
+                if (distRemaining <= distPerFrame && speed > 0)
+                {
+                    finished = true;
+                    leftoverTimeMs = (distPerFrame - distRemaining) / speed;
+                }
+                else if (timeRemainingMs <= frameTime)
+                {
+                    finished = true;
+                    leftoverTimeMs = frameTime - timeRemainingMs;
+                }
+            }
+
+            if (finished)
             {
                 SetDashingState(false);
-                return (distPerFrame - distRemaining) / speed;
+                return leftoverTimeMs;
             }
-            if (timeRemaining <= frameTime)
-            {
-                SetDashingState(false);
-                return frameTime - timeRemaining;
-            }
+
             MP.PassedDistance += dist;
-            MP.ElapsedTime += time;
+            MP.ElapsedTime += timeMs;
 
             return 0;
         }
@@ -1365,59 +1414,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     if (parentBuff.StackCount >= parentBuff.MaxStacks)
                     {
-                        RemoveBuffSlot(b);
+                        parentBuff.Refresh();
                     }
                     else
                     {
-                        var buffsWithName = GetBuffsWithName(b.Name);
-                        var maxRemainingDuration = 0.0f;
-                        for (var i = 0; i < buffsWithName.Count; i++)
-                        {
-                            var existingBuff = buffsWithName[i];
-                            var remainingDuration = Math.Max(0.0f, existingBuff.Duration - existingBuff.TimeElapsed);
-                            if (remainingDuration > maxRemainingDuration)
-                            {
-                                maxRemainingDuration = remainingDuration;
-                            }
-                        }
-
-                        var durationToAdd = maxRemainingDuration + b.Duration;
-                        if (durationToAdd <= Extensions.COMPARE_EPSILON)
-                        {
-                            durationToAdd = b.Duration;
-                        }
-
-                        // Recreate this stack with a queued duration so stack expirations continue sequentially.
-                        var continuingBuff = new Buff(_game, b.Name, durationToAdd, parentBuff.StackCount, b.OriginSpell,
-                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.Variables?.Clone());
-
-                        // Reuse the parent slot for this stack group.
-                        RemoveBuffSlot(b);
-                        RemoveBuffSlot(continuingBuff);
-                        continuingBuff.SetSlot(parentBuff.Slot);
-
-                        BuffList.Add(continuingBuff);
-
                         parentBuff.IncrementStackCount();
-                        buffsWithName.Add(continuingBuff);
-                        for (var i = 0; i < buffsWithName.Count; i++)
-                        {
-                            buffsWithName[i].SetStacks(parentBuff.StackCount);
-                        }
-
-                        if (!b.IsHidden)
-                        {
-                            if (parentBuff.BuffType == BuffType.COUNTER)
-                            {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
-                            }
-                            else
-                            {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff, parentBuff.Duration, parentBuff.TimeElapsed);
-                            }
-                        }
-
-                        // STACKS_AND_CONTINUE stacks are queued durations; only the current parent stack should stay active.
                     }
                 }
                 else if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS)
@@ -1429,21 +1430,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         RemoveBuff(b.Name, true);
 
                         var tempbuffs = GetBuffsWithName(b.Name);
-                        BuffSlots[oldestbuff.Slot] = tempbuffs[0];
-                        ParentBuffs.Add(oldestbuff.Name, tempbuffs[0]);
-                        BuffList.Add(b);
-
-                        if (!b.IsHidden)
+                        if (tempbuffs.Count > 0)
                         {
-                            var currentParentBuff = ParentBuffs[b.Name];
-                            if (currentParentBuff.BuffType == BuffType.COUNTER)
-                            {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(currentParentBuff);
-                            }
-                            else
-                            {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
-                            }
+                            BuffSlots[oldestbuff.Slot] = tempbuffs[0];
+                            ParentBuffs.Add(oldestbuff.Name, tempbuffs[0]);
+                            BuffList.Add(b);
+
+                            ParentBuffs[b.Name].SetStacks(parentBuff.StackCount);
                         }
 
                         b.ActivateBuff();
@@ -1453,68 +1446,28 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         BuffList.Add(b);
 
                         parentBuff.IncrementStackCount();
-                        var buffsWithName = GetBuffsWithName(b.Name);
-                        for (var i = 0; i < buffsWithName.Count; i++)
+                        GetBuffsWithName(b.Name).ForEach(buff =>
                         {
-                            buffsWithName[i].SetStacks(parentBuff.StackCount);
-                        }
-
-                        if (!b.IsHidden)
-                        {
-                            if (b.BuffType == BuffType.COUNTER)
+                            if (buff != ParentBuffs[b.Name])
                             {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
+                                buff.SetStacks(ParentBuffs[b.Name].StackCount, false);
                             }
-                            else
-                            {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(b, b.Duration, b.TimeElapsed);
-                            }
-                        }
+                        });
 
                         b.ActivateBuff();
                     }
                 }
                 else if (parentBuff.BuffAddType == BuffAddType.STACKS_AND_RENEWS)
                 {
-                    var existingBuffs = GetBuffsWithName(b.Name);
-                    for (var i = 0; i < existingBuffs.Count; i++)
+                    RemoveBuffSlot(b);
+                    if (parentBuff.IncrementStackCount())
                     {
-                        existingBuffs[i].ResetTimeElapsed();
+                        parentBuff.ActivateBuff();
                     }
-
-                    // If max stacks reached, only renew existing stack timers.
-                    if (parentBuff.StackCount >= parentBuff.MaxStacks)
-                    {
-                        RemoveBuffSlot(b);
-                    }
+                    // If max stacks reached, we just refresh
                     else
                     {
-                        // Reuse the parent slot for this stack group.
-                        var parentSlot = parentBuff.Slot;
-                        RemoveBuffSlot(b);
-                        b.SetSlot(parentSlot);
-
-                        BuffList.Add(b);
-                        parentBuff.IncrementStackCount();
-                        existingBuffs.Add(b);
-                        for (var i = 0; i < existingBuffs.Count; i++)
-                        {
-                            existingBuffs[i].SetStacks(parentBuff.StackCount);
-                        }
-
-                        b.ActivateBuff();
-                    }
-
-                    if (!b.IsHidden)
-                    {
-                        if (parentBuff.BuffType == BuffType.COUNTER)
-                        {
-                            _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(parentBuff);
-                        }
-                        else
-                        {
-                            _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff, parentBuff.Duration, parentBuff.TimeElapsed);
-                        }
+                        parentBuff.Refresh();
                     }
                 }
                 return true;
@@ -1657,164 +1610,48 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return;
             }
 
-            // STACKS_AND_CONTINUE keeps queued buff instances and removes one segment at a time.
-            if (b.BuffAddType == BuffAddType.STACKS_AND_CONTINUE && b.StackCount > 1)
+            // STACKS_AND_OVERLAPS is the only type that maintains multiple active Buff objects in BuffList
+            if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS && b.StackCount > 1)
             {
                 if (b == parentBuff)
                 {
                     var parentSlot = parentBuff.Slot;
-                    if (!parentBuff.Elapsed())
-                    {
-                        parentBuff.DeactivateBuff();
-                    }
+                    if (!parentBuff.Elapsed()) parentBuff.DeactivateBuff();
 
-                    parentBuff.DecrementStackCount();
                     RemoveBuff(b.Name, false);
 
                     var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    if (tempBuffs.Count > 0)
+                    {
+                        var newParent = tempBuffs[0];
+                        BuffSlots[parentSlot] = newParent;
+                        newParent.SetSlot(parentSlot);
+                        ParentBuffs.Add(b.Name, newParent);
 
-                    // Next oldest buff takes the parent slot.
-                    BuffSlots[parentSlot] = tempBuffs[0];
-                    tempBuffs[0].SetSlot(parentSlot);
-                    ParentBuffs.Add(b.Name, tempBuffs[0]);
-
-                    // Continue-style stacks apply one active segment at a time.
-                    tempBuffs[0].ActivateBuff();
+                        newParent.SetStacks(parentBuff.StackCount - 1, false);
+                        tempBuffs.ForEach(tb => { if (tb != newParent) tb.SetStacks(newParent.StackCount, false); });
+                    }
                 }
                 else
                 {
-                    if (!b.Elapsed())
-                    {
-                        b.DeactivateBuff();
-                    }
+                    if (!b.Elapsed()) b.DeactivateBuff();
                     BuffList.Remove(b);
+                    RemoveBuffSlot(b);
 
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
+                    parentBuff.SetStacks(parentBuff.StackCount - 1, false);
+                    GetBuffsWithName(b.Name).ForEach(tb => { if (tb != parentBuff) tb.SetStacks(parentBuff.StackCount, false); });
                 }
 
-                if (!b.IsHidden)
+                if (!b.IsHidden && ParentBuffs.TryGetValue(b.Name, out var currentParent))
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(currentParent);
                     }
                     else
                     {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(ParentBuffs[b.Name], ParentBuffs[b.Name].Duration,
-                            ParentBuffs[b.Name].TimeElapsed);
-                    }
-                }
-            }
-            else if (b.BuffAddType == BuffAddType.STACKS_AND_RENEWS && b.StackCount > 1)
-            {
-                if (b == parentBuff)
-                {
-                    var parentSlot = parentBuff.Slot;
-                    if (!parentBuff.Elapsed())
-                    {
-                        parentBuff.DeactivateBuff();
-                    }
-
-                    parentBuff.DecrementStackCount();
-                    RemoveBuff(b.Name, false);
-
-                    var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
-
-                    // Next oldest buff takes the parent slot.
-                    BuffSlots[parentSlot] = tempBuffs[0];
-                    tempBuffs[0].SetSlot(parentSlot);
-                    ParentBuffs.Add(b.Name, tempBuffs[0]);
-                }
-                else
-                {
-                    if (!b.Elapsed())
-                    {
-                        b.DeactivateBuff();
-                    }
-                    BuffList.Remove(b);
-
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
-                }
-
-                // Keep visual timer from the newest active instance.
-                var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
-                var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
-
-                if (!b.IsHidden)
-                {
-                    if (b.BuffType == BuffType.COUNTER)
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
-                    }
-                    else if (parentBuff.StackCount == 1)
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(newestBuff, b.Duration - newestBuff.TimeElapsed,
-                            newestBuff.TimeElapsed);
-                    }
-                    else
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, tempBuffsAfterRemoval,
-                            b.Duration - newestBuff.TimeElapsed, newestBuff.TimeElapsed);
-                    }
-                }
-            }
-            // STACKS_AND_OVERLAPS maintains multiple active Buff objects in BuffList
-            else if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS && b.StackCount > 1)
-            {
-                if (b == parentBuff)
-                {
-                    var parentSlot = parentBuff.Slot;
-                    if (!parentBuff.Elapsed())
-                    {
-                        parentBuff.DeactivateBuff();
-                    }
-
-                    parentBuff.DecrementStackCount();
-                    RemoveBuff(b.Name, false);
-
-                    var tempBuffs = GetBuffsWithName(b.Name);
-                    tempBuffs.ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
-
-                    // Next oldest buff takes the parent slot.
-                    BuffSlots[parentSlot] = tempBuffs[0];
-                    tempBuffs[0].SetSlot(parentSlot);
-                    ParentBuffs.Add(b.Name, tempBuffs[0]);
-                }
-                else
-                {
-                    if (!b.Elapsed())
-                    {
-                        b.DeactivateBuff();
-                    }
-                    BuffList.Remove(b);
-
-                    parentBuff.DecrementStackCount();
-                    GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount));
-                }
-
-                // Used in packets to maintain the visual buff icon's timer, as removing a stack from the icon can reset the timer.
-                var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
-                var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
-
-                if (!b.IsHidden)
-                {
-                    if (b.BuffType == BuffType.COUNTER)
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(ParentBuffs[b.Name]);
-                    }
-                    else if (parentBuff.StackCount == 1)
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(newestBuff, b.Duration - newestBuff.TimeElapsed,
-                            newestBuff.TimeElapsed);
-                    }
-                    else
-                    {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, tempBuffsAfterRemoval,
-                            b.Duration - newestBuff.TimeElapsed, newestBuff.TimeElapsed);
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCountGroup(this, GetBuffsWithName(b.Name),
+                            currentParent.Duration - currentParent.TimeElapsed, currentParent.TimeElapsed);
                     }
                 }
             }
@@ -1985,51 +1822,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default)
         {
-            if (MovementParameters != null)
+            var parameters = new ForceMovementParameters
             {
-                SetDashingState(false, MoveStopReason.ForceMovement);
-            }
-            var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
-
-            // False because we don't want this to be networked as a normal movement.
-            SetWaypoints(new List<Vector2> { Position, newCoords }, true);
-
-            // TODO: Take into account the rest of the arguments
-            MovementParameters = new ForceMovementParameters
-            {
-                SetStatus = StatusFlags.None,
-                ElapsedTime = 0,
+                TargetPosition = endPos,
                 PathSpeedOverride = dashSpeed,
+                Animation = animation,
+                OverrideRunAnimation = true,
                 ParabolicGravity = leapGravity,
-                ParabolicStartPoint = parabolicStartPoint == default ? Position : parabolicStartPoint,
                 KeepFacingDirection = keepFacingLastDirection,
-                FollowNetID = 0,
-                FollowDistance = 0,
-                FollowBackDistance = 0,
-                FollowTravelTime = 0,
                 MovementName = movementName,
-                Caster = caster ?? this
+                Caster = caster ?? this,
+                IgnoreTerrain = ignoreTerrain,
+                ParabolicStartPoint = parabolicStartPoint == default ? Position : parabolicStartPoint,
+                SetStatus = consideredCC ? (StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove) : StatusFlags.None
             };
 
-            if (consideredCC)
-            {
-                MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
-            }
-
-            SetDashingState(true, MoveStopReason.ForceMovement);
-
-            if (animation != null && animation != "")
-            {
-                var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs, MovementParameters);
-            }
-
-            // Movement is networked this way instead.
-            // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
-            //_game.PacketNotifier.NotifyWaypointListWithSpeed(this, dashSpeed, leapGravity, keepFacingLastDirection, null, 0, 0, 20000.0f);
-            _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
-            _movementUpdated = false;
+            StartForcedMovement(parameters);
         }
+
 
         /// <summary>
         /// Sets this unit's current dash state to the given state.
@@ -2048,9 +1858,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             if (MovementParameters != null && state == false)
             {
-                RemoveAnimStates(MovementParameters);
+                if (!string.IsNullOrEmpty(MovementParameters.Animation))
+                {
+                    if (MovementParameters.OverrideRunAnimation)
+                    {
+                        RemoveAnimStates(MovementParameters);
+                    }
+                    else if (MovementParameters.DoStopAnimation)
+                    {
+                        bool fade = (MovementParameters.StopAnimationFlags & StopAnimationFlags.Fade) != 0;
+                        bool ignoreLock = (MovementParameters.StopAnimationFlags & StopAnimationFlags.IgnoreLock) != 0;
+                        bool stopAll = (MovementParameters.StopAnimationFlags & StopAnimationFlags.StopAll) != 0;
+                        StopAnimation(MovementParameters.Animation, stopAll, fade, ignoreLock);
+                    }
+                }
+
                 var movementParams = MovementParameters;
                 MovementParameters = null;
+
+                ResetWaypoints();
 
                 ApiEventManager.OnMoveEnd.Publish(this, movementParams);
 
@@ -2062,8 +1888,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     ApiEventManager.OnMoveFailure.Publish(this, movementParams);
                 }
-
-                ResetWaypoints();
             }
         }
 
@@ -2197,15 +2021,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
         public void EnterStealth(float fadeTime = 0f, float value = 0.3f, bool IsFadingIn = true, float FadeTime = 0.0f, float MaxWeight = 0.2f)
         {
+            _revealSpecificUnitTimer = 0.0f;
+            SetStatus(StatusFlags.RevealSpecificUnit, false);
+
             if (fadeTime == 0f)
             {
                 SetStatus(StatusFlags.Stealthed, true);
+                _game.ObjectManager.RefreshUnitVision(this); 
             }
             else
             {
                 RegisterTimer(new GameScriptTimer(fadeTime, () =>
                 {
                     SetStatus(StatusFlags.Stealthed, true);
+                    _game.ObjectManager.RefreshUnitVision(this); 
                 }));
             }
 
@@ -2269,6 +2098,77 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     ApiEventManager.OnLeaveGrass.Publish(this);
                 }
             }
+        }
+        public void StartForcedMovement(ForceMovementParameters parameters)
+        {
+            if (MovementParameters != null)
+            {
+                SetDashingState(false, MoveStopReason.ForceMovement);
+            }
+
+            MovementParameters = parameters;
+
+            if (parameters.Duration > 0 && parameters.PathSpeedOverride <= 0)
+            {
+                float distance = 0;
+                if (parameters.FollowNetID == 0)
+                {
+                    Vector2 startPos = parameters.ParabolicStartPoint != default ? parameters.ParabolicStartPoint : Position;
+                    distance = Vector2.Distance(startPos, parameters.TargetPosition);
+                }
+
+                if (distance > 0)
+                {
+                    parameters.PathSpeedOverride = distance / parameters.Duration;
+                }
+                else
+                {
+                    // Should we have a fallback hm
+                    parameters.TargetPosition = Position + new Vector2(1, 0);
+                    parameters.PathSpeedOverride = 1f / parameters.Duration;
+                }
+            }
+
+            if (parameters.FollowNetID == 0)
+            {
+                Vector2 endPos = parameters.TargetPosition;
+
+                if (!parameters.IgnoreTerrain && Position != endPos)
+                {
+                    endPos = _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
+                    parameters.TargetPosition = endPos;
+                }
+
+                if (endPos == default) endPos = Position;
+
+                SetWaypoints(new List<Vector2> { Position, endPos }, true);
+            }
+            else
+            {
+                GameObject target = _game.ObjectManager.GetObjectById(parameters.FollowNetID);
+                if (target != null)
+                {
+                    SetWaypoints(new List<Vector2> { Position, target.Position }, true);
+                }
+            }
+
+            SetDashingState(true, MoveStopReason.ForceMovement);
+
+            if (!string.IsNullOrEmpty(parameters.Animation))
+            {
+                if (parameters.OverrideRunAnimation)
+                {
+                    var animPairs = new Dictionary<string, string> { { "RUN", parameters.Animation } };
+                    SetAnimStates(animPairs, MovementParameters);
+                }
+                else
+                {
+                    PlayAnimation(parameters.Animation, parameters.AnimationTimeScale, parameters.AnimationStartTime, parameters.AnimationSpeedScale, parameters.AnimationFlags);
+                }
+            }
+
+            _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
+            _movementUpdated = false;
         }
     }
 }

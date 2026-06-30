@@ -15,7 +15,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.DAMAGE,
+            BuffType = BuffType.INVISIBILITY,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
@@ -70,6 +70,7 @@ namespace Buffs
                 }
             }
             ApiEventManager.OnSpellSectorHit.RemoveListener(this, _fearZone);
+            _boxUnit.ExitStealth();
         }
 
         public void OnUpdate(float diff)

@@ -33,7 +33,7 @@ namespace Spells
             {
                 Minion newBox = AddMinion((Champion)owner, "ShacoBox", "ShacoBox", spellPos, owner.Team);
                 newBox.FaceDirection(owner.Direction);
-                AddParticle(owner, null, "JackintheboxPoof", spellPos, lifetime: 5f, ignoreCasterVisibility: true);
+                AddParticle(owner, null, "JackintheboxPoof", spellPos, lifetime: 5f, ignoreCasterVisibility: true, reqVision: true);
 
                 var boxTimer = new GameScriptTimer(2.0f, () =>
                 {

@@ -192,10 +192,19 @@ namespace LeagueSandbox.GameServer
             Champion champion = clientInfo.Champion;
 
             bool shouldBeVisibleForPlayer;
-            if (obj is Particle particle && particle.SpecificUnit != null)
+            if (obj is Particle particle)
             {
-                shouldBeVisibleForPlayer = IsServerFoWDisabled
-                    || particle.IsAudienceVisibleToRecipient(team, cid);
+                if (!particle.IsAudienceVisibleToRecipient(team, cid))
+                {
+                    shouldBeVisibleForPlayer = false;
+                }
+                else
+                {
+                    bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
+                    shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
+                        nearSighted ? UnitHasVisionOn(champion, obj, nearSighted) : obj.IsVisibleByTeam(champion.Team)
+                    );
+                }
             }
             else
             {
@@ -417,6 +426,14 @@ namespace LeagueSandbox.GameServer
                 if (!particle.IsAudienceVisibleToTeam(observer.Team))
                 {
                     return false;
+                }
+
+                if (!particle.IgnoreCasterVisibility && particle.Caster != null)
+                {
+                    if (!TeamHasVisionOn(observer.Team, particle.Caster))
+                    {
+                        return false;
+                    }
                 }
 
                 if (particle.ShouldAutoRevealForObserverTeam(observer.Team))

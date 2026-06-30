@@ -684,14 +684,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
         public static Particle AddParticlePos(GameObject caster, string particle, Vector2 start, Vector2 end,
-            float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, TeamId teamOnly = TeamId.TEAM_ALL,
+                    GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+                    float overrideTargetHeight = 0f, string enemyParticle = null,
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
                 enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
             return p;
         }
@@ -714,14 +714,14 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
         public static Particle AddParticle(GameObject caster, GameObject bindObj, string particle, Vector2 position,
-            float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, TeamId teamOnly = TeamId.TEAM_ALL,
+                    GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+                    float overrideTargetHeight = 0f, string enemyParticle = null,
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
                 enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
         }
 
@@ -744,18 +744,17 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="flags">Flags which determine how the particle behaves. Refer to FXFlags enum.</param>
         /// <returns>New particle instance.</returns>
         public static Particle AddParticleTarget(GameObject caster, GameObject bindObj, string particle,
-            GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
-            GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, TeamId teamOnly = TeamId.TEAM_ALL,
+                    GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
+                    float overrideTargetHeight = 0f, string enemyParticle = null,
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
-                followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
+                followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
                 enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
             return p;
         }
-
         /// <summary>
         /// Removes the specified particle from ObjectManager and networks the removal to players.
         /// </summary>

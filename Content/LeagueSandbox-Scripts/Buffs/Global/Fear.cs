@@ -31,6 +31,9 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            slowPercent = buff.Variables.GetFloat("SlowPercent", 0f);
+            RandomDirection = buff.Variables.GetBool("RandomDirection", false);
+
             _unit = unit;
             _owner = buff.SourceUnit;
             AddParticleTarget(_owner, unit, "LOC_fear", unit, buff.Duration, bone: "head");
@@ -105,9 +108,9 @@ namespace Buffs
             if (_unit is ObjAIBase ai && _owner != null)
             {
                 var dir = Vector2.Normalize(_unit.Position - _owner.Position);
-                if (float.IsNaN(dir.X) || float.IsNaN(dir.Y)) dir = new Vector2(1, 0); 
+                if (float.IsNaN(dir.X) || float.IsNaN(dir.Y)) dir = new Vector2(1, 0);
 
-                var targetPos = _unit.Position + dir * 1000; 
+                var targetPos = _unit.Position + dir * 1000;
 
                 var path = GetPath(_unit.Position, targetPos);
                 ai.SetWaypoints(path);

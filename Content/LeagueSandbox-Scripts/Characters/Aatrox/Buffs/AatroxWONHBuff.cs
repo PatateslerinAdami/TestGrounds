@@ -44,25 +44,36 @@ public class AatroxWONHBuff : IBuffGameScript {
                         _spell, _aatrox, _aatrox, true);
                 break;
             case >= 3:
-                var buffs = _aatrox.GetBuffsWithName("AatroxW");
-                foreach (var buff in buffs) { RemoveBuff(buff); }
+                RemoveBuff(_aatrox, "AatroxW");
 
-                if (_aatrox.HasBuff("AatroxWLife")) {
+                if (_aatrox.HasBuff("AatroxWLife"))
+                {
                     SpellCast(_aatrox, 2, SpellSlotType.ExtraSlots, false, _aatrox, data.Target.Position);
-                }else if (_aatrox.HasBuff("AatroxWPower")) {
+                }
+                else if (_aatrox.HasBuff("AatroxWPower"))
+                {
                     var adCost = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[1].SpellData.Coefficient;
-                    var healthCost                  = 15f + 8.75f * (_aatrox.Spells[1].CastInfo.SpellLevel - 1) + adCost;
+                    var healthCost = 15f + 8.75f * (_aatrox.Spells[1].CastInfo.SpellLevel - 1) + adCost;
                     _aatrox.Stats.CurrentHealth = Math.Max(1, _aatrox.Stats.CurrentHealth - healthCost);
-                    var buff = _aatrox.GetBuffWithName("AatroxPassive")?.BuffScript as AatroxPassive;
-                    buff?.AddBlood(healthCost);
 
-                    var ad  = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[1].SpellData.Coefficient2;
+                    // Safe cast check for AatroxPassive
+                    if (_aatrox.GetBuffWithName("AatroxPassive")?.BuffScript is AatroxPassive buff)
+                    {
+                        buff.AddBlood(healthCost);
+                    }
+
+                    var ad = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[1].SpellData.Coefficient2;
                     var dmg = 60f + 35f * (_aatrox.Spells[1].CastInfo.SpellLevel - 1) + ad;
                     data.Target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_PHYSICAL,
                                            DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
                 }
 
-                RemoveBuff(_aatrox, _aatrox.HasBuff("AatroxWLife") ? "AatroxWONHLifeBuff" : "AatroxWONHPowerBuff");
+                CreateTimer(0.001f, () => {
+                    if (_aatrox != null && !_aatrox.IsDead)
+                    {
+                        RemoveBuff(_aatrox, _aatrox.HasBuff("AatroxWLife") ? "AatroxWONHLifeBuff" : "AatroxWONHPowerBuff");
+                    }
+                });
                 break;
         }
     }

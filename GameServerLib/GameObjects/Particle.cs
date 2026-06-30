@@ -112,13 +112,14 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName,
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
             uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
+            DisableFoW = !reqVision;
             Caster = caster;
             BindObject = bindObj;
             TargetObject = target;
@@ -156,14 +157,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
 
         public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName,
-            float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
-            TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
-            FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
-            : base(game, targetPos, 0, 0, 0, netId, teamOnly)
+                    float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
+                    TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
+                    FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
+                    float overrideTargetHeight = 0f, string enemyParticle = null,
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
+            DisableFoW = !reqVision;
             Caster = caster;
 
             BindObject = bindObj;
@@ -207,14 +209,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
 
         public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName,
-            float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, float lifetime = 0,
-            TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
-            FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
-            : base(game, startPos, 0, 0, 0, netId, teamOnly)
+                    float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
+                    TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
+                    FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
+                    float overrideTargetHeight = 0f, string enemyParticle = null,
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
+            DisableFoW = !reqVision;
             Caster = caster;
 
             BindObject = null;
@@ -299,12 +302,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public bool ShouldAutoRevealForObserverTeam(TeamId observerTeam)
         {
-            if (!IsAudienceVisibleToTeam(observerTeam))
-            {
-                return false;
-            }
-
-            return SpecificTeam == TeamId.TEAM_ALL;
+            return false;
         }
 
         public override void Update(float diff)

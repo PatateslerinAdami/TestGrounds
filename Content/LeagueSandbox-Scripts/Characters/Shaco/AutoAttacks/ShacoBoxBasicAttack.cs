@@ -24,9 +24,9 @@ namespace Spells
         };
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            owner.ExitStealth();
+
         }
-    }
+    } 
 
     public class ShacoBoxAttackMissile : ISpellScript
     {

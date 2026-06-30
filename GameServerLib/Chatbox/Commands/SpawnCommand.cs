@@ -124,17 +124,17 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
             var minions = new[]
             {
-                new Minion(Game, null, championPos, casterModel, casterModel, 0, team),
-                new Minion(Game, null, championPos, cannonModel, cannonModel, 0, team),
-                new Minion(Game, null, championPos, meleeModel, meleeModel, 0, team),
-                new Minion(Game, null, championPos, superModel, superModel, 0, team)
+                new Minion(Game, null, championPos, casterModel, casterModel, 0, team, AIScript: "MinonAI"),
+                new Minion(Game, null, championPos, cannonModel, cannonModel, 0, team, AIScript: "MinonAI"),
+                new Minion(Game, null, championPos, meleeModel, meleeModel, 0, team, AIScript: "MinonAI"),
+                new Minion(Game, null, championPos, superModel, superModel, 0, team, AIScript: "MinonAI")
             };
 
             const int X = 400;
             foreach (var minion in minions)
             {
                 minion.SetPosition(championPos + new Vector2(random.Next(-X, X), random.Next(-X, X)), false);
-                minion.PauseAI(true);
+                //minion.PauseAI(true);
                 minion.StopMovement();
                 minion.UpdateMoveOrder(OrderType.Hold);
                 Game.ObjectManager.AddObject(minion);

@@ -177,8 +177,26 @@ namespace PacketDefinitions420
         /// <returns>MovementDataWithSpeed if unit has MovementParameters (!= null) and enough waypoints (>= 1), otherwise crashes.</returns>
         public static MovementDataWithSpeed CreateMovementDataWithSpeed(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
-            System.Diagnostics.Debug.Assert(unit.Waypoints.Count >= 1);
             System.Diagnostics.Debug.Assert(unit.MovementParameters != null);
+
+            List<CompressedWaypoint> waypoints;
+            if (unit.MovementParameters.ParabolicStartPoint != default && unit.MovementParameters.ParabolicStartPoint != unit.Position)
+            {
+                var customWaypoints = new List<Vector2> { unit.MovementParameters.ParabolicStartPoint, unit.MovementParameters.TargetPosition != default ? unit.MovementParameters.TargetPosition : unit.Position };
+                waypoints = customWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
+            }
+            else
+            {
+                if (unit.Waypoints.Count < 1)
+                {
+                    var customWaypoints = new List<Vector2> { unit.Position, unit.Position };
+                    waypoints = customWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
+                }
+                else
+                {
+                    waypoints = GetCenteredWaypoints(unit, grid);
+                }
+            }
 
             return new MovementDataWithSpeed
             {
@@ -186,13 +204,12 @@ namespace PacketDefinitions420
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
-                Waypoints = GetCenteredWaypoints(unit, grid),
+                Waypoints = waypoints,
                 SpeedParams = new SpeedParams
                 {
                     PathSpeedOverride = unit.MovementParameters.PathSpeedOverride,
                     ParabolicGravity = unit.MovementParameters.ParabolicGravity,
-                    // TODO: Implement as parameter (ex: Aatrox Q).
-                    ParabolicStartPoint = unit.MovementParameters.ParabolicStartPoint,
+                    ParabolicStartPoint = unit.MovementParameters.ParabolicStartPoint != default ? unit.MovementParameters.ParabolicStartPoint : unit.Position,
                     Facing = unit.MovementParameters.KeepFacingDirection,
                     FollowNetID = unit.MovementParameters.FollowNetID,
                     FollowDistance = unit.MovementParameters.FollowDistance,

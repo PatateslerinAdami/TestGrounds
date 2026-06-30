@@ -130,6 +130,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private bool _charScriptActivated;
         private bool _charScriptPostActivated;
         private bool _scriptsEnabled = true;
+
+        protected float? _claimedAttackAngle = null;
+        protected float? _initialApproachAngle = null;
+        protected AttackableUnit _lastSlotTarget = null;
+
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
             Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "", bool enableScripts = true) :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
@@ -390,7 +395,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 DamageType = DamageType.DAMAGE_TYPE_PHYSICAL,
                 DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
             };
-            
+
             // TODO: Verify if we should use MissChance instead.
             if (HasBuffType(BuffType.BLIND))
             {
@@ -622,90 +627,47 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="consideredCC">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void DashToTarget
-        (
-            AttackableUnit target,
-            float dashSpeed,
-            string animation = "",
-            float leapGravity = 0,
-            bool keepFacingLastDirection = true,
-            float followTargetMaxDistance = 0,
-            float backDistance = 0,
-            float travelTime = 0,
-            bool consideredCC = true,
-            string movementName = "",
-            AttackableUnit caster = null
-        )
+       (
+           AttackableUnit target,
+           float dashSpeed,
+           string animation = "",
+           float leapGravity = 0,
+           bool keepFacingLastDirection = true,
+           float followTargetMaxDistance = 0,
+           float backDistance = 0,
+           float travelTime = 0,
+           bool consideredCC = true,
+           string movementName = "",
+           AttackableUnit caster = null
+       )
         {
-            if (MovementParameters != null)
+            if (this is ObjAIBase ai)
             {
-                SetDashingState(false, MoveStopReason.ForceMovement);
+                ai.SetTargetUnit(target, true);
             }
 
-            SetWaypoints(new List<Vector2> { Position, target.Position }, true);
-
-            SetTargetUnit(target, true);
-
-            // TODO: Take into account the rest of the arguments
-            MovementParameters = new ForceMovementParameters
+            var parameters = new ForceMovementParameters
             {
-                SetStatus = StatusFlags.None,
-                ElapsedTime = 0,
-                PathSpeedOverride = dashSpeed,
-                ParabolicGravity = leapGravity,
-                ParabolicStartPoint = Position,
-                KeepFacingDirection = keepFacingLastDirection,
                 FollowNetID = target.NetId,
+                PathSpeedOverride = dashSpeed,
+                Animation = animation,
+                OverrideRunAnimation = true,
+                ParabolicGravity = leapGravity,
+                KeepFacingDirection = keepFacingLastDirection,
                 FollowDistance = followTargetMaxDistance,
                 FollowBackDistance = backDistance,
                 FollowTravelTime = travelTime,
                 MovementName = movementName,
-                Caster = caster ?? this
+                Caster = caster ?? this,
+                SetStatus = consideredCC ? (StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove) : StatusFlags.None
             };
 
-            if (consideredCC)
-            {
-                MovementParameters.SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
-            }
-
-            _game.PacketNotifier.NotifyWaypointListWithSpeed(
-                this,
-                dashSpeed,
-                leapGravity,
-                keepFacingLastDirection,
-                target,
-                followTargetMaxDistance,
-                backDistance,
-                travelTime
-            );
-            if (target != null)
-            {
-                _game.PacketNotifier.NotifyMovementDriverReplication(this);
-            }
-            SetDashingState(true);
-
-            if (animation != null && animation != "")
-            {
-                var animPairs = new Dictionary<string, string> { { "RUN", animation } };
-                SetAnimStates(animPairs, MovementParameters);
-            }
-            _movementUpdated = false;
-            // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
+            StartForcedMovement(parameters);
         }
 
         /// <summary>
         /// Forces this AI unit to perform a lunge which follows the specified AttackableUnit.
-        /// Compatibility wrapper for scripts that distinguish lunges from regular dashes.
         /// </summary>
-        /// <param name="target">Unit to follow.</param>
-        /// <param name="speed">Constant speed that the unit will have during the lunge.</param>
-        /// <param name="animation">Internal name of the lunge animation.</param>
-        /// <param name="leapGravity">How much gravity the unit will experience when above the ground while lunging.</param>
-        /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before lunging.</param>
-        /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the target before stopping or reaching the target.</param>
-        /// <param name="backDistance">Additional stopping distance from the target.</param>
-        /// <param name="travelTime">Total time (in seconds) the lunge may follow the target before stopping.</param>
-        /// <param name="consideredCc">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
-        /// <param name="movementType">Force movement type. Included for API compatibility.</param>
         public void LungeToTarget
         (
             AttackableUnit target,
@@ -733,56 +695,155 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             );
         }
 
-        /// <summary>
-        /// Automatically paths this AI to a favorable auto attacking position. 
-        /// Used only for Minions currently.
-        /// </summary>
-        /// <returns></returns>
-        /// TODO: Move this to Minion? It isn't used anywhere else.
-        /// TODO: Re-implement this for LaneMinions and add a patience or distance threshold so they don't follow forever.
-        public bool RecalculateAttackPosition()
+        protected Vector2 GetAttackSlotPosition(AttackableUnit target, float idealRange)
         {
-            // If we are already where we should be, which means we are in attack range, then keep our current position.
-            if (TargetUnit == null || TargetUnit.IsDead || Vector2.DistanceSquared(Position, TargetUnit.Position) <= Stats.Range.Total * Stats.Range.Total)
+            float standDistance = Math.Max(60f, idealRange - 25f);
+            float spaceNeeded = CollisionRadius * 2.0f; 
+
+            var nearbyAllies = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(target.Position, standDistance + 500f))
+                .OfType<ObjAIBase>()
+                .Where(u => u.Team == Team && u != this && !u.IsDead && u.TargetUnit == target)
+                .ToList();
+
+            if (_lastSlotTarget != target)
             {
-                return false;
+                _claimedAttackAngle = null;
+                _lastSlotTarget = target;
+
+                Vector2 targetToUs = Position - target.Position;
+                if (targetToUs.LengthSquared() <= 0.001f) targetToUs = new Vector2(1, 0);
+                _initialApproachAngle = (float)Math.Atan2(targetToUs.Y, targetToUs.X);
             }
 
-            var nearestObjects = _game.Map.CollisionHandler.GetNearestObjects(new Circle(Position, DETECT_RANGE));
+            float checkDistSq = spaceNeeded * spaceNeeded;
 
-            foreach (var gameObject in nearestObjects)
+            bool IsPositionFree(Vector2 testPos)
             {
-                var unit = gameObject as AttackableUnit;
-                if (unit == null ||
-                    unit.NetId == NetId ||
-                    unit.IsDead ||
-                    Vector2.DistanceSquared(Position, TargetUnit.Position) > DETECT_RANGE * DETECT_RANGE
-                )
+                foreach (var ally in nearbyAllies)
                 {
-                    continue;
+                    Vector2 allyPos = ally.Position;
+                    Vector2 allyDest = ally.Waypoints.Count > 0 ? ally.Waypoints.Last() : ally.Position;
+
+                    if (Vector2.DistanceSquared(allyPos, testPos) < checkDistSq ||
+                        Vector2.DistanceSquared(allyDest, testPos) < checkDistSq)
+                    {
+                        return false;
+                    }
                 }
+                return true;
+            }
 
-                var closestPoint = GameServerCore.Extensions.GetClosestCircleEdgePoint(Position, gameObject.Position, gameObject.PathfindingRadius);
+            if (_claimedAttackAngle.HasValue)
+            {
+                Vector2 claimedDir = new Vector2((float)Math.Cos(_claimedAttackAngle.Value), (float)Math.Sin(_claimedAttackAngle.Value));
+                Vector2 claimedPos = target.Position + (claimedDir * standDistance);
 
-                // If this unit is colliding with gameObject
-                if (GameServerCore.Extensions.IsVectorWithinRange(closestPoint, Position, PathfindingRadius))
+                if (IsPositionFree(claimedPos) && _game.Map.PathingHandler.IsWalkable(claimedPos, PathfindingRadius))
                 {
-                    var exitPoint = GameServerCore.Extensions.GetCircleEscapePoint(Position, PathfindingRadius + 1, gameObject.Position, gameObject.PathfindingRadius);
-                    SetWaypoints(new List<Vector2> { Position, exitPoint });
-                    return true;
+                    return claimedPos;
                 }
             }
 
-            return false;
+            float angleStepRadians = spaceNeeded / standDistance;
+            if (angleStepRadians < 0.2f) angleStepRadians = 0.2f;
+
+            int numSlots = (int)(Math.PI * 2 / angleStepRadians);
+            float baseAngle = _initialApproachAngle ?? 0f;
+
+            for (int i = 0; i <= numSlots / 2; i++)
+            {
+                float[] offsets = i == 0 ? new float[] { 0 } : new float[] { i * angleStepRadians, -i * angleStepRadians };
+
+                foreach (float offset in offsets)
+                {
+                    float testAngle = baseAngle + offset;
+                    Vector2 testDir = new Vector2((float)Math.Cos(testAngle), (float)Math.Sin(testAngle));
+                    Vector2 testPos = target.Position + (testDir * standDistance);
+
+                    if (IsPositionFree(testPos) && _game.Map.PathingHandler.IsWalkable(testPos, PathfindingRadius))
+                    {
+                        _claimedAttackAngle = testAngle;
+                        return testPos;
+                    }
+                }
+            }
+
+            return Position;
         }
 
-        /// <summary>
-        /// Function which refreshes this AI's waypoints if they have a target.
-        /// </summary>
+        private float DistancePointToSegment(Vector2 p, Vector2 a, Vector2 b)
+        {
+            Vector2 ab = b - a;
+            float lenSq = ab.LengthSquared();
+            if (lenSq == 0) return Vector2.Distance(p, a);
+
+            float t = Math.Max(0, Math.Min(1, Vector2.Dot(p - a, ab) / lenSq));
+            Vector2 proj = a + t * ab;
+            return Vector2.Distance(p, proj);
+        }
+
+        protected List<Vector2> FindClearLocalPath(Vector2 start, Vector2 target, float radius)
+        {
+            float distToTarget = Vector2.Distance(start, target);
+            if (distToTarget <= 0.001f) return new List<Vector2> { start, target };
+
+            float scanRadius = Math.Min(distToTarget, Stats.AcquisitionRange.Total) + radius + 150f;
+            var obstacles = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(start, scanRadius))
+                .OfType<ObjAIBase>()
+                .Where(u => u != this && !u.IsDead && !u.Status.HasFlag(StatusFlags.Ghosted) && u.CollisionRadius > 0 && u != TargetUnit)
+                .ToList();
+
+            bool isSegmentClear(Vector2 p1, Vector2 p2)
+            {
+                if (_game.Map.NavigationGrid.CastCircle(p1, p2, radius)) return false; // Terrain check
+
+                foreach (var obs in obstacles)
+                {
+                    float distToLine = DistancePointToSegment(obs.Position, p1, p2);
+                    if (distToLine < (radius + obs.CollisionRadius)) return false;
+                }
+                return true;
+            }
+
+            if (isSegmentClear(start, target))
+            {
+                return new List<Vector2> { start, target };
+            }
+
+            Vector2 dirToTarget = (target - start) / distToTarget;
+            float[] angles = new float[] { 15f, -15f, 30f, -30f, 45f, -45f, 60f, -60f, 90f, -90f };
+
+            float scanDist = Math.Min(distToTarget, Stats.AcquisitionRange.Total);
+            if (scanDist < 100f) scanDist = 100f;
+
+            foreach (float angle in angles)
+            {
+                float rad = angle * (float)Math.PI / 180f;
+                float cos = (float)Math.Cos(rad);
+                float sin = (float)Math.Sin(rad);
+                Vector2 scanDir = new Vector2(dirToTarget.X * cos - dirToTarget.Y * sin, dirToTarget.X * sin + dirToTarget.Y * cos);
+
+                Vector2 scanTarget = start + scanDir * scanDist;
+
+                if (isSegmentClear(start, scanTarget))
+                {
+                    if (_game.Map.PathingHandler.IsWalkable(scanTarget, radius))
+                    {
+                        return new List<Vector2> { start, scanTarget, target };
+                    }
+                }
+            }
+
+            var fallbackPath = _game.Map.PathingHandler.GetPath(start, target, radius);
+            if (fallbackPath != null && fallbackPath.Count > 1) return fallbackPath;
+
+            return new List<Vector2> { start, target };
+        }
+
         public virtual void RefreshWaypoints(float idealRange)
         {
             if (MovementParameters != null)
-            {
+            { 
                 return;
             }
 
@@ -840,9 +901,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 if (Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange)
                 {
                     bool isReadyToAttack = CanAttack() &&
-                       _autoAttackCurrentCooldown <= 0 &&
-                       AutoAttackSpell != null &&
-                       AutoAttackSpell.State == SpellState.STATE_READY;
+                    _autoAttackCurrentCooldown <= 0 &&
+                    AutoAttackSpell != null &&
+                    AutoAttackSpell.State == SpellState.STATE_READY;
 
                     if (isReadyToAttack)
                     {
@@ -855,15 +916,30 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
                 else
                 {
-                    if (!_game.Map.PathingHandler.IsWalkable(targetPos, PathfindingRadius))
+                    Vector2 attackSlotPos = GetAttackSlotPosition(TargetUnit, idealRange);
+
+                    if (attackSlotPos == Position)
                     {
-                        targetPos = _game.Map.NavigationGrid.GetClosestTerrainExit(targetPos, PathfindingRadius);
+                        if (Waypoints.Count > 1) StopMovement(networked: true);
+                        return;
                     }
 
-                    var newWaypoints = _game.Map.PathingHandler.GetPath(Position, targetPos, PathfindingRadius);
-                    if (newWaypoints != null && newWaypoints.Count > 1)
+                    if (!_game.Map.PathingHandler.IsWalkable(attackSlotPos, PathfindingRadius))
                     {
-                        SetWaypoints(newWaypoints);
+                        attackSlotPos = _game.Map.NavigationGrid.GetClosestTerrainExit(attackSlotPos, PathfindingRadius);
+                    }
+
+                    bool needsRepath = true;
+                    if (Waypoints != null && Waypoints.Count > 0)
+                    {
+                        Vector2 currentDest = Waypoints.Last();
+                        if (Vector2.DistanceSquared(currentDest, attackSlotPos) < 2500f) needsRepath = false;
+                    }
+
+                    if (needsRepath)
+                    {
+                        var newWaypoints = FindClearLocalPath(Position, attackSlotPos, PathfindingRadius);
+                        if (newWaypoints != null && newWaypoints.Count > 1) SetWaypoints(newWaypoints);
                     }
                 }
             }
@@ -1740,6 +1816,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             TryPostActivateSpellScripts();
         }
 
+        private float _lastSteerTime = 0f;
+
         public override void Update(float diff)
         {
             if (delayedSpellPackets.Count > 0) invisSent = true;
@@ -1778,6 +1856,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             UpdateAssistMarkers();
             UpdateTarget();
+
+            PredictiveSteer();
 
             if (_autoAttackCurrentCooldown > 0)
             {
@@ -1823,6 +1903,54 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
             delayedSpellPackets.Clear();
             */
+        }
+
+
+        private void PredictiveSteer()
+        {
+            if (Waypoints.Count <= 1 || IsAttacking || MovementParameters != null) return;
+
+
+            if (_game.GameTime - _lastSteerTime < 250f) return;
+            _lastSteerTime = _game.GameTime;
+
+            Vector2 currentDest = Waypoints.Last();
+            Vector2 direction = currentDest - Position;
+            if (direction.LengthSquared() <= 0.001f) return;
+            direction = Vector2.Normalize(direction);
+
+            float lookAheadDist = GetMoveSpeed() * 0.5f;
+            Vector2 lookAheadPoint = Position + (direction * lookAheadDist);
+
+            float checkRadius = CollisionRadius * 1.5f;
+            var obstacles = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(lookAheadPoint, checkRadius))
+                .OfType<ObjAIBase>()
+                .Where(u => u.Team == Team && u != this && !u.IsDead);
+
+            foreach (var obs in obstacles)
+            {
+                bool obsMoving = obs.Waypoints.Count > 1 && !obs.IsAttacking;
+                if (obsMoving)
+                {
+                    Vector2 obsDir = obs.Waypoints.Last() - obs.Position;
+                    if (obsDir.LengthSquared() > 0.001f)
+                    {
+                        obsDir = Vector2.Normalize(obsDir);
+                        if (Vector2.Dot(direction, obsDir) > 0.7f && obs.GetMoveSpeed() >= GetMoveSpeed()) continue;
+                    }
+                }
+                Vector2 right = new Vector2(-direction.Y, direction.X);
+                Vector2 toObs = Vector2.Normalize(obs.Position - Position);
+                if (Vector2.Dot(right, toObs) > 0) right = -right;
+
+                Vector2 steerPos = Position + (direction * lookAheadDist * 0.5f) + (right * CollisionRadius * 2.5f);
+
+                if (_game.Map.PathingHandler.IsWalkable(steerPos, PathfindingRadius))
+                {
+                    SetWaypoints(new List<Vector2> { Position, steerPos });
+                    return;
+                }
+            }
         }
 
         public override void LateUpdate(float diff)
@@ -1908,7 +2036,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             else if (IsAttacking)
             {
                 float cancelBuffer = 300.0f;
-                float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius + cancelBuffer;
+                float maxCancelRange = Stats.Range.Total + TargetUnit.CollisionRadius + cancelBuffer;
                 if (Vector2.Distance(TargetUnit.Position, Position) > maxCancelRange
                         && AutoAttackSpell.State == SpellState.STATE_CASTING && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
                 {
@@ -1949,7 +2077,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // TODO: Verify if there are any other cases we want to avoid.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
                 {
-                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius;
+                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius;
 
                     if (Vector2.DistanceSquared(Position, TargetUnit.Position) <= idealRange * idealRange && MovementParameters == null)
                     {
