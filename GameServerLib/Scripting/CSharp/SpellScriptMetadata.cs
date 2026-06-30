@@ -177,6 +177,17 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public Vector2 OverrideEndPosition { get; set; }
 
         /// <summary>
+        /// Circle missiles only: end the orbit when it first reaches the cast TargetPosition
+        /// (the aim point) instead of running the full MissileLifetime. The missile self-computes
+        /// the sweep angle from spawn → TargetPosition around its orbit center at construction and
+        /// despawns there (DestroyClientMissile stops the client at the same point). Lets a circle
+        /// missile spawned via the normal SpellCast path stop at the cursor — e.g. Diana Q's
+        /// crescent bolt + trail band, where the cast passes the aim as TargetPosition and the
+        /// orbit center as TargetPositionEnd. Default false = orbit until MissileLifetime.
+        /// </summary>
+        public bool CircleSweepToTarget { get; set; }
+
+        /// <summary>
         /// Chain-missile bounce spells. Two modes:
         /// (1) Exactly ONE of the two fields set — legacy single-pool chain: every bounce
         ///     flies under that spell's hash/speed/radius, but SpellOrigin/Parameters stay

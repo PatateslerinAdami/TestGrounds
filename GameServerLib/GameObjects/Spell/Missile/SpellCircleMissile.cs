@@ -37,31 +37,37 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             _circleAngularVelocity = SpellOrigin.SpellData.CircleMissileAngularVelocity;
             _circleRadialVelocity = SpellOrigin.SpellData.CircleMissileRadialVelocity;
 
-            // Orbit-center derivation, faithful to obj_SpellCircleMissile::OnCreate:
-            //   mRotateCenterPosition = targetObj ? targetObj->GetPosition() : TargetPos
-            //   mRotateRadius = |Position - mRotateCenterPosition|   (Position = the spawn point)
-            //   mRotatePhase  = atan2(diff.z, diff.x)
-            // i.e. Riot reads the orbit CENTER from the cast target (Targets[0]) and anchors
-            // the radius/phase off the missile's spawn position. Self-orbit casts (Ahri W,
-            // Diana W) therefore pass the orb point as the override-cast (= spawn/launch)
-            // position and themselves as the target.
+            // Orbit-center derivation, faithful to Spell::Missile::SpellCircleMissile::OnCreate
+            // (4.17 mac decomp, verified):
+            //   mRotateCenterPosition = targetObj ? targetObj->GetPosition() : mCastInfo.TargetPos
+            //   mCasterPos            = mCastInfo.mSpellCastLaunchPos
+            //   diff = Position(=launch) - mRotateCenterPosition
+            //   mRotateRadius = |diff_xz| ;  mRotatePhase = atan2(diff.z, diff.x)
+            // So the missile ALWAYS spawns at the launch position and orbits either the tracked
+            // target unit or — with no target — the cast TargetPos. The client's base OnCreate
+            // runs the same derivation, so its orbit center is the wire CastInfo.TargetPos; the
+            // wire Direction carries (radius, phase) on top (SpellCircleMissileClient.cpp:185).
             Vector2 circleOffset;
+            var launch2D = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
             if (TargetUnit != null)
             {
+                // Tracked-unit orbit (Diana W / Ahri W orbs): center = target unit, spawn = launch.
                 _circleCenter = TargetUnit.Position;
-                var spawn = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
-                circleOffset = spawn - _circleCenter;
+                circleOffset = launch2D - _circleCenter;
             }
             else
             {
-                // No target unit: orbit a fixed point (center = launch position, radius/phase
-                // toward the cast end position). Covers Varus Q's radial arrow and zero-velocity
-                // attachment missiles that have no tracked anchor.
-                _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
-                var circleReferenceEnd = overrideEndPos != default
+                // No target unit: center = cast TargetPos (= overrideEndPos / TargetPositionEnd),
+                // spawn = launch. This is the Diana Q "Crescent Strike" path — Diana sits on the
+                // rim and the crescent orbits the aim point; matches OnCreate's TargetPos branch
+                // exactly. The CLIENT reads the orbit center from CastInfo.TargetPosition (decomp
+                // mRotateCenterPosition = mCastInfo.TargetPos), so the server MUST use the same field
+                // — otherwise the client orbits the wrong point and the missile spawns off Diana.
+                // (TargetPositionEnd is left free to carry the sweep-end aim for CircleSweepToTarget.)
+                _circleCenter = overrideEndPos != default
                     ? overrideEndPos
-                    : new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
-                circleOffset = circleReferenceEnd - _circleCenter;
+                    : new Vector2(CastInfo.TargetPosition.X, CastInfo.TargetPosition.Z);
+                circleOffset = launch2D - _circleCenter;
             }
 
             if (circleOffset.LengthSquared() <= float.Epsilon)
@@ -93,6 +99,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             }
             var tangent = new Vector2(-MathF.Sin(_circleAngle), MathF.Cos(_circleAngle)) * tangentSign;
             Direction = new Vector3(tangent.X, 0.0f, tangent.Y);
+
+            // CircleSweepToTarget (Diana Q): end the orbit when it first reaches the sweep-end aim
+            // rather than at MissileLifetime. The center comes from TargetPosition (above), so the
+            // aim is carried in TargetPositionEnd. Self-compute the sweep from the spawn angle to the
+            // aim around the center, in the angular-velocity direction, and store it as the per-cast
+            // lifetime so the missile despawns at the aim (the early removal sends
+            // DestroyClientMissile, stopping the client there too).
+            if ((SpellOrigin?.Script?.ScriptMetadata?.MissileParameters?.CircleSweepToTarget ?? false)
+                && MathF.Abs(_circleAngularVelocity) > float.Epsilon)
+            {
+                var aim = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
+                var aimAngle = MathF.Atan2(aim.Y - _circleCenter.Y, aim.X - _circleCenter.X);
+                var sweep = (aimAngle - _circleAngle) * tangentSign;   // travel in the AV direction
+                while (sweep <= 0f) sweep += MathF.Tau;
+                SweepLifetimeOverrideSeconds = sweep / MathF.Abs(_circleAngularVelocity) + 0.05f;
+            }
         }
 
         // Circle — orbit missiles (e.g. Diana W orbs). This Type routes the missile into
@@ -113,6 +135,16 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 _game.PacketNotifier.NotifyS2C_ChangeMissileTarget(this);
             }
         }
+
+        /// <summary>
+        /// Per-cast server-side lifetime (seconds). When &gt; 0 it replaces SpellData.MissileLifetime
+        /// for the despawn check — used to END a circle sweep early (e.g. Diana Q stops the crescent
+        /// at the cursor instead of running the full data lifetime). The client still self-sweeps its
+        /// own 200° from its spell data, so the early server removal goes out as a DestroyClientMissile
+        /// (SetToRemove: removal before the JSON lifetime ⇒ not client-self-expired), which stops the
+        /// client missile at the same point. Default 0 = use SpellData.MissileLifetime.
+        /// </summary>
+        public float SweepLifetimeOverrideSeconds { get; set; }
 
         public Vector3 GetReplicationDirection()
         {
@@ -145,7 +177,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // Lifetime self-expiry (client mirrors this locally from MissileLifetime,
             // see the destroy-packet suppression in SpellMissile.SetToRemove). Missiles
             // without a lifetime live until a script/hit removes them (attachment class).
-            var lifetimeSeconds = SpellOrigin.SpellData.MissileLifetime;
+            // A per-cast SweepLifetimeOverrideSeconds (Diana Q) ends the sweep at the cursor.
+            var lifetimeSeconds = SweepLifetimeOverrideSeconds > 0.0f
+                ? SweepLifetimeOverrideSeconds
+                : SpellOrigin.SpellData.MissileLifetime;
             if (lifetimeSeconds > 0.0f && _lifeElapsedMs >= lifetimeSeconds * 1000.0f)
             {
                 SetToRemove();
