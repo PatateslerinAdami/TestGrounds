@@ -9,6 +9,7 @@ using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiGameEvents;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace MapScripts.Map10
 {
@@ -239,6 +240,57 @@ namespace MapScripts.Map10
             }
             waypoint.Add(new Vector2(opposedBarrack.CentralPoint.X, opposedBarrack.CentralPoint.Z));
 
+            // The per-lane __NAV path + barrack stops at the inhibitor; the central nexus turrets and
+            // the nexus sit further in. Extend the corridor to the enemy nexus (as Map1's MinionPaths
+            // already do) so that once the lane turrets fall the wave free-pushes through the base,
+            // acquiring the inhibitor and the central nexus turrets in range along the way instead of
+            // halting at the barrack.
+            var enemyNexus = LevelScriptObjects.NexusList.Find(n => n.Team == opposingTeam);
+            if (enemyNexus != null)
+            {
+                waypoint.Add(enemyNexus.Position);
+            }
+
+            // Per S4 NavPointManager::GetNextNavLocIter -> minions hold at the next alive enemy turret
+            // instead of beelining to the nexus. Mirror of Map1's per-lane turret-cap list: cap only
+            // on the lane's OWN turrets (INNER_TURRET outermost, then the INHIBITOR_TURRET behind it),
+            // sorted by appearance order. The central nexus turrets are intentionally NOT capped -
+            // like Map1 they are engaged during the post-inhibitor free-push via FindTargetInAcR (they
+            // stay untargetable until an inhibitor dies, so capping them would strand the wave at an
+            // unattackable turret). Without this list GetMaxAllowedWaypointIndex always returns the
+            // final waypoint, so the wave A*-paths past every turret straight to the nexus.
+            var enemyTurretsAhead = new List<BaseTurret>();
+            var enemyTurretIndices = new List<int>();
+            if (LevelScriptObjects.TurretList.TryGetValue(opposingTeam, out var enemyTurretsByLane)
+                && enemyTurretsByLane.TryGetValue(lane, out var enemyLaneTurrets))
+            {
+                var pairs = new List<(BaseTurret turret, int wpIdx)>();
+                foreach (var turret in enemyLaneTurrets)
+                {
+                    // FOUNTAIN_TURRET sits at the spawn shrine, never a frontier to hold against.
+                    if (turret.Type == TurretType.FOUNTAIN_TURRET) continue;
+
+                    int closestIdx = -1;
+                    float closestDistSq = float.MaxValue;
+                    for (int i = 0; i < waypoint.Count; i++)
+                    {
+                        float d = Vector2.DistanceSquared(waypoint[i], turret.Position);
+                        if (d < closestDistSq)
+                        {
+                            closestDistSq = d;
+                            closestIdx = i;
+                        }
+                    }
+                    if (closestIdx >= 0) pairs.Add((turret, closestIdx));
+                }
+                pairs.Sort((a, b) => a.wpIdx.CompareTo(b.wpIdx));
+                foreach (var p in pairs)
+                {
+                    enemyTurretsAhead.Add(p.turret);
+                    enemyTurretIndices.Add(p.wpIdx);
+                }
+            }
+
             StatsModifier rampModifier = null;
             float rampGold = -1f, rampExp = -1f;
             if (minionNumber < spawnWave.Item2.Count
@@ -251,6 +303,7 @@ namespace MapScripts.Map10
             int minionLevel = Math.Max(1, GetPlayerAverageLevel());
 
             var spawnedMinion = CreateLaneMinion(spawnWave.Item2, position, barrackTeam, minionNumber, barracksName, waypoint, LaneMinionAI,
+                enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices, lane: lane,
                 statModifier: rampModifier, initialLevel: minionLevel, goldGiven: rampGold, expGiven: rampExp);
 
             // 4.20 Map10 EXP_GIVEN_RADIUS = 1250 (SR uses 1400). Gold is last-hit on TT too, so only

@@ -22,7 +22,7 @@ namespace MapScripts.Map10
         public static Dictionary<TeamId, Dictionary<Lane, MapObject>> SpawnBarracks = new Dictionary<TeamId, Dictionary<Lane, MapObject>>();
         public static Dictionary<TeamId, bool> AllInhibitorsAreDead = new Dictionary<TeamId, bool> { { TeamId.TEAM_BLUE, false }, { TeamId.TEAM_PURPLE, false } };
         public static Dictionary<Lane, List<Vector2>> MinionPaths = new Dictionary<Lane, List<Vector2>> { { Lane.LANE_L, new List<Vector2>() }, { Lane.LANE_R, new List<Vector2>() } };
-        static List<Nexus> NexusList = new List<Nexus>();
+        public static List<Nexus> NexusList = new List<Nexus>();
         static string LaneTurretAI = "TurretAI";
 
         static Dictionary<TeamId, Dictionary<Inhibitor, float>> DeadInhibitors = new Dictionary<TeamId, Dictionary<Inhibitor, float>> 
@@ -31,7 +31,7 @@ namespace MapScripts.Map10
             { TeamId.TEAM_PURPLE, new Dictionary<Inhibitor, float>() } 
         };
 
-        static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
+        public static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
         {
             {TeamId.TEAM_BLUE, new Dictionary<Lane, List<LaneTurret>>{
                 { Lane.LANE_Unknown, new List<LaneTurret>()},
