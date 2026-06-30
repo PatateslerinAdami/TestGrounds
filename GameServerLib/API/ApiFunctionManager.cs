@@ -2495,11 +2495,15 @@ namespace LeagueSandbox.GameServer.API
         /// source has moved onto the target by the time of the knockback (e.g. Alistar W: the caster charges onto
         /// the target, so its live position is degenerate — supply the cast-origin instead). null = derive from
         /// source.Position (the default).</param>
+        /// <param name="innerDistance">Riot BBMoveAway <c>DistanceInner</c>: minimum displacement floor. If terrain
+        /// resolution stops the push closer than this, it is re-extended to innerDistance along the push direction
+        /// (to a walkable point only). 0 = no floor (fully clampable, e.g. Headbutt). Use for a guaranteed minimum
+        /// knockback (e.g. SweepingBlow's [550, 600] band: distance 600, innerDistance 550).</param>
         public static void ForceMoveAway(AttackableUnit target, AttackableUnit source, float distance, float speed,
             float gravity = 0f, ForceMovementType resolve = ForceMovementType.FURTHEST_WITHIN_RANGE,
             ForceMovementOrdersFacing facing = ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
             ForceMovementOrdersType orders = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, string movementName = "",
-            Vector2? awayFrom = null)
+            Vector2? awayFrom = null, float innerDistance = 0f)
         {
             if (target == null || source == null || speed <= 0f)
             {
@@ -2518,7 +2522,7 @@ namespace LeagueSandbox.GameServer.API
             var endPos = target.Position + dir * distance;
             bool keepFacing = facing == ForceMovementOrdersFacing.KEEP_CURRENT_FACING;
             target.ServerForceLinePath(endPos, speed, gravity, keepFacing, true, movementName, source,
-                movementType: resolve, movementOrdersType: orders);
+                movementType: resolve, movementOrdersType: orders, innerDistance: innerDistance);
         }
 
         // NOTE: there is intentionally NO KnockUp verb. Riot has no BBKnockup — a knockup IS just a

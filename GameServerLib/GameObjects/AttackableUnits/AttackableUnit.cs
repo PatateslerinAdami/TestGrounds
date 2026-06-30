@@ -3665,10 +3665,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="moveBackBy">Riot BBMove/BBMoveToUnit <c>MoveBackBy</c>: pull the endpoint back toward the start
         /// by this many units (positive = stop short of the target, negative = overshoot past it). Applied after
         /// idealDistance and before terrain resolution.</param>
+        /// <param name="innerDistance">Riot BBMoveAway <c>DistanceInner</c>: minimum displacement floor. If terrain
+        /// resolution pulls the endpoint closer than this, push it back out to innerDistance along the dash
+        /// direction — but only to a walkable point, never into terrain. Guarantees a minimum travel (e.g.
+        /// SweepingBlow's [550, 600] band). 0 = no floor (fully clampable, e.g. Headbutt).</param>
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, float idealDistance = 0.0f, float moveBackBy = 0.0f)
+        public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, float idealDistance = 0.0f, float moveBackBy = 0.0f, float innerDistance = 0.0f)
         {
             // Displacement immunity: a unit flagged Imobile (Baron/Dragon) or an epic monster cannot be
             // displaced by an EXTERNAL force (knockup/knockback/pull). A self-initiated dash (caster == this)
@@ -3706,6 +3710,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
+            // Direction of the intended dash (post-idealDistance/moveBackBy, pre-clamp). Captured here so the
+            // innerDistance floor below can re-extend along the SAME ray after terrain resolution shortens it.
+            Vector2 intendedEnd = endPos;
+
             // FIRST_WALL_HIT: clamp the destination to the last walkable cell along the ray so the
             // unit stops at the wall instead of being teleported through it by GetClosestTerrainExit
             // when the requested endPos lies inside terrain. Track whether a wall was actually hit
@@ -3723,6 +3731,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
+
+            // DistanceInner (Riot BBMoveAway): minimum displacement floor. If the wall/terrain resolution above
+            // pulled the endpoint closer than innerDistance, push it back out to innerDistance along the dash
+            // direction — but only to a walkable point, never into terrain (a wall genuinely caps the travel).
+            // Lets an away-dash guarantee a minimum (e.g. SweepingBlow's [550,600]); innerDistance 0 = no floor.
+            if (innerDistance > 0.0f)
+            {
+                var floorDir = intendedEnd - Position;
+                float floorLen = floorDir.Length();
+                if (floorLen > 0.0f && Vector2.Distance(Position, newCoords) < innerDistance)
+                {
+                    var flooredEnd = Position + (floorDir / floorLen) * innerDistance;
+                    if (ignoreTerrain || _game.Map.NavigationGrid.IsWalkable(flooredEnd, PathfindingRadius))
+                    {
+                        newCoords = flooredEnd;
+                    }
+                }
+            }
 
             // POSTPONE_CURRENT_ORDER + an active walk-to-point: snapshot the move destination (last
             // waypoint) NOW, before SetWaypoints below clears it. Re-issued at dash-end (ObjAIBase
