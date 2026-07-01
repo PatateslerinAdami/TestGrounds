@@ -2443,8 +2443,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // Changing the state of the spell to READY during casting prevents the spell from finishing casting, thus locking the player in the move order CastSpell.
                 if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
                 {
+                    bool wasOnCooldown = State == SpellState.STATE_COOLDOWN;
                     State = SpellState.STATE_READY;
                     CurrentCooldown = 0;
+                    // A manual reset/refund (CDR proc, item, refund) that ends an active cooldown fires the
+                    // off-cooldown event too — but only when actually leaving COOLDOWN, not on a READY->READY set.
+                    if (wasOnCooldown)
+                    {
+                        ApiEventManager.OnSpellCooldownEnd.Publish(this);
+                    }
                 }
             }
             else

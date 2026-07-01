@@ -59,6 +59,7 @@ using GameServerCore.Packets.Enums;
 [OnReconnect]
 [OnResurrect]
 [OnSpellCast] - start casting
+[OnSpellCooldownEnd] - spell's cooldown finished, back to STATE_READY (natural expiry + manual reset). (wired)
 [OnSpellChannel] - start channeling
 [OnSpellChannelCancel] - abrupt stop channeling
 [OnSpellChannelUpdate] - every server tick during channel; diff=0f at channel entry. Scripts pace via PeriodicTicker.
@@ -259,6 +260,12 @@ namespace LeagueSandbox.GameServer.API
             = new Dispatcher<SpellMissile, float>();
 
         public static Dispatcher<Spell> OnSpellPostCast
+            = new Dispatcher<Spell>();
+
+        // Fires when a spell's cooldown finishes and it returns to STATE_READY — both the natural
+        // per-tick expiry (Update) and manual resets to 0 (CDR procs / refunds via SetCooldown).
+        // Keyed by the Spell. Use for "off-cooldown" triggers (e.g. Master Yi E refresh logic).
+        public static Dispatcher<Spell> OnSpellCooldownEnd
             = new Dispatcher<Spell>();
 
         public static Dispatcher<Spell> OnSpellPostChannel
