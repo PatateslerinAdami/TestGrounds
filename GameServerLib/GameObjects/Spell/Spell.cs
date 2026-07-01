@@ -512,7 +512,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // is 0 for everything except real ammo spells (AkaliShadowDance: 28.5s recharge
             // alongside its 1.9s between-cast cooldown).
             CastInfo.AmmoUsed = 1;
-            CastInfo.AmmoRechargeTime = CurrentAmmoCooldown;
+            // The client reads this from the CastSpellAns to drive the charge-recharge display
+            // (replay VelkozW: AmmoRecharge=17.1 = the full recharge time, sent on every cast).
+            // Must be the recharge DURATION, not CurrentAmmoCooldown (which is 0 before the consume).
+            CastInfo.AmmoRechargeTime = GetAmmoRechageTime();
 
             // TODO: Account for multiple targets
             CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.IsNextAutoMiss, CastInfo.Owner.IsNextAutoDodged)));
@@ -772,14 +775,19 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                     // Riot obj_AI_Base::ApplySpellCastCosts: on consuming a charge, arm the recharge
                     // timer ONLY if no recharge is already in flight (an in-progress refill keeps
-                    // counting), then notify the client + scripts. Without arming the timer the
-                    // recharge tick (UpdateAmmo) would see CurrentAmmoCooldown <= 0 and refill the
-                    // charge on the very next tick.
+                    // counting). Without arming it the recharge tick (UpdateAmmo) would see
+                    // CurrentAmmoCooldown <= 0 and refill the charge on the very next tick.
                     if (CurrentAmmoCooldown <= 0.0f)
                     {
                         CurrentAmmoCooldown = GetAmmoRechageTime();
                     }
-                    _game.PacketNotifier.NotifyS2C_AmmoUpdate(this);
+                    // NO NotifyS2C_AmmoUpdate here — replay (VelkozW, c0896952) shows Riot does NOT
+                    // send S2C_AmmoUpdate on the cast-consume tick; the client learns the consume from
+                    // the CastSpellAns (AmmoUsed=1 + AmmoRechargeTime). Sending it here (with the
+                    // recharge time) made the client display the spell on the full ~18s ammo-recharge
+                    // cooldown, blocking the remaining charge. S2C_AmmoUpdate only fires on recharge
+                    // events (AddAmmo). OnUpdateAmmo (the internal script callback) still fires here,
+                    // mirroring Riot's HandleOnAmmoUpdate on consume.
                     ApiEventManager.OnUpdateAmmo.Publish(CastInfo.Owner, this);
                 }
                 Vector3 originalTarget = CastInfo.TargetPosition;
@@ -969,7 +977,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // spells) — the previous CurrentCooldown here would have leaked every spell's
             // cooldown into the field, which Riot never does.
             CastInfo.AmmoUsed = 1;
-            CastInfo.AmmoRechargeTime = CurrentAmmoCooldown;
+            // The client reads this from the CastSpellAns to drive the charge-recharge display
+            // (replay VelkozW: AmmoRecharge=17.1 = the full recharge time, sent on every cast).
+            // Must be the recharge DURATION, not CurrentAmmoCooldown (which is 0 before the consume).
+            CastInfo.AmmoRechargeTime = GetAmmoRechageTime();
 
             // TODO: implement check for IsForceCastingOrChannel and IsOverrideCastPosition
             if (SpellData.CastType == (int)CastType.CAST_TargetMissile
