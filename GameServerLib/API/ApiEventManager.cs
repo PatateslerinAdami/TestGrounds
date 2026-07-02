@@ -253,6 +253,15 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<SpellMissile> OnSpellMissileEnd
             = new Dispatcher<SpellMissile>();
 
+        // Fires ONCE when a chained missile's whole chain ends — the final hop that spawns no
+        // successor (bounce budget reached / no next target / fizzle / cancel / lifetime). Keyed by the
+        // ORIGIN spell (constant across a non-alternating chain), carries the final missile. Use this
+        // instead of per-hop OnSpellMissileEnd for "after the last bounce" logic (e.g. Master Yi Q
+        // reappear). NOTE: for alternating ally/enemy chains (Nami W) the origin switches per segment,
+        // so the key is the LAST segment's spell.
+        public static Dispatcher<Spell, SpellMissile> OnSpellChainMissileEnd
+            = new Dispatcher<Spell, SpellMissile>();
+
         public static Dispatcher<SpellMissile, AttackableUnit> OnSpellMissileHit
             = new Dispatcher<SpellMissile, AttackableUnit>();
 

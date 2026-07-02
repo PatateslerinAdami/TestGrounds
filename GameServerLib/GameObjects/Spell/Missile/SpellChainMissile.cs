@@ -27,6 +27,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// </summary>
         public MissileParameters Parameters { get; protected set; }
         private float _bounceRadius;
+        // True once this hop has spawned a successor missile. If it ends WITHOUT one, this is the
+        // final hop -> the whole chain is over (see SetToRemove -> OnSpellChainMissileEnd).
+        private bool _spawnedSuccessor;
 
         // Shared across segments: each bounce is a NEW missile instance; per-instance
         // seeding is wasteful and the game loop is single-threaded.
@@ -45,6 +48,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             _chainHitCount = 0;
             Parameters = parameters;
             _bounceRadius = originSpell.SpellData.BounceRadius;
+        }
+
+        public override void SetToRemove()
+        {
+            // A chain missile removed WITHOUT having spawned a successor is the last hop, so the whole
+            // chain is over — fire OnSpellChainMissileEnd exactly once (guarded by IsToRemove like base,
+            // so a double SetToRemove doesn't re-fire). Covers every end path: bounce budget reached,
+            // no next target, mid-flight cancel, and lifetime expiry — all funnel through here.
+            if (!IsToRemove() && !_spawnedSuccessor)
+            {
+                API.ApiEventManager.OnSpellChainMissileEnd.Publish(SpellOrigin, this);
+            }
+
+            base.SetToRemove();
         }
 
         public override void Update(float diff)
@@ -355,6 +372,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 newMissile.HasClientCastInfo = false;
 
                 _game.ObjectManager.AddObject(newMissile);
+                _spawnedSuccessor = true;
 
                 API.ApiEventManager.OnLaunchMissile.Publish(SpellOrigin, newMissile);
             }

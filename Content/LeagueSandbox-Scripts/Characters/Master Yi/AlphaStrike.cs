@@ -27,7 +27,7 @@ public class AlphaStrike : ISpellScript {
             Type = MissileType.Chained,
             BounceSpellNameEnemy = "AlphaStrikeBounce",
             BounceSelection = BounceSelection.Nearest,
-            MaximumHits = 5,
+            MaximumHits = 4,
             CanHitSameTargetConsecutively = false,
             CanHitCaster = false,
             CanHitSameTarget = false,
@@ -45,7 +45,8 @@ public class AlphaStrike : ISpellScript {
     {
         _target = target;
         _spell = spell;
-        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
+        // Fires once after the LAST bounce (chain end), not per hop.
+        ApiEventManager.OnSpellChainMissileEnd.AddListener(this, spell, OnChainEnd);
     }
 
     public void OnSpellCast(Spell spell)
@@ -53,17 +54,11 @@ public class AlphaStrike : ISpellScript {
         AddBuff("Alpha_Strike", 4f, 1, spell, _masterYi, _masterYi);
     }
 
-    private void OnLaunchMissile(Spell spell, SpellMissile missile)
+    private void OnChainEnd(Spell spell, SpellMissile missile)
     {
-        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd);
-    }
-
-    private void OnMissileEnd(SpellMissile missile)
-    {
-        RemoveBuff(_masterYi,"Alpha_Strike");
+        ApiEventManager.OnSpellChainMissileEnd.RemoveListener(this, spell, OnChainEnd);
+        RemoveBuff(_masterYi, "Alpha_Strike");
         SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
-        ApiEventManager.OnLaunchMissile.RemoveListener(this, missile.SpellOrigin, OnLaunchMissile);
-        ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnMissileEnd);
     }
 }
 
@@ -85,7 +80,7 @@ public class AlphaStrikeBounce : ISpellScript {
 
 
 public class AlphaStrikeTeleport : ISpellScript {
-    private ObjAIBase      _katarina;
+    private ObjAIBase      _masterYi;
     private AttackableUnit _target;
     private Vector2        _previousPos;
     private Vector2        _coords;
@@ -95,35 +90,30 @@ public class AlphaStrikeTeleport : ISpellScript {
         IsDamagingSpell                = true,
         CastingBreaksStealth           = false,
         NotSingleTargetSpell           = false,
-        IsDeathRecapSource             = true,
-        AutoFaceDirection              = false,
         // Lets OnSpellPreCast write the landing pos into CastInfo.TargetPosition without
         // Spell.Cast clobbering it with the default 10-unit-forward stub.
         OverrideTargetPositionInScript = true,
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) { _katarina = owner; }
+    public void OnActivate(ObjAIBase owner, Spell spell) { _masterYi = owner; }
     
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
-        _previousPos = _katarina.Position;
+        _previousPos = _masterYi.Position;
       
         const float visualBuffer = 50f;
-        var overshoot = _katarina.CollisionRadius + _target.CollisionRadius + visualBuffer;
-        _coords = CalcVector(overshoot, _katarina.Position, _target.Position);
+        var overshoot = _masterYi.CollisionRadius + _target.CollisionRadius + visualBuffer;
+        _coords = CalcVector(overshoot, _masterYi.Position, _target.Position);
         // Replay-verified: CastSpellAns.targetPosition is the landing pos, not the click
         // target's center. Sets up the wire packet that Spell.Cast will broadcast next.
-        var landing3D = new Vector3(_coords.X, _katarina.GetHeight(), _coords.Y);
+        var landing3D = new Vector3(_coords.X, _masterYi.GetHeight(), _coords.Y);
         spell.CastInfo.TargetPosition = landing3D;
         spell.CastInfo.TargetPositionEnd = landing3D;
         
-        FaceDirection(_target.Position, _katarina, true);
-        var canDoSilentHandoff = IsValidTarget(_katarina, _target,
-            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-            SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-        TeleportTo(_katarina, _coords.X, _coords.Y, silent: true);
-        NotifyTeleport(_katarina, _coords);
-        FaceDirection(_target.Position, _katarina, true);
+        FaceDirection(_target.Position, _masterYi, true);
+        TeleportTo(_masterYi, _coords.X, _coords.Y, silent: true);
+        NotifyTeleport(_masterYi, _coords);
+        FaceDirection(_target.Position, _masterYi, true);
     }
     
 
