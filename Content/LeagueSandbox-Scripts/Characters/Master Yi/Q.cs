@@ -54,7 +54,7 @@ public class AlphaStrike : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        AddBuff("Alpha_Strike", 4f, 1, spell, _masterYi, _masterYi);
+        AddBuff("Alpha_Strike", 3f, 1, spell, _masterYi, _masterYi);
     }
 
     private void OnChainEnd(Spell spell, SpellMissile missile)
