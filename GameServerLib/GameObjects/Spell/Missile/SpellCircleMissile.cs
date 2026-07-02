@@ -113,7 +113,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 var aimAngle = MathF.Atan2(aim.Y - _circleCenter.Y, aim.X - _circleCenter.X);
                 var sweep = (aimAngle - _circleAngle) * tangentSign;   // travel in the AV direction
                 while (sweep <= 0f) sweep += MathF.Tau;
-                SweepLifetimeOverrideSeconds = sweep / MathF.Abs(_circleAngularVelocity) + 0.05f;
+                // End AT the aim (no overshoot): a positive margin makes each edge fly past the aim,
+                // and since the edges sweep at different angularVels they splay/cross into an X/Y
+                // beyond the tip. Stopping exactly at the sweep angle keeps them meeting in a point.
+                SweepLifetimeOverrideSeconds = sweep / MathF.Abs(_circleAngularVelocity);
             }
         }
 

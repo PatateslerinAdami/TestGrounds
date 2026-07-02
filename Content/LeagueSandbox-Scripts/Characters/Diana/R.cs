@@ -44,6 +44,15 @@ public class DianaTeleport : ISpellScript {
         ApiEventManager.OnMoveSuccess.AddListener(this, _diana, OnMoveSuccess);
         ApiEventManager.OnMoveFailure.AddListener(this, _diana, OnMoveFailure);
         FaceDirection(_target.Position, _diana, true);
+        if (_target.HasBuff("Moonlight"))
+        {
+            spell.SetCooldown(0f, true);
+            var units = EnumerateUnitsInRange(_diana.Position, 2500000f, true).Where(unit => unit.HasBuff("Moonlight"));
+            foreach (var unit in units)
+            {
+                RemoveBuff(unit, "Moonlight");
+            }
+        }
         ForceMove(_diana, _target.Position, 2500f, 0, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, true, ForceMovementOrdersType.CANCEL_ORDER, movementName: "DianaTeleport");
         //ForceMoveToUnit(_diana, _target, 2100f, 150f,0f, 2100f, 4f, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, ForceMovementOrdersType.CANCEL_ORDER, "DianaTeleport");
     }
