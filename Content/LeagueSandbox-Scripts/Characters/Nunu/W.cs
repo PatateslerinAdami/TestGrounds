@@ -41,7 +41,7 @@ public class BloodBoil : ISpellScript {
         if (_target == _nunu)
         {
              var unit = GetUnitsInRange(_nunu, _nunu.Position, 700f, true, SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.NotAffectSelf)
-                .OrderBy(unit => unit is Champion).First();
+                .OrderBy(unit => unit is Champion).FirstOrDefault();
              if (unit == null) return;
              AddBuff("BloodBoil", 12f, 1, spell, unit, _nunu);
         }

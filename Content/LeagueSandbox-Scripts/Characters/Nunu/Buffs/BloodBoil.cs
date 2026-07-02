@@ -2,22 +2,18 @@ using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using GameMaths;
-using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace Buffs
 {
     internal class BloodBoil : IBuffGameScript
     {
 
-        private ObjAIBase _masterYi;
+        private ObjAIBase _nunu;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.HASTE,
@@ -25,13 +21,13 @@ namespace Buffs
             MaxStacks = 1,
             IsNonDispellable = true
         };
-        public StatsModifier StatsModifier { get; private set; }
+        public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _masterYi = ownerSpell.CastInfo.Owner;
-            StatsModifier.AttackSpeed.PercentBonus = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100;
+            _nunu = ownerSpell.CastInfo.Owner;
+            StatsModifier.AttackSpeed.PercentBonus = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100f;
             StatsModifier.MoveSpeed.PercentBonus =
-                ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel] / 100;
+                ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel]/100f;
             unit.AddStatModifier(StatsModifier);
         }
 
