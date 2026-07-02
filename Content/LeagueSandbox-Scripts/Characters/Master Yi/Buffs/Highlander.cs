@@ -25,6 +25,7 @@ internal class Highlander : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
+        MaxStacks = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -32,6 +33,7 @@ internal class Highlander : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _masterYi   = ownerSpell.CastInfo.Owner;
         _buff       = buff;
+        _spell = ownerSpell;
         //this is for fun
         var runAnim = Rng.Next(0, 2) == 0 ? "Run_HASTE" : "2013_run_haste";
        var particleName = ownerSpell.CastInfo.SpellLevel switch {
@@ -55,18 +57,17 @@ internal class Highlander : IBuffGameScript {
     }
 
     private void OnKill(DeathData data) {
-        AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_R_OnBuffKill", _masterYi);
         ExtendDuration();
     }
     
     private void OnAssist(ObjAIBase assistant,DeathData data) {
-        AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_R_OnBuffKill", _masterYi);
         ExtendDuration();
     }
 
     private void ExtendDuration()
     {
-        var duration = (_buff.Duration - _buff.TimeElapsed) + 4;
+        AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_R_OnBuffKill", _masterYi);
+        var duration = (_buff.Duration - _buff.TimeElapsed) + 4f;
         AddBuff("Highlander", duration, 1, _spell, _masterYi, _masterYi);
     }
 
