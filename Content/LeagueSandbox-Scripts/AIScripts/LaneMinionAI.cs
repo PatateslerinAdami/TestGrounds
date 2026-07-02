@@ -96,6 +96,15 @@ namespace AIScripts
             Subscribe(AIEvent.OnTauntEnd, _ => OnTauntEnded());
             Subscribe(AIEvent.OnCharmEnd, _ => FindTargetOrMove());
 
+            // Aggro.lua OnCanMove / OnCanAttack: a movement/attack-disabling lock just ended
+            // (stun, root, snare, channel lock — anything that drops the capability) → reset to
+            // idle and re-decide immediately (lua body: NetSetState(AI_IDLE); FindTargetOrMove())
+            // instead of resuming the stale pre-CC intent on the next 0.25s sweep. Fear/Taunt/
+            // Charm additionally have their dedicated End events above; a double re-acquire on
+            // overlap is harmless (FindTargetOrMove re-picks / keeps forward nav idempotently).
+            Subscribe(AIEvent.OnCanMove, _ => OnCapabilityRegained());
+            Subscribe(AIEvent.OnCanAttack, _ => OnCapabilityRegained());
+
             // Aggro.lua OnCollisionEnemy / OnTargetLost / OnPathToTargetBlocked — immediate
             // reevaluation on body-contact with an enemy, when the engine drops our target, and
             // when navigation to the target fails (the 0.25s scan is the fallback for all three).
@@ -360,6 +369,20 @@ namespace AIScripts
 
             SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, u);
             ResetAndStartTimer("TimerAntiKite");
+        }
+
+        // Aggro.lua OnCanMove / OnCanAttack handler body: NetSetState(AI_IDLE) + FindTargetOrMove.
+        // The idle reset matters: Riot's minion re-picks the NEAREST target after a CC lock ends
+        // rather than resuming whatever it was doing before the lock.
+        private void OnCapabilityRegained()
+        {
+            if (_minion == null || _minion.IsDead || IsCrowdControlled())
+            {
+                return;
+            }
+
+            NetSetState(AIState.AI_IDLE);
+            FindTargetOrMove();
         }
 
         // Aggro.lua OnTargetLost: the engine dropped our target (died / went invalid) — re-acquire
