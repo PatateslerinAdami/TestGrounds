@@ -3521,7 +3521,9 @@ namespace PacketDefinitions420
                     IsSummonerSpell = spell.SpellName.StartsWith("Summoner"),
                     SpellSlot = spell.CastInfo.SpellSlot,
                     CurrentAmmo = spell.CurrentAmmo,
-                    // TODO: Implement this. Example spell which uses it is Syndra R.
+                    // Replay-verified (VelkozW, c0896952): Riot sends MaxAmmo = -1 here (the client
+                    // doesn't use it — max comes from the client's own spell data). Do NOT "fix" to the
+                    // real cap; -1 is faithful.
                     MaxAmmo = -1,
                     SenderNetID = spell.CastInfo.Owner.NetId
                 };

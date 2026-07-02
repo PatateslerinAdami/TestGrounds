@@ -536,7 +536,16 @@ namespace LeagueSandbox.GameServer.Handlers
             // separation, which we can't reproduce), so this is the pragmatic mitigation.
             Vector2 naturalStand = recommendedAttackPos;
             Vector2 bestStand = naturalStand;
-            float bestClearSq = MinAllyDistSq(naturalStand, allyClear);
+            // Seed BELOW any real clearance (not naturalStand's own clearance): naturalStand is the
+            // RAW, un-relocated cell — it must never win the comparison against a get-to-able-snapped
+            // candidate. With no nearby allies (every champion, and lane minions in the open) allyClear
+            // is empty so MinAllyDistSq == MaxValue for all cells; seeding bestClearSq at MaxValue made
+            // the relocated candidate fail `> bestClearSq` and we returned the un-snapped raw cell —
+            // i.e. the get-to-able relocation was silently skipped, so the approach path aimed at a cell
+            // that wasn't necessarily directly reachable (the "from some angles not the shortest path"
+            // champion regression). Seeding at -1 lets the first relocated candidate always take over,
+            // restoring the committed single-call behavior in the no-ally case.
+            float bestClearSq = -1f;
             foreach (float frac in StandClearanceFracs)
             {
                 float curClearSq = (fullClearance * frac) * (fullClearance * frac);

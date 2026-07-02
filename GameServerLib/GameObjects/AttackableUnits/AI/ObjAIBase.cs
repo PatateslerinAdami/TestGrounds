@@ -1311,11 +1311,30 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     Vector2 recommended = targetPos;
                     if (chaseUnit != null)
                     {
-                        gotAttackPoint = _game.Map.PathingHandler.GetClosestAttackPoint(
-                            this, chaseUnit, idealRange, out recommended, out _, out _);
-                        pathDestination = gotAttackPoint
-                            ? recommended
-                            : _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange);
+                        if (this is Champion)
+                        {
+                            // A champion chasing a single attack target approaches on a DIRECT line to
+                            // the near-side stand point and stops exactly at range, then attacks.
+                            // GetAttackStandPosition = targetPos + dir_to_attacker * (range*0.95) is that
+                            // point. OUR path-based GetClosestAttackPoint spirals AROUND the target: its
+                            // spiral relocates the stand cell onto the attacker's own column / just outside
+                            // range, and the firstInRange<0 branch returns it raw — so the champ first
+                            // walks straight down its column, then loops right around the target instead of
+                            // going straight at it (PATHDBG-confirmed: waypoints stay on X=1785 while the
+                            // target sits at X=1647; rec distTgtRec=163 > idealRange=135). Minions keep
+                            // GetClosestAttackPoint (below) for the wave attacker-spread (distinct cells).
+                            pathDestination = _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange);
+                            gotAttackPoint = true;
+                            recommended = pathDestination;
+                        }
+                        else
+                        {
+                            gotAttackPoint = _game.Map.PathingHandler.GetClosestAttackPoint(
+                                this, chaseUnit, idealRange, out recommended, out _, out _);
+                            pathDestination = gotAttackPoint
+                                ? recommended
+                                : _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange);
+                        }
                     }
 
                     if (!_game.Map.PathingHandler.IsWalkable(pathDestination, PathfindingRadius))
@@ -1327,19 +1346,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // routes around blocking units instead of producing a path that would
                     // immediately need post-process collision correction.
                     //
-                    // STAGE B (allied-spacing fan-out, 2026-06-21): for LANE MINIONS, skip the
-                    // straight-line LOS fast-path so the actor-aware A* actually runs on the approach
-                    // — a follower whose straight line to its stand cell is blocked by a LEADING ALLY
-                    // routes AROUND it and arrives from a distinct angle, so the wave fans onto
-                    // distinct boundary points instead of piling on one line (the user's "ally in the
-                    // way → I go around" model). Scoped to lane minions ONLY: they target the FRONT of
-                    // the wave (stage A — CallForHelp no longer redirects them to backline minions),
-                    // so "route around" only ever means around ALLIES between them and a front target,
-                    // never around the enemy front to reach a backline target (which is what produced
-                    // behind-wave for the unscoped chase, clash22). Champions/pets keep the LOS-first
-                    // path, where skip-LOS WOULD route behind a backline target. The actor-aware
-                    // smoothing (B1) keeps the bend from being flattened back to a straight line.
-                    bool actorAwareChase = this is LaneMinion;
+                    // RIOT MODEL (2026-06-30): the attack approach uses the LOS-first path (straight
+                    // line when terrain-clear, A* only around TERRAIN) for lane minions too — NOT the
+                    // actor-aware gap-threading the old "STAGE B fan-out" forced (skipLineOfSight: this
+                    // is LaneMinion). That threading routed the minion BETWEEN leading allies toward its
+                    // on-axis stand cell (wire: n=4 squeeze paths; 35% of attack paths were n>=3); a gap
+                    // that is >= pathfinding-radius wide is "passable" to A* but too narrow for the
+                    // collision body + shifting neighbours → the minion wedges and can't reach its cell
+                    // (the "stuck between two minions, can't attack" bug, 1:56). Riot instead walks
+                    // straight to the target and lets COLLISION settle the unit beside the ally on the
+                    // OPEN side (stacked-wave wire: 72% n=1, repathed each brain-sweep from the
+                    // collision-pushed position so the curve-around emerges from the push, not the path).
+                    // The fan-out therefore must come from the collision response, not path threading —
+                    // that is the next step. Matches the forward-nav terrain-only change (same root).
+                    // Champions/pets already used LOS-first; this just brings lane minions in line.
+                    bool actorAwareChase = false;
                     var newWaypoints = _game.Map.PathingHandler.GetPath(this, pathDestination,
                         skipLineOfSight: actorAwareChase);
                     if (newWaypoints != null && newWaypoints.Count > 1)
