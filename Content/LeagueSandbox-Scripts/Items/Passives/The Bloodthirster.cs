@@ -101,35 +101,31 @@ namespace ItemPassives
 
         private void OnHitUnit(DamageData data)
         {
-            if (data.IsAutoAttack)
+            if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK) return;
+            float lifeStealPercent = _owner.Stats.LifeSteal.Total;
+            float healAmount = data.PostMitigationDamage * lifeStealPercent;
+            float missingHp = _owner.Stats.HealthPoints.Total - _owner.Stats.CurrentHealth;
+
+            if (!(healAmount > missingHp)) return;
+            float overheal = healAmount - missingHp;
+            if (missingHp <= 0) overheal = healAmount;
+
+            float maxShield = 50f + (_owner.Stats.Level - 1) * 17.64f;
+
+            if (_btShield != null && _btShield.IsConsumed())
             {
-                float lifeStealPercent = _owner.Stats.LifeSteal.Total;
-                float healAmount = data.PostMitigationDamage * lifeStealPercent;
-                float missingHp = _owner.Stats.HealthPoints.Total - _owner.Stats.CurrentHealth;
-
-                if (healAmount > missingHp)
-                {
-                    float overheal = healAmount - missingHp;
-                    if (missingHp <= 0) overheal = healAmount;
-
-                    float maxShield = 50f + (_owner.Stats.Level - 1) * 17.64f;
-
-                    if (_btShield != null && _btShield.IsConsumed())
-                    {
-                        _shieldAmount = 0f;
-                    }
+                _shieldAmount = 0f;
+            }
                     
-                    _shieldAmount += overheal;
-                    if (_shieldAmount > maxShield) _shieldAmount = maxShield;
+            _shieldAmount += overheal;
+            if (_shieldAmount > maxShield) _shieldAmount = maxShield;
                     
-                    UpdateNativeShield();
-                    EnterCombatState(); 
+            UpdateNativeShield();
+            EnterCombatState(); 
 
-                    if (_shieldParticle == null)
-                    {
-                        _shieldParticle = AddParticleTarget(_owner, _owner, "Item_BTOverheal_Shield.troy", _owner, float.MaxValue, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
-                    }
-                }
+            if (_shieldParticle == null)
+            {
+                _shieldParticle = AddParticleTarget(_owner, _owner, "Item_BTOverheal_Shield.troy", _owner, float.MaxValue, 1f, "C_BUFFBONE_GLB_CHEST_LOC");
             }
         }
 

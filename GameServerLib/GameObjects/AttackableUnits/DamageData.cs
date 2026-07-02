@@ -26,7 +26,11 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// </summary>
         public DamageType DamageType { get; set; }
         /// <summary>
-        /// Whether or not the damage came from an autoatack or a Spell
+        /// True only for a GENUINE basic-attack swing (set exclusively by ObjAIBase.AutoAttackHit —
+        /// the real auto-attack damage-application, fired on missile arrival for ranged). On-hit
+        /// SPELLS that deal DAMAGE_SOURCE_ATTACK to proc on-hit effects (Alpha Strike, Yasuo Q,
+        /// Ezreal Q, ...) leave this false. Scripts that want "attack-source damage" (on-hit effects)
+        /// must test <see cref="DamageSource"/> == DAMAGE_SOURCE_ATTACK, NOT this flag.
         /// </summary>
         public bool IsAutoAttack { get; set; }
         /// <summary>

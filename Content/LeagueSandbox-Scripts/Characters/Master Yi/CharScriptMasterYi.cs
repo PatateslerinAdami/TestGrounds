@@ -30,9 +30,12 @@ public class CharScriptMasterYi : ICharScript
 
     private void OnHit(DamageData data)
     {
+        // Count only genuine basic attacks — an on-hit spell like Alpha Strike deals
+        // DAMAGE_SOURCE_ATTACK (so it procs on-hit effects) but must NOT advance Double Strike.
+        if (!data.IsAutoAttack) return;
         if (_masterYi.HasBuff("DoubleStrikeReady") || _masterYi.HasBuff("DoubleStrike"))return;
-        AddBuff("DoubleStrikeStacks", 250000f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi, true);
+        AddBuff("DoubleStrikeStacks", 4f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi);
         if (_masterYi.GetBuffsWithName("DoubleStrikeStacks").Count != 3) return;
-        AddBuff("DoubleStrikeReady", 250000f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi, true);
+        AddBuff("DoubleStrikeReady", 4f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi);
     }
 }

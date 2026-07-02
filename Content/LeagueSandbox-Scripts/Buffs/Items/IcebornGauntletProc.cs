@@ -47,10 +47,6 @@ public class IcebornGauntletProc : IBuffGameScript
         ApiEventManager.RemoveAllListenersForOwner(this);
     }
 
-    public void OnUpdate(float diff)
-    {
-    }
-
     private void OnHitUnit(DamageData damageData)
     {
         if (_owner == null || _buff == null)
@@ -58,7 +54,7 @@ public class IcebornGauntletProc : IBuffGameScript
             return;
         }
 
-        if (!damageData.IsAutoAttack)
+        if (damageData.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK)
         {
             return;
         }

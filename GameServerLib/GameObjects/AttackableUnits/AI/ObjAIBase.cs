@@ -646,6 +646,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             DamageData damageData = new DamageData
             {
+                // The ONLY place IsAutoAttack is set true — a genuine basic-attack swing. On-hit spells
+                // dealing DAMAGE_SOURCE_ATTACK go through the scalar TakeDamage overload (IsAutoAttack
+                // stays false), so effects gated on IsAutoAttack fire only for real autos.
                 IsAutoAttack = true,
                 Attacker = this,
                 Target = target,

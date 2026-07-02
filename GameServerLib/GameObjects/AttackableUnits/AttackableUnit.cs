@@ -1170,7 +1170,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             //TODO: Make all TakeDamage functions return DamageData
             DamageData damageData = new DamageData
             {
-                IsAutoAttack = source == DamageSource.DAMAGE_SOURCE_ATTACK,
+                // IsAutoAttack means a GENUINE basic-attack swing, and that is set explicitly by
+                // ObjAIBase.AutoAttackHit (the only real auto path). Script-dealt damage — including
+                // on-hit SPELLS that use DAMAGE_SOURCE_ATTACK to proc on-hit effects (Alpha Strike,
+                // Yasuo Q, Ezreal Q, ...) — is never a basic attack, so it must be false here.
+                // Scripts that want "attack-source damage" should test DamageSource, not IsAutoAttack.
+                IsAutoAttack = false,
                 Attacker = attacker,
                 Target = this,
                 Damage = damage,

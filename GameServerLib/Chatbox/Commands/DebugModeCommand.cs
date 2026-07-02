@@ -24,8 +24,15 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         private static readonly Dictionary<uint, List<Particle>> _arrowParticlesList = new Dictionary<uint, List<Particle>>();
         private enum DebugMode: int
         {
-            None, Self, Champions, Minions, Projectiles, Sectors, All
+            None, Self, Champions, Minions, Projectiles, Sectors, Navpoints, All
         }
+        // Lane-navpoint markers (the lane polyline each LaneMinion walks). Not keyed by unit — the
+        // points are static map locations — so they live in their own list, re-spawned on a slow
+        // cadence (they don't move; only re-spawned to outlive the short DebugCircle troy).
+        private static readonly List<Particle> _navpointParticles = new List<Particle>();
+        private float _lastNavpointDraw = float.NegativeInfinity;
+        private const float _navpointRedrawMs = 500f;   // re-spawn cadence (static markers)
+        private const float _navpointLifetimeS = 0.7f;  // > redraw cadence so they never blink out
         private DebugMode _debugMode = DebugMode.None;
 
         public override string Command => "debugmode";
@@ -97,6 +104,14 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                         }
                         _arrowParticlesList.Clear();
                     }
+                    if (_navpointParticles.Count != 0)
+                    {
+                        foreach (var p in _navpointParticles)
+                        {
+                            p.SetToRemove();
+                        }
+                        _navpointParticles.Clear();
+                    }
                 }
                 else
                 {
@@ -137,6 +152,10 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 else if (_debugMode == DebugMode.Projectiles)
                 {
                     DrawProjectiles(_userId);
+                }
+                else if (_debugMode == DebugMode.Navpoints)
+                {
+                    DrawNavpoints(_userId);
                 }
                 else if (_debugMode == DebugMode.All)
                 {
@@ -240,6 +259,67 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 {
                     DrawAttackableUnit(minion, userId);
                 }
+            }
+        }
+
+        // Draws a marker at every LANE NAVPOINT (the lane polyline each LaneMinion walks). Sources the
+        // polylines from the live lane minions' PathingWaypoints (one distinct list per lane/team), so
+        // it needs at least one alive lane minion per lane to show that lane's points. Re-spawns each
+        // draw (the markers are static map locations, not unit-keyed).
+        public void DrawNavpoints(int userId)
+        {
+            // Slow cadence: the points are static, we only re-spawn to outlive the short troy.
+            if (_game.GameTime - _lastNavpointDraw < _navpointRedrawMs)
+            {
+                return;
+            }
+            _lastNavpointDraw = _game.GameTime;
+
+            try
+            {
+                foreach (var p in _navpointParticles)
+                {
+                    p.SetToRemove();
+                }
+                _navpointParticles.Clear();
+
+                // First pass: collect the distinct navpoints (dedupe by VALUE — different waves get
+                // separate PathingWaypoints copies but share the same lane polyline coordinates, so a
+                // reference-dedupe would draw each lane N-waves times). Cap defensively so a pathological
+                // count can never burst-spawn enough FX to take down the client.
+                var points = new HashSet<Vector2>();
+                foreach (GameObject obj in _game.ObjectManager.GetObjects().Values)
+                {
+                    if (obj is LaneMinion lm && lm.PathingWaypoints != null && lm.PathingWaypoints.Count > 0)
+                    {
+                        foreach (Vector2 wp in lm.PathingWaypoints)
+                        {
+                            points.Add(wp);
+                        }
+                    }
+                }
+
+                const int maxNavpoints = 256;
+                int spawned = 0;
+                foreach (Vector2 wp in points)
+                {
+                    if (spawned >= maxNavpoints)
+                    {
+                        break;
+                    }
+
+                    var particle = new Particle(_game, null, null, wp, "DebugCircle_green.troy",
+                        0.4f, "", "", 0, default, false, _navpointLifetimeS);
+                    _navpointParticles.Add(particle);
+                    spawned++;
+                }
+
+                _logger.Debug($"DrawNavpoints: {points.Count} distinct navpoints, {spawned} markers spawned.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"DrawNavpoints threw — disabling navpoint debug. {ex}");
+                _debugMode = DebugMode.None;
             }
         }
 
