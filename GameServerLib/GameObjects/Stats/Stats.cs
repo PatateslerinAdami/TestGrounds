@@ -69,8 +69,60 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat Range { get; }
         public Stat Size { get; }
         public Stat SpellVamp { get; }
-        public Stat Tenacity { get; }
         public Stat AcquisitionRange { get; set; }
+
+        // Tenacity (CC-duration reduction), bucketed per the 4.17 decomp (CharacterIntermediate.h:19-25,
+        // ItemData.cpp:538-543). Each active StatsModifier contributes to at most one bucket; within the
+        // max buckets only the strongest contribution counts (unique passives don't stack), so removal
+        // must recompute from the remaining contributions — hence per-modifier dictionaries (same pattern
+        // as _slows). Rune is a running additive sum. Combined multiplicatively by PercentCCReduction.
+        private readonly Dictionary<StatsModifier, float> _tenacityItem = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityCharacter = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityMastery = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityCleanse = new();
+        private float _tenacityRune;
+
+        // Slow-resist (slow MAGNITUDE reduction) — same max-across-sources rule as the tenacity item
+        // bucket (decomp ItemData.cpp:543 std::max). Separate axis from tenacity's duration cut.
+        private readonly Dictionary<StatsModifier, float> _slowResist = new();
+
+        /// <summary>
+        /// Upper clamp on total tenacity. The client asserts CC reduction never reaches 100%
+        /// (HeroHealthBar.cpp:719), so we keep it just under 1.0.
+        /// </summary>
+        private const float MaxTenacity = 0.999f;
+
+        /// <summary>
+        /// Final aggregated CC-duration reduction [0..1), replicated to the client as
+        /// <c>mPercentCCReduction</c>. Buckets combine multiplicatively:
+        /// <c>1 - (1-rune)(1-mastery)(1-item)(1-character)(1-cleanse)</c>, each max-bucket taking its
+        /// strongest contribution. Consumed at buff creation to shorten reducible CC durations.
+        /// </summary>
+        public float PercentCCReduction
+        {
+            get
+            {
+                float item = MaxOrZero(_tenacityItem);
+                float character = MaxOrZero(_tenacityCharacter);
+                float mastery = MaxOrZero(_tenacityMastery);
+                float cleanse = MaxOrZero(_tenacityCleanse);
+                float reduction = 1f - (1f - _tenacityRune) * (1f - mastery) * (1f - item) * (1f - character) * (1f - cleanse);
+                return Math.Clamp(reduction, 0f, MaxTenacity);
+            }
+        }
+
+        private static float MaxOrZero(Dictionary<StatsModifier, float> bucket)
+        {
+            float max = 0f;
+            foreach (var v in bucket.Values)
+            {
+                if (v > max)
+                {
+                    max = v;
+                }
+            }
+            return max;
+        }
 
         public float Gold { get; set; }
         public byte Level { get; set; }
@@ -78,7 +130,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float Points { get; set; }
         public uint EvolvePoints { get; set; }
         public uint EvolveFlags { get; set; }
-        public float SlowResistPercent { get; set; }
+        /// <summary>
+        /// Slow-resist [0..1): reduces slow MAGNITUDE (applied in CalculateTrueMoveSpeed). Combines by
+        /// MAX across sources (decomp ItemData.cpp:543), so multiple slow-resist items (e.g. Boots of
+        /// Swiftness + a boot enchant) grant only the highest, not the sum. Separate axis from tenacity,
+        /// which cuts slow DURATION.
+        /// </summary>
+        public float SlowResistPercent => MaxOrZero(_slowResist);
         /// <summary>
         /// Epic-monster slow rejection (Baron/Dragon, Monster_Epic tag). Slows are a MoveSpeed stat-mod,
         /// not a status flag, so they bypass the BuffType CC-flag suppression in AttackableUnit
@@ -158,7 +216,6 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Range = new Stat();
             Size = new Stat(1.0f, 0, 0, 0, 0);
             SpellVamp = new Stat();
-            Tenacity = new Stat();
             AcquisitionRange = new Stat();
         }
 
@@ -234,8 +291,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Range.ApplyStatModifier(modifier.Range);
             Size.ApplyStatModifier(modifier.Size);
             SpellVamp.ApplyStatModifier(modifier.SpellVamp);
-            Tenacity.ApplyStatModifier(modifier.Tenacity);
-            SlowResistPercent += modifier.SlowResistPercent;
+            ApplyTenacityBuckets(modifier);
             MultiplicativeSpeedBonus += modifier.MultiplicativeSpeedBonus;
         }
 
@@ -276,9 +332,30 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Range.RemoveStatModifier(modifier.Range);
             Size.RemoveStatModifier(modifier.Size);
             SpellVamp.RemoveStatModifier(modifier.SpellVamp);
-            Tenacity.RemoveStatModifier(modifier.Tenacity);
-            SlowResistPercent -= modifier.SlowResistPercent;
+            RemoveTenacityBuckets(modifier);
             MultiplicativeSpeedBonus -= modifier.MultiplicativeSpeedBonus;
+        }
+
+        private void ApplyTenacityBuckets(StatsModifier modifier)
+        {
+            // Dictionary assignment (not Add) so re-applying the same modifier with a new value
+            // (e.g. Irelia's enemy-count-scaled passive) updates its contribution in place.
+            if (modifier.TenacityItem != 0f) _tenacityItem[modifier] = modifier.TenacityItem;
+            if (modifier.TenacityCharacter != 0f) _tenacityCharacter[modifier] = modifier.TenacityCharacter;
+            if (modifier.TenacityMastery != 0f) _tenacityMastery[modifier] = modifier.TenacityMastery;
+            if (modifier.TenacityCleanse != 0f) _tenacityCleanse[modifier] = modifier.TenacityCleanse;
+            _tenacityRune += modifier.TenacityRune;
+            if (modifier.SlowResistPercent != 0f) _slowResist[modifier] = modifier.SlowResistPercent;
+        }
+
+        private void RemoveTenacityBuckets(StatsModifier modifier)
+        {
+            _tenacityItem.Remove(modifier);
+            _tenacityCharacter.Remove(modifier);
+            _tenacityMastery.Remove(modifier);
+            _tenacityCleanse.Remove(modifier);
+            _tenacityRune -= modifier.TenacityRune;
+            _slowResist.Remove(modifier);
         }
 
         public float GetTotalAttackSpeed()

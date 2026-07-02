@@ -60,7 +60,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(1.0f - Math.Clamp(Stats.MagicPenetration.PercentBaseBonus, 0.0f, 1.0f), ReplicationBucket.Local1, 27); //mPercentMagicPenetration
             UpdateFloat(Stats.LifeSteal.Total, ReplicationBucket.Local1, 28); //mPercentLifeStealMod
             UpdateFloat(Stats.SpellVamp.Total, ReplicationBucket.Local1, 29); //mPercentSpellVampMod
-            UpdateFloat(Stats.Tenacity.Total, ReplicationBucket.Local1, 30); //mPercentCCReduction
+            UpdateFloat(Stats.PercentCCReduction, ReplicationBucket.Local1, 30); //mPercentCCReduction
             UpdateFloat(1.0f - Math.Clamp(Stats.ArmorPenetration.PercentBonus, 0.0f, 1.0f), ReplicationBucket.Local2, 0); //mPercentBonusArmorPenetration
             UpdateFloat(1.0f - Math.Clamp(Stats.MagicPenetration.PercentBonus, 0.0f, 1.0f), ReplicationBucket.Local2, 1); //mPercentBonusMagicPenetration
             UpdateFloat(Stats.HealthRegeneration.BaseValue, ReplicationBucket.Local2, 2); //mBaseHPRegenRate

@@ -27,7 +27,7 @@ namespace Buffs
             if (unit is Champion champion)
             {
                 StatsModifier.CooldownReduction.FlatBonus += 0.8f;
-                StatsModifier.Tenacity.FlatBonus += 0.25f;
+                StatsModifier.TenacityCharacter += 0.25f;
                 StatsModifier.MoveSpeed.FlatBonus += 60;
                 //TODO: Add +35% Resistance Against Dinosaurs
                 if (!champion.IsMelee)
@@ -41,7 +41,7 @@ namespace Buffs
                 // Mana/Energy cost reduction, CDR, Tenacity, Movespeed, Dinosaur Resist 
                 SetBuffToolTipVar(buff, 0, 100);
                 SetBuffToolTipVar(buff, 1, StatsModifier.CooldownReduction.FlatBonus * 100);
-                SetBuffToolTipVar(buff, 2, StatsModifier.Tenacity.FlatBonus * 100);
+                SetBuffToolTipVar(buff, 2, StatsModifier.TenacityCharacter * 100);
                 SetBuffToolTipVar(buff, 3, StatsModifier.MoveSpeed.FlatBonus);
                 SetBuffToolTipVar(buff, 4, 35);
             }

@@ -45,7 +45,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             ObjAIBase from,
             bool infiniteDuration = false,
             IEventSource parent = null,
-            BuffVariables buffVariables = null
+            BuffVariables buffVariables = null,
+            bool skipTenacity = false
         )
         {
             if (duration < 0)
@@ -74,7 +75,24 @@ namespace LeagueSandbox.GameServer.GameObjects
             // "Infinite" buffs are just buffs with a permanent-on-the-wire duration; the client needs
             // span >= 20000s to drop the decaying timer ring (see PERMANENT_DURATION). There is no
             // separate server-side never-expire flag anymore — these are removed explicitly by scripts.
-            Duration = infiniteDuration ? PERMANENT_DURATION : duration;
+            var effectiveDuration = infiniteDuration ? PERMANENT_DURATION : duration;
+
+            // Tenacity: shorten reducible CC durations by the target's aggregated PercentCCReduction
+            // (effectiveDuration = base * (1 - tenacity)), matching the 4.20 model — the reduction is
+            // applied once at buff creation and the shortened duration goes out on the wire; the client
+            // does not re-reduce (it uses mPercentCCReduction only to draw the LoC bar). See
+            // docs/TENACITY_IMPLEMENTATION_PLAN.md. skipTenacity avoids double-applying on internal
+            // buff reconstructions (STACKS_AND_CONTINUE) whose durations derive from already-reduced buffs.
+            if (!skipTenacity && !infiniteDuration && BuffType.IsTenacityReducible() && onto != null)
+            {
+                var tenacity = onto.Stats.PercentCCReduction;
+                if (tenacity > 0f)
+                {
+                    effectiveDuration *= 1f - tenacity;
+                }
+            }
+
+            Duration = effectiveDuration;
             Hidden = BuffScript.BuffMetaData.IsHidden;
             if (BuffScript.BuffMetaData.MaxStacks > 254 && BuffType != BuffType.COUNTER)
             {

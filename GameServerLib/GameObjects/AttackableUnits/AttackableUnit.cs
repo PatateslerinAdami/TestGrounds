@@ -3052,8 +3052,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         }
 
                         // Recreate this stack with a queued duration so stack expirations continue sequentially.
+                        // skipTenacity: durationToAdd derives from buffs already tenacity-reduced at their
+                        // own creation; reducing again here would double-apply.
                         var continuingBuff = new Buff(_game, b.Name, durationToAdd, parentBuff.StackCount, b.OriginSpell,
-                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.Variables?.Clone());
+                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.Variables?.Clone(), skipTenacity: true);
 
                         // Reuse the parent slot for this stack group.
                         RemoveBuffSlot(b);

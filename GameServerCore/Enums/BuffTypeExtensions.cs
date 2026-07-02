@@ -66,5 +66,27 @@ namespace GameServerCore.Enums
                 _ => StatusFlags.None,
             };
         }
+
+        /// <summary>
+        /// 4.17 decomp mask <c>kTenacityReducibleCCFlags = 0x12640DA0</c> (BuffEnums.h:55) =
+        /// {Stun, Silence, Taunt, Slow, Snare, Sleep, Fear, Charm, Blind, Flee}, EXTENDED here
+        /// with Polymorph (bit 9) and Disarm (bit 31) per project decision (2026-07-02) to match
+        /// modern/4.20 tenacity behavior (tenacity reduces all CC except airborne/knockup/knockback/
+        /// suppression). Extended mask = 0x12640DA0 | (1&lt;&lt;9) | (1&lt;&lt;31) = 0x92640FA0.
+        /// See docs/TENACITY_IMPLEMENTATION_PLAN.md §2c.
+        /// </summary>
+        private const uint TenacityReducibleMask = 0x92640FA0u;
+
+        /// <summary>
+        /// Whether a buff of this <see cref="BuffType"/> has its duration shortened by tenacity
+        /// (<see cref="GameServerCore.Enums.BuffType"/> is the CC classifier). Applied at buff
+        /// creation as <c>duration *= (1 - tenacity)</c>. Slow is reducible on its DURATION here;
+        /// its magnitude is reduced separately by SlowResistPercent. Suppression, Knockup and
+        /// Knockback are exempt.
+        /// </summary>
+        public static bool IsTenacityReducible(this BuffType type)
+        {
+            return (TenacityReducibleMask & (1u << (int)type)) != 0;
+        }
     }
 }

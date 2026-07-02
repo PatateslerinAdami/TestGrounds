@@ -127,7 +127,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             systemTipsGroup.AddQuest(new UIQuestData
             {
                 QuestId = questManager.GetNextQuestId(),
-                Objective = "Welcome to League Sandbox!",
+                Objective = "Welcome to BloodWell!",
                 Tooltip = "This is a WIP project.",
                 IsTip = true
             });

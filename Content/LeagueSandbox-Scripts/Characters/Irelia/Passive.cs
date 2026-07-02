@@ -91,7 +91,7 @@ public class CharScriptIrelia : ICharScript {
             return;
         }
 
-        _tenacityModifier.Tenacity.FlatBonus = tenacityBonus;
+        _tenacityModifier.TenacityCharacter = tenacityBonus;
         _irelia.AddStatModifier(_tenacityModifier);
     }
 
