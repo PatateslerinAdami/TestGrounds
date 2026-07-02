@@ -7,6 +7,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     {
         public AttackableUnit Owner { get; private set; }
 
+        /// <summary>
+        /// Script-spawned turret: no nav-grid footprint bake (Riot's adjustNaviMesh=false path —
+        /// a dying Azir turret must not leave a permanently blocked disc in lane).
+        /// </summary>
+        protected override bool AdjustsNavMesh => false;
+
         public AzirTurret(
             Game game,
             AttackableUnit owner,

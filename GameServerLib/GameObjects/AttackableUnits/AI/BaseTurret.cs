@@ -88,9 +88,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             base.Die(data);
         }
 
+        /// <summary>
+        /// Riot's obj_AI_Turret::Create adjustNaviMesh parameter: map-placed turrets bake their
+        /// footprint into the nav grid (AITurret.cpp:309 `if (mAdjustNaviMesh)`), script-spawned
+        /// turrets (Azir) don't.
+        /// </summary>
+        protected virtual bool AdjustsNavMesh => true;
+
         public override void OnRemoved()
         {
-            UnbakeFootprint();
+            // Riot freezes the turret nav bake on death: obj_AI_Turret::RemoveFromNavGrid gates
+            // its flag-clear on !IsDead() (AITurret.cpp:629-637), so a destroyed turret's rubble
+            // keeps blocking pathing permanently. The CLIENT runs the same code in its own
+            // movement sim — unbaking server-side would let server paths cut through rubble the
+            // client can't follow (desync/snap at dead towers). Non-death removals still unbake.
+            if (!IsDead)
+            {
+                UnbakeFootprint();
+            }
             base.OnRemoved();
         }
 
@@ -111,14 +126,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             base.OnAdded();
             _game.ObjectManager.AddTurret(this);
             
-            _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, PathfindingRadius);
+            if (AdjustsNavMesh)
+            {
+                // Pathing half of Riot's turret bake: obj_AI_Turret::OnCreate writes
+                // NOT_PASSABLE|SEE_THROUGH over a 140u disc (AITurret.cpp:310
+                // SetFlagInRadius(pos, 140, 0x46)) — 140 is the Riot literal, deliberately larger
+                // than the ~88u pathfinding radius because the A* is cell-based with no per-unit
+                // radius corridor: the bake is pre-inflated by expected unit clearance, exactly
+                // like the inhib/nexus footprints. Baking only PathfindingRadius let unit bodies
+                // clip the turret base.
+                _blockedNavCells = _game.Map.NavigationGrid.AddDynamicBlocker(Position, 140f);
 
-            // Vision half of Riot's turret bake (AITurret.cpp:185 SetFlagInRadius(pos, 140, 0x46)):
-            // mark the turret's own emplacement structure SEE_THROUGH so it never occludes line of
-            // sight (the real turret sees over its own base). Fixes the nexus-turret-only vision
-            // flicker — its baked base blob sits ~110u out, past the LoS-ray start offset, and was
-            // grazing the turret↔enemy ray. 140u is Riot's exact bake radius.
-            _game.Map.NavigationGrid.MarkSeeThroughInRadius(Position, 140f);
+                // Vision half of the same bake: mark the turret's own emplacement structure
+                // SEE_THROUGH so it never occludes line of sight (the real turret sees over its
+                // own base). Fixes the nexus-turret-only vision flicker — its baked base blob sits
+                // ~110u out, past the LoS-ray start offset, and was grazing the turret↔enemy ray.
+                _game.Map.NavigationGrid.MarkSeeThroughInRadius(Position, 140f);
+            }
 
             // TODO: Handle this via map script for LaneTurret and via CharScript for AzirTurret.
             BubbleRegion = new Region
