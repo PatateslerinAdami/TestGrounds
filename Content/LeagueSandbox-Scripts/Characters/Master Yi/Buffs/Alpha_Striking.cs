@@ -13,7 +13,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace Buffs
 {
-    internal class Alpha_Strike: IBuffGameScript
+    internal class Alpha_Striking: IBuffGameScript
     {
 
         private ObjAIBase _alistar;

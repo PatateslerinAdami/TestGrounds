@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Collections.Generic;
+using System.Numerics;
 using GameMaths;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
@@ -18,6 +19,9 @@ public class AlphaStrike : ISpellScript
     private ObjAIBase _masterYi;
     private AttackableUnit _target;
     private Spell _spell;
+    // Targets the chain marked during the dash. Damage is dealt to all of them at once in
+    // OnChainEnd (replay: every Alpha Strike target takes damage in the same tick, not per hop).
+    private readonly List<AttackableUnit> _hitTargets = new();
 
     public SpellScriptMetadata ScriptMetadata => new()
     {
@@ -47,19 +51,44 @@ public class AlphaStrike : ISpellScript
     {
         _target = target;
         _spell = spell;
-        // Fires once after the LAST bounce (chain end), not per hop.
+        _hitTargets.Clear();
+        // OnSpellHit fires per bounce (collects targets); OnChainEnd fires once after the LAST bounce.
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
         ApiEventManager.OnSpellChainMissileEnd.AddListener(this, spell, OnChainEnd);
     }
 
     public void OnSpellCast(Spell spell)
     {
-        AddBuff("Alpha_Strike", 3f, 1, spell, _masterYi, _masterYi);
+        AddBuff("Alpha_Striking", 3f, 1, spell, _masterYi, _masterYi);
     }
 
     private void OnChainEnd(Spell spell, SpellMissile missile)
     {
-        RemoveBuff(_masterYi, "Alpha_Strike");
+        // Apply all bounce damage simultaneously (replay: every target lands in the same tick),
+        // and emit the hit particle on each target at the same moment.
+        foreach (var target in _hitTargets)
+        {
+            if (target == null || target.IsDead)
+            {
+                continue;
+            }
+
+            var ad = _masterYi.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
+            var dmg =
+                (IsValidTarget(_masterYi, target,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions)
+                    ? spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel]
+                    : spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel]) + ad;
+
+            bool isCrit = RollCrit(_masterYi, target);
+            if (isCrit) dmg *= _masterYi.Stats.CriticalDamage.Total;
+            AddParticleTarget(_masterYi, target, "MasterYi_Base_Q_Tar.troy", target);
+            target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK,
+                isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL);
+        }
+        _hitTargets.Clear();
+
+        RemoveBuff(_masterYi, "Alpha_Striking");
         if (!_target.IsDead)
         {
             SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
@@ -71,20 +100,12 @@ public class AlphaStrike : ISpellScript
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        var ad = _masterYi.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
-        
-        var dmg =
-            (IsValidTarget(_masterYi, target,
-                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions)
-                ? spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel]
-                : spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel]) + ad;
-
-
-        bool isCrit = RollCrit(_masterYi, target);
-        if (isCrit) dmg *= _masterYi.Stats.CriticalDamage.Total;
-        AddParticleTarget(_masterYi, target, "MasterYi_Base_Q_Tar.troy", target);
-        target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK,
-            isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL);
+        // Mark only — Alpha Strike deals NO damage per hop. Damage is dealt to every marked target
+        // at once in OnChainEnd (replay: spread=0ms across all bounce targets).
+        if (target != null && !_hitTargets.Contains(target))
+        {
+            _hitTargets.Add(target);
+        }
     }
 }
 

@@ -34,7 +34,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.AttackDamage.BaseValue, ReplicationBucket.Local1, 5); //mBaseAttackDamage
             UpdateFloat(Stats.AbilityPower.BaseValue, ReplicationBucket.Local1, 6); //mBaseAbilityDamage
             UpdateFloat(Stats.Dodge.Total, ReplicationBucket.Local1, 7); //mDodge
-            UpdateFloat(Stats.CriticalChance.Total, ReplicationBucket.Local1, 8); //mCrit
+            // Crit chance is capped at 100% (replay-verified: Ashe's mCrit reads exactly 1.0 while her
+            // Focus guaranteed-crit is active, never base+100%). Excess crit (e.g. the guaranteed-crit
+            // buff stacked on top of item crit) is wasted, not displayed — matches Riot's ceiling.
+            UpdateFloat(Math.Min(Stats.CriticalChance.Total, 1.0f), ReplicationBucket.Local1, 8); //mCrit
             UpdateFloat(Stats.Armor.Total, ReplicationBucket.Local1, 9); //mArmor
             UpdateFloat(Stats.MagicResist.Total, ReplicationBucket.Local1, 10); //mSpellBlock
             UpdateFloat(Stats.HealthRegeneration.Total, ReplicationBucket.Local1, 11); //mHPRegenRate

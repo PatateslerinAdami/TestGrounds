@@ -48,6 +48,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             _chainHitCount = 0;
             Parameters = parameters;
             _bounceRadius = originSpell.SpellData.BounceRadius;
+
+            // MissileFixedTravelTime (JSON): each hop flies for a FIXED time regardless of hop
+            // distance, instead of the raw distance/MissileSpeed calc. Master Yi's Alpha Strike
+            // (MissileFixedTravelTime=0.2) must spend ~0.2s per bounce so a 4-target chain lasts
+            // ~0.9s (replay-verified: cast->damage scales ~0.2-0.25s per target); with MissileSpeed
+            // the hops are near-instant on clustered targets and the whole spell resolves too fast.
+            // Every bounce is a NEW SpellChainMissile whose launch pos is the previous target and
+            // whose TargetUnit is the next one, so computing it here per-segment covers the initial
+            // hop AND all bounces (SpellOrigin stays the origin spell on non-alternating chains).
+            // Mirrors SpellLineMissile. Guarded by >0 so speed-based chains (Sivir W, etc.) are untouched.
+            if (SpellOrigin?.SpellData != null && SpellOrigin.SpellData.MissileFixedTravelTime > 0 && TargetUnit != null)
+            {
+                float distance = Vector2.Distance(Position, TargetUnit.Position);
+                if (distance > 0f)
+                {
+                    _moveSpeed = distance / SpellOrigin.SpellData.MissileFixedTravelTime;
+                }
+            }
         }
 
         public override void SetToRemove()

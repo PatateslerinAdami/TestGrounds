@@ -19,6 +19,7 @@ namespace Buffs
 
         private ObjAIBase _masterYi;
         private Spell _spell;
+        private Particle _p1, _p2;
         private PeriodicTicker _periodicTicker;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
@@ -32,13 +33,20 @@ namespace Buffs
         {
             _masterYi = ownerSpell.CastInfo.Owner;
             _spell = ownerSpell;
-            AddParticleTarget(_masterYi, _masterYi, "masteryi_base_w_cas", _masterYi, flags: 0); 
+            _p1 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Buf.troy", _masterYi, buff.Duration); 
+            _p2 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Cas.troy", _masterYi); 
             ApiEventManager.OnPreTakeDamage.AddListener(this, _masterYi, OnPreTakeDamage);
+            ApiEventManager.OnTakeDamage.AddListener(this, _masterYi, OnTakeDamage);
         }
 
         private void OnPreTakeDamage(DamageData data)
         {
             data.PostMitigationDamage -= data.PostMitigationDamage * (_spell.SpellData.EffectLevelAmount[3][_spell.CastInfo.SpellLevel]/100);
+        }
+
+        private void OnTakeDamage(DamageData data)
+        {
+            AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Dmg.troy", _masterYi); 
         }
 
         public void OnUpdate(float diff)
@@ -51,6 +59,8 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            RemoveParticle(_p1);
+            RemoveParticle(_p2);
             //master yi heals when finishing channeling
             _masterYi.TakeHeal(_masterYi, _spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] + _masterYi.Stats.AbilityPower.Total * _spell.SpellData.Coefficient, HealType.SelfHeal);
         }
