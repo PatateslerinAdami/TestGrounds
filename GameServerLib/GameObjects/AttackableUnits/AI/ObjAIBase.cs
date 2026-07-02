@@ -1472,6 +1472,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
+        /// Rolls a critical strike against <paramref name="target"/> using the SAME logic as auto-attacks
+        /// (crit-karma PRD per target class + uniform-roll fallback). For abilities that can crit like an AA
+        /// (e.g. Master Yi Alpha Strike) — shares the AA crit streams by design ("exactly like auto-attacks").
+        /// The caller applies the crit damage itself: multiply by <c>Stats.CriticalDamage.Total</c> and pass
+        /// <c>DamageResultType.RESULT_CRITICAL</c>.
+        /// </summary>
+        public bool RollCrit(AttackableUnit target) => RollAutoAttackCrit(target);
+
+        /// <summary>
         /// Rolls whether the next auto attack misses, against this unit's <see cref="StatsNS.Stats.MissChance"/>
         /// [0..1]. Blind raises MissChance to 1.0 → guaranteed miss. A flat roll (no Karma smoothing): unlike
         /// crit, Riot does not pseudo-randomize miss. MissChance defaults to 0, so this is false for everyone

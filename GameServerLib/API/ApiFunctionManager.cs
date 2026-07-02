@@ -443,6 +443,26 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Rolls a critical strike for a spell EXACTLY like an auto-attack: uses <paramref name="caster"/>'s
+        /// CriticalChance via the same crit-karma roll as AAs (so it only crits by chance unless crit chance is
+        /// 100%). Returns true on crit. The caller then applies the crit damage — multiply the damage by
+        /// <c>caster.Stats.CriticalDamage.Total</c> BEFORE dealing it, and pass
+        /// <c>DamageResultType.RESULT_CRITICAL</c> to TakeDamage for the crit splash text (that flag is
+        /// visual-only; it does not multiply). Used e.g. by Master Yi's Alpha Strike.
+        /// </summary>
+        /// <param name="caster">The unit whose CriticalChance is rolled.</param>
+        /// <param name="target">The unit being hit (crit-karma stream depends on its class).</param>
+        /// <returns>True if this hit crits.</returns>
+        public static bool RollCrit(ObjAIBase caster, AttackableUnit target)
+        {
+            if (caster == null || target == null)
+            {
+                return false;
+            }
+            return caster.RollCrit(target);
+        }
+
+        /// <summary>
         /// Reports whether or not the specified coordinates are walkable.
         /// </summary>
         /// <param name="x">X coordinaate.</param>

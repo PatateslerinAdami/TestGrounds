@@ -36,6 +36,7 @@ namespace Buffs
 
         private void OnHit(DamageData data)
         {
+            if (!data.IsAutoAttack) return;
             var variables = new BuffVariables();
             variables.Set("damage", data.Damage);
             variables.Set("damageResultType", data.DamageResultType);
