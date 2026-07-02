@@ -46,6 +46,7 @@ public class AlphaStrike : ISpellScript {
         _target = target;
         _spell = spell;
         // Fires once after the LAST bounce (chain end), not per hop.
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
         ApiEventManager.OnSpellChainMissileEnd.AddListener(this, spell, OnChainEnd);
     }
 
@@ -56,9 +57,19 @@ public class AlphaStrike : ISpellScript {
 
     private void OnChainEnd(Spell spell, SpellMissile missile)
     {
-        ApiEventManager.OnSpellChainMissileEnd.RemoveListener(this, spell, OnChainEnd);
         RemoveBuff(_masterYi, "Alpha_Strike");
         SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
+        ApiEventManager.OnSpellHit.RemoveListener(this, spell, OnSpellHit);
+        ApiEventManager.OnSpellChainMissileEnd.RemoveListener(this, spell, OnChainEnd);
+        
+    }
+    
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var ad = _masterYi.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ad;
+        AddParticleTarget(_masterYi, target, "MasterYi_Base_Q_Tar.troy", target);
+        target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, DamageResultType.RESULT_NORMAL);
     }
 }
 
@@ -100,12 +111,11 @@ public class AlphaStrikeTeleport : ISpellScript {
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
         _previousPos = _masterYi.Position;
-      
+        
         const float visualBuffer = 50f;
         var overshoot = _masterYi.CollisionRadius + _target.CollisionRadius + visualBuffer;
         _coords = CalcVector(overshoot, _masterYi.Position, _target.Position);
-        // Replay-verified: CastSpellAns.targetPosition is the landing pos, not the click
-        // target's center. Sets up the wire packet that Spell.Cast will broadcast next.
+        
         var landing3D = new Vector3(_coords.X, _masterYi.GetHeight(), _coords.Y);
         spell.CastInfo.TargetPosition = landing3D;
         spell.CastInfo.TargetPositionEnd = landing3D;
@@ -115,8 +125,6 @@ public class AlphaStrikeTeleport : ISpellScript {
         NotifyTeleport(_masterYi, _coords);
         FaceDirection(_target.Position, _masterYi, true);
     }
-    
-
 
     private static Vector2 CalcVector(in float distance, in Vector2 player, in Vector2 target) {
         return target - (player - target).Normalized() * (!IsWalkable(target.X, target.Y) ? -distance : distance);
