@@ -437,6 +437,19 @@ namespace LeagueSandbox.GameServer.Handlers
             }
             travelDistanceNeededBeforeTargetable = travel;
 
+            // Beeline shortcut (NavGrid::GetClosestAttackPoint, NavigationGrid.cpp:2395-2447): when
+            // even 60% of the walk to the first in-range waypoint exceeds the crow distance from the
+            // attacker to the snapped end cell, the path is a long detour — recommend the snapped
+            // end directly and skip the stand-point commit (the client returns the end-cell center
+            // and sets canReachCloseSpot there).
+            float beelineSq = Vector2.DistanceSquared(attacker.Position, end);
+            if (travel * 0.6f * (travel * 0.6f) > beelineSq)
+            {
+                recommendedAttackPos = end;
+                canReachCloseSpot = true;
+                return true;
+            }
+
             // Stand point = commit ~2 cells INTO attack range: the first path waypoint within
             // (effectiveRange − ~2 cells) of the target, floored at the close radius. DISTANCE-based,
             // NOT "firstInRange + 2 waypoints": our A* path is sparse (corner waypoints), so +2 indices
@@ -783,7 +796,11 @@ namespace LeagueSandbox.GameServer.Handlers
                     {
                         var other = nearby[i];
                         if (other == attacker || other.IsToRemove()) continue;
-                        if (other is AttackableUnit ru && (ru.Status.HasFlag(StatusFlags.Ghosted) || ru.IsTemporarilyGhosted)) continue;
+                        // Dead units neither collide nor block pathing: Riot removes the actor from
+                        // the nav mesh on death (Actor_Common::HandleDeath → RemoveNavigationActor).
+                        // The per-tick responders (CollectHardColliders) already filter IsDead; without
+                        // this a dead-but-not-yet-removed unit still blocked A* route-finding.
+                        if (other is AttackableUnit ru && (ru.IsDead || ru.Status.HasFlag(StatusFlags.Ghosted) || ru.IsTemporarilyGhosted)) continue;
                         // Neighbour pathing footprint = mRadius = PathfindingRadius (NOT the gameplay
                         // CollisionRadius), matching the attacker's effRadius which is derived from
                         // attacker.PathfindingRadius.
@@ -807,7 +824,8 @@ namespace LeagueSandbox.GameServer.Handlers
                 {
                     var other = nearby[i];
                     if (other == attacker || other.IsToRemove()) continue;
-                    if (other is AttackableUnit ou && (ou.Status.HasFlag(StatusFlags.Ghosted) || ou.IsTemporarilyGhosted)) continue;
+                    // Dead units don't block pathing (see the reachability-mode filter above).
+                    if (other is AttackableUnit ou && (ou.IsDead || ou.Status.HasFlag(StatusFlags.Ghosted) || ou.IsTemporarilyGhosted)) continue;
 
                     // Neighbour pathing footprint = mRadius = PathfindingRadius (NOT gameplay CollisionRadius).
                     float aR = other.PathfindingRadius;
