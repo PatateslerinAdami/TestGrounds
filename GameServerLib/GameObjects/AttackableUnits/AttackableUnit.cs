@@ -1787,6 +1787,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
         }
 
+        /// <summary>
+        /// Consecutive-zero-movement tick counter for the active force move — Riot's
+        /// NavigationPath::m_MoveBlockTimeOut (NavigationPath.cpp:150): AssembleWaypointList
+        /// increments it whenever a non-overrideable (forced) path produced no movement this tick
+        /// and calls Stop once it reaches 15 (Actor.cpp:2216-2223) — a wedged/zero-speed force
+        /// move gives up after ~half a second instead of suppressing the unit forever. Lives on
+        /// the path at Riot (fresh per force move); reset here on force-move begin.
+        /// </summary>
+        private int _forceMoveBlockedTicks;
+        private const int FORCE_MOVE_BLOCK_TIMEOUT_TICKS = 15;
+
         private float UpdateForceMovement(float frameTime)
         {
             var MP = MovementParameters;
@@ -1855,6 +1866,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (dir != Vector2.Zero)
             {
                 Position += Vector2.Normalize(dir) * dist;
+            }
+
+            // MoveBlockTimeOut give-up (see _forceMoveBlockedTicks): a force move that produces no
+            // displacement for 15 consecutive-ish ticks (zero speed override with no travel time,
+            // or an unreachable follow) ends instead of holding the unit in the suppressed
+            // force-move state forever. Counted cumulatively per force move, like Riot's
+            // path-lifetime counter. The arrival branches below still take precedence this tick.
+            if (dist <= 0.001f && distRemaining > distPerFrame && timeRemaining > frameTime)
+            {
+                if (++_forceMoveBlockedTicks >= FORCE_MOVE_BLOCK_TIMEOUT_TICKS)
+                {
+                    SetForceMovementState(false, MoveStopReason.ForceMovement);
+                    return frameTime;
+                }
             }
 
             if (distRemaining <= distPerFrame)
@@ -3839,6 +3864,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // stun/root hold on the same capability survives when this dash releases its own hold.
             if (state && MovementParameters != null)
             {
+                // Fresh force move = fresh block counter (Riot: m_MoveBlockTimeOut lives on the
+                // newly constructed force path).
+                _forceMoveBlockedTicks = 0;
                 if (MovementParameters.SetStatus != StatusFlags.None)
                 {
                     SetStatus(MovementParameters.SetStatus, false);
@@ -3850,6 +3878,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 var movementParams = MovementParameters;
                 MovementParameters = null;
+
+                // End-of-force-move terrain validation (Riot AssembleWaypointList end-of-path,
+                // Actor.cpp:2126-2200): forced paths skip per-step passability (they may cross
+                // walls), so a dash CANCELLED mid-wall (stun/death) can strand the unit inside
+                // terrain. Riot validates the final position and snaps via
+                // SnapToNearestPassableCellCenter; we mirror it with the minimal center-out exit
+                // (radius 1 — same choice as the OnCollision terrain handler: the full-body-
+                // clearance exit caused 50-90u jumps). Done BEFORE the end events so scripts
+                // (wall-stuns etc.) read the final position. Normally-ending dashes never trigger
+                // this: their endpoint was terrain-resolved at setup.
+                if (!_game.Map.PathingHandler.IsWalkable(Position, 0f))
+                {
+                    Position = _game.Map.NavigationGrid.GetClosestTerrainExit(Position, 1.0f);
+                }
 
                 if (movementParams.SetStatus != StatusFlags.None)
                 {
