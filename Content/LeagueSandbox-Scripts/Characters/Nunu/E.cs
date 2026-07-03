@@ -34,6 +34,7 @@ public class IceBlast : ISpellScript {
     private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ap                = _nunu.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var dmg            = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
+        AddBuff("Ice_Blast", 2f, 1, spell, target, _nunu);  
         AddParticleTarget(_nunu, target, "yeti_iceBlast_tar.troy", target);
         target.TakeDamage(_nunu, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
         ApiEventManager.OnSpellHit.RemoveListener(this, spell, TargetExecute);
