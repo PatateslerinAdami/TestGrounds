@@ -14,7 +14,7 @@ namespace CharScripts;
 public class CharScriptDiana : ICharScript {
     private ObjAIBase _diana;
     private Spell _spell;
-    private int _counter;
+    private int _counter = 0;
 
     public StatsModifier StatsModifier { get; } = new();
 
@@ -31,22 +31,16 @@ public class CharScriptDiana : ICharScript {
 
     private void OnHit(DamageData data)
     {
-        AddBuff("DianaPassive", 4f, 1, _spell, _diana, _diana);
-        if (_diana.GetBuffsWithName("DianaPassive").Count == 3)
+        _counter++;
+        LogDebug("" + _counter);
+        switch (_counter)
         {
-            AddParticleTarget(_diana, _diana, "Diana_Base_P.troy", data.Target);
-            var ap = _diana.Stats.AbilityPower.Total * 0.8f;
-            var dmg = 20f + 5 * (_diana.Stats.Level - 1) + ap;
-            foreach (var unit in GetUnitsInCone(_diana, _diana.Position, data.Target.Position - _diana.Position, 175f, 180f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes))
-            {
-                unit.TakeDamage(_diana, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
-            }
-
-            var buffs = _diana.GetBuffsWithName("DianaPassive");
-            foreach (var buff in buffs)
-            {
-                RemoveBuff(buff);
-            }
+            case 2:
+                AddBuff("DianaPassive", 4f, 1, _spell, _diana, _diana);
+                break;
+            case 3:
+                _counter = 0;
+                break;
         }
     }
 }
