@@ -37,10 +37,9 @@ public class Consume : ISpellScript {
     public void OnSpellPostCast(Spell spell)
     {
         
-        var dmg            = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel];
+        var dmg            = _target.HasBuff("ResistantSkin") ? spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel] : spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel];
         var ap = _nunu.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var heal = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
-        AddBuff("Ice_Blast", 2f, 1, spell, _nunu, _nunu);  
         AddParticleTarget(_nunu, _target, "yeti_Consume_tar.troy", _target);
         _target.TakeDamage(_nunu, dmg, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_SPELL, false);
         _nunu.TakeHeal(_nunu, heal, HealType.SelfHeal);
@@ -51,11 +50,21 @@ public class Consume : ISpellScript {
             // therefore never equals "SRU_Blue" — the switch has to use monster.Model.
             string buffName = monster.Model switch
             {
-                // 4.20 SR (Map11) camp models
-                "SRU_Blue" or "SRU_Krug" or "SRU_Gromp" => "NunuQBuffGolem",
-                "SRU_Red" or "SRU_Dragon" => "NunuQBuffLizard",
-                "SRU_Razorbeak" => "NunuQBuffWraith",
-                "SRU_Murkwolf" => "NunuQBuffWolf",
+                // Patch 4.20 Consume categories (LoL wiki), Map11 SRU camp models:
+                // Rough Rock Candy (size + health + heal): Blue Sentinel/Sentry, Red Brambleback/
+                // Cinderling, Ancient Krug/Krug.
+                "SRU_Blue" or "SRU_BlueMini" or "SRU_BlueMini2"
+                    or "SRU_Red" or "SRU_RedMini"
+                    or "SRU_Krug" or "SRU_KrugMini" => "NunuQBuffGolem",
+                // Ornery Monster Tails (bonus magic damage on attacks/abilities): Baron, Dragon,
+                // Gromp, Vilemaw. (4.20 moved Gromp here and Red out to Rough Rock Candy.)
+                "SRU_Baron" or "SRU_Dragon" or "SRU_Gromp" => "NunuQBuffLizard",
+                // Spooky Mystery Meat (MS on kill): Crimson Raptor/Raptor, Greater Murk Wolf/Murk
+                // Wolf, Rift Scuttler. All 4.20 SR camps here are animals → Wolf ("Undead" Wraith
+                // variant has no SR camp, so it only fires for the legacy models below).
+                "SRU_Razorbeak" or "SRU_RazorbeakMini"
+                    or "SRU_Murkwolf" or "SRU_MurkwolfMini"
+                    or "Sru_Crab" => "NunuQBuffWolf",
                 // legacy (Map1) models
                 "AncientGolem" or "Golem" or "SmallGolem" => "NunuQBuffGolem",
                 "LizardElder" or "YoungLizard" or "Dragon" or "Worm" => "NunuQBuffLizard",

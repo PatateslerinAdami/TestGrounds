@@ -25,9 +25,14 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _nunu = ownerSpell.CastInfo.Owner;
-            StatsModifier.Size.PercentBaseBonus = ownerSpell.SpellData.EffectLevelAmount[5][ownerSpell.CastInfo.SpellLevel];
-            StatsModifier.HealthPoints.FlatBonus = _nunu.Stats.HealthPoints.Total * ownerSpell.SpellData.EffectLevelAmount[5][ownerSpell.CastInfo.SpellLevel];
+            var pct = ownerSpell.SpellData.EffectLevelAmount[5][ownerSpell.CastInfo.SpellLevel];
+            var bonusHealth = _nunu.Stats.HealthPoints.Total * pct;
+            StatsModifier.Size.PercentBaseBonus = pct;
+            StatsModifier.HealthPoints.FlatBonus = bonusHealth;
             unit.AddStatModifier(StatsModifier);
+            // Wiki: "...bonus health as well as healing for the amount gained." AddStatModifier raised
+            // MaxHP by bonusHealth first, so this heal fills exactly that new headroom.
+            _nunu.TakeHeal(_nunu, bonusHealth, HealType.SelfHeal);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
