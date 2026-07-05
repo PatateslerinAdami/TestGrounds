@@ -14,10 +14,19 @@ namespace Spells;
 
 public class SivirE : ISpellScript {
 
+    private ObjAIBase _sivir;
     public SpellScriptMetadata ScriptMetadata => new() {
+        NotSingleTargetSpell = true,
+        TriggersSpellCasts = true,
+        IsDamagingSpell = false
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
+        _sivir = owner;
+    }
 
+    public void OnSpellCast(Spell spell)
+    {
+        AddBuff("SivirE", 1.5f, 1, spell, _sivir, _sivir);
     }
 }

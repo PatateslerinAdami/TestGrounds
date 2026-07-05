@@ -272,6 +272,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 return;
             }
+
+            // Spell-shield gate — replay-verified engine behavior (project_spell_shield_system
+            // memory, 3 replays 2026-07-05): a non-ally, non-AA spell execution on a target with
+            // an active SPELL_SHIELD buff is blocked ENTIRELY — no OnSpellHit, no damage, no
+            // debuffs, nothing on the wire except the shield's own BuffRemove2. Basic attacks
+            // pass through (replay: Sona AA damages through a standing Sivir E). Executions with
+            // DoesntBreakShields bypass the gate: effect applies AND the shield stays untouched
+            // (SpellMetaData.txt: "the spell's execution won't break shields" — Absolute Zero,
+            // TormentedSoil ticks, sub-executions like KarthusLayWasteDead*).
+            if (!CastInfo.IsAutoAttack
+                && Script.ScriptMetadata?.DoesntBreakShields != true
+                && u.ConsumeSpellShield(this))
+            {
+                return;
+            }
             if (SpellData.HaveHitEffect && !string.IsNullOrEmpty(SpellData.HitEffectName) && !CastInfo.IsAutoAttack && HasEmptyScript)
             {
                 if (SpellData.HaveHitBone)

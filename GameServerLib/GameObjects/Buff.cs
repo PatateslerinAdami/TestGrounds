@@ -183,6 +183,11 @@ namespace LeagueSandbox.GameServer.GameObjects
             // Apply this buff's status effects (explicit SetStatusEffect + BuffType-derived CC state)
             // the same tick it activates, instead of waiting for the target's next UpdateBuffs.
             TargetUnit?.RecomputeBuffEffects();
+
+            // After the buff is fully registered and active, let buffs already on this unit react
+            // (Riot buff-script OnBuffAdded hook; spell-shields consume break-markers here — the
+            // handler may synchronously DeactivateBuff this very buff, callers check Elapsed()).
+            ApiEventManager.OnUnitBuffActivated.Publish(TargetUnit, this);
         }
 
         public void DeactivateBuff()

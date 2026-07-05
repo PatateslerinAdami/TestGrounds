@@ -15,7 +15,10 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.SPELL_SHIELD,
+            // NOT BuffType.SPELL_SHIELD: Barrier is a plain HP absorb. SPELL_SHIELD now drives the
+            // engine spell-shield gate (AttackableUnit.ConsumeSpellShield) — mislabeling Barrier as
+            // one would make it BLOCK an enemy ability outright instead of absorbing damage.
+            BuffType = BuffType.INTERNAL,
             IsHidden = false,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1,

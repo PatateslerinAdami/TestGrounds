@@ -10,6 +10,7 @@ using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
@@ -2442,19 +2443,33 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _timeSinceLastSync += delta;
                 float keepaliveDist = this is Champion ? CHAMPION_KEEPALIVE
                     : (_inHardCollision || _inBodyContact) ? CONTACT_KEEPALIVE : NONCHAMPION_KEEPALIVE;
-                // NO travel keepalive for LaneMinions (2026-07-05, wobble invention audit —
-                // VERIFIED in-game: the marching wobble disappeared). Riot's wire is ONE
-                // full-leg path per lane node (776-1341u) and then SILENCE until the next node
-                // (re-anchor rate 12.8/min vs our former ~44-48/min) — every keepalive re-anchor
-                // hard-snaps the client to wp0 (ActorClient.cpp:169) AND replaces its path,
-                // resetting the client's local collision separation; that churn was the visible
-                // marching wobble. The distance-keepalive layer was a server invention. For lane
-                // minions the 12u drift-RESYNC above is the only correction net (fires
-                // immediately on real server-side collision divergence) — requires the full-leg
-                // wire runway in GetCenteredWaypoints so the client's path never runs dry
-                // mid-leg. Champions/other units keep their measured cadences.
-                bool isLaneMinion = this is LaneMinion;
-                if (!isLaneMinion && Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
+                // LANE MINION CADENCE (2026-07-05, two-step calibration):
+                //
+                // Step 1 (wobble fix, verified in-game): the old 325u/100u keepalive PLUS the
+                // rolling-segment re-issues REPLACED the client's path mid-leg several times per
+                // leg — that churn was the marching wobble. Removed entirely (silence during the
+                // leg, 12u drift-resync as the only net) → wobble gone.
+                //
+                // Step 2 (tt125 "minions accelerate dash-like the further they advance"): full
+                // silence overshot. The 4.x client SIMULATES its minion copies locally (own
+                // collision/avoidance — shared-sim heritage) and that local sim drifts; Riot's
+                // own TT replays measure the drift at ~31u/s (minionsnap on Riot wire: anchor
+                // snap p50=31.5u p90=116u at a p50 0.7-0.9s MOVING-minion anchor cadence) and
+                // rein it in every ~1-2s. With our anchors 3.4-5s apart the client sim ran free
+                // long enough to visibly accelerate away (~175u/window worst case) before an
+                // anchor pulled it back. So: travel keepalive REINSTATED for lane minions at
+                // 650u (~2s) — a pure same-path re-anchor (full remaining leg, wp0 re-seeded;
+                // no truncation, no path replacement — the wobble mechanics stay gone). Bounds
+                // client-sim drift to ~2s (~70u, sub-perceptual) while staying far sparser than
+                // the old wobble regime. If the wobble RETURNS at this cadence, that is the
+                // final proof that only a persistent velocity-model port (Riot m_Movement,
+                // Stage C) reconciles the two — cadence tuning cannot.
+                const float LANEMINION_KEEPALIVE = 650f;
+                if (this is LaneMinion)
+                {
+                    keepaliveDist = LANEMINION_KEEPALIVE;
+                }
+                if (Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
                 {
                     _movementUpdated = true;
                 }
@@ -3638,6 +3653,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public bool HasBuffType(BuffType type)
         {
             return BuffList != null && BuffList.Find(b => b.BuffType == type) != null;
+        }
+
+        /// <summary>
+        /// Engine spell-shield consume for a non-ally spell execution hitting this unit.
+        /// Replay-verified Riot behavior (project_spell_shield_system memory): the break is
+        /// wire-INVISIBLE (no SpellShieldMarker packet exists in any replay) — the only wire trace
+        /// is the shield buff's own BuffRemove2. Ally-cast executions never interact with spell
+        /// shields (they always hit); enemy AND neutral (jungle-monster) executions break —
+        /// policy decision 2026-07-05, covered by the same-team check below.
+        /// The shield's buff script reacts via <see cref="ApiEventManager.OnSpellShieldBroken"/>
+        /// (self-removal + on-block FX/mana); if it doesn't deactivate itself, we force-remove it.
+        /// </summary>
+        /// <param name="breaker">The spell whose execution is attempting to break the shield.</param>
+        /// <returns>True if a spell shield consumed the execution (caller must skip ALL effects).</returns>
+        public bool ConsumeSpellShield(Spell breaker)
+        {
+            if (breaker?.CastInfo?.Owner == null || breaker.CastInfo.Owner.Team == Team)
+            {
+                return false;
+            }
+
+            Buff shield = BuffList?.Find(b => b.BuffType == BuffType.SPELL_SHIELD && !b.Elapsed());
+            if (shield == null)
+            {
+                return false;
+            }
+
+            ApiEventManager.OnSpellShieldBroken.Publish(shield, breaker);
+            if (!shield.Elapsed())
+            {
+                shield.DeactivateBuff();
+            }
+            return true;
         }
 
         /// <summary>

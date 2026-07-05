@@ -18,6 +18,10 @@ public class TormentedSoil : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts = true,
+        // 4.20 TormentedSoil.lua: the pool ticks pass through spell shields without consuming
+        // them (SpellMetaData.txt's "won't break shields" case). Matters once the W damage is
+        // routed through Spell.ApplyEffects (its spell-shield gate reads this flag).
+        DoesntBreakShields = true,
     };
 
     public void OnSpellPostCast(Spell spell) {

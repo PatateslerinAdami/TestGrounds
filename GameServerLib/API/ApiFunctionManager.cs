@@ -752,7 +752,45 @@ namespace LeagueSandbox.GameServer.API
         {
             target.RemoveBuffsByType(type);
         }
-        
+
+        /// <summary>
+        /// Whether the given buff is a spell-shield break attempt. Riot uses two coexisting patterns
+        /// (see project_spell_shield_system memory): the generic "SpellShieldMarker" applied via
+        /// BB <c>BBBreakSpellShields</c> (BuildingBlocksBase.lua:3471), and per-spell
+        /// "&lt;Champ&gt;&lt;Spell&gt;SpellShieldCheck" window buffs (KatarinaQMark/VarusQ/E/R/YasuoQ/
+        /// LissandraR, all present as 4.20 luaobjs) for spells with conditional follow-up effects.
+        /// Spell-shield buff scripts match on this from their OnUnitBuffActivated hook.
+        /// </summary>
+        public static bool IsSpellShieldBreaker(Buff buff)
+        {
+            return buff.Name == "SpellShieldMarker" || buff.Name.EndsWith("SpellShieldCheck");
+        }
+
+        /// <summary>
+        /// Script-facing equivalent of BB <c>BBBreakSpellShields</c> (BuildingBlocksBase.lua:3471) for
+        /// break attempts OUTSIDE the automatic <c>Spell.ApplyEffects</c> gate (which every spell
+        /// execution already passes through — scripts normally do NOT need to call this).
+        /// Routes through <see cref="AttackableUnit.ConsumeSpellShield"/>: wire-silent, ally-safe,
+        /// notifies the shield script via OnSpellShieldBroken. Replay-verified: Riot's break sends NO
+        /// SpellShieldMarker packet — the marker buff name survives only as BB-script legacy
+        /// (nothing in the 4.20 corpus calls the BB function; see project_spell_shield_system memory).
+        /// </summary>
+        /// <returns>
+        /// True if the effect may proceed (no spell shield blocked it), false if a shield consumed the hit.
+        /// Spells whose script metadata sets <c>DoesntBreakShields</c> (SpellMetaData.txt: "the spell's
+        /// execution won't break shields", e.g. Absolute Zero ticks) never attempt the break and always proceed.
+        /// </returns>
+        public static bool BreakSpellShields(AttackableUnit target, Spell originSpell)
+        {
+            if (originSpell?.Script?.ScriptMetadata?.DoesntBreakShields == true)
+            {
+                return true;
+            }
+
+            return !target.ConsumeSpellShield(originSpell);
+        }
+
+
         /// <summary>
         ///     Whether the specified unit is within its team's fountain area.
         /// </summary>

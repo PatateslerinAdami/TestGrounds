@@ -173,10 +173,11 @@ namespace PacketDefinitions420
             // measured), so the client never runs dry there either.
             const float NonChampionRunway = 800f;
             // LaneMinions send the FULL remaining route (2026-07-05, wobble invention audit):
-            // their travel keepalive is disabled (see AttackableUnit), so nothing tops the
-            // client's path up mid-leg — a runway cap would make the client run dry on legs
-            // > 800u. Riot sends the full leg to the node (776-1341u measured), so this is
-            // also the faithful wire shape.
+            // Riot sends the full leg to the node (776-1341u measured), and their 650u travel
+            // keepalive (see AttackableUnit) must be a pure same-path re-anchor — carrying the
+            // whole remaining leg keeps every re-anchor identical in shape to the original
+            // issue (wp0 re-seeded, rest unchanged) and the client can never run its path dry
+            // between anchors regardless of future cadence tuning.
             bool needsFullRoute = unit.FullPathBroadcastPending
                 || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Champion
                 || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.LaneMinion;

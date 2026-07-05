@@ -318,8 +318,28 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<ObjAIBase, Emotions> OnEmote
             = new Dispatcher<ObjAIBase, Emotions>();
 
+        // Mirrors the Riot buff-script OnBuffAdded hook: a buff on a unit observing OTHER buffs
+        // being activated on that same unit. Primary consumer: spell-shield buffs (BuffType.SPELL_SHIELD,
+        // e.g. SivirE) consuming incoming "SpellShieldMarker"/"*SpellShieldCheck" break-attempt buffs
+        // (BuildingBlocksBase.lua BBBreakSpellShields; see project_spell_shield_system memory).
+        // Keyed by the receiving unit, carrying the newly activated buff. Published from Buff.ActivateBuff,
+        // i.e. only for genuinely new instances (new-add / REPLACE_EXISTING) — not for RENEW/STACK refreshes.
+        public static Dispatcher<AttackableUnit, Buff> OnUnitBuffActivated
+            = new Dispatcher<AttackableUnit, Buff>();
+
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
+
+        // Fires when the engine spell-shield gate (Spell.ApplyEffects → AttackableUnit.
+        // ConsumeSpellShield) blocks a hostile spell execution with an active SPELL_SHIELD buff.
+        // Keyed by the shield BUFF; data = the blocked spell. The shield's buff script does its
+        // on-block reaction here (self-removal, on-block FX, Sivir-E mana). If no handler
+        // deactivates the shield buff, ConsumeSpellShield force-removes it as fallback.
+        // Engine-convenience event: Riot's server-internal notification path is unknown — replays
+        // show only the shield's BuffRemove2 plus server-sent on-block FX at the consume instant
+        // (project_spell_shield_system memory, replay-verified 2026-07-05).
+        public static Dispatcher<Buff, Spell> OnSpellShieldBroken
+            = new Dispatcher<Buff, Spell>();
 
         public static Dispatcher<Shield> OnShieldBreak
             = new Dispatcher<Shield>();
