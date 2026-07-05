@@ -1279,6 +1279,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public void Channel()
         {
             State = SpellState.STATE_CHANNELING;
+
+            // A STALE pre-cast attack order must not survive into the channel: ChannelCancelCheck
+            // treats the Attack* order group as attack INPUT and would cancel the channel on its
+            // first tick (repro: autoattack, then cast Sion Q -> charge instantly cancelled). The
+            // cast consumed the order — replace it with CastSpell, exactly what the
+            // !CanMoveWhileChanneling path already did in Cast(); for CanMoveWhileChanneling
+            // spells nothing else clears it. A NEW attack click during the channel still cancels
+            // (it arrives after this and re-sets the order).
+            var staleOrder = CastInfo.Owner.MoveOrder;
+            if (staleOrder == OrderType.AttackTo
+                || staleOrder == OrderType.AttackTerrainOnce
+                || staleOrder == OrderType.AttackTerrainSustained
+                || staleOrder == OrderType.PetHardAttack)
+            {
+                CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
+            }
+
             // Server-side timer uses MAX HOLD duration (>= bar-fill duration). For charge spells
             // like Varus Q this is 4s (= ChargeMaxHoldDuration), while the wire DesignerTotalTime
             // stays at 1.5s (= ChargeDuration, drives client bar fill).
@@ -2034,9 +2051,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
                 {
-                    cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                    cd *= 1 + CastInfo.Owner.Stats.GetClampedCooldownReduction();
                 }
-                return cd;
+                // Floor the final cooldown at gcd_CooldownMinimum (Constants.var: "Minimum cooldown time
+                // for a spell", 0.0). Defensive: the CDR clamp above already prevents a negative multiplier.
+                return Math.Max(cd, GlobalData.GlobalCharacterDataConstants.CooldownMinimum);
             }
 
             return 0.0f;
@@ -2055,7 +2074,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
             {
-                cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                cd *= 1 + CastInfo.Owner.Stats.GetClampedCooldownReduction();
             }
 
             return cd;
@@ -2458,7 +2477,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 if (!ignoreCDR)
                 {
-                    newCd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                    newCd *= 1 + CastInfo.Owner.Stats.GetClampedCooldownReduction();
                 }
 
                 if (!silent)

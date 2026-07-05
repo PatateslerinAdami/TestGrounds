@@ -59,7 +59,7 @@ namespace Spells
 
         public void OnSpellChargeStart(Spell spell)
         {
-            b = AddBuff("SionR", 8f, 1, spell, _owner, _owner);
+            b = AddBuff("SionR", 8.5f, 1, spell, _owner, _owner);
             _isCharging = true;
             _chargeTime = 0f;
             _waypointUpdateTimer = 0f;
@@ -153,14 +153,16 @@ namespace Spells
                     if ((from unit in nearbyUnits
                             let dist = Vector2.Distance(_owner.Position, unit.Position)
                             where dist <= _unitHitboxRadius + unit.CollisionRadius
-                            select unit).Any())
+                            select unit).FirstOrDefault() != null)
                     {
+                        
                         collided = true;
                     }
                 }
 
                 if (collided)
                 {
+                    
                     // Collision-triggered slam — clear charge HUD; impact lands at Sion's
                     // current position (where the collision happened, no leap).
                     spell.FireCharge(_owner.Position);
@@ -236,6 +238,7 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
+                            PlayAnimation(_owner, "Spell4_STOP", flags: AnimationFlags.Lock | AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk6 | AnimationFlags.Junk7);
                             ForceMove(_owner, _owner.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0.0f,
                                 facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
                             _owner.RegisterTimer(new GameScriptTimer(GetForceMoveTravelTime(LeapDistance, LeapSpeed), () => { OnHit(); }));

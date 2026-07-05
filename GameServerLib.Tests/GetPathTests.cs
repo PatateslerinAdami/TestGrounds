@@ -28,6 +28,21 @@ public class GetPathTests
         return new NavigationGrid(Map1NavGridPath);
     }
 
+    /// <summary>
+    /// The path must END within one cell (Chebyshev) of the requested goal. Exact-goal equality
+    /// no longer holds: the ported TrimNavigationPath (NavigationMesh.cpp:524-571) folds the goal
+    /// into the last kept cell-center vertex when they are within cellSize of each other — Riot's
+    /// server does the same, so units stop up to ~one cell short of the exact click point.
+    /// </summary>
+    private static void AssertEndsAtGoal(NavigationGrid grid, IReadOnlyList<Vector2> path, Vector2 to,
+        string context = "")
+    {
+        var end = path[^1];
+        Assert.True(
+            Math.Abs(end.X - to.X) <= grid.CellSize && Math.Abs(end.Y - to.Y) <= grid.CellSize,
+            $"{context} path ends at {end}, more than one cell from goal {to}");
+    }
+
     /// <summary>Find a walkable, non-grass cell — usable as a path endpoint.</summary>
     private static Vector2 FindWalkablePos(NavigationGrid grid, int approxCellX, int approxCellY)
     {
@@ -62,7 +77,7 @@ public class GetPathTests
         Assert.NotNull(path);
         Assert.True(path.Count >= 2);
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
     }
 
     [Fact]
@@ -77,7 +92,7 @@ public class GetPathTests
         Assert.NotNull(path);
         Assert.True(path.Count >= 2);
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
     }
 
     [Fact]
@@ -97,7 +112,7 @@ public class GetPathTests
         Assert.NotNull(path1);
         Assert.NotNull(path2);
         Assert.Equal(p2From, path2[0]);
-        Assert.Equal(p2To, path2[^1]);
+        AssertEndsAtGoal(grid, path2, p2To);
     }
 
     [Fact]
@@ -119,7 +134,7 @@ public class GetPathTests
                 var path = grid.GetPath(from, to);
                 Assert.NotNull(path);
                 Assert.Equal(from, path[0]);
-                Assert.Equal(to, path[^1]);
+                AssertEndsAtGoal(grid, path, to);
             }
         }
     }
@@ -175,7 +190,7 @@ public class GetPathTests
             Assert.NotNull(path);
             Assert.True(path.Count >= 2, $"({fx},{fy})->({tx},{ty}): path.Count={path.Count}");
             Assert.Equal(from, path[0]);
-            Assert.Equal(to, path[^1]);
+            AssertEndsAtGoal(grid, path, to, $"({fx},{fy})->({tx},{ty}):");
         }
     }
 
@@ -255,7 +270,7 @@ public class GetPathTests
             var path = grid.GetPath(current, to);
             Assert.NotNull(path);
             Assert.Equal(current, path[0]);
-            Assert.Equal(to, path[^1]);
+            AssertEndsAtGoal(grid, path, to);
             var halfwayIdx = Math.Max(1, path.Count / 2);
             current = path[halfwayIdx];
             iterations++;
@@ -263,12 +278,14 @@ public class GetPathTests
         Assert.True(iterations > 0, "Replanning loop did not execute at all");
     }
 
-    // Stronger Phase-4 invariant: SmoothPath drops a waypoint when the next-next cell has clear
-    // LOS at radius=0, so any consecutive pair in the returned path must have clear LOS by
-    // construction. A violation would mean the chain walk produced a non-adjacent cell pair —
-    // the failure mode that the cross-direction AdjustCell crossover (S1:7951 / S4:11670) or
-    // the meeting-cell forward-prefix-drop would introduce. Both are addressed by the Phase 4
-    // popped-cell-anchor reconstruction.
+    // Construction invariant (updated for the TrimNavigationPath port): every consecutive pair
+    // in the returned path was validated by IsGridLineOfSightClear (the client's own
+    // GridLineOfSightTest walk) during the string-pull, so it must still pass that test here.
+    // A violation means the chain walk produced a garbage jump (the cross-direction AdjustCell
+    // crossover / meeting-cell prefix-drop failure modes) or the trim collapsed across a wall.
+    // NOTE: legs are deliberately NOT required to pass the supercover CastCircle — Riot's walk
+    // tolerates diagonal corner-touches the supercover flags, and that tolerance is what removes
+    // the cell-center staircases at wall corners (see IsGridLineOfSightClear doc).
     [Fact]
     public void Path_ConsecutiveWaypointsHaveLOS_ManyEndpointPairs()
     {
@@ -281,8 +298,14 @@ public class GetPathTests
             Assert.NotNull(path);
             for (int i = 1; i < path.Count; i++)
             {
-                Assert.False(
-                    grid.CastCircle(path[i - 1], path[i], 0f, translate: true),
+                // A leg was validated by ONE of the two construction validators: the straight-LOS
+                // shortcut path (n=2) by the supercover CastCircle, trimmed A* legs by the walk.
+                // Neither test implies the other (walk tolerates corner-touches the supercover
+                // flags; walk's ascending sawtooth can probe off-line cells the supercover never
+                // visits), so accept a leg that is clear under either.
+                Assert.True(
+                    grid.IsGridLineOfSightClear(path[i - 1], path[i])
+                        || !grid.CastCircle(path[i - 1], path[i], 0f, translate: true),
                     $"Leg {i - 1}->{i} blocked between {path[i - 1]} and {path[i]} for ({fx},{fy})->({tx},{ty})"
                 );
             }
@@ -356,7 +379,7 @@ public class GetPathTests
 
         Assert.NotNull(path);
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
 
         // Convert intermediate waypoints back to cells and confirm none are in the wall set.
         // SmoothPath drops cells with LOS, so endpoints are world coords; intermediate are
@@ -392,7 +415,7 @@ public class GetPathTests
         Assert.NotNull(path);
         Assert.False(path.IsPartial, "Goal-cell exemption should produce a full path, not partial");
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
     }
 
     [Fact]
@@ -499,7 +522,7 @@ public class GetPathTests
         Assert.NotNull(path);
         Assert.False(path.IsPartial, "Near-goal radius exemption should produce a full path");
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
     }
 
     [Fact]
@@ -554,7 +577,7 @@ public class GetPathTests
 
         Assert.NotNull(path);
         Assert.Equal(from, path[0]);
-        Assert.Equal(to, path[^1]);
+        AssertEndsAtGoal(grid, path, to);
 
         // Path traversal of the wall is permitted under the skip optimization. The exact
         // path depends on heuristic biases, but at least one waypoint within the wall set
@@ -596,7 +619,7 @@ public class GetPathTests
             Assert.NotNull(path);
             Assert.True(path.Count >= 2);
             Assert.Equal(center, path[0]);  // first waypoint is unit's actual stuck position
-            Assert.Equal(target, path[^1]);
+            AssertEndsAtGoal(grid, path, target);
         }
         finally
         {

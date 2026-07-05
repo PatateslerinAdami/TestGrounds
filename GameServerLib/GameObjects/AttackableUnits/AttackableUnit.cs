@@ -38,6 +38,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         //TODO: Find out where this variable came from and if it can be unhardcoded
         internal const float DETECT_RANGE = 475.0f;
 
+        // Assist bookkeeping (Riot obj_AI_Base::m{Allied,Enemy}AssistMarkers, hoisted from
+        // ObjAIBase to AttackableUnit: the 4.20 wire carries assist lists for turret AND
+        // dampener deaths, and dampeners are plain AttackableUnits). Only hero sources leave
+        // markers (S1 AddAssistMarker gates on IsHero); any attackable victim collects them.
+        internal readonly List<AssistMarker> AlliedAssistMarkers = new List<AssistMarker>();
+        internal readonly List<AssistMarker> EnemyAssistMarkers = new List<AssistMarker>();
+
         /// <summary>
         /// Variable containing all data about the this unit's current character such as base health, base mana, whether or not they are melee, base movespeed, per level stats, etc.
         /// </summary>
@@ -211,11 +218,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private int TempGhostThreshold => (this as ObjAIBase)?.UsesFastPath == true ? 45 : 15;
         public bool IsTemporarilyGhosted => _stuckGhostFrames > TempGhostThreshold;
 
-        // Last GameTime (ms) a move order was broadcast for this unit. Drives the move-order
-        // rate-limiter in HandleMove: held-mouse issues a MoveTo every mouse-move frame; we
-        // broadcast at most once per streaming window and fold the rest into the 96ms stream.
-        public float LastMoveOrderBroadcastTime { get; set; }
-
         // NOTE (D11, 2026-06-21): the former `_collisionSlideSign` latch + `ResolveSlideSign`
         // helper were removed with the D0 collision rewrite. The default per-tick responder is
         // now the path STEER (SteerPathAroundColliders), which recomputes its slide sign every
@@ -254,7 +256,34 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // around the wave instead of clipping through on a straight n=2 path. _collisionRepathMs is
         // that throttle accumulator.
         private bool _inHardCollision;
+
+        /// <summary>
+        /// True while this MOVING unit's body overlaps another unit's body this tick — unlike
+        /// <see cref="_inHardCollision"/> this has NO deep-overlap floor: the collider collection
+        /// faithfully ignores neighbours closer than 10u (distSq &gt;= 100, Actor.cpp:296), which
+        /// makes a FUSED pair invisible to it — exactly the units that need dense re-anchoring
+        /// (their client copies diverge the most). Drives the contact keepalive cadence only.
+        /// </summary>
+        private bool _inBodyContact;
+
+        /// <summary>
+        /// True while the active <see cref="Waypoints"/> came from an actor-aware body-routing /
+        /// unstuck repath (skipLineOfSight A*). Such a path already routes AROUND the collider
+        /// bodies — running the gated position-push on top of it makes the two FIGHT: the push
+        /// shoves the unit off the routed path ~9-15u per tick in alternating directions, every
+        /// shove breaches the 12u drift-resync, and the client gets hard-snapped sideways several
+        /// times a second (the "clumped minions glitch/teleport into each other" symptom,
+        /// wire103/coll103 2026-07-03: resync snaps median 17u / p90 49u). While on a routed path
+        /// the push is therefore suppressed; the replicated STEER and the terrain gates stay
+        /// active. Cleared whenever any other path is accepted (SetWaypoints). Note the temp-ghost
+        /// escalation lives inside the suppressed block, but in the position model bodies never
+        /// impede the walk itself — without pushes there is no body-wedge for it to escape.
+        /// </summary>
+        private bool _pathFromBodyRouting;
         private float _collisionRepathMs;
+        // Position at the start of the current collision-repath window; the reroute only fires
+        // when travel over the window collapsed below half the expected stride (progress gate).
+        private Vector2 _collisionRepathAnchor;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
@@ -525,16 +554,41 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             const float COLLISION_REPATH_INTERVAL_MS = 250f; // ~ Riot s_TimeBetweenRepaths; tunable
             if (_inHardCollision && !IsPathEnded() && CanChangeWaypoints())
             {
+                if (_collisionRepathMs == 0f)
+                {
+                    _collisionRepathAnchor = Position;
+                }
                 _collisionRepathMs += diff;
                 if (_collisionRepathMs >= COLLISION_REPATH_INTERVAL_MS)
                 {
+                    // PROGRESS GATE (2026-07-05, tt119 "wizard curves behind its own wave"): the
+                    // comment above always said "in collision AND NOT MAKING WAYPOINT PROGRESS" —
+                    // but the progress half was never implemented, so a TRAILING minion moving at
+                    // full speed ~65-70u behind its wave (permanently at the hard-collider
+                    // threshold to the ally ahead) got an actor-aware curve around its own wave
+                    // re-issued every 250ms (path119: 'other' issues at 250-300ms cadence). At
+                    // Riot mere contact triggers nothing for a full-speed follower: the repath
+                    // needs m_ForceRefreshPath (stuck-with-repulse = collapsed movement), the
+                    // n=2 steer is a no-op and the push is path-size-gated. Only reroute when
+                    // the unit actually LOST at least half its expected travel over the window.
+                    float movedInWindow = Vector2.Distance(Position, _collisionRepathAnchor);
+                    float expectedInWindow = GetMoveSpeed() * (_collisionRepathMs / 1000f);
                     _collisionRepathMs = 0f;
-                    Vector2 goal = Waypoints[Waypoints.Count - 1];
-                    var routed = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
-                    if (routed != null && routed.Count >= 2
-                        && !routed.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey))
+                    if (expectedInWindow > 0.001f && movedInWindow < expectedInWindow * 0.5f)
                     {
-                        SetWaypoints(routed);
+                        Vector2 goal = Waypoints[Waypoints.Count - 1];
+                        var routed = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
+                        if (routed != null && routed.Count >= 2
+                            && !routed.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey)
+                            && !PathThreadsThroughBodies(routed))
+                        {
+                            if (SetWaypoints(routed))
+                            {
+                                // Routed around bodies — suppress the position-push while following it
+                                // (see _pathFromBodyRouting).
+                                _pathFromBodyRouting = true;
+                            }
+                        }
                     }
                 }
             }
@@ -608,6 +662,39 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// avoids recursing through the SafePath logic. If repath fails, position is at least
         /// snapped to walkable so the next tick's path-following starts from a clean state.
         /// </summary>
+        /// <summary>
+        /// Clearance floor for actor-aware reroutes (2026-07-04): the A*'s start-proximity
+        /// exemption hides TOUCHING neighbours, so a "route around the bodies" through a dense
+        /// pack can come back THREADING a gap — vertices ~6u from an ally's centre (wire106 pair
+        /// trace) — which renders as the unit sliding THROUGH its neighbour into a stack. A route
+        /// whose vertex drives this unit's centre within body-sum of another unit isn't routing
+        /// around anything; reject it and keep the current path (straight n=2 clip-through is the
+        /// faithful open-clash behaviour).
+        /// </summary>
+        private bool PathThreadsThroughBodies(NavigationPath routed)
+        {
+            for (int i = 1; i < routed.Count; i++)
+            {
+                var nearby = _game.Map.CollisionHandler.GetNearestObjects(
+                    new System.Activities.Presentation.View.Circle(routed[i], PathfindingRadius * 2f));
+                for (int j = 0; j < nearby.Count; j++)
+                {
+                    var o = nearby[j];
+                    if (o == this || o is not AttackableUnit au || au.IsDead
+                        || au.Status.HasFlag(StatusFlags.Ghosted) || au.IsTemporarilyGhosted)
+                    {
+                        continue;
+                    }
+                    float rr = PathfindingRadius + au.PathfindingRadius;
+                    if (Vector2.DistanceSquared(au.Position, routed[i]) < rr * rr)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         private bool TryUnstuckRepath()
         {
             // Stuck-recovery action: GetClosestTerrainExit + a full actor-aware A*. Scoped so the
@@ -657,7 +744,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // 45/15) becomes the escape of last resort.
                 bool reroutedOrSnapped = positionChanged
                     || !newPath.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
-                SetWaypoints(newPath);
+                if (SetWaypoints(newPath))
+                {
+                    // Actor-aware unstuck route — same push suppression as the body-routing
+                    // repath (see _pathFromBodyRouting).
+                    _pathFromBodyRouting = true;
+                }
                 return reroutedOrSnapped;
             }
 
@@ -675,6 +767,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 UpdateBuffs(diff);
             }
             UpdateRevealSpecificUnit(diff);
+
+            using (Profiler.Scope("AttackableUnit.AssistMarkers"))
+            {
+                UpdateAssistMarkers();
+            }
 
             // TODO: Rework stat management.
             _statUpdateTimer += diff;
@@ -748,6 +845,91 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 _revealSpecificUnitTimer = 0.0f;
                 SetStatus(StatusFlags.RevealSpecificUnit, false);
             }
+        }
+
+        internal void AddAssistMarker(ObjAIBase sourceUnit, float duration, DamageData damageData = null)
+        {
+            if (sourceUnit is Champion)
+            {
+                if (sourceUnit.Team == Team)
+                {
+                    AuxAddAssistMarker(AlliedAssistMarkers, sourceUnit, duration, damageData);
+                }
+                else
+                {
+                    AuxAddAssistMarker(EnemyAssistMarkers, sourceUnit, duration, damageData);
+                }
+            }
+        }
+
+        void AuxAddAssistMarker(List<AssistMarker> assistList, ObjAIBase sourceUnit, float duration, DamageData damageData = null)
+        {
+            AssistMarker assistMarker = assistList.Find(x => x.Source == sourceUnit);
+            if (assistMarker != null)
+            {
+                float desiredDuration = _game.GameTime + duration * 1000;
+                assistMarker.StartTime = _game.GameTime;
+                assistMarker.EndTime = assistMarker.EndTime < desiredDuration ? desiredDuration : assistMarker.EndTime;
+            }
+            else
+            {
+                assistMarker = new AssistMarker()
+                {
+                    Source = sourceUnit,
+                    StartTime = _game.GameTime,
+                    EndTime = _game.GameTime + duration * 1000,
+                };
+
+                assistList.Add(assistMarker);
+            }
+
+            if (damageData != null)
+            {
+                switch (damageData.DamageType)
+                {
+                    case DamageType.DAMAGE_TYPE_PHYSICAL:
+                        assistMarker.PhysicalDamage += damageData.Damage;
+                        break;
+                    case DamageType.DAMAGE_TYPE_MAGICAL:
+                        assistMarker.MagicalDamage += damageData.Damage;
+                        break;
+                    case DamageType.DAMAGE_TYPE_TRUE:
+                        assistMarker.TrueDamage += damageData.Damage;
+                        break;
+                }
+            }
+        }
+
+        void UpdateAssistMarkers()
+        {
+            // Count guards avoid the per-tick delegate allocation on the (common) empty lists.
+            if (AlliedAssistMarkers.Count > 0)
+            {
+                AlliedAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
+            }
+            if (EnemyAssistMarkers.Count > 0)
+            {
+                EnemyAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
+            }
+        }
+
+        /// <summary>
+        /// Champions holding an active enemy assist marker on this unit, excluding the killer —
+        /// the Assists list of the ArgsDie announce events (OnTurretDie/OnDampenerDie).
+        /// Replay-verified (4.20): the killer is never in the list, even when a minion lands
+        /// the killing blow. Ordered by marker start time, matching ChampionDeathHandler.
+        /// </summary>
+        internal List<Champion> GetEnemyChampionAssists(AttackableUnit excluded = null)
+        {
+            var assists = new List<Champion>();
+            foreach (var marker in EnemyAssistMarkers.OrderBy(x => x.StartTime))
+            {
+                if (marker.EndTime >= _game.GameTime && marker.Source is Champion c && c != excluded)
+                {
+                    assists.Add(c);
+                }
+            }
+            return assists;
         }
 
         protected virtual void UpdateFacing()
@@ -1223,6 +1405,52 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="type">Whether the damage is physical, magical, or true.</param>
         /// <param name="source">What the damage came from: attack, spell, summoner spell, or passive.</param>
         /// <param name="damageText">Type of damage the damage text should be.</param>
+        /// <summary>Actor category for the dr_ attack-ratio lookup (Hero / Unit / Building).</summary>
+        private enum ActorDamageClass { Hero, Unit, Building }
+
+        /// <summary>
+        /// Classifies a unit for the dr_ actor-type attack ratios: champions are Hero; turrets, inhibitors
+        /// and the nexus are Building (mirrors AITurret / obj_Building -> Building in the decomp); everything
+        /// else attackable (minions, monsters, pets, wards) is Unit (obj_AI_Minion -> Unit). Matches the
+        /// existing structure test at <c>this is not ObjBuilding and not BaseTurret</c>.
+        /// </summary>
+        private static ActorDamageClass ClassifyForAttackRatio(AttackableUnit unit)
+        {
+            if (unit is Champion)
+            {
+                return ActorDamageClass.Hero;
+            }
+            if (unit is ObjBuilding or BaseTurret)
+            {
+                return ActorDamageClass.Building;
+            }
+            return ActorDamageClass.Unit;
+        }
+
+        /// <summary>
+        /// The dr_ basic-attack damage multiplier for <paramref name="attacker"/> hitting
+        /// <paramref name="target"/> (GlobalData.DamageRatios, loaded from Constants.var). The decomp's
+        /// attacker getters collapse a Turret target into the Building ratio, so target types reduce to the
+        /// same three categories as source types — a clean 3×3 lookup over the nine dr_ values.
+        /// </summary>
+        private static float GetActorTypeAttackRatio(AttackableUnit attacker, AttackableUnit target)
+        {
+            var ratios = GlobalData.DamageRatios;
+            return (ClassifyForAttackRatio(attacker), ClassifyForAttackRatio(target)) switch
+            {
+                (ActorDamageClass.Hero, ActorDamageClass.Hero) => ratios.HeroToHero,
+                (ActorDamageClass.Hero, ActorDamageClass.Unit) => ratios.HeroToUnit,
+                (ActorDamageClass.Hero, ActorDamageClass.Building) => ratios.HeroToBuilding,
+                (ActorDamageClass.Unit, ActorDamageClass.Hero) => ratios.UnitToHero,
+                (ActorDamageClass.Unit, ActorDamageClass.Unit) => ratios.UnitToUnit,
+                (ActorDamageClass.Unit, ActorDamageClass.Building) => ratios.UnitToBuilding,
+                (ActorDamageClass.Building, ActorDamageClass.Hero) => ratios.BuildingToHero,
+                (ActorDamageClass.Building, ActorDamageClass.Unit) => ratios.BuildingToUnit,
+                (ActorDamageClass.Building, ActorDamageClass.Building) => ratios.BuildingToBuilding,
+                _ => 1.0f
+            };
+        }
+
         public virtual void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
             // Riot OnPreDamage: fires on the RAW damage BEFORE mitigation. Scripts may modify
@@ -1230,6 +1458,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // attacker- and target-side buffs.
             ApiEventManager.OnPreDamage.Publish(damageData.Attacker, damageData);
             ApiEventManager.OnPreDamage.Publish(damageData.Target, damageData);
+
+            // dr_ actor-type attack ratios (Constants.var): a basic attack's damage is scaled by a
+            // source-type × target-type multiplier (dr_UnitToHero=0.6 — minions deal 60% to champions;
+            // dr_UnitToBuilding=0.5; dr_BuildingToUnit=1.25 — turrets deal 125% to minions; the rest are 1.0).
+            // Gated on IsAutoAttack — the decomp method family is obj_AI_*::GetAttackRatioWhenAttacking*
+            // (mac 4.17), i.e. GENUINE basic-attack swings only; on-hit spells (DAMAGE_SOURCE_ATTACK but not
+            // IsAutoAttack) and the turret execute are untouched. NOTE: the decomp exposes the source×target
+            // getter structure but its multiply SITE was not recovered, so we apply it to the raw
+            // pre-mitigation attack damage here (see docs/CONSTANTS_VAR_AUDIT.md).
+            if (damageData.IsAutoAttack && damageData.Attacker != null)
+            {
+                damageData.Damage *= GetActorTypeAttackRatio(damageData.Attacker, damageData.Target);
+            }
 
             // Armor/MR mitigation lives HERE in the central damage sink, not at DamageData construction.
             // Placed after OnPreDamage (pre-mitigation) but before the on-hit / OnPreDeal/Take hooks so
@@ -1291,9 +1532,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            if (this is Champion c && damageData.Attacker is Champion cAttacker)
+            // Any attackable victim tracks champion damagers — replay-verified (4.20): the
+            // OnTurretDie/OnDampenerDie announce events carry assist lists, so markers can't
+            // be champion-victim-only. S1 AddAssistMarker only gates on the SOURCE being a hero.
+            if (damageData.Attacker is Champion cAttacker)
             {
-                c.AddAssistMarker(cAttacker, GlobalData.ChampionVariables.TimerForAssist, damageData);
+                AddAssistMarker(cAttacker, GlobalData.ChampionVariables.TimerForAssist, damageData);
             }
 
             if (!CanTakeDamage(type))
@@ -1339,12 +1583,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     // Die() (Riot: BecomeZombie var set in BuffOnDeath → bZombie). See the zombie
                     // branch in Die() / OnZombie.
                     BecomeZombie = false,
-                    DieType = 0, // TODO: Unhardcode
+                    // Dead wire field: the client never consumes the packet's DieType — DoNPCDie
+                    // ignores it, and the NPC_Die_Broadcast path even recomputes it locally from
+                    // the unit type (minion/pet=MINION_DIE 0, else NETURAL_DIE 1; AIBase.cpp
+                    // DoDieBroadcast). Replay-verified: all 743 death packets in the 4.20 capture
+                    // carry 0. Riot's own server sends 0 unconditionally.
+                    DieType = 0,
                     Unit = this,
                     Killer = attacker,
                     DamageType = type,
                     DamageSource = source,
-                    DeathDuration = 0 // TODO: Unhardcode
+                    // Only meaningful for hero deaths (client GetRespawnTimeRemaining → death
+                    // timer UI); NotifyNPC_Hero_Die injects the real champ.RespawnTimer at the
+                    // packet level. For non-heroes Riot's server sends uninitialized garbage
+                    // (replay shows wild exponents and even ASCII "BUFF" fragments in the float),
+                    // which the client stores but never uses — clean 0 is the faithful value.
+                    DeathDuration = 0
                 };
             }
 
@@ -1910,6 +2164,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Reset the body-routing trigger each tick; only the moving+collision path
             // (RunCollisionResponse) sets it true, so stationary / ghosted / dashing leave it false.
             _inHardCollision = false;
+            _inBodyContact = false;
 
             if (CurrentWaypointKey < Waypoints.Count)
             {
@@ -2138,15 +2393,68 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // ~latency*speed). 57u (~167ms) is far less frequent; IN-GAME VERIFY that arc
                 // jitter has not returned, and raise CHAMPION_KEEPALIVE if it has.
                 //
-                // Non-champions stay at 100u (~3 updates/s at minion speed): denser than Riot's
-                // ~167u minion cadence because our server collision sim diverges from the old
-                // client's local sim — smaller intervals = smaller hard-snap corrections.
-                // Affordable since GetCenteredWaypoints caps non-champion lists at 4 entries.
+                // Non-champions: 325u ≈ 1s of travel at minion speed (Riot's measured MAX walking
+                // stretch between same-path updates — replay 343e3502; Riot median is far sparser,
+                // ~6 updates per minion LIFETIME vs our former ~31). RAISED 100u→325u (2026-07-03,
+                // overlap diagnosis): every keepalive re-anchor hard-snaps the client to wp0 and
+                // thereby RESETS the client's own local collision separation — at 100u (~3/s) the
+                // real 4.x client never got a window to disentangle a marching wave, so server-side
+                // overlap (n=2 paths have NO server separation — steer/push gated n>=3/n>=4,
+                // faithful) stayed visible: measured 3.9% walking time <20u vs Riot 0.7%. The old
+                // "smaller intervals = smaller corrections" rationale predates D0/terrain-only:
+                // real off-path divergence is collision pushes, which accumulate in
+                // _unreplicatedDrift and trigger the 12u drift-RESYNC above IMMEDIATELY regardless
+                // of this cadence — the keepalive only folds sub-12u noise, so sparser is safe.
+                // ~1s windows let the client separation work like Riot's. Tune DOWN if walking
+                // paths visibly desync at corners, UP toward event-driven if overlap persists.
+                // EXPERIMENT ENDED (2026-07-05): the 2026-07-04 wiggle experiment raised this
+                // 325→650 (and contact 100→250, reverted earlier). tt122 exposed the REAL wiggle
+                // root instead: the Position+3 waypoint-count runway in GetCenteredWaypoints ran
+                // dry between anchors (SubdividePath shortened waypoint spacing; 3 waypoints ≈
+                // 250-500u vs the 650u stride) — the client copy stood mid-window and was
+                // teleported forward by the next anchor, a uniform 145.9u yank on EVERY minion.
+                // The runway is now DISTANCE-based (800u, see GetCenteredWaypoints) so the stride
+                // can never outrun the client's path again; 325u keeps the July overlap-fix
+                // benefits (client-separation windows) without the dry-run.
+                const float NONCHAMPION_KEEPALIVE = 325f;
                 const float CHAMPION_KEEPALIVE = 57f;
+                // DENSITY-AWARE (2026-07-04, the "ranged minions teleport FORWARD in big marching
+                // groups" symptom, wire105): the server never jumps (wp0 excess-over-walk = 0
+                // events) — the forward yank is the CLIENT's local copy falling behind inside a
+                // dense clump (the real client's own collision/avoidance slows its local sim; our
+                // server, pushes suppressed, walks straight through) and then being hard-snapped
+                // forward by the next re-anchor. At 325u gaps that divergence accumulates ~1s
+                // before release = a visible yank; at 100u it releases in sub-perceptual steps.
+                // So: units in body contact this tick re-anchor on the old dense 100u cadence,
+                // free walkers keep the sparse Riot-like 325u.
+                // EXPERIMENT RESULT (2026-07-05, tt117): 250u REVERTED to 100f. The wire105
+                // forward-yank returned exactly as the revert criterion predicted — blue bot-lane
+                // casters in a marching clump visibly ran back-and-forth and "teleported" (user
+                // report 5:15-5:28; emitted paths verified CLEAN: headings stable, zero flips —
+                // the yank is the client copy collision-braking inside the clump and being pulled
+                // forward by the next, now-2.5x-later, anchor). Conclusion: the contact cadence
+                // knob cannot fix the facing wiggle without buying back the yank — dense anchors
+                // (100u) = separation-reset flicker, sparse (250u) = teleport. The real fix is
+                // upstream: keep marching minions from converging into body contact at all
+                // (server-side gentle separation / Riot's shared-collision model).
+                const float CONTACT_KEEPALIVE = 100f;
                 _traveledSinceLastSync += originalDelta.Length();
                 _timeSinceLastSync += delta;
-                float keepaliveDist = this is Champion ? CHAMPION_KEEPALIVE : 100f;
-                if (Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
+                float keepaliveDist = this is Champion ? CHAMPION_KEEPALIVE
+                    : (_inHardCollision || _inBodyContact) ? CONTACT_KEEPALIVE : NONCHAMPION_KEEPALIVE;
+                // NO travel keepalive for LaneMinions (2026-07-05, wobble invention audit —
+                // VERIFIED in-game: the marching wobble disappeared). Riot's wire is ONE
+                // full-leg path per lane node (776-1341u) and then SILENCE until the next node
+                // (re-anchor rate 12.8/min vs our former ~44-48/min) — every keepalive re-anchor
+                // hard-snaps the client to wp0 (ActorClient.cpp:169) AND replaces its path,
+                // resetting the client's local collision separation; that churn was the visible
+                // marching wobble. The distance-keepalive layer was a server invention. For lane
+                // minions the 12u drift-RESYNC above is the only correction net (fires
+                // immediately on real server-side collision divergence) — requires the full-leg
+                // wire runway in GetCenteredWaypoints so the client's path never runs dry
+                // mid-leg. Champions/other units keep their measured cadences.
+                bool isLaneMinion = this is LaneMinion;
+                if (!isLaneMinion && Waypoints.Count > 1 && _traveledSinceLastSync >= keepaliveDist)
                 {
                     _movementUpdated = true;
                 }
@@ -2477,27 +2785,81 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // no-op there but still reports hard colliders) — which is exactly the clip-through case.
             _inHardCollision = hadHardColliders;
 
-            if (Waypoints.Count >= MaxNumRepath && hadHardColliders)
+            // Body-contact WITHOUT the 10u deep-overlap floor (keepalive cadence only; see field).
+            foreach (var o in nearby)
+            {
+                if (o == this || o is not AttackableUnit au || au.IsDead
+                    || au.Status.HasFlag(StatusFlags.Ghosted) || au.IsTemporarilyGhosted)
+                {
+                    continue;
+                }
+                float rr = PathfindingRadius + au.PathfindingRadius;
+                if (Vector2.DistanceSquared(au.Position, Position) < rr * rr)
+                {
+                    _inBodyContact = true;
+                    break;
+                }
+            }
+
+            // Body-routed paths (n>=4 actor-aware reroutes) suppress the push: the path already
+            // separates via its geometry + the steer; pushing on top of it caused the off-path
+            // drift → 12u-resync storm → visible sideways glitching in walking clumps (see
+            // _pathFromBodyRouting).
+            //
+            // HISTORY: 2026-07-03 extended this to ALL minions ("|| this is Minion") after
+            // wire104/coll104 showed push storms that never resolved overlap. REVERTED 2026-07-05
+            // (marching-separation research round): the blanket suppression removed the COMBAT-
+            // phase separation Riot relies on. Source-confirmed model (Actor.cpp:1721
+            // `m_Path.GetSize() >= MAX_NUMREPATH && isInCollision`): Riot applies NO active
+            // separation to n=2 marchers at all — march spacing is preserved passively (spawn
+            // stagger + equal speeds) — but in the CLASH phase paths are n>=4 and the damped
+            // push/avoidance stack actively resolves compression (replay: deep overlap 5.8% vs
+            // our 17%). With the blanket suppression, clash compression was permanent (ratchet)
+            // and waves carried the fusion onto the march — the wiggle/fusion root. The 2026-07-03
+            // storm predates CommitStand/stand-reservations/SmoothPath; re-measure with coll-log
+            // (push rate + magnitudes + resolution) — if storms return, the split-sim resync
+            // interplay needs the deeper lockstep look, NOT a blanket gate.
+            bool suppressPush = _pathFromBodyRouting;
+            if (Waypoints.Count >= MaxNumRepath && hadHardColliders && !suppressPush)
             {
                 float speedPerTick = GetMoveSpeed() * (delta * 0.001f);
 
+                // LOOP SEMANTICS CORRECTED 2026-07-05 (tt118 push-storm anatomy): the decomp loop
+                // (Actor.cpp:1718-1730) is `responseCheck = HandleActorCollision(info); if
+                // (responseCheck == 0 && loopCount >= 2) responseCheck = HandleActorCollision(info);
+                // if (responseCheck) break;` — it BREAKS as soon as a response was handled
+                // (nonzero = hard branch taken), i.e. AT MOST ONE applied push per tick; the loop
+                // exists to RETRY THE DETECTION when nothing was handled, and the second call
+                // fires only when the FIRST returned zero on the final iteration. Our old port
+                // had it inverted (apply every iteration, continue WHILE in collision) → up to 4
+                // chained pushes per tick (~45-60u): logged as multiple same-timestamp group
+                // events, visible as the forward "dash" (net displacement +153u/1.5s, same-
+                // direction chain) and the ±15u ping-pong storm (134 events/3s, net 47u) the
+                // moment the minion push suppression was lifted. One clamped push per tick is
+                // what makes Riot's response converge.
                 for (int loopCount = 0; loopCount < HardStopLoopCount; loopCount++)
                 {
                     Vector2 outMovement = originalDelta;
-                    bool isInCollision = HandleActorCollision(nearby, originalPos, originalDelta,
+                    bool handled = HandleActorCollision(nearby, originalPos, originalDelta,
                         speedPerTick, ref outMovement);
-                    // Position already holds the natural walk (originalDelta); apply the residual.
-                    pushed |= ApplyCollisionPush(outMovement - originalDelta, isInCollision);
-
-                    if (isInCollision && loopCount >= 2)
+                    if (handled)
                     {
-                        // 2nd HandleActorCollision pass on the final iteration (Actor.cpp:1724).
-                        isInCollision = HandleActorCollision(nearby, originalPos, originalDelta,
-                            speedPerTick, ref outMovement);
-                        pushed |= ApplyCollisionPush(outMovement - originalDelta, isInCollision);
+                        // Position already holds the natural walk (originalDelta); apply the residual.
+                        pushed |= ApplyCollisionPush(outMovement - originalDelta, true);
+                        break; // decomp: if (responseCheck) break;
                     }
 
-                    if (!isInCollision) break;
+                    if (loopCount >= 2)
+                    {
+                        // 2nd HandleActorCollision pass ONLY when the first returned zero on the
+                        // final iteration (Actor.cpp:1723-1725).
+                        handled = HandleActorCollision(nearby, originalPos, originalDelta,
+                            speedPerTick, ref outMovement);
+                        if (handled)
+                        {
+                            pushed |= ApplyCollisionPush(outMovement - originalDelta, true);
+                        }
+                    }
                 }
 
                 // Temp-ghost counter (S4 Actor.cpp:1473-1477): escalate on GENUINE stuck (final
@@ -2876,10 +3238,27 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // produce the same route. The new path is fresh (m_NextWaypoint=0); the current
             // path's cursor is CurrentWaypointKey (its progress so far), both threaded into the
             // faithful S4 IsPathTheSame so its near-unit prefix-skip works as the client's does.
-            bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
+            //
+            // TWO-WAY CHECK (2026-07-05, tt123 "melees accelerate forward then get synced
+            // back"): IsPathTheSame returns true iff the OTHER path is exhausted by the match,
+            // and its phase-2 prefix-skip consumes every waypoint within a 50u box of the unit
+            // — so a nearly-finished current path counts as "the same" against ANY new path.
+            // One-way, that silently swapped in a fresh chase/forward path (server walks it,
+            // client keeps the dry old path, no broadcast, no PATH_LOG) whenever a re-acquire
+            // fired near the end of the previous path; the divergence surfaced only at the 5s
+            // heartbeat as a forward yank (wire: 264u, unit 1073745601 @110.0s). Requiring the
+            // REVERSE direction too means the NEW path must also be exhausted — i.e. it carries
+            // nothing the client doesn't already know. Genuine recompute-duplicates still match
+            // both ways and stay deduplicated; the broadcast-suppression itself is our own
+            // wire-noise optimization (not Riot-evidenced), the S4 primitive is untouched.
+            bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey)
+                && Waypoints.IsPathTheSame(newWaypoints, Position, CurrentWaypointKey, 0);
 
             Waypoints = newWaypoints;
             CurrentWaypointKey = 1;
+            // Default: a fresh path is push-eligible again; the body-routing/unstuck call sites
+            // re-mark their routed paths right after this call (see _pathFromBodyRouting).
+            _pathFromBodyRouting = false;
 
             PathHasTrueEnd = false;
 
@@ -2987,6 +3366,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Adds the given buff instance to this unit.
         /// </summary>
+        /// <summary>
+        /// Whether buff wire packets (BuffAdd2/Remove2/Replace/UpdateCount) go out for this buff.
+        /// ALWAYS true, hidden buffs included. Evidence (4.17 mac decomp + replay):
+        /// - Riot's wire carries hidden buffs with IsHidden=1 (replay: SionQ charge buff +
+        ///   SionQSound* all arrive as BuffAdd2 hidden=1).
+        /// - The client processes them fully: BuffManager_pimpl::OnNetworkPacket(PKT_NPC_BuffAdd2)
+        ///   does ResizeClient + SetIsHidden(n.isHidden==1) (display-only flag) and fires the
+        ///   kSoundEventTypeOnBuffActivate/OnBuffCast audio events — buff-driven spell sounds
+        ///   NEED the add packet (BuffManagerClient.cpp:775+).
+        /// - Unknown buff names (our server-internal markers) are handled gracefully:
+        ///   buffsFindGlobalBuff fails -> Riot assert -> AssertCallback is LOG-ONLY
+        ///   (GameAsserts.cpp: RiotLogMessage + ignore-set, no crash) and the packet is ignored.
+        /// </summary>
+        private static bool BuffIsReplicated(Buff b) => true;
+
         /// <param name="b">Buff instance to add.</param>
         /// TODO: Probably needs a refactor to lessen thread usage. Make sure to stick very closely to the current method; just optimize it.
         public virtual bool AddBuff(Buff b)
@@ -3004,7 +3398,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     {
                         ParentBuffs.Add(b.Name, b);
                         BuffList.Add(b);
-                        if (!b.IsHidden)
+                        if (BuffIsReplicated(b))
                         {
                             _game.PacketNotifier.NotifyNPC_BuffAdd2(b);
                             // BuffAdd2 carries no counter field and the client's ResizeClient doesn't set
@@ -3030,7 +3424,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     ParentBuffs.Add(b.Name, b);
                     BuffList.Add(b);
 
-                    if (!b.IsHidden)
+                    if (BuffIsReplicated(b))
                     {
                         _game.PacketNotifier.NotifyNPC_BuffReplace(b);
                         // BuffReplace (like BuffAdd2) doesn't carry/set the client mCounter — re-send the
@@ -3097,7 +3491,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                             buffsWithName[i].SetStacks(parentBuff.StackCount, false);
                         }
 
-                        if (!b.IsHidden)
+                        if (BuffIsReplicated(b))
                         {
                             if (parentBuff.BuffType == BuffType.COUNTER)
                             {
@@ -3125,7 +3519,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         ParentBuffs.Add(oldestbuff.Name, tempbuffs[0]);
                         BuffList.Add(b);
 
-                        if (!b.IsHidden)
+                        if (BuffIsReplicated(b))
                         {
                             var currentParentBuff = ParentBuffs[b.Name];
                             if (currentParentBuff.BuffType == BuffType.COUNTER)
@@ -3152,7 +3546,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                             buffsWithName[i].SetStacks(parentBuff.StackCount, false);
                         }
 
-                        if (!b.IsHidden)
+                        if (BuffIsReplicated(b))
                         {
                             if (b.BuffType == BuffType.COUNTER)
                             {
@@ -3199,7 +3593,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         b.ActivateBuff();
                     }
 
-                    if (!b.IsHidden)
+                    if (BuffIsReplicated(b))
                     {
                         if (parentBuff.BuffType == BuffType.COUNTER)
                         {
@@ -3349,7 +3743,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 BuffList.Remove(b);
                 RemoveBuffSlot(b);
 
-                if (!b.IsHidden) _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
+                if (BuffIsReplicated(b)) _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
                 return;
             }
 
@@ -3391,7 +3785,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     GetBuffsWithName(b.Name).ForEach(tempBuff => tempBuff.SetStacks(parentBuff.StackCount, false));
                 }
 
-                if (!b.IsHidden)
+                if (BuffIsReplicated(b))
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
@@ -3442,7 +3836,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
                 var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
 
-                if (!b.IsHidden)
+                if (BuffIsReplicated(b))
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
@@ -3499,7 +3893,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 var tempBuffsAfterRemoval = GetBuffsWithName(b.Name);
                 var newestBuff = tempBuffsAfterRemoval[tempBuffsAfterRemoval.Count - 1];
 
-                if (!b.IsHidden)
+                if (BuffIsReplicated(b))
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
@@ -3534,7 +3928,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     RemoveBuffSlot(b);
                 }
 
-                if (!b.IsHidden)
+                if (BuffIsReplicated(b))
                 {
                     _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
                 }
@@ -3615,6 +4009,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // StopShieldFade=false: replay-verified Riot animates the bar on a shield GAIN
             // (1437/1437 adds in the Morgana replay carry StopShieldFade=0), never snaps it.
             _game.PacketNotifier.NotifyModifyShield(this, shield.Amount, shield.Physical, shield.Magical, false);
+            ApiEventManager.OnShieldAdded.Publish(this, shield);
         }
 
         public virtual void RemoveShield(Shield shield)
@@ -3651,12 +4046,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         protected bool ConsumeShields(DamageData damageData)
         {
             LinkedList<Shield> toRemove = new LinkedList<Shield>();
-            foreach (var shield in Shields)
+            // Riot consumption order: OnPreDamagePriority descending (higher shields absorb first);
+            // among equal priority, shields flagged DoOnPreDamageInExpirationOrder are spent in
+            // soonest-expiry-first order so a shield about to vanish is used before a longer-lived
+            // one. OrderBy is stable, so shields with no expiration preference keep insertion order.
+            var ordered = Shields
+                .OrderByDescending(s => s.Priority)
+                .ThenBy(s => s.ConsumeInExpirationOrder ? s.RemainingTime : float.MaxValue);
+            foreach (var shield in ordered)
             {
                 var consumed = shield.Consume(damageData);
                 if (consumed != 0)
                 {
                     _game.PacketNotifier.NotifyModifyShield(this, -consumed, shield.Physical, shield.Magical, false);
+                    ApiEventManager.OnShieldReduced.Publish(shield, consumed);
                 }
 
                 if (shield.IsConsumed())

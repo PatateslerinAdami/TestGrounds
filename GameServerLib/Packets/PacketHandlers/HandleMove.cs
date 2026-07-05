@@ -112,6 +112,19 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             waypoints = new NavigationPath(req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates));
 
+                            // Desync sample: the client builds this path locally, so Waypoint[0] is
+                            // where the CLIENT believes the champion is right now. Distance to our
+                            // authoritative Position = client/server movement divergence at exactly
+                            // the moment the player clicked (the moment divergence is FELT). Logged
+                            // before the Replace(0) below discards the client's claim.
+                            if (PathLogger.Enabled && waypoints.Count > 0)
+                            {
+                                var clientPos = waypoints[0];
+                                PathLogger.LogDesync(_game.GameTime, champion.NetId,
+                                    clientPos.X, clientPos.Y, champion.Position.X, champion.Position.Y,
+                                    !champion.IsPathEnded(), req.OrderType.ToString());
+                            }
+
                             // REMOVED (2026-06-07): the old "client-prediction smoothing" snapped
                             // the SERVER position to the client's claimed start (up to 150u). With
                             // the 96ms hero-streaming cadence the client structurally trails the
@@ -145,6 +158,23 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
                             waypoints.Replace(0, champion.Position);
 
+                            // Actor-aware near-window (2026-07-04, Riot-faithful): the client's
+                            // trusted path is TERRAIN-only, but Riot's server never accepts a
+                            // straight line through stuck actor bodies — GridLineOfSightTest2
+                            // (the path-build LOS shortcut) checks HasStuckActor within the first
+                            // 1500u of the line (NavigationGrid.cpp:673 `travelLength < 1500`,
+                            // prediction mode travelLength/0.8). Without this, a click across a
+                            // jungle camp walked the champion INTO the stationary monsters and the
+                            // collision response bounced it in place (wire113 t=143-145s, ~25u
+                            // ping-pong for 1.7s — neither the stuck watchdog (unit moves plenty)
+                            // nor body-routing reliably rescued). The predicate tests moving units
+                            // at predicted positions, stationary ones where they stand; the A*'s
+                            // own near-goal + far-from-origin exemptions keep clicks ONTO units
+                            // and long paths sane.
+                            var actorBlocked = _game.Map.PathingHandler.BuildActorBlockedPredicate(champion);
+                            const float ActorCheckWindow = 1500f; // T2's stuck-actor window
+                            float cumDist = 0f;
+
                             for(int i = 0; i < waypoints.Count - 1; i++)
                             {
                                 // CELL-BASED validation (radius 0), matching how the client computed
@@ -153,12 +183,25 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                 // radius-aware sweep here would re-flag wall-hugging client paths the
                                 // client (and Riot) walk straight — producing a spurious A* detour
                                 // (n>=3 wire shape, visible arc near walls) where Riot keeps the
-                                // straight 2-point path. Only re-A* on genuine cell-level terrain block.
-                                if(nav.CastCircle(waypoints[i], waypoints[i + 1], 0f, true))
+                                // straight 2-point path. Only re-A* on genuine cell-level terrain
+                                // block — or a stuck actor inside the near window (above).
+                                int actorBudgetCells = (int)((ActorCheckWindow - cumDist) / nav.CellSize);
+                                bool segmentBlocked = nav.CastCircle(waypoints[i], waypoints[i + 1], 0f, true)
+                                    || (actorBlocked != null && actorBudgetCells > 0
+                                        && !nav.IsGridLineOfSightClear(waypoints[i], waypoints[i + 1],
+                                            actorBlocked, actorBudgetCells));
+                                cumDist += Vector2.Distance(waypoints[i], waypoints[i + 1]);
+                                if(segmentBlocked)
                                 {
                                     var ithWaypoint = waypoints[i];
                                     var lastWaypoint = waypoints[waypoints.Count - 1];
-                                    var path = nav.GetPath(ithWaypoint, lastWaypoint, champion.PathfindingRadius, champion.UsesFastPath);
+                                    // skipLineOfSight bypasses GetPath's terrain-only straight-LOS
+                                    // shortcut (which would hand the blocked straight line right
+                                    // back) and threads the predicate into the A* AND the smoothing
+                                    // trim — the same route-around-bodies flavor the stuck-recovery
+                                    // paths use, and what Riot's T2-gated BuildNavGridPath does.
+                                    var path = nav.GetPath(ithWaypoint, lastWaypoint, champion.PathfindingRadius,
+                                        champion.UsesFastPath, actorBlocked, skipLineOfSight: true);
 
                                     // Stuck-recovery: if GetPath failed (champion is in or
                                     // immediately adjacent to a dynamic-blocker cell that even
@@ -174,7 +217,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                         snappedFrom = nav.GetClosestTerrainExit(ithWaypoint, 0f);
                                         if (snappedFrom != ithWaypoint)
                                         {
-                                            path = nav.GetPath(snappedFrom, lastWaypoint, champion.PathfindingRadius, champion.UsesFastPath);
+                                            path = nav.GetPath(snappedFrom, lastWaypoint, champion.PathfindingRadius,
+                                                champion.UsesFastPath, actorBlocked, skipLineOfSight: true);
                                             if (path != null)
                                             {
                                                 // Hard-snap champion to the unstuck position so
@@ -204,7 +248,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                         var snappedClear = nav.GetClosestTerrainExit(ithWaypoint, champion.PathfindingRadius);
                                         if (snappedClear != ithWaypoint && snappedClear != snappedFrom)
                                         {
-                                            path = nav.GetPath(snappedClear, lastWaypoint, champion.PathfindingRadius, champion.UsesFastPath);
+                                            path = nav.GetPath(snappedClear, lastWaypoint, champion.PathfindingRadius,
+                                                champion.UsesFastPath, actorBlocked, skipLineOfSight: true);
                                             if (path != null)
                                             {
                                                 champion.SetPosition(snappedClear, repath: false);
@@ -279,68 +324,38 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                             {
                                 champion.UpdateMoveOrder(req.OrderType, true);
 
-                                // Move-order rate limiter (2026-06-07): holding the mouse issues a
-                                // fresh MoveTo every mouse-move frame (log shows 10-30 orders/s).
-                                // Broadcasting each as a full-path WaypointGroup makes the client
-                                // hard-snap to Waypoint[0] at that rate — visible jitter while held.
-                                // If the champion is ALREADY moving and the last broadcast was within
-                                // the streaming window, apply the new path silently: the server walks
-                                // it and the 96ms champion streamer carries a small Position+3
-                                // correction. Well-spaced single clicks (> window apart) still
-                                // broadcast immediately and stay responsive.
-                                const float MoveOrderBroadcastWindowMs = 96f;
-                                bool alreadyMoving = !champion.IsPathEnded();
-                                bool broadcast = !alreadyMoving
-                                    || (_game.GameTime - champion.LastMoveOrderBroadcastTime) >= MoveOrderBroadcastWindowMs;
-
-                                // Distinct-destination bypass (2026-06-17): the limiter exists to dedupe
-                                // held-mouse spam to ~the same spot (same endpoint every frame). A new
-                                // order whose ENDPOINT differs materially from the path we're already
-                                // walking is a fresh click (kiting/dodging), not a repeat — broadcast it
-                                // now so rapid distinct clicks aren't throttled to the ~96ms cadence (the
-                                // "sluggish when clicking a lot" symptom). Held / slow-drag orders keep
-                                // ~the same endpoint frame-to-frame (SetWaypoints runs on every order, so
-                                // the current endpoint already reflects the previous one) → still throttled,
-                                // so the 10-30 hard-snaps/s jitter the limiter prevents stays prevented.
-                                const float MoveOrderDistinctDestSq = 50f * 50f;
-                                if (!broadcast && alreadyMoving
+                                // Broadcast EVERY order that carries new information (limiter removed
+                                // 2026-07-04). The old 96ms rate limiter applied throttled orders
+                                // silently and left the correction to the 57u keepalive — but the
+                                // client has NO movement prediction for its own hero (decomp:
+                                // TryToExecuteOrder returns 0 client-side, AIBaseClient.cpp:2953;
+                                // motion starts only when our WaypointGroup arrives), so every
+                                // suppressed broadcast added ~100-260ms of pure input latency
+                                // (user-confirmed "sluggish"). Riot's wire is new-goal dominated
+                                // (~116 fresh order responses per champion-moving-minute) — clicks
+                                // answer immediately. The jitter the limiter was built against
+                                // (2026-06-07: 10-30 held-mouse orders/s, each a wp[0] hard-snap) is
+                                // no longer a threat: wp[0] re-anchors measure p90 ≈ 1.4u off-path
+                                // (wire104/109), sub-perceptual even at order rate.
+                                //
+                                // The one case still deduped: held-mouse orders to the SAME endpoint
+                                // (within one 2u wire-quantization step). The resulting path is
+                                // byte-identical to what the client already walks — rebroadcasting
+                                // it is pure redundancy, and skipping it costs zero latency.
+                                bool broadcast = true;
+                                if (!champion.IsPathEnded()
                                     && champion.Waypoints.Count > 0 && waypoints.Count > 0)
                                 {
                                     var curDest = champion.Waypoints[champion.Waypoints.Count - 1];
                                     var newDest = waypoints[waypoints.Count - 1];
-                                    if (Vector2.DistanceSquared(curDest, newDest) > MoveOrderDistinctDestSq)
+                                    const float SameDestEpsilonSq = 4f * 4f;
+                                    if (Vector2.DistanceSquared(curDest, newDest) <= SameDestEpsilonSq)
                                     {
-                                        broadcast = true;
-                                    }
-                                }
-
-                                // Reversal override (2026-06-08): throttling is only safe when the
-                                // client's forward extrapolation moves the SAME way the server does
-                                // — then the gap stays under the client's ~20u drift-snap threshold.
-                                // When the new order points BACK against the current heading (mouse
-                                // held, dragged to the opposite side), the client keeps extrapolating
-                                // forward for up to one window while the server already walks
-                                // backward; the two diverge at ~2*speed*window (~65u) and the
-                                // eventual throttled WaypointGroup snaps the client back onto the
-                                // server position. Direction reversal is exactly the event that must
-                                // resync immediately, so bypass the limiter when headings oppose.
-                                if (!broadcast && alreadyMoving && waypoints.Count >= 2)
-                                {
-                                    var curDir = champion.CurrentWaypoint - champion.Position;
-                                    var newDir = waypoints[1] - waypoints[0];
-                                    if (curDir.LengthSquared() > float.Epsilon
-                                        && newDir.LengthSquared() > float.Epsilon
-                                        && Vector2.Dot(Vector2.Normalize(curDir), Vector2.Normalize(newDir)) < 0f)
-                                    {
-                                        broadcast = true;
+                                        broadcast = false;
                                     }
                                 }
 
                                 champion.SetWaypoints(waypoints, broadcastImmediately: broadcast);
-                                if (broadcast)
-                                {
-                                    champion.LastMoveOrderBroadcastTime = _game.GameTime;
-                                }
                                 champion.SetTargetUnit(null);
 
                                 // Attack-move to a ground point: remember the destination so the champion

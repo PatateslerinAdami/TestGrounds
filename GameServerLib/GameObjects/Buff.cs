@@ -131,7 +131,9 @@ namespace LeagueSandbox.GameServer.GameObjects
         public string Name { get; }
         public Spell OriginSpell { get; }
         public byte Slot { get; private set; }
-        public ObjAIBase SourceUnit { get; }
+        // Internal setter for the SetBuffCasterUnit script API (Riot BBSetBuffCasterUnit):
+        // scripts re-attribute a running buff's caster, e.g. hand a DoT's credit to another unit.
+        public ObjAIBase SourceUnit { get; internal set; }
         public AttackableUnit TargetUnit { get; }
         public float TimeElapsed { get; private set; }
         public BuffVariables Variables { get; }
@@ -333,10 +335,9 @@ namespace LeagueSandbox.GameServer.GameObjects
         public void Refresh()
         {
             ResetTimeElapsed();
-            if (!IsHidden)
-            {
-                _game.PacketNotifier.NotifyNPC_BuffReplace(this);
-            }
+            // Hidden buffs are replicated too (wire IsHidden=1) — see BuffIsReplicated in
+            // AttackableUnit for the decomp evidence.
+            _game.PacketNotifier.NotifyNPC_BuffReplace(this);
         }
         public void Update(float diff)
         {

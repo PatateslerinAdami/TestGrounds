@@ -1081,6 +1081,7 @@ namespace LeagueSandbox.GameServer
         public void AddChampion(Champion champion)
         {
             _champions.Add(champion.NetId, champion);
+            PacketLogger.TagChampion(champion.NetId);
         }
 
         /// <summary>

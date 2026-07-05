@@ -324,6 +324,27 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Shield> OnShieldBreak
             = new Dispatcher<Shield>();
 
+        // Engine-level shield lifecycle events. NOTE: these are NOT faithful Riot buff callbacks
+        // (Riot has no OnShield* handler — a shield there IS a buff, so its lifecycle is the buff's
+        // OnActivate/OnPreDamage/OnDeactivate). They mirror this engine's dedicated Shield-object
+        // system, extending the same convenience pattern as OnShieldBreak above.
+
+        // Fires when a shield is added to a unit. Keyed by the RECEIVING unit (the Shield does not
+        // exist yet at subscribe time), carrying the new Shield as data.
+        public static Dispatcher<AttackableUnit, Shield> OnShieldAdded
+            = new Dispatcher<AttackableUnit, Shield>();
+
+        // Fires when an existing shield's amount grows (IncShield). Keyed by the Shield, carrying
+        // the applied delta.
+        public static Dispatcher<Shield, float> OnShieldIncreased
+            = new Dispatcher<Shield, float>();
+
+        // Fires when a shield's amount shrinks — damage consumption (ConsumeShields) or ReduceShield.
+        // Keyed by the Shield, carrying the amount removed. A killing drain fires this (with the
+        // consumed delta) and then OnShieldBreak from RemoveShield when it hits 0.
+        public static Dispatcher<Shield, float> OnShieldReduced
+            = new Dispatcher<Shield, float>();
+
         // TODO: Handle crowd control the same as normal dashes.
         public static Dispatcher<AttackableUnit> OnUnitCrowdControlled
             = new Dispatcher<AttackableUnit>();

@@ -153,24 +153,45 @@ namespace PacketDefinitions420
             // stationary) once the path is done.
             var result = new List<Vector2> { unit.Position };
 
-            // Waypoint budget. The Position+3 trim was designed for the OLD per-tick (96ms) hero
-            // streamer: each WaypointGroup REPLACES the client's path, but a fresh one arrived
-            // every ~33u so 3 lookahead always sufficed. Champions are now event-driven (the 96ms
-            // streamer was removed 2026-06-08) — between path changes the only updates are the
-            // ~5s vision batches. With Position+3 the client runs out of its 4-waypoint copy on a
-            // long route (waypoints closer than ~1725u of 5s travel), STOPS, then snaps forward on
-            // the next batch ("stopped then teleported to a position on the way", MOVEPKT-confirmed:
-            // order broadcast nWp=9 → next vision-batch nWp=4). So a champion must carry its FULL
-            // remaining route every broadcast; it then walks autonomously until the next real
-            // change. Non-champions keep the trim (they still have the 100u distance-streamer
-            // above, so 3 lookahead always covers the gap) — full lists per update caused FPS
-            // drops on minion waves. Fresh orders (FullPathBroadcastPending) always send full.
+            // Waypoint budget. Champions carry their FULL remaining route every broadcast (they are
+            // event-driven; the client walks autonomously until the next real change — see the
+            // 2026-06-08 "stopped then teleported" fix). Fresh orders (FullPathBroadcastPending)
+            // always send full.
+            //
+            // Non-champions: DISTANCE-based runway (2026-07-05, tt122 "client minions are somewhere
+            // completely different"). The old Position+3 waypoint-count trim was calibrated to the
+            // 100u keepalive streamer ("3 lookahead always covers the gap") and broke SILENTLY
+            // twice: the keepalive stride was raised (100→325→650 experiments) and the SmoothPath
+            // port's SubdividePath shortened waypoint spacing to ~85-170u near the path start —
+            // 3 waypoints ≈ 250-500u of runway vs a 650u anchor stride. The client copy RAN OUT of
+            // path mid-window, stood, and was teleported forward by the next re-anchor — measured
+            // as a uniform 145.9u worst-yank on EVERY minion (stand → teleport → stand, hugely
+            // visible). The runway must always exceed the largest non-champion keepalive stride
+            // (NONCHAMPION_KEEPALIVE, plus margin for timing jitter) — expressed as DISTANCE so
+            // neither future keepalive tuning nor waypoint-density changes can silently break the
+            // invariant again. Riot's minion legs always reach the next lane node (776-1341u
+            // measured), so the client never runs dry there either.
+            const float NonChampionRunway = 800f;
+            // LaneMinions send the FULL remaining route (2026-07-05, wobble invention audit):
+            // their travel keepalive is disabled (see AttackableUnit), so nothing tops the
+            // client's path up mid-leg — a runway cap would make the client run dry on legs
+            // > 800u. Riot sends the full leg to the node (776-1341u measured), so this is
+            // also the faithful wire shape.
             bool needsFullRoute = unit.FullPathBroadcastPending
-                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Champion;
-            int maxAhead = needsFullRoute ? int.MaxValue : 3;
-            for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count && maxAhead > 0; i++, maxAhead--)
+                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Champion
+                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.LaneMinion;
+            float runway = 0f;
+            Vector2 prev = unit.Position;
+            for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count; i++)
             {
-                result.Add(unit.Waypoints[i]);
+                if (!needsFullRoute && runway >= NonChampionRunway)
+                {
+                    break;
+                }
+                Vector2 w = unit.Waypoints[i];
+                runway += Vector2.Distance(prev, w);
+                prev = w;
+                result.Add(w);
             }
             return result.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
         }

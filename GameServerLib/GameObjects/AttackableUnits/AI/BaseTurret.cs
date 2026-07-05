@@ -77,12 +77,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             UnbakeFootprint();
 
+            // Replay-verified (4.20, 16 OnTurretDie events): assists = champions with an active
+            // assist marker on the turret, the killer is never included, GoldGiven is always 0.
+            var assists = GetEnemyChampionAssists(data.Killer);
             var announce = new OnTurretDie
             {
-                AssistCount = 0,
+                AssistCount = assists.Count,
                 GoldGiven = 0.0f,
                 OtherNetID = data.Killer.NetId
             };
+            for (int i = 0; i < assists.Count && i < announce.Assists.Length; i++)
+            {
+                announce.Assists[i] = assists[i].NetId;
+            }
             _game.PacketNotifier.NotifyOnEvent(announce, this);
 
             base.Die(data);

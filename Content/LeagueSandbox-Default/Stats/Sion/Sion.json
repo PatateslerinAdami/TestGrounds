@@ -59,6 +59,8 @@
             "ExtraSpell5": "SionQIndicatorMissile2",
             "ExtraSpell6": "SionQIndicatorMissile",
             "ExtraSpell7": "SionQShapeCut",
+            "ExtraSpell15" : "SionQSoundAfterHalf",
+            "ExtraSpell16" : "SionWDetonate",
             "FireworksEnabled": 1,
             "GameplayCollisionRadius": 80,
             "HPPerLevel": 73,

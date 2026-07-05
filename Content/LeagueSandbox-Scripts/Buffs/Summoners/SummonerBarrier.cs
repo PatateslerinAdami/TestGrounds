@@ -17,8 +17,11 @@ namespace Buffs
         {
             BuffType = BuffType.SPELL_SHIELD,
             IsHidden = false,
-            BuffAddType = BuffAddType.REPLACE_EXISTING, 
-            MaxStacks = 1
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            MaxStacks = 1,
+            // 4.20 SummonerBarrier.lua stub: OnPreDamagePriority = 3 — barrier absorbs before
+            // lower-priority shields on the same unit.
+            OnPreDamagePriority = 3
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();

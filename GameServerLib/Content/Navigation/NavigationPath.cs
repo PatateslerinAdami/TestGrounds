@@ -313,8 +313,21 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             if (_waypoints.Count < 2) return true;
             for (int i = 1; i < _waypoints.Count; i++)
             {
+                if (radius == 0f)
+                {
+                    // Same thin-line walk the SmoothPath trim built this path with. Using the
+                    // supercover CastCircle here would re-flag the trim's legitimate corner-touch
+                    // legs as blocked — PathingHandler.UpdatePaths runs this every 3s per unit,
+                    // so a validator/builder disagreement reroutes every corner-hugging path per
+                    // batch. New blockers (turret bakes, dynamic blockers) span whole footprints
+                    // and are caught by the thin line just as reliably.
+                    if (!grid.IsGridLineOfSightClear(_waypoints[i - 1], _waypoints[i]))
+                    {
+                        return false;
+                    }
+                }
                 // CastCircle returns true when BLOCKED, false when clear.
-                if (grid.CastCircle(_waypoints[i - 1], _waypoints[i], radius))
+                else if (grid.CastCircle(_waypoints[i - 1], _waypoints[i], radius))
                 {
                     return false;
                 }

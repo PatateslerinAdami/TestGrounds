@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -23,6 +24,7 @@ namespace LeagueSandbox.GameServer.Logging
     {
         private static readonly object _lock = new object();
         private static StreamWriter _writer;
+        private static readonly List<uint> _championTags = new List<uint>();
 
         public static bool Enabled { get; private set; }
 
@@ -48,6 +50,11 @@ namespace LeagueSandbox.GameServer.Logging
                 _writer = new StreamWriter(path, append: false, Encoding.ASCII) { AutoFlush = true };
                 Enabled = true;
                 Console.WriteLine($"[PacketLogger] capturing outbound packets to {Path.GetFullPath(path)}");
+
+                foreach (var netId in _championTags)
+                {
+                    WriteChampionTag(netId);
+                }
             }
         }
 
@@ -60,6 +67,43 @@ namespace LeagueSandbox.GameServer.Logging
                 _writer = null;
                 Enabled = false;
             }
+        }
+
+        /// <summary>
+        /// Marks a NetID as a champion in the capture. Riot replays identify champions by the
+        /// sender of S2C_HeroStats (0x46), a packet we never send — so replay tooling
+        /// (tools/wpath.py) found no champions in our captures and skipped all champion metrics.
+        /// This writes a capture-only synthetic record whose bytes are just the 5-byte header
+        /// <c>[0x46][netId u32]</c>; it never goes on the wire. Safe to call before Enable
+        /// (tags are buffered and flushed when capturing starts).
+        /// </summary>
+        public static void TagChampion(uint netId)
+        {
+            lock (_lock)
+            {
+                if (_championTags.Contains(netId))
+                {
+                    return;
+                }
+                _championTags.Add(netId);
+                if (Enabled && _writer != null)
+                {
+                    WriteChampionTag(netId);
+                }
+            }
+        }
+
+        private static void WriteChampionTag(uint netId)
+        {
+            var bytes = new byte[5];
+            bytes[0] = 0x46;
+            bytes[1] = (byte)netId;
+            bytes[2] = (byte)(netId >> 8);
+            bytes[3] = (byte)(netId >> 16);
+            bytes[4] = (byte)(netId >> 24);
+            _writer.Write("{\"Time\": 0, \"Bytes\": \"");
+            _writer.Write(Convert.ToBase64String(bytes));
+            _writer.Write("\", \"Channel\": 0, \"Flags\": 0}\n");
         }
 
         /// <summary>

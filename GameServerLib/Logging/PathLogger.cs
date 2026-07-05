@@ -157,6 +157,79 @@ namespace LeagueSandbox.GameServer.Logging
         }
 
         /// <summary>
+        /// Logs one client-vs-server position sample (ev:"desync"). Source: every client move order
+        /// (NPC_IssueOrderReq) carries the client's locally built path whose Waypoint[0] is the
+        /// position the CLIENT believes it is at — the distance to our authoritative server position
+        /// at receive time is a direct measurement of client/server movement divergence.
+        /// <para>Caveats for analysis: the client waypoint is quantized to the 2u wire grid, and the
+        /// sample includes ~one-way network latency of genuine transit (the client clicked slightly
+        /// in the past, the server has walked on since) — on localhost that term is negligible, so
+        /// d ≈ true desync. Only emitted while a player clicks, i.e. it samples exactly the moments
+        /// that FEEL laggy/snappy when divergence is high.</para>
+        /// </summary>
+        public static void LogDesync(float gameTimeMs, uint netId, float clientX, float clientZ,
+            float serverX, float serverZ, bool moving, string orderType)
+        {
+            if (!Enabled) return;
+            float dx = clientX - serverX, dz = clientZ - serverZ;
+            float d = (float)Math.Sqrt(dx * dx + dz * dz);
+            lock (_lock)
+            {
+                if (_writer == null) return;
+                var ci = CultureInfo.InvariantCulture;
+                _writer.Write("{\"t\": ");
+                _writer.Write(gameTimeMs.ToString("R", ci));
+                _writer.Write(", \"net\": ");
+                _writer.Write(netId.ToString(ci));
+                _writer.Write(", \"ev\": \"desync\", \"d\": ");
+                _writer.Write(d.ToString("F1", ci));
+                _writer.Write(", \"cx\": ");
+                _writer.Write(clientX.ToString("F1", ci));
+                _writer.Write(", \"cz\": ");
+                _writer.Write(clientZ.ToString("F1", ci));
+                _writer.Write(", \"sx\": ");
+                _writer.Write(serverX.ToString("F1", ci));
+                _writer.Write(", \"sz\": ");
+                _writer.Write(serverZ.ToString("F1", ci));
+                _writer.Write(", \"moving\": ");
+                _writer.Write(moving ? "true" : "false");
+                _writer.Write(", \"order\": \"");
+                _writer.Write(orderType);
+                _writer.Write("\"}\n");
+            }
+        }
+
+        /// <summary>
+        /// Logs one client movement-ack (ev:"ack"). The client echoes the SyncID of the last
+        /// movement packet it APPLIED (PKT_C2S_MoveConfirm — Riot's server ignores it, we only log).
+        /// Our WireSyncID is a monotonic session clock at 2/3 per ms, so
+        /// <c>(nowSync − ackedSync) · 1.5</c> ≈ milliseconds between us building that movement
+        /// packet and the client's ack arriving back ≈ RTT + client apply delay ("latms"). A rising
+        /// latms series = growing client-side lag; gaps in acked syncIDs = movement packets the
+        /// client dropped as stale (CanSyncUpdate gate).
+        /// </summary>
+        public static void LogMoveAck(float gameTimeMs, uint netId, int ackedSync, int nowSync, byte teleportCount)
+        {
+            if (!Enabled) return;
+            lock (_lock)
+            {
+                if (_writer == null) return;
+                var ci = CultureInfo.InvariantCulture;
+                _writer.Write("{\"t\": ");
+                _writer.Write(gameTimeMs.ToString("R", ci));
+                _writer.Write(", \"net\": ");
+                _writer.Write(netId.ToString(ci));
+                _writer.Write(", \"ev\": \"ack\", \"sync\": ");
+                _writer.Write(ackedSync.ToString(ci));
+                _writer.Write(", \"latms\": ");
+                _writer.Write(((nowSync - ackedSync) * 1.5f).ToString("F1", ci));
+                _writer.Write(", \"tele\": ");
+                _writer.Write(teleportCount.ToString(ci));
+                _writer.Write("}\n");
+            }
+        }
+
+        /// <summary>
         /// Logs one issued path. <paramref name="path"/> is the just-set waypoint list (index 0 =
         /// current position). <paramref name="allyBodies"/> = nearby same-team body positions (for
         /// the clearance metric — pass the live collision-neighbour positions). No-op unless enabled.

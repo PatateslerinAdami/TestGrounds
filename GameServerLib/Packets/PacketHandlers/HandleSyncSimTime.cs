@@ -29,14 +29,28 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 //_logger.Warn(msg);
             }
 
-            // Reply with SyncSimTimeFinalS2C (0x76) so the client refines its latency average + clock
-            // convergence. serverTime in seconds; estLatency = half the round-trip since the server time
-            // the client echoed (TimeLastServer), clamped to a sane range so a stale/garbage timestamp
-            // can never corrupt the client clock (0 => no latency compensation, still drives convergence).
+            // Reply with SyncSimTimeFinalS2C (0x76). Field semantics replay-verified against Riot
+            // (343e3502, four samples exact to ±0.01, 2026-07-04):
+            //   TimeLastClient      = ECHO of the client's reported clock (req.TimeLastClient)
+            //   TimeRTTLastOverhead = serverNow − req.TimeLastServer, RAW — the full round trip
+            //                         since the 0xC1 stamp the client last saw (the C2S heartbeat
+            //                         is the client's reply to 0xC1, GameClient.cpp:4017), i.e.
+            //                         RTT + frame/scheduling overhead: ~0.3-0.5s steady state in
+            //                         Riot games, seconds-large during load. NO clamping — the
+            //                         old 0.5s sanity clamp fired on virtually every heartbeat
+            //                         (the echoed stamp can be many seconds old whenever a
+            //                         heartbeat isn't an immediate 0xC1 reply) and zeroed the
+            //                         field permanently.
+            //   TimeConvergance     = server GameTime now, seconds (the 4.17 client's 0x76
+            //                         handler doesn't read it; Riot sends it, so do we).
+            // Client consumption (GameClient.cpp:3353-3361): gAverageLatency = f9·0.3 + old·0.7;
+            // gLastConvergenceDelta = (clock − f5)·0.4 + gAverageLatency; and the periodic 0xC1
+            // HARD clock-set applies SetTime(stamp + gAverageLatency) (GameClient.cpp:4022) — so
+            // a zeroed f9 disabled the client's latency compensation entirely (invisible on
+            // localhost, real lag for networked players).
             var serverTimeNow = _game.GameTime / 1000.0f;
-            var roundTrip = serverTimeNow - req.TimeLastServer;
-            var estLatency = (roundTrip > 0f && roundTrip < 0.5f) ? roundTrip * 0.5f : 0f;
-            _game.PacketNotifier.NotifySyncSimTimeFinalS2C(userId, serverTimeNow, estLatency);
+            var rttOverhead = System.Math.Max(0f, serverTimeNow - req.TimeLastServer);
+            _game.PacketNotifier.NotifySyncSimTimeFinalS2C(userId, req.TimeLastClient, rttOverhead, serverTimeNow);
 
             return true;
         }

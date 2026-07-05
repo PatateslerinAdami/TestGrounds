@@ -250,16 +250,15 @@ namespace PacketDefinitions420
                 // so the new viewer learns name/type/duration/caster. The BuffCount field below carries the
                 // counter value (S4 BuffManagerClient::Deserialize writes to BuffInstance offset 0x74,
                 // BuffManagerClient.cpp:185-188). Replay shows ~5.85% of BuffAdd2 packets carry runningTime>0,
-                // matching the resync pattern. Hidden buffs stay server-side.
+                // matching the resync pattern.
                 packets ??= new List<GamePacket>();
                 for (var i = 0; i < tempBuffs.Count; i++)
                 {
                     var buff = tempBuffs.ElementAt(i).Value;
                     buffCountList.Add(new KeyValuePair<byte, int>(buff.Slot, buff.StackCount));
-                    if (!buff.IsHidden)
-                    {
-                        packets.Add(BuildBuffAdd2(buff));
-                    }
+                    // Hidden buffs are replicated too (wire IsHidden=1, display-only flag) —
+                    // see BuffIsReplicated in AttackableUnit for the decomp evidence.
+                    packets.Add(BuildBuffAdd2(buff));
                 }
             }
 
@@ -1287,7 +1286,10 @@ namespace PacketDefinitions420
             {
                 SenderNetID = deathData.Unit.NetId,
                 AttackerNetID = deathData.Killer.NetId,
-                //TODO: Unhardcode this when an assists system gets implemented
+                // Always 0 on Riot's wire: all 3 Building_Die in the 4.20 replay carry
+                // lastHeroNetId=0, including one minion kill where a "last hero" would apply.
+                // The S1 client never reads the field either (obj_Building/obj_HQ
+                // OnNetworkPacket only use mAttacker), so 0 is the faithful value.
                 LastHeroNetID = 0
             };
             _packetHandlerManager.BroadcastPacket(buildingDie.GetBytes(), Channel.CHL_S2C);
@@ -1470,7 +1472,7 @@ namespace PacketDefinitions420
         /// <param name="newDisplayRange">New max display range for the spell to set.</param>
         /// <param name="newIconIndex">New index of an icon for the spell to set.</param>
         /// <param name="offsetTargets">New target netids for the spell to set.</param>
-        public void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot, GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false, TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0, float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0, List<uint> offsetTargets = null)
+        public void NotifyChangeSlotSpellData(int userId, ObjAIBase owner, byte slot, GameServerCore.Enums.ChangeSlotSpellDataType changeType, bool isSummonerSpell = false, TargetingType targetingType = TargetingType.Invalid, string newName = "", float newRange = 0, float newMaxCastRange = 0, float newDisplayRange = 0, byte newIconIndex = 0x0, List<uint> offsetTargets = null, byte extraFlags = 0x0E)
         {
             ChangeSpellData spellData = new ChangeSpellDataUnknown()
             {
@@ -1557,6 +1559,10 @@ namespace PacketDefinitions420
                         break;
                     }
             }
+
+            // Bitfield beyond IsSummonerSpell: Riot never sends 0 (Sion W replay: 0x6E arming the
+            // override spell, 0x0E restoring). Replicated verbatim via extraFlags.
+            spellData.ExtraFlags = extraFlags;
 
             // Per-type wire split (replay-verified across 40 SR replays, no overlap; byte-faithful):
             //   SpellName (60951x) / TargetingType (1184x) -> ChangeSlotSpellData (0x17), BROADCAST to all
@@ -2231,22 +2237,28 @@ namespace PacketDefinitions420
         /// Sends a packet to all players detailing the state (DEAD/ALIVE) of the specified inhibitor.
         /// </summary>
         /// <param name="inhibitor">Inhibitor to check.</param>
-        /// <param name="killer">Killer of the inhibitor (if applicable).</param>
-        /// <param name="assists">Assists of the killer (if applicable).</param>
-        public void NotifyInhibitorState(Inhibitor inhibitor, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null, List<Champion> assists = null)
+        /// <param name="deathData">Death information (killer etc.) when the inhibitor just died.</param>
+        public void NotifyInhibitorState(Inhibitor inhibitor, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null)
         {
             switch (inhibitor.InhibitorState)
             {
                 case DampenerState.RegenerationState:
+                    // Replay-verified (4.20, both OnDampenerDie events): assists = champions with
+                    // an active assist marker on the dampener, the killer is never included,
+                    // GoldGiven is always 0. Riot sends this as a unit-scoped OnEvent (0xA3) with
+                    // the dampener as sender, not as OnEventWorld (0x45).
+                    var assists = inhibitor.GetEnemyChampionAssists(deathData.Killer);
                     var annoucementDeath = new OnDampenerDie
                     {
-                        //All mentions i found were 0, investigate further if we'd want to unhardcode this
                         GoldGiven = 0.0f,
                         OtherNetID = deathData.Killer.NetId,
-                        AssistCount = 0
-                        //TODO: Inplement assists when an assist system gets put in place
+                        AssistCount = assists.Count
                     };
-                    NotifyS2C_OnEventWorld(annoucementDeath, inhibitor);
+                    for (int i = 0; i < assists.Count && i < annoucementDeath.Assists.Length; i++)
+                    {
+                        annoucementDeath.Assists[i] = assists[i].NetId;
+                    }
+                    NotifyOnEvent(annoucementDeath, inhibitor);
 
                     NotifyBuilding_Die(deathData);
 
@@ -2774,7 +2786,13 @@ namespace PacketDefinitions420
                 SenderNetID = b.TargetUnit.NetId, //TODO: Verify if this should change depending on the removal source
                 BuffSlot = b.Slot,
                 BuffNameHash = HashFunctions.HashString(b.Name),
-                RunTimeRemove = b.Duration - b.TimeElapsed
+                // Riot sends (effectively) always 0 here: 2791/2814 removes in the Sion test
+                // replay are exactly 0.0, the rest tiny latency values (<0.25s). The 4.17 client
+                // feeds this float as the TIME OFFSET into the buff's OnBuffDeactivate audio
+                // event (BuffManagerClient.cpp:706-714) — sending remaining duration (the old
+                // value here) seeks PAST the sound, silencing e.g. Sion W's detonate explosion
+                // on early recasts while full-duration expiries (remaining=0) played fine.
+                RunTimeRemove = 0f
             };
             _packetHandlerManager.BroadcastPacket(removePacket.GetBytes(), Channel.CHL_S2C);
         }
@@ -2798,7 +2816,9 @@ namespace PacketDefinitions420
                 {
                     OwnerNetID = buffs[i].TargetUnit.NetId,
                     Slot = buffs[i].Slot,
-                    RunTimeRemove = buffs[i].Duration - buffs[i].TimeElapsed
+                    // Always 0, like the single NPC_BuffRemove2 above — the client uses this as
+                    // the seek offset into the buff's OnBuffDeactivate audio event.
+                    RunTimeRemove = 0f
                 };
                 entries.Add(entry);
             }
@@ -5121,18 +5141,22 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Replies to a client's SynchSimTimeC2S heartbeat with SyncSimTimeFinalS2C (0x76): the client reads
-        /// field@5 as the server time and field@9 as the estimated one-way latency, smooths its average
-        /// latency and computes a convergence delta (the gradual clock correction; the hard clock-set is
-        /// SynchSimTimeS2C 0xC1). Times are in seconds. estLatency 0 = no latency compensation (safe).
+        /// Replies to a client's SynchSimTimeC2S heartbeat with SyncSimTimeFinalS2C (0x76). Field
+        /// filling is replay-verified against Riot (343e3502): field@5 = echo of the client's
+        /// reported clock, field@9 = raw round-trip-plus-overhead since the last 0xC1 stamp the
+        /// client saw, field@13 = server GameTime (seconds). The client (GameClient.cpp:3353-3361)
+        /// smooths field@9 into gAverageLatency (×0.3/0.7) and derives gLastConvergenceDelta from
+        /// field@5; gAverageLatency then offsets the periodic 0xC1 HARD clock-set
+        /// (SetTime(stamp + gAverageLatency), GameClient.cpp:4022) — this reply is what makes the
+        /// client clock latency-compensated. See HandleSyncSimTime for the full derivation.
         /// </summary>
-        public void NotifySyncSimTimeFinalS2C(int userId, float serverTime, float estLatency)
+        public void NotifySyncSimTimeFinalS2C(int userId, float timeLastClient, float rttOverhead, float serverTime)
         {
             var packet = new SyncSimTimeFinalS2C
             {
-                TimeLastClient = serverTime,
-                TimeRTTLastOverhead = estLatency,
-                TimeConvergance = 0f
+                TimeLastClient = timeLastClient,
+                TimeRTTLastOverhead = rttOverhead,
+                TimeConvergance = serverTime
             };
             _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
         }

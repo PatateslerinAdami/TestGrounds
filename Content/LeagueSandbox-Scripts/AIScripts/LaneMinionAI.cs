@@ -37,35 +37,18 @@ namespace AIScripts
         // reached and the minion advances to the next. Patch 4.20 = 500 (sNearPointThresholdSq =
         // 250000); note 4.17 used 150. We target 4.20, so 500. Flat threshold, NOT collision-relative.
         private const float NEAR_POINT_THRESHOLD = 500f;
-        // Riot issues SHORT forward paths refreshed as the minion rolls forward — wire-measured chord
-        // median ~277u (343e3502 SR-4.20), NOT one long line to the distant nav point (our fwd:target
-        // paths measured 1459u median: too long → stale as bodies move → re-path teleport). Cap the
-        // issued forward segment here; the remainder of the (actor-aware) route is re-issued via
-        // IsPathEnded each segment. Kept a touch above Riot's median so the refresh cadence isn't
-        // tighter than the nav-point advance.
-        // Raised 350→700 (2026-06-30): with TERRAIN-ONLY forward paths the issued line is shape-stable
-        // (terrain doesn't move), so it never goes stale and there is no reason to re-issue often. A
-        // longer rolling segment HALVES the WaypointGroup rate — each re-issue hard-snaps the client to
-        // wp0 and resets its local collision separation, so fewer re-issues let the client de-clump a
-        // stacked wave between snaps (the residual "wuselig" look). (Under the old actor-routed path
-        // this had to stay short because the bend went stale as neighbours moved.)
-        private const float MAX_ROLL_LEN = 700f;
         // Within this of a FINAL (non-advancing) target — turret / nexus cap — stop re-issuing so the
         // minion settles instead of churning a fresh path per tick (Riot NavPointManager::IsStillOldPosition).
-        // Small enough not to cut the rolling refresh mid-segment (which fires while the target is still far).
         private const float ARRIVE_STOP = 150f;
-        // Re-issue the next rolling segment BEFORE the current one is fully consumed, once the remaining
-        // path drops below this. With MAX_ROLL_LEN truncation the server walks smoothly, but the CLIENT
-        // follows the issued path and STOPS when it reaches the end — then waits ~1 RTT for the next
-        // segment and jerks forward to catch up (the measured "minion briefly stops then teleports
-        // forward while pushing, before any combat"; the server-side nav log shows NO stall, so it is
-        // purely client path-starvation). Keeping ~175u of path ahead at all times means the client
-        // never reaches the end → no stutter. Must be < MAX_ROLL_LEN and > ARRIVE_STOP.
-        private const float REISSUE_LOOKAHEAD = 300f;
 
         private LaneMinion _minion;
         private Vector2 _lastOrderedWaypoint = new Vector2(float.NaN, float.NaN);
         private int _navIndex;
+        // Per-capping-turret committed approach cell (distinct-cell fix, see the capped branch):
+        // computed ONCE per turret via the stand-cell reservation handshake, reused until the
+        // capping turret changes (next tower after a kill resets it via the NetId mismatch).
+        private Vector2 _cappedStandTarget;
+        private uint _cappedStandTurretNetId;
 
         // Whether body-contact with an enemy makes the minion engage it (Aggro.lua OnCollisionEnemy).
         // BaronMinionAI overrides this to false (its OnCollisionEnemy is a no-op).
@@ -456,14 +439,48 @@ namespace AIScripts
             Vector2 target = next.Value;
 
             // Inline-turret fidelity (Riot GetNextNavLocIter halts at the enemy turret nav node):
-            // once the cap waypoint is reached, target the capping turret's exact position instead
-            // of the nearest lane waypoint, so the minion always closes into its acquisition range.
+            // once the cap waypoint is reached, target the capping turret instead of the nearest
+            // lane waypoint, so the minion always closes into its acquisition range.
+            //
+            // DISTINCT-CELL FIX (2026-07-05, tt120 "casters path into each other, oscillate, end
+            // STACKED on one attack position"): the old code targeted cappingTurret.Position RAW —
+            // the IDENTICAL coordinate for every capped wave member. This is a plain forward-nav
+            // MOVE, so none of the attack-stand machinery (GCAP spiral, reservations, CommitStand)
+            // ever ran: paths converged geometrically onto one point, the casters fused during the
+            // walk (wire: dests 10-24u apart at 111s, identical at 112.5s, d=0.0 stacked from
+            // 114s for 10+s) and the in-range stops froze the stack. Route the shared point
+            // through the stand-cell reservation handshake ONCE per capping turret (cached — a
+            // per-tick CommitStand would relocate against its own reservation churn and re-issue
+            // every evaluation): each member commits a distinct get-to-able cell at the tower.
             if (_navIndex >= maxIndex)
             {
                 var cappingTurret = _minion.GetCappingTurret();
                 if (cappingTurret != null)
                 {
-                    target = cappingTurret.Position;
+                    if (_cappedStandTurretNetId != cappingTurret.NetId)
+                    {
+                        _cappedStandTarget = CommitAttackStandPosition(_minion, cappingTurret.Position);
+                        // ACQUISITION CLAMP (2026-07-05, user bug "minions stop on the lane just
+                        // short of turret range"): the reservation relocation is spatially
+                        // unconstrained — under crowding the Nth ring cell can land OUTSIDE this
+                        // minion's acquisition range of the turret. The minion then arrives there,
+                        // atFinalTarget correctly suppresses further re-issues (riot-emission
+                        // model: no lookahead top-up prods it anymore either), targeting never
+                        // sees the turret, and it stands on the lane forever. A cell that cannot
+                        // acquire the turret falls back to the raw center (one minion risking
+                        // ring overlap beats a pacifist).
+                        float acq = _minion.GetAcquisitionRange();
+                        if (Vector2.DistanceSquared(_cappedStandTarget, cappingTurret.Position) > acq * acq)
+                        {
+                            _cappedStandTarget = cappingTurret.Position;
+                        }
+                        _cappedStandTurretNetId = cappingTurret.NetId;
+                    }
+                    target = _cappedStandTarget;
+                }
+                else
+                {
+                    _cappedStandTurretNetId = 0;
                 }
             }
 
@@ -486,18 +503,23 @@ namespace AIScripts
             // transit retrying (the 0.25s sweep + OnPathToTargetBlocked also cover that case).
             bool atFinalTarget =
                 Vector2.DistanceSquared(_minion.Position, target) <= ARRIVE_STOP * ARRIVE_STOP;
-            // Remaining length of the currently-issued path (≈ distance to its last waypoint; the
-            // forward segment is short and near-straight). When it drops below REISSUE_LOOKAHEAD we
-            // top it up so the client never runs out of path and stalls.
-            float pathRemaining = (_minion.Waypoints != null && _minion.Waypoints.Count > 0)
-                ? Vector2.Distance(_minion.Position, _minion.Waypoints[_minion.Waypoints.Count - 1])
-                : 0f;
-            bool pathRunningLow = _minion.IsPathEnded() || pathRemaining < REISSUE_LOOKAHEAD;
-            if (_lastOrderedWaypoint != target || (pathRunningLow && !atFinalTarget))
+            // RIOT EMISSION MODEL (2026-07-05, wobble invention audit — VERIFIED in-game: the
+            // marching wobble/"Rumpathen" disappeared with this change): ONE full path per lane
+            // leg, no mid-leg top-up. Riot issues the whole leg to the nav node in one path
+            // (wire: n=2, 776-1341u) and re-issues only on the nav-node advance — the client
+            // walks the whole leg undisturbed. The previous invented rolling-segment scheme
+            // (700u truncation + 300u lookahead top-up, see git history) replaced the client's
+            // path mid-run several times per leg; every replace hard-snaps the client to wp0
+            // (ActorClient.cpp:169) and resets its local collision separation — that churn WAS
+            // the visible wobble. Re-issue ONLY when the forward-nav target changes (node
+            // advance / turret cap) or when the issued path was consumed while still short of
+            // the target (partial/blocked route — worth one retry; without it a blocked minion
+            // would stand until the next node).
+            bool pathConsumedShort = _minion.IsPathEnded() && !atFinalTarget;
+            if (_lastOrderedWaypoint != target || pathConsumedShort)
             {
                 // Diagnostic reason for PATH_LOG: which clause opened the gate.
-                string reason = _lastOrderedWaypoint != target ? "fwd:target"
-                    : (_minion.IsPathEnded() ? "fwd:pathend" : "fwd:lookahead");
+                string reason = _lastOrderedWaypoint != target ? "fwd:target" : "fwd:pathend";
                 // TERRAIN-ONLY path (Riot-faithful, replay-verified 2026-06-30): the lane walk issues a
                 // straight path to the next nav point, routing around TERRAIN only — NOT around allied
                 // bodies. Riot's wire proves this: in a stacked wave 72% of minion paths are n=1 (a single
@@ -512,9 +534,10 @@ namespace AIScripts
                 // as the minion advances. (Server-side de-clumping isn't lost faithfully: the steer
                 // returns early for n=2 and the push needs Count>=4 — exactly Riot's gating — so straight
                 // lane walks rely on client separation just like Riot's do.)
-                List<Vector2> full = GetPath(_minion.Position, target)
+                // Full leg, no truncation — Riot sends the whole leg to the nav node in one
+                // issue (see the emission-model comment on the gate above).
+                List<Vector2> path = GetPath(_minion.Position, target)
                                      ?? new List<Vector2> { _minion.Position, target };
-                List<Vector2> path = TruncatePath(full, MAX_ROLL_LEN);
                 _minion.SetWaypoints(path, pathReason: reason);
                 _lastOrderedWaypoint = target;
 
@@ -559,36 +582,5 @@ namespace AIScripts
                 _minion.Position.X, _minion.Position.Y, enriched);
         }
 
-        // Returns the head of <paramref name="path"/> up to <paramref name="maxLen"/> cumulative
-        // length, cutting the final segment at the cap — so the issued forward path is a short rolling
-        // prefix of the full actor-aware route (Riot's ~277u chord), refreshed via IsPathEnded as the
-        // minion advances. Preserves path[0] (== current position, required by SetWaypoints). Paths
-        // already shorter than the cap pass through unchanged.
-        private static List<Vector2> TruncatePath(List<Vector2> path, float maxLen)
-        {
-            // NOTE: must also truncate 2-point paths. A clear-LOS forward push returns a straight
-            // [pos, navPoint] (n=2) that can be >1000u; the old `Count <= 2` early-return let that
-            // through un-truncated, so the rolling cap silently didn't apply on open lane (measured
-            // chord 1302u). Only a genuinely degenerate <2-point path is returned as-is.
-            if (path == null || path.Count < 2)
-            {
-                return path;
-            }
-            var outp = new List<Vector2> { path[0] };
-            float acc = 0f;
-            for (int i = 1; i < path.Count; i++)
-            {
-                float seg = Vector2.Distance(path[i - 1], path[i]);
-                if (acc + seg >= maxLen)
-                {
-                    float t = seg > 1e-3f ? (maxLen - acc) / seg : 0f;
-                    outp.Add(Vector2.Lerp(path[i - 1], path[i], Math.Clamp(t, 0f, 1f)));
-                    break;
-                }
-                acc += seg;
-                outp.Add(path[i]);
-            }
-            return outp;
-        }
     }
 }

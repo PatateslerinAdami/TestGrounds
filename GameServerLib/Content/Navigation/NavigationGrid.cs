@@ -620,7 +620,18 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             // radius parameter — like the A* expansion, unit clearance lives in the pre-inflated
             // footprint bakes, not in per-query radius sweeps. Radius-aware LOS here rejected
             // straight lines the client takes (forcing pointless A* runs near walls).
-            if (!skipLineOfSight && !CastCircle(from, to, 0f))
+            //
+            // ACTOR-GATED (2026-07-04, T2-faithful): GridLineOfSightTest2 also runs HasStuckActor
+            // within the first 1500u of the line (NavigationGrid.cpp:673 `travelLength < 1500`,
+            // prediction mode) — Riot's shortcut never hands back a straight line through stuck
+            // actor bodies; such a request falls through to the actor-aware A* and routes around.
+            // Applies to every caller that supplies a predicate (champion orders, chase, attack
+            // approach); terrain-only callers (null predicate, e.g. minion forward-nav) keep the
+            // pure terrain shortcut.
+            const int SHORTCUT_ACTOR_WINDOW_CELLS = 30; // 1500u / cellSize(50)
+            if (!skipLineOfSight && !CastCircle(from, to, 0f)
+                && (actorBlocked == null
+                    || IsGridLineOfSightClear(from, to, actorBlocked, SHORTCUT_ACTOR_WINDOW_CELLS)))
             {
                 return new NavigationPath(new[] { from, to });
             }
@@ -921,36 +932,44 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                 pathCells.Reverse();
             }
 
-            // Cell-based string-pulling (radius 0) — the client's TrimNavigationPath LOS
-            // shortcuts run on the same cell-sampled tests as GridLineOfSightTest2. Radius-aware
-            // smoothing left stairsteps on wall-hugging paths the client straightens (units
-            // visually hugging walls is authentic 4.x).
-            // ACTOR-AWARE smoothing only on a skip-LOS (stuck-recovery) path: the client's
-            // TrimNavigationPath uses GridLineOfSightTest WITH HasStuckActor (NavigationMesh.cpp:286)
-            // so a shortcut that would collapse the detour back through a body is rejected. Without
-            // this the actor-aware A* bend gets string-pulled straight again (terrain LOS is clear),
-            // undoing the routing-around. Scoped to skipLineOfSight so normal chase paths keep the
-            // faithful terrain-only smoothing.
-            SmoothPath(pathCells, 0f, skipLineOfSight ? actorBlocked : null);
-
-            var returnPath = new NavigationPath(pathCells.Count) { IsPartial = isPartialPath };
-            returnPath.AddWaypoint(from);
+            // Build the raw world waypoint list (from + intermediate cell centers + goal), then run
+            // the server-side smoothing pipeline on it.
+            var waypoints = new List<Vector2>(pathCells.Count + 1) { from };
             for (int i = 1; i < pathCells.Count - 1; i++)
             {
-                returnPath.AddWaypoint(TranslateFromNavGrid(pathCells[i].Locator));
+                waypoints.Add(TranslateFromNavGrid(pathCells[i].Locator));
             }
             // A full path lands exactly on the request target; a partial path lands at the center
             // of the closest reachable cell.
-            if (isPartialPath)
-            {
-                returnPath.AddWaypoint(TranslateFromNavGrid(pathCells[pathCells.Count - 1].Locator));
-            }
-            else
-            {
-                returnPath.AddWaypoint(to);
-            }
+            waypoints.Add(isPartialPath
+                ? TranslateFromNavGrid(pathCells[pathCells.Count - 1].Locator)
+                : to);
 
-            return returnPath;
+            // Actor_Common::SmoothPath (Actor.cpp:2956-2986) — Riot runs this on EVERY order path
+            // after BuildNavigationPath, server-side (IssueOrder executes on the server; the client
+            // only uses its copy for the order marker — CloneNavigationPath copies received
+            // waypoints RAW, so whatever we emit here is exactly what the client walks/renders).
+            // The subdivide passes run only when the path build was NOT a straight line-of-sight
+            // shortcut — always true on this code path (the LOS shortcut early-returned above).
+            // Sequence and constants verbatim; SubdividePath densifies the near portion of the
+            // path (index caps 5/5/3/5/3) so the string-pull has midpoints to land on, and
+            // TrimNavigationPath greedily collapses to farthest-visible vertices.
+            //
+            // ACTOR-AWARE trim whenever a predicate is supplied (2026-07-04, T1-faithful: Riot's
+            // TrimNavigationPath always runs the HasStuckActor leg, budgeted by the collisionsteps
+            // taper to the first cell of committed travel). Required for coherence with the
+            // actor-gated LOS shortcut above: a path that fell into the A* because a body blocked
+            // the straight line must not have that detour string-pulled right back through the
+            // body. Terrain-only callers (null predicate, e.g. minion forward-nav) are unaffected.
+            SubdividePath(waypoints, 2500f, 5);
+            SubdividePath(waypoints, 1000f, 5);
+            SubdividePath(waypoints, 500f, 3);
+            TrimNavigationPath(waypoints, actorBlocked);
+            SubdividePath(waypoints, 1500f, 5);
+            SubdividePath(waypoints, 1000f, 3);
+            TrimNavigationPath(waypoints, actorBlocked);
+
+            return new NavigationPath(waypoints) { IsPartial = isPartialPath };
         }
 
         /// <summary>
@@ -1470,71 +1489,332 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// Remove waypoints (cells) that have LOS from one to the other from path.
         /// </summary>
         /// <param name="path"></param>
-        private void SmoothPath(List<NavigationGridCell> path, float checkDistance = 0f,
-            ActorBlockedPredicate actorBlocked = null)
+        /// <summary>
+        /// Port of <c>NavigationPath::SubdividePath</c> (NavigationPath.cpp:406). One pass splits
+        /// each segment longer than 85u in half (midpoint quantized to the 2u wire grid so the
+        /// vertex survives the round-trip through CompressedWaypoint unchanged), but only within
+        /// the first <paramref name="capMaxSplits"/> indices of the list and only until the summed
+        /// length of split segments exceeds <paramref name="maxDistance"/> — i.e. it densifies the
+        /// NEAR portion of the path. The SmoothPath sequence calls this with shrinking parameters
+        /// so the subsequent string-pull has midpoints to land on around corners.
+        /// </summary>
+        private void SubdividePath(List<Vector2> waypoints, float maxDistance, int capMaxSplits)
         {
-            if(path.Count < 3)
+            const float MIN_SUBDIVIDE = 85f; // NavigationPath.cpp:407 minSubdivide
+
+            if (waypoints.Count < 2)
             {
                 return;
             }
-            int j = 0;
-            // The first point remains untouched.
-            for(int i = 2; i < path.Count; i++)
+
+            // m_NextWaypoint - 1 in the decomp; our paths are always fresh here, so start at 0.
+            int iter = 0;
+            Vector2 last = waypoints[iter];
+            float distance = 0f;
+
+            while (maxDistance > distance)
             {
-                // If there is something (terrain OR, when actor-aware, a blocking unit) between the
-                // last added point and the current one, keep the intermediate waypoint.
-                if(CastCircle(path[j].GetCenter(), path[i].GetCenter(), checkDistance, false)
-                    || (actorBlocked != null && SegmentBlockedByActor(path[j], path[i], actorBlocked)))
+                iter++;
+                bool split = false;
+                while (iter < waypoints.Count && iter < capMaxSplits)
                 {
-                    // add previous.
-                    path[++j] = path[i - 1];
+                    Vector2 point = waypoints[iter];
+                    float dist = Vector2.Distance(point, last);
+                    iter++;
+
+                    if (dist > MIN_SUBDIVIDE)
+                    {
+                        // Midpoint, quantized to the wire grid: (short)((v - origin) / 2) * 2 + origin
+                        // (decomp uses the path's compression offset = map middle, scale 2).
+                        Vector2 mid = point + (last - point) * 0.5f;
+                        mid = new Vector2(
+                            (short)((mid.X - MiddleOfMap.X) / 2f) * 2f + MiddleOfMap.X,
+                            (short)((mid.Y - MiddleOfMap.Y) / 2f) * 2f + MiddleOfMap.Y);
+
+                        // GUARD (deviation from the decomp, which inserts blindly): a midpoint of a
+                        // wall-grazing segment can land — quantization included — inside a blocked
+                        // cell. Emitting an in-wall VERTEX makes the client walk into the wall to
+                        // reach it (its local sim then grinds/sticks; wire112 had 18 such endpoints
+                        // during a 6s wall-stuck). Skip the insertion; the segment stays undivided.
+                        if (!IsWalkable(mid, 0f))
+                        {
+                            last = point;
+                            continue;
+                        }
+
+                        last = point;
+                        waypoints.Insert(iter - 1, mid);
+                        distance += dist;
+                        split = true;
+                        break; // done_inner: outer loop re-checks the distance budget
+                    }
+
+                    last = point;
+                }
+
+                if (!split)
+                {
+                    return; // walked off the end / index cap without finding a long segment
                 }
             }
-            // Add last.
-            path[++j] = path[path.Count - 1];
-            j++; // Remove everything after.
-            path.RemoveRange(j, path.Count - j);
         }
 
         /// <summary>
-        /// Actor-aware leg of the string-pull LOS test (the <c>HasStuckActor</c> sampling inside the
-        /// client's <c>GridLineOfSightTest</c>, NavigationMesh.cpp:286 + 320). Walks the segment
-        /// between two cell centres in cell-size steps and asks <paramref name="actorBlocked"/>
-        /// whether a blocking unit sits on each sampled cell. Returns true (= "blocked", keep the
-        /// intermediate waypoint) as soon as one sample is occupied. Reachability mode
-        /// (<c>arrivalCost = -1</c>): tests the unit's CURRENT position, no movement prediction —
-        /// matching how the grid pathfinder's reachability sites call the predicate. Bounded to the
-        /// client's <c>collisionsteps</c> window (20 cells) so a long collapse only honours actors in
-        /// the near segment, exactly like the decomp.
+        /// Port of <c>NavigationMesh::TrimNavigationPath</c> (NavigationMesh.cpp:167): greedy
+        /// string-pull — from each kept vertex, binary-search the farthest waypoint still
+        /// line-of-sight visible (via <see cref="IsGridLineOfSightClear"/>, the client's own walk,
+        /// NOT our supercover CastCircle — see that method for why this matters at wall corners),
+        /// jump there, repeat. Vertices within one cell (Chebyshev) of the previously kept one are
+        /// dropped (the decomp's cellSize tolerance — note this means the exact requested goal can
+        /// be folded into the last kept cell-center vertex, ending the path up to ~1 cell short of
+        /// the click; Riot does the same).
+        /// <para>DELIBERATELY NOT PORTED: the wBest "refinement" block (NavigationMesh.cpp:293-520,
+        /// a one-iteration total-distance improvement over intermediate candidates, gated to the
+        /// first maxSteps=10 commits) and the LOS-cache/losCheckCount caps (pure perf; our binary
+        /// search does ≤log2(n) tests anyway). Output differs only where the refinement would have
+        /// picked a marginally shorter intermediate vertex.</para>
+        /// <para>The actor leg (<paramref name="actorBlocked"/>) mirrors the decomp's HasStuckActor
+        /// sampling budget: collisionsteps starts at 20 cells and tapers to 0 once one cell of path
+        /// has been committed (NavigationMesh.cpp:541-543) — bodies only block the collapse near
+        /// the path start.</para>
         /// </summary>
-        private bool SegmentBlockedByActor(NavigationGridCell a, NavigationGridCell b,
-            ActorBlockedPredicate actorBlocked)
+        private void TrimNavigationPath(List<Vector2> waypoints, ActorBlockedPredicate actorBlocked)
         {
-            Vector2 worldA = TranslateFromNavGrid(a.Locator);
-            Vector2 worldB = TranslateFromNavGrid(b.Locator);
-            Vector2 delta = worldB - worldA;
-            float dist = delta.Length();
-            if (dist < 1e-3f) return false;
-
-            const int CollisionSteps = 20; // client collisionsteps window (NavigationMesh.cpp:245)
-            int steps = Math.Min(CollisionSteps, (int)(dist / CellSize));
-            if (steps <= 0) return false;
-            Vector2 step = delta / steps;
-
-            // Skip the endpoints (i in [1, steps-1]); a and b are retained waypoints, what matters is
-            // whether a body sits BETWEEN them and blocks the straight collapse.
-            for (int i = 1; i < steps; i++)
+            if (waypoints.Count < 3)
             {
-                Vector2 sample = worldA + step * i;
-                var cell = GetCell(sample, true);
-                if (cell == null) continue;
-                // The predicate measures actor distance from the CELL CENTRE (BuildActorBlockedPredicate
-                // uses its first arg as cellCenterWorld), so pass the cell's true centre, not the raw
-                // sample point — same coords the A* expansion feeds it.
-                Vector2 cellCenter = TranslateFromNavGrid(cell.Locator);
-                if (actorBlocked(cellCenter, cell, -1f)) return true;
+                return;
             }
-            return false;
+
+            var trimmed = new List<Vector2>(waypoints.Count) { waypoints[0] };
+            float travelDistance = 0f;
+            int collisionSteps = 20; // NavigationMesh.cpp:245
+            int cur = 0;
+
+            // LOS is anchored at the TRIMMED tail, not at waypoints[cur]. This is load-bearing:
+            // the cellSize dedup below can DROP a committed corner vertex, and with cur-anchored
+            // LOS the two verified legs (anchor->corner, corner->far) splice into an UNVERIFIED
+            // anchor->far bridge — observed in-game as a path straight through a 2-cell wall
+            // (wire112 t=30-36s, champion wall-grind for ~6s: verified chain went over the wall
+            // via a corner vertex 49.8u from the anchor, dedup dropped it, emitted leg crossed
+            // the wall, subdivide then quantized a midpoint INTO the wall). In the decomp this
+            // guarantee comes from the wBest refinement block we deliberately skip — it re-tests
+            // candidates from `lastPos = trimmedlist.back()` (NavigationMesh.cpp:349). Anchoring
+            // the primary search there restores the every-emitted-leg-is-verified invariant.
+            while (true)
+            {
+                Vector2 anchor = trimmed[trimmed.Count - 1];
+
+                // Farthest waypoint after cur that is LOS-visible from the anchor (client binary
+                // probe, NavigationMesh.cpp:230-262; like Riot's, accepts the binary-search
+                // approximation on non-monotone visibility — but the committed leg itself is
+                // always verified below).
+                int lo = cur + 1;
+                int hi = waypoints.Count - 1;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi + 1) / 2;
+                    if (IsGridLineOfSightClear(anchor, waypoints[mid], actorBlocked, collisionSteps))
+                    {
+                        lo = mid;
+                    }
+                    else
+                    {
+                        hi = mid - 1;
+                    }
+                }
+                int far = lo;
+
+                if (!IsGridLineOfSightClear(anchor, waypoints[far], actorBlocked, collisionSteps))
+                {
+                    if (cur > 0 && waypoints[cur] != anchor)
+                    {
+                        // Even the nearest candidate is invisible from the anchor — the dedup
+                        // dropped a load-bearing corner (waypoints[cur], which WAS verified from
+                        // this anchor when it became cur). Re-add it despite the tolerance and
+                        // re-anchor there.
+                        travelDistance += Vector2.Distance(anchor, waypoints[cur]);
+                        trimmed.Add(waypoints[cur]);
+                        collisionSteps = travelDistance <= CellSize
+                            ? 20 - (int)(travelDistance / CellSize)
+                            : 0;
+                        continue;
+                    }
+                    // Anchor IS the current vertex and its A*-adjacent successor still fails the
+                    // walk (conservative disagreement between walk and A* adjacency) — take the
+                    // adjacent vertex; it is a walkable path cell at most one cell away.
+                    far = cur + 1;
+                }
+
+                // Commit the chosen vertex unless it collapses into the previous one
+                // (cellSize Chebyshev tolerance, NavigationMesh.cpp:524-535). Dropping is safe
+                // now: the NEXT leg is verified from the anchor, not from the dropped vertex.
+                if (Math.Abs(waypoints[far].X - anchor.X) > CellSize
+                    || Math.Abs(waypoints[far].Y - anchor.Y) > CellSize)
+                {
+                    travelDistance += Vector2.Distance(anchor, waypoints[far]);
+                    trimmed.Add(waypoints[far]);
+                }
+
+                if (far >= waypoints.Count - 1)
+                {
+                    // End reached. The final waypoint follows the decomp's m_EndPoint tolerance
+                    // (NavigationMesh.cpp:556-571): if it deduped into the tail vertex, the path
+                    // ends up to ~1 cell short of the exact goal — Riot does the same.
+                    break;
+                }
+
+                cur = far;
+
+                // collisionsteps taper (NavigationMesh.cpp:541-543): actor sampling only within
+                // the first cell of committed travel.
+                collisionSteps = travelDistance <= CellSize
+                    ? 20 - (int)(travelDistance / CellSize)
+                    : 0;
+            }
+
+            // A degenerate collapse (everything within tolerance of the start) would produce a
+            // 1-point path SetWaypoints rejects — keep the untrimmed list in that case.
+            if (trimmed.Count < 2)
+            {
+                return;
+            }
+
+            waypoints.Clear();
+            waypoints.AddRange(trimmed);
+        }
+
+        /// <summary>
+        /// Thin-line LOS walk for the string-pull, functional port of
+        /// <c>NavGrid::GridLineOfSightTest</c> (NavigationGrid.cpp:186). Returns true = line CLEAR.
+        /// <para>This is NOT equivalent to our supercover <see cref="GetAllCellsInLine"/>/
+        /// <see cref="CastCircle"/>: it tests only the 1-2 cells the line actually passes through
+        /// per major-axis column and TOLERATES exact corner-touches (epsilon shrink per column) —
+        /// which is what lets the trim collapse the diagonal cell-center staircases the supercover
+        /// keeps at wall corners (wire104: 4% of champion segments were 50-71u corner stairsteps,
+        /// detour overhead 4x Riot on short paths). Unlike the literal decompiled sawtooth walk
+        /// (see the HISTORY note in the body), it tracks the true line exactly, so genuine wall
+        /// crossings are never missed.</para>
+        /// <para>Grass legs (mFlags &amp; 1) omitted: every TrimNavigationPath call site passes
+        /// ignoreWallOfGrass = true, so those branches are dead in this use. The actor leg mirrors
+        /// HasStuckActor sampling: within the first <paramref name="collisionSteps"/> walked cells,
+        /// <paramref name="actorBlocked"/> (reachability mode, arrivalCost -1) blocks the line.</para>
+        /// </summary>
+        public bool IsGridLineOfSightClear(Vector2 from, Vector2 to,
+            ActorBlockedPredicate actorBlocked = null, int collisionSteps = 0)
+        {
+            float x0 = from.X, y0 = from.Y;
+            float x1 = to.X, y1 = to.Y;
+
+            bool isSteep = Math.Abs(y1 - y0) > Math.Abs(x1 - x0);
+            if (isSteep)
+            {
+                (x0, y0) = (y0, x0);
+                (x1, y1) = (y1, x1);
+            }
+
+            if (x0 == x1)
+            {
+                return true;
+            }
+
+            if (x0 > x1)
+            {
+                (x0, x1) = (x1, x0);
+                (y0, y1) = (y1, y0);
+            }
+
+            float lineStartMajor = x0;
+
+            // Tests the cell under the (major=x, minor=y) walk position; true = the line is blocked
+            // there. Cell coords clamped to the grid like the decomp (never null).
+            bool CellBlocked(float majorX, float minorY, int distTraveled)
+            {
+                float worldX = isSteep ? minorY : majorX;
+                float worldZ = isSteep ? majorX : minorY;
+                int cx = (int)((worldX - MinGridPosition.X) / CellSize);
+                int cz = (int)((worldZ - MinGridPosition.Z) / CellSize);
+                cx = Math.Clamp(cx, 0, (int)CellCountX - 1);
+                cz = Math.Clamp(cz, 0, (int)CellCountY - 1);
+                var cell = GetCell((short)cx, (short)cz);
+                if (!IsWalkable(cell))
+                {
+                    return true;
+                }
+                if (actorBlocked != null && distTraveled <= collisionSteps)
+                {
+                    // PREDICTION mode, like the decomp's walks: GridLineOfSightTest passes
+                    // startEndTravelDistance (NavigationGrid.cpp:290) and GridLineOfSightTest2
+                    // passes travelLength/0.8 (:678) — the predicate divides by the attacker's
+                    // move speed and tests MOVING units at their predicted position at arrival
+                    // time (stationary ones where they stand). The major-axis distance from the
+                    // line start is the same travel measure the decomp accumulates in cell strides.
+                    float travel = Math.Abs(majorX - lineStartMajor);
+                    if (actorBlocked(TranslateFromNavGrid(cell.Locator), cell, travel))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Exact thin-line column walk. HISTORY: the first port reproduced the decompiled
+            // sawtooth walk (one 50u sample per column + approximate diagonalFactor row-advance,
+            // NavigationGrid.cpp:308-475). That walk's minor-axis position drifts off the true
+            // line (overshoot-then-wait), and on long shallow legs it probes the WRONG ROW for
+            // several columns — measured offline: 9/46/125 emitted legs per distance bin crossed
+            // >=30u of blocked cells, and in-game it let the trim collapse a detour straight
+            // through a 2-cell wall (wire112 wall-stuck). Riot's shipped game visibly does not
+            // emit through-wall paths, so the sawtooth as recovered (FIXME-barrier-riddled
+            // region, sign already ambiguous) cannot be the effective behavior. This version
+            // keeps the walk's INTENT — test only the 1-2 cells the line actually passes
+            // through per major-axis column (thin line, NOT a supercover) — exactly:
+            //  - per column, test the cell at the line's entry minor-coordinate and, when the
+            //    line crosses a row boundary inside the column, the exit cell too;
+            //  - a crossing exactly ON the column corner stays tolerated (the epsilon shrink
+            //    keeps the corner-touching neighbor cells untested), which is the property that
+            //    collapses the diagonal cell-center staircases the supercover CastCircle keeps.
+            float minMajor = isSteep ? MinGridPosition.Z : MinGridPosition.X;
+            float slope = (y1 - y0) / (x1 - x0);
+            const float EPS = 1e-3f;
+
+            int col0 = (int)((x0 - minMajor) / CellSize);
+            int col1 = (int)((x1 - minMajor) / CellSize);
+            int distTraveledCells = 0;
+
+            for (int c = col0; c <= col1; c++)
+            {
+                float colLeft = minMajor + c * CellSize;
+                float mStart = Math.Max(x0, colLeft) + EPS;
+                float mEnd = Math.Min(x1, colLeft + CellSize) - EPS;
+                if (mEnd < mStart)
+                {
+                    // Degenerate sliver (line barely touches this column) — corner tolerance.
+                    continue;
+                }
+
+                float nStart = y0 + slope * (mStart - x0);
+                float nEnd = y0 + slope * (mEnd - x0);
+
+                if (CellBlocked(mStart, nStart, distTraveledCells))
+                {
+                    return false;
+                }
+                distTraveledCells++;
+
+                // |slope| <= 1 after the major-axis swap, so the line spans at most two rows
+                // per column; test the exit row only when it differs.
+                float minMinor = isSteep ? MinGridPosition.X : MinGridPosition.Z;
+                if ((int)((nStart - minMinor) / CellSize) != (int)((nEnd - minMinor) / CellSize))
+                {
+                    if (CellBlocked(mEnd, nEnd, distTraveledCells))
+                    {
+                        return false;
+                    }
+                    distTraveledCells++;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

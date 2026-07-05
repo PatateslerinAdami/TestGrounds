@@ -89,15 +89,20 @@ public class AhriFoxFireMissile : ISpellScript {
         missile.CastInfo.Variables.Set("Ready", ready);
         if (ready < 3) return;
 
-        // S1 scan radius is 650 (the BBForNClosestVisibleUnitsInTargetArea Range, not the
-        // ini CastRadius of 710). Champion-first / nearest ordering reproduces S1's two-phase
-        // "enemy heroes first, then any unit" priority in a single pass.
-        var unitsInRange = EnumerateValidUnitsInRange(_ahri, missile.Position, 650f, true,
-                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)
-            .OrderByDescending(unit => unit is Champion).ThenBy(unit => Vector2.DistanceSquared(missile.Position, unit.Position)).ToList();
-        if (unitsInRange.Count == 0) return;
+        // Literal S1 two-phase acquisition (both BBForNClosestVisibleUnitsInTargetArea, Range 650
+        // — not the ini CastRadius of 710): first the nearest enemy HERO, and only if none was
+        // found (BBIf Count == 0) the nearest of any valid unit. The Visible variant means
+        // foxfires never acquire fog-hidden/stealthed targets.
+        var targets = ForNClosestVisibleUnitsInTargetArea(_ahri, missile.Position, 650f, 1,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
+        if (targets.Count == 0)
+        {
+            targets = ForNClosestVisibleUnitsInTargetArea(_ahri, missile.Position, 650f, 1,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
+        }
+        if (targets.Count == 0) return;
 
-        SpellCast(_ahri, 3, SpellSlotType.ExtraSlots, true, unitsInRange.First(), missile.Position);
+        SpellCast(_ahri, 3, SpellSlotType.ExtraSlots, true, targets[0], missile.Position);
         var foxFireBuff = _ahri.GetBuffWithName("AhriFoxFire");
         if (foxFireBuff != null)
         {

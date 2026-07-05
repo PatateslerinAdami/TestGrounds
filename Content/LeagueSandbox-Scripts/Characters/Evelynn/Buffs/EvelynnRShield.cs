@@ -32,7 +32,7 @@ public class EvelynnRShield : IBuffGameScript {
         _evelynn = ownerspell.CastInfo.Owner;
         _buff = buff;
         _shieldHealth = buff.Variables.GetFloat("shieldAmount");
-        _agonyShield  = new Shield(_evelynn, _evelynn, true, true, _shieldHealth);
+        _agonyShield  = new Shield(_evelynn, _evelynn, true, true, _shieldHealth, buff);
         unit.AddShield(_agonyShield);
         _particle1 = AddParticleTarget(_evelynn,_evelynn, "Evelynn_R_shield",_evelynn,buff.Duration, size: _evelynn.Stats.Size.Total);
     }

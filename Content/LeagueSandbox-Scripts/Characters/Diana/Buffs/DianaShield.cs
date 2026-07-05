@@ -40,7 +40,7 @@ public class DianaShield : IBuffGameScript {
             _shieldHealth *= 2;
             AddParticleTarget(_diana, _diana, "Diana_Base_W_Refreshed", _diana);
         }
-        _orbShield = new Shield(_diana, _diana, true, true, _shieldHealth);
+        _orbShield = new Shield(_diana, _diana, true, true, _shieldHealth, buff);
         unit.AddShield(_orbShield);
         
         _shieldParticle = AddParticleTarget(_diana, _diana, "Diana_Base_W_Shield.troy", _diana, buff.Duration);

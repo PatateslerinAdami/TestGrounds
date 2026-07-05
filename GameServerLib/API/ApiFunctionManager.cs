@@ -356,11 +356,20 @@ namespace LeagueSandbox.GameServer.API
         /// <summary>
         /// Teleports an AI unit to the specified coordinates.
         /// Instant.
-        /// TODO: Change to GameObjects.
+        /// ObjAIBase is the correct scope — Riot's script teleport is obj_AI_Base-typed in both
+        /// eras (LuaSpellScriptHelper::TeleportToPositionR3dPoint(obj_AI_Base*, r3dPoint3D), S1
+        /// server + 4.17 client decomp), so this should NOT be widened to GameObject. Riot snaps
+        /// the target to the nearest passable cell (our GetClosestTerrainExit inside TeleportTo)
+        /// and refuses the teleport when the snapped target lies outside the unit's active
+        /// circular movement restriction (IsGoalPosRestricted checks mMovementRestrictionCenter/
+        /// Radius). We only have the wire side of that feature (S2C_SetCircularMovementRestriction),
+        /// no server-side restriction state, so there is nothing to gate on yet.
         /// </summary>
         /// <param name="unit">AI unit to teleport.</param>
         /// <param name="x">X coordinate.</param>
         /// <param name="y">Y coordinate.</param>
+        /// <param name="silent">Passed through to AttackableUnit.TeleportTo: no movement-update
+        /// flag and no networked StopMovement (for blink spells with their own position sync).</param>
         public static void TeleportTo(ObjAIBase unit, float x, float y, bool silent = false)
         {
             if (unit.MovementParameters != null)
@@ -641,6 +650,30 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Sets the counter of a COUNTER-type buff to the given value. Unlike the byte overload,
+        /// the value travels as an int32 via NPC_BuffUpdateNumCounter (client SetCounter(int)), so
+        /// values above 255 are preserved — e.g. Sion W's Soul Furnace shield amount, which is
+        /// replay-verified to reach 500+ (NPC_BuffUpdateNumCounter, BuffType=COUNTER).
+        /// </summary>
+        /// <param name="b">Buff instance.</param>
+        /// <param name="newCounter">Counter value to set.</param>
+        public static void EditBuffCounter(Buff b, int newCounter)
+        {
+            if (b == null)
+            {
+                return;
+            }
+
+            b.SetStacks(newCounter, false);
+            if (b.Hidden || _game?.PacketNotifier == null)
+            {
+                return;
+            }
+
+            _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(b);
+        }
+
+        /// <summary>
         /// Updates only the client-side timer visuals for a buff icon.
         /// Useful for infinite buffs that need a custom recharge indicator.
         /// </summary>
@@ -739,16 +772,20 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="amount">Shield amount.</param>
         /// <param name="physical">Whether the shield blocks physical damage.</param>
         /// <param name="magical">Whether the shield blocks magical damage.</param>
+        /// <param name="owner">Optional owning buff. Pass it so the shield inherits the buff's
+        /// OnPreDamagePriority / DoOnPreDamageInExpirationOrder and remaining lifetime, which drive
+        /// the consumption order when a unit holds several shields at once.</param>
         /// <returns>New shield instance.</returns>
         public static Shield AddShield(
             ObjAIBase source,
             AttackableUnit target,
             float amount,
             bool physical = true,
-            bool magical = true
+            bool magical = true,
+            Buff owner = null
         )
         {
-            var shield = new Shield(source, target, physical, magical, amount);
+            var shield = new Shield(source, target, physical, magical, amount, owner);
             target.AddShield(shield);
             return shield;
         }
@@ -796,6 +833,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             _game.PacketNotifier.NotifyModifyShield(unit, -applied, shield.Physical, shield.Magical, false);
+            ApiEventManager.OnShieldReduced.Publish(shield, applied);
             if (shield.IsConsumed())
             {
                 unit.RemoveShield(shield);
@@ -821,6 +859,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             _game.PacketNotifier.NotifyModifyShield(unit, applied, shield.Physical, shield.Magical, false);
+            ApiEventManager.OnShieldIncreased.Publish(shield, applied);
         }
 
         /// <summary>
@@ -1586,6 +1625,9 @@ namespace LeagueSandbox.GameServer.API
 
         /// <summary>
         ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
+        ///     Mirrors Riot's plain BBForEachUnitInTargetArea: the visibility gate is masked, so
+        ///     fog-hidden/stealthed units are included. Use <see cref="ForEachVisibleUnitInTargetArea"/>
+        ///     for the visibility-checked acquisition variant.
         /// </summary>
         /// <param name="self">Unit used as the source for team/flag checks.</param>
         /// <param name="targetPos">Origin of the range to check.</param>
@@ -1601,9 +1643,477 @@ namespace LeagueSandbox.GameServer.API
             SpellDataFlags useFlags
         )
         {
-            return EnumerateUnitsInRange(targetPos, range, isAlive)
-                .Where(unit => IsValidTarget(self, unit, useFlags));
+            return EnumerateValidUnitsInRangeImpl(self, targetPos, range, isAlive, useFlags | SpellDataFlags.IgnoreVisibilityCheck);
         }
+
+        // Shared body (Riot: `anonymous namespace'::ForEachUnitInTargetAreaImpl(..., extraFlags) —
+        // public entry points funnel here, differing only in whether IgnoreVisibilityCheck was ORed).
+        private static IEnumerable<AttackableUnit> EnumerateValidUnitsInRangeImpl(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
+            return EnumerateUnitsInRange(targetPos, range, isAlive)
+                .Where(unit => ValidTargetCheck(self, unit, useFlags));
+        }
+
+        #region Riot BB target-iteration family
+        // 1:1 ports of the S1 server's Lua BuildingBlock target iterators
+        // (luabuildingblockhelper.cpp), names minus the BB prefix. Shared shape per Riot:
+        // circle/box spatial query → TargetHelper::ValidTargetCheck per unit (the plain variants
+        // OR IgnoreVisibilityCheck; the *Visible* variants keep the visibility gate active) →
+        // FilterByBuffName → shape-specific pick. Dead units are not pre-filtered — Riot gates
+        // them purely on AffectDead inside ValidTargetCheck.
+
+        /// <summary>
+        /// Riot BBForEachUnitInTargetArea: every valid unit in the circle, unsorted (grid order).
+        /// Hits fog-hidden/stealthed units (visibility masked like all plain BB iterators).
+        /// </summary>
+        /// <param name="attacker">Caster used for team/flag/visibility checks (AttackerVar).</param>
+        /// <param name="center">Circle center (CenterVar).</param>
+        /// <param name="range">Circle radius (Range).</param>
+        /// <param name="flags">SpellDataFlags filter (Flags).</param>
+        /// <param name="buffNameFilter">When set, filters by buff presence (BuffNameFilter).</param>
+        /// <param name="inclusiveBuffFilter">true = only units WITH the buff, false = only units
+        /// WITHOUT it (InclusiveBuffFilter; Riot FilterByBuffName).</param>
+        public static List<AttackableUnit> ForEachUnitInTargetArea(
+            AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return CollectUnitsInTargetArea(attacker, center, range,
+                flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter);
+        }
+
+        /// <summary>Riot BBForEachVisibleUnitInTargetArea: like <see cref="ForEachUnitInTargetArea"/>
+        /// but fog-hidden/stealthed units are excluded (visibility gate active).</summary>
+        public static List<AttackableUnit> ForEachVisibleUnitInTargetArea(
+            AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return CollectUnitsInTargetArea(attacker, center, range, flags, buffNameFilter, inclusiveBuffFilter);
+        }
+
+        /// <summary>
+        /// Riot BBForNClosestUnitsInTargetArea: up to <paramref name="maximumUnitsToPick"/> valid
+        /// units, closest to <paramref name="center"/> first (Riot partial_sorts by 2D distance,
+        /// WhichUnitIsCloserToPoint). Visibility masked.
+        /// </summary>
+        public static List<AttackableUnit> ForNClosestUnitsInTargetArea(
+            AttackableUnit attacker, Vector2 center, float range, int maximumUnitsToPick, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return PickNClosest(CollectUnitsInTargetArea(attacker, center, range,
+                flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter),
+                center, maximumUnitsToPick);
+        }
+
+        /// <summary>Riot BBForNClosestVisibleUnitsInTargetArea: like
+        /// <see cref="ForNClosestUnitsInTargetArea"/> but fog-hidden/stealthed units are never
+        /// acquired (S1 uses this for foxfire/box/chain target acquisition).</summary>
+        public static List<AttackableUnit> ForNClosestVisibleUnitsInTargetArea(
+            AttackableUnit attacker, Vector2 center, float range, int maximumUnitsToPick, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return PickNClosest(CollectUnitsInTargetArea(attacker, center, range, flags, buffNameFilter, inclusiveBuffFilter),
+                center, maximumUnitsToPick);
+        }
+
+        /// <summary>
+        /// Riot BBForEachUnitInTargetAreaRandom: up to <paramref name="maximumUnitsToPick"/> valid
+        /// units picked in random order without replacement. Visibility masked.
+        /// </summary>
+        public static List<AttackableUnit> ForEachUnitInTargetAreaRandom(
+            AttackableUnit attacker, Vector2 center, float range, int maximumUnitsToPick, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return PickNRandom(CollectUnitsInTargetArea(attacker, center, range,
+                flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter),
+                maximumUnitsToPick);
+        }
+
+        /// <summary>Riot BBForEachVisibleUnitInTargetAreaRandom: like
+        /// <see cref="ForEachUnitInTargetAreaRandom"/> but visibility-checked.</summary>
+        public static List<AttackableUnit> ForEachVisibleUnitInTargetAreaRandom(
+            AttackableUnit attacker, Vector2 center, float range, int maximumUnitsToPick, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return PickNRandom(CollectUnitsInTargetArea(attacker, center, range, flags, buffNameFilter, inclusiveBuffFilter),
+                maximumUnitsToPick);
+        }
+
+        /// <summary>
+        /// Riot BBForEachUnitInTargetRectangle: every valid unit intersecting the box centered on
+        /// <paramref name="center"/>, whose length axis points from the attacker toward the center
+        /// (S1: Normalize(Center − AttackerPos)). Bounding-radius-aware intersection
+        /// (TargetHelper::IsObjectIntersectingBox). Visibility masked.
+        /// </summary>
+        /// <param name="halfWidth">Half extent across the axis (HalfWidth).</param>
+        /// <param name="halfLength">Half extent along the axis (HalfLength).</param>
+        public static List<AttackableUnit> ForEachUnitInTargetRectangle(
+            AttackableUnit attacker, Vector2 center, float halfWidth, float halfLength, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return CollectUnitsInTargetRectangle(attacker, center, halfWidth, halfLength,
+                flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter);
+        }
+
+        /// <summary>Riot BBForEachVisibleUnitInTargetRectangle: like
+        /// <see cref="ForEachUnitInTargetRectangle"/> but visibility-checked.</summary>
+        public static List<AttackableUnit> ForEachVisibleUnitInTargetRectangle(
+            AttackableUnit attacker, Vector2 center, float halfWidth, float halfLength, SpellDataFlags flags,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            return CollectUnitsInTargetRectangle(attacker, center, halfWidth, halfLength, flags,
+                buffNameFilter, inclusiveBuffFilter);
+        }
+
+        private static List<AttackableUnit> CollectUnitsInTargetArea(
+            AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
+            string buffNameFilter, bool inclusiveBuffFilter)
+        {
+            var units = new List<AttackableUnit>();
+            foreach (var unit in EnumerateUnitsInRange(center, range, false))
+            {
+                if (ValidTargetCheck(attacker, unit, flags)
+                    && PassesBuffNameFilter(unit, buffNameFilter, inclusiveBuffFilter))
+                {
+                    units.Add(unit);
+                }
+            }
+            return units;
+        }
+
+        private static List<AttackableUnit> CollectUnitsInTargetRectangle(
+            AttackableUnit attacker, Vector2 center, float halfWidth, float halfLength, SpellDataFlags flags,
+            string buffNameFilter, bool inclusiveBuffFilter)
+        {
+            // Length axis: from the attacker toward the box center (S1 rect impl normalizes
+            // Center − AttackerPos). Zero-guard: fall back to the attacker's facing.
+            var axis = center - attacker.Position;
+            if (axis.LengthSquared() <= float.Epsilon)
+            {
+                axis = new Vector2(attacker.Direction.X, attacker.Direction.Z);
+                if (axis.LengthSquared() <= float.Epsilon)
+                {
+                    axis = new Vector2(1.0f, 0.0f);
+                }
+            }
+            axis = Vector2.Normalize(axis);
+
+            var units = new List<AttackableUnit>();
+            // Broadphase: half-diagonal plus slack for unit bounding radii; the exact
+            // bounding-radius-aware box test below decides.
+            float broadphase = MathF.Sqrt(halfWidth * halfWidth + halfLength * halfLength) + 400.0f;
+            foreach (var unit in EnumerateUnitsInRange(center, broadphase, false))
+            {
+                if (IsUnitIntersectingBox(unit, center, axis, halfWidth, halfLength)
+                    && ValidTargetCheck(attacker, unit, flags)
+                    && PassesBuffNameFilter(unit, buffNameFilter, inclusiveBuffFilter))
+                {
+                    units.Add(unit);
+                }
+            }
+            return units;
+        }
+
+        /// <summary>
+        /// Riot TargetHelper::IsObjectIntersectingBox: circle-vs-oriented-box with the unit's
+        /// bounding radius; exact corner test when the unit center is outside both extents.
+        /// </summary>
+        private static bool IsUnitIntersectingBox(AttackableUnit unit, Vector2 center, Vector2 axis, float halfWidth, float halfLength)
+        {
+            float radius = unit.CollisionRadius;
+            var dv = unit.Position - center;
+            float along = MathF.Abs(dv.X * axis.X + dv.Y * axis.Y) - halfLength;
+            if (along > radius)
+            {
+                return false;
+            }
+            float across = MathF.Abs(dv.X * -axis.Y + dv.Y * axis.X) - halfWidth;
+            if (across > radius)
+            {
+                return false;
+            }
+            if (along <= 0.0f || across <= 0.0f)
+            {
+                return true;
+            }
+            return radius * radius >= along * along + across * across;
+        }
+
+        // Riot FilterByBuffName: empty filter = no-op; inclusive keeps only units WITH the buff,
+        // exclusive only units WITHOUT it. Non-ObjAIBase units bypass the filter (kept).
+        private static bool PassesBuffNameFilter(AttackableUnit unit, string buffNameFilter, bool inclusive)
+        {
+            if (string.IsNullOrEmpty(buffNameFilter) || unit is not ObjAIBase)
+            {
+                return true;
+            }
+            return unit.HasBuff(buffNameFilter) == inclusive;
+        }
+
+        // Riot: std::partial_sort with WhichUnitIsCloserToPoint (2D distance to center, ascending),
+        // then the first MaximumUnitsToPick.
+        private static List<AttackableUnit> PickNClosest(List<AttackableUnit> units, Vector2 center, int maximumUnitsToPick)
+        {
+            units.Sort((a, b) =>
+                Vector2.DistanceSquared(a.Position, center).CompareTo(Vector2.DistanceSquared(b.Position, center)));
+            if (units.Count > maximumUnitsToPick)
+            {
+                units.RemoveRange(maximumUnitsToPick, units.Count - maximumUnitsToPick);
+            }
+            return units;
+        }
+
+        // Riot: random pick without replacement (GRandomGen index % remaining) up to the cap.
+        private static List<AttackableUnit> PickNRandom(List<AttackableUnit> units, int maximumUnitsToPick)
+        {
+            int picks = Math.Min(maximumUnitsToPick, units.Count);
+            for (int i = 0; i < picks; i++)
+            {
+                int j = i + _random.Next(units.Count - i);
+                (units[i], units[j]) = (units[j], units[i]);
+            }
+            if (units.Count > picks)
+            {
+                units.RemoveRange(picks, units.Count - picks);
+            }
+            return units;
+        }
+
+        /// <summary>
+        /// Riot BBForEachUnitInTargetAreaAddBuff: fused area query + buff application — Riot's
+        /// aura tick primitive (S1 users: BeaconAura/BeaconAuraAP = the Rally banner,
+        /// OdinVanguardAura = Map8 relic; the aura pulses a short RENEW_EXISTING buff onto every
+        /// valid unit in range each tick). Returns the affected units. Riot's BuffAddType /
+        /// BuffType / BuffMaxStack / TickRate / IsHiddenOnClient call-site params come from the
+        /// C# buff script's BuffScriptMetaData in our engine instead. Visibility masked.
+        /// </summary>
+        /// <param name="buffAttacker">Buff source (BuffAttackerVar); defaults to the attacker.</param>
+        public static List<AttackableUnit> ForEachUnitInTargetAreaAddBuff(
+            AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
+            string buffName, float buffDuration, byte buffNumberOfStacks = 1,
+            ObjAIBase buffAttacker = null, Spell originSpell = null,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true,
+            BuffVariables buffVariables = null)
+        {
+            var units = CollectUnitsInTargetArea(attacker, center, range,
+                flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter);
+            AddBuffToEach(units, buffName, buffDuration, buffNumberOfStacks,
+                buffAttacker ?? attacker as ObjAIBase, originSpell, buffVariables);
+            return units;
+        }
+
+        /// <summary>Riot BBForEachVisibleUnitInTargetAreaAddBuff: like
+        /// <see cref="ForEachUnitInTargetAreaAddBuff"/> but visibility-checked.</summary>
+        public static List<AttackableUnit> ForEachVisibleUnitInTargetAreaAddBuff(
+            AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
+            string buffName, float buffDuration, byte buffNumberOfStacks = 1,
+            ObjAIBase buffAttacker = null, Spell originSpell = null,
+            string buffNameFilter = null, bool inclusiveBuffFilter = true,
+            BuffVariables buffVariables = null)
+        {
+            var units = CollectUnitsInTargetArea(attacker, center, range, flags, buffNameFilter, inclusiveBuffFilter);
+            AddBuffToEach(units, buffName, buffDuration, buffNumberOfStacks,
+                buffAttacker ?? attacker as ObjAIBase, originSpell, buffVariables);
+            return units;
+        }
+
+        private static void AddBuffToEach(
+            List<AttackableUnit> units, string buffName, float buffDuration, byte buffNumberOfStacks,
+            ObjAIBase buffAttacker, Spell originSpell, BuffVariables buffVariables)
+        {
+            foreach (var unit in units)
+            {
+                AddBuff(buffName, buffDuration, buffNumberOfStacks, originSpell, unit, buffAttacker,
+                    buffVariables: buffVariables);
+            }
+        }
+
+        /// <summary>
+        /// Riot BBForEachPetInTarget: every pet belonging to the given unit, optionally filtered
+        /// by buff presence (FilterByBuffName semantics: inclusive = only pets WITH the buff).
+        /// No area/visibility dimension — Riot walks the owner's pet slots directly. No S1 spell
+        /// script uses it; ported for API-family completeness.
+        /// </summary>
+        public static List<Pet> ForEachPetInTarget(
+            AttackableUnit target, string buffNameFilter = null, bool inclusiveBuffFilter = true)
+        {
+            var pets = new List<Pet>();
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is Pet pet && pet.Owner == target
+                    && PassesBuffNameFilter(pet, buffNameFilter, inclusiveBuffFilter))
+                {
+                    pets.Add(pet);
+                }
+            }
+            return pets;
+        }
+
+        /// <summary>
+        /// Riot BBForEachPointOnLine: <paramref name="iterations"/> points along the segment of
+        /// total length <paramref name="size"/>, centered on <paramref name="center"/> pushed
+        /// <paramref name="pushForward"/> units toward <paramref name="faceTowardsPos"/>. Riot
+        /// steps size/iterations per point from the segment's back edge (first point one step in,
+        /// last point on the front edge) and only yields points on VALID nav cells.
+        /// </summary>
+        public static List<Vector2> ForEachPointOnLine(
+            Vector2 center, Vector2 faceTowardsPos, float size, float pushForward, int iterations)
+        {
+            var points = new List<Vector2>();
+            if (iterations <= 0)
+            {
+                return points;
+            }
+
+            var dir = faceTowardsPos - center;
+            if (dir.LengthSquared() <= float.Epsilon)
+            {
+                return points;
+            }
+            dir = Vector2.Normalize(dir);
+
+            var pos = center + dir * (pushForward - size * 0.5f);
+            var step = dir * (size / iterations);
+            for (int i = 0; i < iterations; i++)
+            {
+                pos += step;
+                if (_game.Map.PathingHandler.IsWalkable(pos))
+                {
+                    points.Add(pos);
+                }
+            }
+            return points;
+        }
+
+        /// <summary>
+        /// Riot BBForEachPointAroundCircle: points on the circle around
+        /// <paramref name="center"/>, starting at angle 0 (= center + (radius, 0)). Riot's angle
+        /// step is 360 / iterations in INTEGER degrees — e.g. 7 iterations yields a 51° step and
+        /// therefore 8 points; quirk preserved. No nav-cell gate (unlike the line variant).
+        /// </summary>
+        public static List<Vector2> ForEachPointAroundCircle(Vector2 center, float radius, int iterations)
+        {
+            var points = new List<Vector2>();
+            if (iterations <= 0)
+            {
+                return points;
+            }
+
+            int stepDegrees = 360 / iterations;
+            for (int angle = 0; angle < 360; angle += stepDegrees)
+            {
+                float rad = angle * (MathF.PI / 180.0f);
+                points.Add(center + radius * new Vector2(MathF.Cos(rad), MathF.Sin(rad)));
+            }
+            return points;
+        }
+
+        /// <summary>
+        /// Riot BBDestroyMissileForTarget: flags every in-flight missile whose target is the given
+        /// unit for destruction — regardless of owner or team. This is the untargetability
+        /// pattern: S1 users are VladimirSanguinePool, ZhonyasRingShield, ShenStandUnited and
+        /// VoidWalk (Kassadin R), which drop incoming targeted missiles on becoming untargetable.
+        /// </summary>
+        public static void DestroyMissileForTarget(AttackableUnit target)
+        {
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is SpellMissile missile && !missile.IsToRemove() && missile.TargetUnit == target)
+                {
+                    missile.SetToRemove();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Riot BBCanSeeTarget(Viewer, Target): whether the viewer's side currently sees the
+        /// target (fog + stealth). Same primitive as ValidTargetCheck's visibility gate. S1 users:
+        /// Brand passive missile, Garen E, Swain R.
+        /// </summary>
+        public static bool CanSeeTarget(AttackableUnit viewer, AttackableUnit target)
+        {
+            return target.IsVisibleByTeam(viewer.Team);
+        }
+
+        /// <summary>
+        /// Buff types a dispel treats as negative. Riot's BuffManager::DispellNegative body is not
+        /// decompiled (client stub asserts); this classification is inferred from the BuffType
+        /// taxonomy — every control/impairment type plus the debuff categories. QSS (the only S1
+        /// user) advertises "removes all debuffs" INCLUDING suppression, so SUPPRESSION is in.
+        /// </summary>
+        private static readonly HashSet<BuffType> NegativeBuffTypes = new()
+        {
+            BuffType.COMBAT_DEHANCER, BuffType.STUN, BuffType.SILENCE, BuffType.TAUNT,
+            BuffType.POLYMORPH, BuffType.SLOW, BuffType.SNARE, BuffType.DAMAGE, BuffType.SLEEP,
+            BuffType.NEAR_SIGHT, BuffType.FEAR, BuffType.CHARM, BuffType.POISON,
+            BuffType.SUPPRESSION, BuffType.BLIND, BuffType.SHRED, BuffType.FLEE,
+            BuffType.KNOCKUP, BuffType.KNOCKBACK, BuffType.DISARM
+        };
+
+        /// <summary>
+        /// Riot BBDispellNegativeBuffs (QSS active): removes every dispellable negative buff from
+        /// the target. Buffs whose script sets IsNonDispellable (Riot scriptBaseBuff
+        /// mNonDispellable / kSpellFlagNonDispellable) survive.
+        /// </summary>
+        public static void DispellNegativeBuffs(AttackableUnit target)
+        {
+            // GetBuffs() returns the live buff list — copy before deactivating mutates it.
+            foreach (var buff in target.GetBuffs().ToArray())
+            {
+                if (NegativeBuffTypes.Contains(buff.BuffType)
+                    && !(buff.BuffScript?.BuffMetaData?.IsNonDispellable ?? false))
+                {
+                    buff.DeactivateBuff();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Riot BBSpellBuffClear: fully clears the named buff from the target — ALL instances and
+        /// stacks at once (BuffInstance::Clear), unlike RemoveBuff which follows the add-type's
+        /// removal rules. Riot defaults the name to the calling script; pass it explicitly here.
+        /// </summary>
+        public static void SpellBuffClear(AttackableUnit target, string buffName)
+        {
+            foreach (var buff in target.GetBuffsWithName(buffName))
+            {
+                buff.DeactivateBuff();
+            }
+        }
+
+        /// <summary>
+        /// Riot BBSetBuffCasterUnit: re-attributes a running buff to a different caster —
+        /// damage/kill credit of its future ticks follows the new source. S1 users: BansheesVeil,
+        /// WasStealthed, Yorick.
+        /// </summary>
+        public static void SetBuffCasterUnit(Buff buff, ObjAIBase caster)
+        {
+            buff.SourceUnit = caster;
+        }
+
+        /// <summary>
+        /// Riot BBSetVoiceOverride(Target, OverrideSuffix): switches the unit's voice-over bank
+        /// (Riven "Ult", Sion "Berserk"/"Max") — stores the suffix on the CharacterDataStack and
+        /// mirrors it to clients via S2C_ChangeCharacterVoice (vision-gated).
+        /// </summary>
+        public static void SetVoiceOverride(AttackableUnit target, string overrideSuffix)
+        {
+            target.CharacterDataStack.VoiceOverrideSuffix = overrideSuffix ?? "";
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterVoice(target, overrideSuffix ?? "");
+        }
+
+        /// <summary>Resets the unit's voice-over bank to default (S2C_ChangeCharacterVoice reset bit).</summary>
+        public static void ResetVoiceOverride(AttackableUnit target)
+        {
+            target.CharacterDataStack.VoiceOverrideSuffix = "";
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterVoice(target, "", true);
+        }
+        #endregion
 
         /// <summary>
         ///     Acquires all dead or alive AttackableUnits within range and filters them by IsValidTarget using the given flags.
@@ -2115,7 +2625,9 @@ namespace LeagueSandbox.GameServer.API
 
         /// <summary>
         /// Acquires the closest alive or dead AttackableUnit within the specified range of a target position
-        /// and filters candidates by IsValidTarget using the provided flags.
+        /// and filters candidates by IsValidTarget using the provided flags. Mirrors Riot's plain
+        /// BBForNClosestUnitsInTargetArea (visibility masked — fog-hidden/stealthed units included);
+        /// use <see cref="ForNClosestVisibleUnitsInTargetArea"/> for the visibility-checked variant.
         /// </summary>
         /// <param name="self">Unit used as the source for team/flag checks.</param>
         /// <param name="targetPos">Origin of the range to check.</param>
@@ -2131,6 +2643,19 @@ namespace LeagueSandbox.GameServer.API
             SpellDataFlags useFlags
         )
         {
+            return GetClosestUnitInRangeImpl(self, targetPos, range, isAlive, useFlags | SpellDataFlags.IgnoreVisibilityCheck);
+        }
+
+        // Shared body — GetClosestUnitInRange funnels here with IgnoreVisibilityCheck ORed;
+        // for visibility-checked acquisition use ForNClosestVisibleUnitsInTargetArea.
+        private static AttackableUnit GetClosestUnitInRangeImpl(
+            AttackableUnit self,
+            Vector2 targetPos,
+            float range,
+            bool isAlive,
+            SpellDataFlags useFlags
+        )
+        {
             AttackableUnit closest = null;
             float bestDistSq = float.MaxValue;
 
@@ -2138,7 +2663,7 @@ namespace LeagueSandbox.GameServer.API
             {
                 var distSq = Vector2.DistanceSquared(unit.Position, targetPos);
                 if (distSq >= bestDistSq) continue;
-                if (!IsValidTarget(self, unit, useFlags)) continue;
+                if (!ValidTargetCheck(self, unit, useFlags)) continue;
 
                 bestDistSq = distSq;
                 closest = unit;
@@ -2148,105 +2673,154 @@ namespace LeagueSandbox.GameServer.API
             return closest;
         }
 
+        /// <summary>
+        /// Script-facing target predicate, equivalent to Riot's plain script/BB layer: the
+        /// visibility gate is masked OFF (S1 server ORs 0x400000 into every plain
+        /// BBForEachUnitInTargetArea-family query and into cone targeting; 264 of 268
+        /// area-iterating S1 spell scripts use those). AoE/reactive checks therefore hit
+        /// fog-hidden and stealthed units — use <see cref="ValidTargetCheck"/> (or the
+        /// visibleOnly parameter of the range helpers) for the rare visibility-checked target
+        /// ACQUISITION, Riot's BBForEach*Visible* variants (S1 uses them only in
+        /// AhriFoxFireMissile, JackInTheBox, AhriTumbleKick, VolibearRChain).
+        /// </summary>
         public static bool IsValidTarget(AttackableUnit self, AttackableUnit target, SpellDataFlags useFlags)
         {
+            return ValidTargetCheck(self, target, useFlags | SpellDataFlags.IgnoreVisibilityCheck);
+        }
+
+        /// <summary>
+        /// Faithful port of TargetHelper::ValidTargetCheck (4.17 mac decomp, TargetHelper.cpp)
+        /// ending in the per-class IsValidSpellTarget overrides it dispatches to (obj_AI_Turret /
+        /// obj_Building / obj_AI_Minion / AIHero); the S1 server corroborates the minion decision
+        /// tree with symbol names. Includes the visibility gate — most script-facing paths mask
+        /// it via <see cref="IsValidTarget"/>. Not ported: the AffectImportantBotTargets bot filter.
+        /// </summary>
+        public static bool ValidTargetCheck(AttackableUnit self, AttackableUnit target, SpellDataFlags useFlags)
+        {
+            // Local content workaround (not part of Riot's check): shrines are never spell targets.
             if (target.Model.Contains("Shrine"))
             {
                 return false;
             }
 
+            // Untargetable — globally or to the caster's team; GetIsTargetableToTeam folds in BOTH
+            // (matters for e.g. the TT relic / its anchor: NonTargetableAll) — fails unless
+            // AffectUntargetable, or AffectUseable rescues a useable object. Riot checks this
+            // BEFORE AlwaysSelf, so an untargetable caster is not even self-targetable.
+            if ((useFlags & SpellDataFlags.AffectUntargetable) == 0
+                && !target.GetIsTargetableToTeam(self.Team)
+                && !((useFlags & SpellDataFlags.AffectUseable) != 0 && target.CharData.IsUseable))
+            {
+                return false;
+            }
+
             var isSelf = target == self;
-            var hasAlwaysSelf = (useFlags & SpellDataFlags.AlwaysSelf) != 0;
-            if (hasAlwaysSelf && isSelf) // TODO: Verify
+            // AlwaysSelf is decisive: the caster passes regardless of the team/type/dead gates below.
+            if ((useFlags & SpellDataFlags.AlwaysSelf) != 0 && isSelf)
             {
                 return true;
             }
-
-            var affectDead = (useFlags & SpellDataFlags.AffectDead) != 0;
-            if (!affectDead && target.IsDead)
+            if ((useFlags & SpellDataFlags.NotAffectSelf) != 0 && isSelf)
             {
                 return false;
             }
 
-            // Riot TargetHelper::ValidTargetCheck rejects when the target is untargetable globally OR to the
-            // caster's team. GetIsTargetableToTeam folds in BOTH (the global Targetable status flag AND the
-            // per-team IsTargetableToTeam), so check it instead of only the global flag — otherwise a unit
-            // that's only per-team-untargetable (e.g. the TT relic / its anchor: NonTargetableAll) still
-            // passes here and gets hit by AoE / cone spells (Annie W → GetUnitsHitBySpell → this filter).
-            var affectUntargetable = (useFlags & SpellDataFlags.AffectUntargetable) != 0;
-            if (!affectUntargetable && !target.GetIsTargetableToTeam(self.Team))
+            // Riot rejects outright when either NonTargetable* bit is set on the spell
+            // (flags & 0x1800000); ValidTargetCheck's later per-team NonTargetableAlly/Enemy
+            // branches are dead code behind this.
+            if ((useFlags & SpellDataFlags.NonTargetableAll) != 0)
             {
                 return false;
             }
 
+            // Team gate. Note both checks apply to a neutral-team caster hitting a neutral
+            // target: it needs AffectFriends (same team) AND AffectNeutral.
             var sameTeam = target.Team == self.Team;
-            var targetIsNeutralTeam = target.Team == TeamId.TEAM_NEUTRAL;
-
-            var minion = target as Minion;
-            var isMinion = minion != null;
-            var isLaneMinion = target is LaneMinion;
-            var pet = target as Pet;
-            var isPet = pet != null;
-            var isClone = isPet && pet.IsClone;
-            var isChampion = target is Champion;
-            var isBaseTurret = target is BaseTurret;
-            var isObjBuilding = target is ObjBuilding;
-            var isInhibitor = target is Inhibitor;
-            var isMonster = target is Monster;
-
-            var notAffectSelf = (useFlags & SpellDataFlags.NotAffectSelf) != 0;
-            var notAffectZombie = (useFlags & SpellDataFlags.NotAffectZombie) != 0;
-            var affectNotPet = (useFlags & SpellDataFlags.AffectNotPet) != 0;
-            var ignoreLaneMinion = (useFlags & SpellDataFlags.IgnoreLaneMinion) != 0;
-            var ignoreAllyMinion = (useFlags & SpellDataFlags.IgnoreAllyMinion) != 0;
-            var ignoreEnemyMinion = (useFlags & SpellDataFlags.IgnoreEnemyMinion) != 0;
-            var ignoreClones = (useFlags & SpellDataFlags.IgnoreClones) != 0;
-
-            if ((notAffectSelf && isSelf)
-                || (notAffectZombie && target.IsZombie)
-                || (affectNotPet && isPet) // TODO: Verify
-                || (ignoreLaneMinion && isLaneMinion)
-                || (ignoreAllyMinion && sameTeam && isMinion)
-                || (ignoreEnemyMinion && !sameTeam && isMinion)
-                || (ignoreClones && isClone))
+            var isNeutralTeam = target.Team == TeamId.TEAM_NEUTRAL;
+            if ((sameTeam && (useFlags & SpellDataFlags.AffectFriends) == 0)
+                || (!sameTeam && !isNeutralTeam && (useFlags & SpellDataFlags.AffectEnemies) == 0)
+                || (isNeutralTeam && (useFlags & SpellDataFlags.AffectNeutral) == 0))
             {
                 return false;
             }
 
-            var affectFriends = (useFlags & SpellDataFlags.AffectFriends) != 0;
-            var affectEnemies = (useFlags & SpellDataFlags.AffectEnemies) != 0;
-            var affectNeutral = (useFlags & SpellDataFlags.AffectNeutral) != 0;
-
-            var teamAllowed =
-                (affectFriends && sameTeam)
-                || (affectEnemies && !sameTeam && !targetIsNeutralTeam)
-                || (affectNeutral && targetIsNeutralTeam);
-
-            if (!teamAllowed)
+            if ((useFlags & SpellDataFlags.AffectDead) == 0 && target.IsDead)
             {
                 return false;
             }
 
-            var affectMinions = (useFlags & SpellDataFlags.AffectMinions) != 0;
-            var affectHeroes = (useFlags & SpellDataFlags.AffectHeroes) != 0;
-            var affectWards = (useFlags & SpellDataFlags.AffectWards) != 0;
-            var affectTurrets = (useFlags & SpellDataFlags.AffectTurrets) != 0;
-            var affectBuildings = (useFlags & SpellDataFlags.AffectBuildings) != 0;
-            var affectBarracksOnly = (useFlags & SpellDataFlags.AffectBarracksOnly) != 0;
-            var affectUseable = (useFlags & SpellDataFlags.AffectUseable) != 0;
+            // NotAffectZombie: Riot hosts this inside the hero override (only champions zombie);
+            // kept type-independent here — same behavior.
+            if ((useFlags & SpellDataFlags.NotAffectZombie) != 0 && target.IsZombie)
+            {
+                return false;
+            }
 
-            var typeAllowed =
-                (affectMinions && isMinion) // TODO: Verify
-                || (affectHeroes && (isChampion || isClone))
-                || (affectWards && isMinion && minion.IsWard)
-                || (affectTurrets && (isBaseTurret || isObjBuilding || isInhibitor))
-                || (affectBuildings && isObjBuilding)
-                || (affectBarracksOnly && isInhibitor) // TODO: Verify
-                // It is assumed that the monsters are always in the neutral team
-                || (affectNeutral && isMonster) // TODO: Verify
-                || (affectUseable && target.CharData.IsUseable);
+            // Visibility gate — Riot: !(flags & IgnoreVisibilityCheck) && !obj->IsVisibleTo(caster)
+            // → false (evaluated after the type gate there; pure conjunction, so order-equivalent).
+            // Governs click-target cast validation (SpellTargeting* with mIgnoreVisibility=false)
+            // and the BBForEach*Visible* acquisition variants; the plain script layer masks it.
+            if ((useFlags & SpellDataFlags.IgnoreVisibilityCheck) == 0 && !target.IsVisibleByTeam(self.Team))
+            {
+                return false;
+            }
 
-            return typeAllowed;
+            // Per-class type gate — Riot's virtual obj->IsValidSpellTarget(team, casterID, flags).
+            switch (target)
+            {
+                case Champion:
+                    return (useFlags & SpellDataFlags.AffectHeroes) != 0;
+
+                // obj_AI_Turret returns AffectTurrets and nothing else — buildings are NOT turrets.
+                case BaseTurret:
+                    return (useFlags & SpellDataFlags.AffectTurrets) != 0;
+
+                // obj_AI_Minion (covers lane minions, jungle monsters, pets, wards, clones).
+                case Minion minion:
+                    // "Treated as hero" record branch — clones. 4.17 additionally rejects on
+                    // bit 31 (our IgnoreClones; see the SpellDataFlags doc for that divergence).
+                    if (minion is Pet clonePet && clonePet.IsClone)
+                    {
+                        return (useFlags & SpellDataFlags.AffectHeroes) != 0
+                            && (useFlags & SpellDataFlags.IgnoreClones) == 0;
+                    }
+                    if (minion is Pet && (useFlags & SpellDataFlags.AffectNotPet) != 0)
+                    {
+                        return false;
+                    }
+                    if ((sameTeam && (useFlags & SpellDataFlags.IgnoreAllyMinion) != 0)
+                        || (!sameTeam && (useFlags & SpellDataFlags.IgnoreEnemyMinion) != 0))
+                    {
+                        return false;
+                    }
+                    // Decisive barracks-spawned tests: obj_AI_Minion RETURNS the lane-minion bit
+                    // here, bypassing AffectMinions. "AffectBarracksOnly" therefore means
+                    // "barracks-spawned lane minions only" — NOT inhibitors (dampeners are
+                    // obj_Building and only ever gated by AffectBuildings).
+                    if ((useFlags & SpellDataFlags.IgnoreLaneMinion) != 0)
+                    {
+                        return !(minion is LaneMinion);
+                    }
+                    if ((useFlags & SpellDataFlags.AffectBarracksOnly) != 0)
+                    {
+                        return minion is LaneMinion;
+                    }
+                    // Wards need AffectWards to pass and still fall through to AffectMinions.
+                    if (minion.IsWard && (useFlags & SpellDataFlags.AffectWards) == 0)
+                    {
+                        return false;
+                    }
+                    return (useFlags & SpellDataFlags.AffectMinions) != 0;
+
+                // obj_Building (HQ / inhibitors / barracks): AffectBuildings only.
+                case ObjBuilding:
+                    return (useFlags & SpellDataFlags.AffectBuildings) != 0;
+
+                // Riot's obj_AI_Base base impl is assert(false) — every real target type has an
+                // override; anything else is not a spell target.
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -2702,9 +3276,7 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="animName">Internal name of an animation to play.</param>
         /// <param name="timeScale">How fast the animation should play. Default 1x speed.</param>
         /// <param name="startTime">Time in the animation to start at.</param>
-        /// TODO: Verify if this description is correct, if not, correct it.
         /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
-        /// TODO: Implement AnimationFlags enum for this and fill it in.
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
         public static void PlayAnimation(GameObject obj, string animName, float timeScale = 1.0f, float startTime = 0,
             float speedScale = 0, AnimationFlags flags = 0)
@@ -2817,8 +3389,11 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="slot">Index of the spell slot to change.</param>
         /// <param name="fullReplace">Whether or not the spell should be entirely replaced, or just the name. Typically used for transformations.</param>
         /// <returns>Newly created spell or existing spell with the given name. Null for failure.</returns>
+        /// <param name="changeFlags">Wire bitfield of the ChangeSlotSpellData packet beyond the
+        /// IsSummonerSpell bit. Riot never sends 0 — replay-verified (Sion W): 0x6E when arming a
+        /// temporary override spell, 0x0E when restoring the original / plain sets (default).</param>
         public static Spell SetSpell(ObjAIBase target, string newName, SpellSlotType slotType, int slot,
-            bool fullReplace = false)
+            bool fullReplace = false, byte changeFlags = 0x0E)
         {
             slot = ConvertAPISlot(slotType, slot);
 
@@ -2827,7 +3402,7 @@ namespace LeagueSandbox.GameServer.API
                 return null;
             }
 
-            return target.SetSpell(newName, (byte)slot, true, fullReplace);
+            return target.SetSpell(newName, (byte)slot, true, fullReplace, changeFlags);
         }
 
         /// <summary>
@@ -3137,6 +3712,21 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Runs <paramref name="pos"/> through the lane-minion stand-cell reservation handshake
+        /// (<see cref="LeagueSandbox.GameServer.Handlers.PathingHandler.CommitStand"/>): if another
+        /// lane minion has already committed a stand within body distance, the position is relocated
+        /// to the nearest get-to-able unreserved cell, and the result is reserved for
+        /// <paramref name="attacker"/>. Pass-through for non-lane-minions. Use for SHARED approach
+        /// targets (e.g. the turret-cap point) so simultaneous walkers fan onto distinct cells
+        /// instead of fusing on one coordinate (tt120: capped casters all move-targeted the exact
+        /// turret center, converged during the walk and ended stacked on one attack position).
+        /// </summary>
+        public static Vector2 CommitAttackStandPosition(AttackableUnit attacker, Vector2 pos)
+        {
+            return _game.Map.PathingHandler.CommitStand(attacker, pos);
+        }
+
+        /// <summary>
         /// ACTOR-AWARE path for <paramref name="unit"/>: routes around other units that would block it
         /// (the same A* the engine's attack-approach uses), unlike the terrain-only
         /// <see cref="GetPath(Vector2,Vector2,float)"/> overload which walks straight through bodies.
@@ -3288,13 +3878,13 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="duration">Assist duration in seconds.</param>
         public static void ApplyAssistMarker(AttackableUnit target, AttackableUnit source, float duration)
         {
-            if (target is not ObjAIBase objTarget || source is not ObjAIBase objSource)
+            if (target == null || source is not ObjAIBase objSource)
             {
-                _logger.Warn("Can't ApplyAssistMarker! (Target or Source is null or not ObjAIBase!)");
+                _logger.Warn("Can't ApplyAssistMarker! (Target is null or Source is not ObjAIBase!)");
                 return;
             }
 
-            objTarget.AddAssistMarker(objSource, duration);
+            target.AddAssistMarker(objSource, duration);
         }
 
         /// <summary>

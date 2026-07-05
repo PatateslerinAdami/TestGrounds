@@ -30,7 +30,7 @@ namespace Buffs
             AddParticleTarget((ObjAIBase)unit, unit, "Yasuo_passive_activate", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
             AddParticleTarget((ObjAIBase)unit, unit, "Yasuo_Passive_Burst", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
             AddParticleTarget((ObjAIBase)unit, unit, "Yasuo_base_Passive_timer", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
-            _yasuoShield = new Shield((ObjAIBase)unit, unit, true, true, _amt);
+            _yasuoShield = new Shield((ObjAIBase)unit, unit, true, true, _amt, buff);
             unit.AddShield(_yasuoShield);
         }
 

@@ -422,14 +422,33 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
         /// </summary>
         protected AttackableUnit FindTargetNear(Vector2 center, float range)
         {
-            AttackableUnit best = null;
-            int bestPriority = int.MaxValue;
-            float bestDistSq = range * range;
+            // Two phases: collect candidates AND count attackers-per-candidate from ONE range
+            // enumeration, then rank. The attacker counts feed Riot's target-selection COST model
+            // (Constants.var "AI Attack target selection variables", loaded but unconsumed until
+            // 2026-07-05): without it our nearest-with-priority tournament focused entire waves
+            // onto ONE target (tt120: 7 attackers on a single unit vs ai_TargetMaxNumAttackers=5),
+            // and the resulting mass convergence -> death -> mass re-acquire loop was the constant
+            // pressure behind the attack-phase stacking/oscillation.
+            var candidates = new List<(AttackableUnit unit, float dist)>();
+            var attackerCounts = new Dictionary<AttackableUnit, int>();
 
             foreach (var obj in ApiFunctionManager.EnumerateUnitsInRange(center, range, true))
             {
-                if (obj is not AttackableUnit u || u.IsDead || u.Team == Owner.Team)
+                if (obj is not AttackableUnit u || u.IsDead)
                 {
+                    continue;
+                }
+
+                if (u.Team == Owner.Team)
+                {
+                    // Ally: contribute to the attacker census. Own current target is EXCLUDED from
+                    // the count (Owner == u below never adds) so a unit doesn't penalize re-picking
+                    // its own target — that would make every re-acquire flap between targets.
+                    if (u != Owner && u is ObjAIBase ally && ally.TargetUnit != null)
+                    {
+                        attackerCounts.TryGetValue(ally.TargetUnit, out int c);
+                        attackerCounts[ally.TargetUnit] = c + 1;
+                    }
                     continue;
                 }
 
@@ -454,12 +473,56 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
                     continue;
                 }
 
+                candidates.Add((u, MathF.Sqrt(distSq)));
+            }
+
+            // Riot's cost ranking (Constants.var, comments are Riot's own):
+            //   ai_TargetRangeFactor (0.7)            "Impact of target straight line distance ..."
+            //   ai_TargetDistanceFactorPerAttacker(0.8) "Impact of each attacker on the cost ..."
+            //   ai_MinionTargetingHeroBoost (150)     "ADDITIONAL DISTANCE ADDED ... to discourage
+            //                                          minions attacking heroes" -> cost is in
+            //                                          DISTANCE UNITS, hero boost is additive.
+            //   ai_TargetMaxNumAttackers (5)          "Maximum number of attackers already
+            //                                          attacking target" -> hard exclusion.
+            // Cost model: dist * (RangeFactor + PerAttacker * attackers) + heroBoost. The exact
+            // Riot combination isn't recoverable (the evaluator survives in no available decomp —
+            // S1 dump holds only the CVar initializers), so this is the minimal reading of the
+            // documented semantics. DELIBERATELY NOT PORTED: ai_TargetPathFactor (needs a
+            // per-candidate A* — prohibitive per 0.25s sweep) and ai_TargetDistanceFactorPerNeightbor
+            // (the "neighbor of the target" definition is unrecoverable). The class-priority
+            // tournament (GetTargetPriority) stays OUTERMOST — cost only ranks within a class.
+            var vars = LeagueSandbox.GameServer.Content.GlobalData.AIAttackTargetSelectionVariables;
+            AttackableUnit best = null;
+            int bestPriority = int.MaxValue;
+            float bestCost = float.MaxValue;
+            bool bestCapped = false;
+
+            foreach (var (u, dist) in candidates)
+            {
+                attackerCounts.TryGetValue(u, out int attackers);
+                bool capped = attackers >= vars.TargetMaxNumAttackers;
+
+                float cost = dist * (vars.TargetRangeFactor
+                    + vars.TargetDistanceFactorPerAttacker * attackers);
+                if (Owner is Minion && u is Champion)
+                {
+                    cost += vars.MinionTargetingHeroBoost;
+                }
+
                 int priority = GetTargetPriority(u);
-                if (best == null || priority < bestPriority || (priority == bestPriority && distSq < bestDistSq))
+                // Capped targets lose to ANY uncapped one; among only-capped candidates the best
+                // is still picked (protective deviation: a wave facing a single survivor must not
+                // go pacifist — Riot's behavior for the all-capped case is unknown).
+                bool better = best == null
+                    || (bestCapped && !capped)
+                    || (bestCapped == capped
+                        && (priority < bestPriority || (priority == bestPriority && cost < bestCost)));
+                if (better)
                 {
                     best = u;
                     bestPriority = priority;
-                    bestDistSq = distSq;
+                    bestCost = cost;
+                    bestCapped = capped;
                 }
             }
 

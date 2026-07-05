@@ -360,12 +360,31 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public float GetTotalAttackSpeed()
         {
-            return AttackSpeedFlat * AttackSpeedMultiplier.Total;
+            // Floor the attack-speed multiplier at 1 + gcd_PercentAttackSpeedModMinimum. Constants.var
+            // (Map1:25): "The lowest Attack Speed Percent Mod penalty can go" = -0.95, i.e. the multiplier
+            // bottoms out at 0.05 (a slow can remove at most 95% attack speed). Clamp semantics are taken
+            // from the Riot Constants.var comment — the 4.17 decomp's application site was not recovered.
+            var minMultiplier = 1.0f + GlobalData.GlobalCharacterDataConstants.PercentAttackSpeedModMinimum;
+            return AttackSpeedFlat * Math.Max(AttackSpeedMultiplier.Total, minMultiplier);
+        }
+
+        /// <summary>
+        /// Cooldown-reduction mod floored at gcd_PercentCooldownModMinimum (Constants.var: "The lowest
+        /// Cooldown Percent Mod bonus can go" — -0.4 on SR, overridden to -0.8 in URF). CooldownReduction
+        /// is stored negative-for-reduction, so this floor caps how much CDR can shorten a cooldown.
+        /// Comment-sourced from Constants.var; the 4.17 decomp clamp site was not recovered.
+        /// </summary>
+        public float GetClampedCooldownReduction()
+        {
+            return Math.Max(CooldownReduction.Total, GlobalData.GlobalCharacterDataConstants.PercentCooldownModMinimum);
         }
 
         public float GetRespawnTimer(float baseTimer)
         {
-            return Math.Max(1000.0f, baseTimer * (1 + DeathTimerReduction.Total));
+            // Floor the respawn-time mod at gcd_PercentRespawnTimeModMinimum (-0.95) before applying it,
+            // then keep the existing 1000ms resulting-time floor. Comment-sourced from Constants.var.
+            var mod = Math.Max(DeathTimerReduction.Total, GlobalData.GlobalCharacterDataConstants.PercentRespawnTimeModMinimum);
+            return Math.Max(1000.0f, baseTimer * (1 + mod));
         }
 
         public float GetTrueMoveSpeed()

@@ -46,6 +46,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public string BaseSkinName { get; private set; }
         public uint BaseSkinID { get; private set; }
 
+        /// <summary>
+        /// Active voice-over bank suffix (Riot CharacterDataStack::mVoiceOverrideSuffix, set via
+        /// BBSetVoiceOverride — e.g. Riven "Ult", Sion "Berserk"/"Max"). Empty = default voice.
+        /// Server-side bookkeeping; the client mirrors it via S2C_ChangeCharacterVoice.
+        /// </summary>
+        public string VoiceOverrideSuffix { get; internal set; } = "";
+
         public CharacterDataStack(AttackableUnit owner, Game game, string baseSkin, uint baseSkinID)
         {
             _owner = owner;

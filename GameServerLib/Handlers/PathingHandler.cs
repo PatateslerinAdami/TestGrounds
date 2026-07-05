@@ -424,7 +424,9 @@ namespace LeagueSandbox.GameServer.Handlers
             {
                 // No waypoint enters range (far / partial path): walk to the path end.
                 // travelDistance = 0 is the client literal here (NavigationGrid.cpp:2468-2472).
-                recommendedAttackPos = path[path.Count - 1];
+                // CommitStand: this exit previously bypassed the stand-cell reservation — two
+                // far attackers of the same target got the same path end and fused on arrival.
+                recommendedAttackPos = CommitStand(attacker, path[path.Count - 1]);
                 travelDistanceNeededBeforeTargetable = 0f;
                 canReachCloseSpot = true;
                 return true;
@@ -445,9 +447,25 @@ namespace LeagueSandbox.GameServer.Handlers
             float beelineSq = Vector2.DistanceSquared(attacker.Position, end);
             if (travel * 0.6f * (travel * 0.6f) > beelineSq)
             {
-                recommendedAttackPos = end;
-                canReachCloseSpot = true;
-                return true;
+                // LaneMinion: the shortcut fires PREFERENTIALLY in clumps (the relocated end forces
+                // full actor-blocking → the path curves around the bodies → travel ≫ beeline), and
+                // it would return here WITHOUT the stand-cell reservation handshake below — two
+                // simultaneous deciders both got the same snapped `end` and fused (wire104
+                // incidents, 2026-07-03). If another unit has reserved within body distance of
+                // `end`, fall through to the stand-point walk + clearance spiral instead (which
+                // resolves against reservations); otherwise take the shortcut and reserve it.
+                bool reservedConflict = attacker is LaneMinion
+                    && HasReservationConflict(attacker, end, attacker.PathfindingRadius * 2f);
+                if (!reservedConflict)
+                {
+                    recommendedAttackPos = end;
+                    canReachCloseSpot = true;
+                    if (attacker is LaneMinion)
+                    {
+                        _standReservations[attacker] = end;
+                    }
+                    return true;
+                }
             }
 
             // Stand point = commit ~2 cells INTO attack range: the first path waypoint within
@@ -535,6 +553,37 @@ namespace LeagueSandbox.GameServer.Handlers
                         allyClear.Add(au.Position);
                     }
                 }
+
+                // STAND-CELL RESERVATIONS (2026-07-03, the "two wizards fuse" fix): the spiral's
+                // clearance test above only sees allies' CURRENT positions — when a shared target
+                // dies, co-attacking minions re-acquire the same next target in the SAME tick and
+                // each spiral run sees the other still standing at its OLD spot, so both commit
+                // the SAME stand cell (captured pair: identical attack paths chord=232/clr=41 at
+                // t=190.5s, then d=0.0 lockstep for 16s — once fused, every later decision is
+                // identical and NO separation mechanism fires on their n=2 paths). Treating other
+                // units' freshly COMMITTED cells as occupied closes the race: the second decider
+                // sees the first one's reservation and spirals to a distinct cell. Reservations
+                // self-expire (dead / removed / wandered >600u from the reserved cell).
+                foreach (var kv in _standReservations)
+                {
+                    var owner = kv.Key;
+                    if (owner == attacker) continue;
+                    if (IsReservationStale(owner, kv.Value))
+                    {
+                        _staleReservations.Add(owner);
+                        continue;
+                    }
+                    if (owner.Team == attacker.Team
+                        && Vector2.DistanceSquared(kv.Value, projected) <= snapR * snapR)
+                    {
+                        allyClear.Add(kv.Value);
+                    }
+                }
+                foreach (var stale in _staleReservations)
+                {
+                    _standReservations.Remove(stale);
+                }
+                _staleReservations.Clear();
             }
             // Body diameter + one cell gap → a visible "bit more" fan beyond just non-overlap. Tunable.
             float fullClearance = attacker.PathfindingRadius * 4f + _map.NavigationGrid.CellSize;
@@ -597,7 +646,96 @@ namespace LeagueSandbox.GameServer.Handlers
             }
             recommendedAttackPos = bestStand;
             canReachCloseSpot = true;
+            if (spreadFromAllies)
+            {
+                // Commit = reserve (see the reservation block above). Overwritten on every
+                // re-acquire/chase-repath, so it always reflects the unit's live intent.
+                _standReservations[attacker] = bestStand;
+            }
             return true;
+        }
+
+        // Live attack-stand commitments of lane minions (unit -> committed stand cell), consulted
+        // by the clearance spiral so SIMULTANEOUS deciders pick distinct cells (see the
+        // reservation block in GetClosestAttackPoint). Pruned lazily during consultation.
+        private readonly Dictionary<AttackableUnit, Vector2> _standReservations = new Dictionary<AttackableUnit, Vector2>();
+        private readonly List<AttackableUnit> _staleReservations = new List<AttackableUnit>();
+
+        /// <summary>
+        /// True when another live reservation sits within <paramref name="dist"/> of
+        /// <paramref name="pos"/>. Prunes stale entries as it scans — see
+        /// <see cref="IsReservationStale"/> for the abandonment rule.
+        /// </summary>
+        private bool HasReservationConflict(AttackableUnit attacker, Vector2 pos, float dist)
+        {
+            bool conflict = false;
+            foreach (var kv in _standReservations)
+            {
+                var owner = kv.Key;
+                if (owner == attacker) continue;
+                if (IsReservationStale(owner, kv.Value))
+                {
+                    _staleReservations.Add(owner);
+                    continue;
+                }
+                if (!conflict && Vector2.DistanceSquared(kv.Value, pos) < dist * dist)
+                {
+                    conflict = true;
+                }
+            }
+            foreach (var stale in _staleReservations)
+            {
+                _standReservations.Remove(stale);
+            }
+            _staleReservations.Clear();
+            return conflict;
+        }
+
+        /// <summary>
+        /// Abandonment rule for a stand/approach reservation. Dead / removed owners always prune.
+        /// The distance leg REQUIRES the owner's path to be over: the original ">600u from the
+        /// cell" prune alone silently nullified every FAR commitment — the turret-cap approach
+        /// target is committed while the minion is still 1000u+ down the lane (tt121: the cap fix
+        /// did nothing, wave siblings fused pairwise on the raw tower center again, because every
+        /// consult pruned the walker's reservation as "wandered off"). A unit still WALKING
+        /// (path not ended) keeps its claim however far away it is; only a unit that finished its
+        /// path somewhere else (idle / re-decided) has genuinely abandoned the cell.
+        /// </summary>
+        private static bool IsReservationStale(AttackableUnit owner, Vector2 cell)
+        {
+            if (owner.IsDead || owner.IsToRemove())
+            {
+                return true;
+            }
+            return owner.IsPathEnded()
+                && Vector2.DistanceSquared(owner.Position, cell) > 600f * 600f;
+        }
+
+        /// <summary>
+        /// Distinct-cell guarantee for EVERY lane-minion stand decision (2026-07-04): all exits
+        /// that produce a stand position — beeline shortcut, firstInRange&lt;0 path-end, the
+        /// clearance spiral, AND the geometric GetAttackStandPosition fallback in ObjAIBase —
+        /// must end up body-distinct, or two simultaneous deciders fuse (identical inputs →
+        /// identical decisions forever; nothing separates an n=2 fused pair). If
+        /// <paramref name="pos"/> collides with another unit's live reservation, relocate to the
+        /// nearest get-to-able cell clear of ALL reservations; then reserve. Champions and
+        /// non-lane units pass through untouched.
+        /// </summary>
+        public Vector2 CommitStand(AttackableUnit attacker, Vector2 pos)
+        {
+            if (attacker is not LaneMinion)
+            {
+                return pos;
+            }
+            float bodyDist = attacker.PathfindingRadius * 2f;
+            if (HasReservationConflict(attacker, pos, bodyDist))
+            {
+                pos = SetToNearestGetToAbleCell(attacker, pos, attacker.PathfindingRadius,
+                    cellAccept: c => !HasReservationConflict(attacker, c, bodyDist),
+                    preferOnAxis: true);
+            }
+            _standReservations[attacker] = pos;
+            return pos;
         }
 
         // Graceful-degrade clearance levels (fractions of the full body-gap) for the attack-stand
@@ -744,7 +882,10 @@ namespace LeagueSandbox.GameServer.Handlers
             return _map.NavigationGrid.SetToNearestGetToAbleCell(target, unit.Position, pred, radius, ignoreTargetRadius, targetRadius, cellAccept, preferOnAxis);
         }
 
-        private NavigationGrid.ActorBlockedPredicate BuildActorBlockedPredicate(AttackableUnit attacker)
+        // Public since 2026-07-04: HandleMove threads the predicate through champion move-order
+        // validation + re-A* (the Riot-faithful actor-aware near-window — GridLineOfSightTest2
+        // checks HasStuckActor within the first 1500u, NavigationGrid.cpp:673-681).
+        public NavigationGrid.ActorBlockedPredicate BuildActorBlockedPredicate(AttackableUnit attacker)
         {
             if (attacker == null)
             {

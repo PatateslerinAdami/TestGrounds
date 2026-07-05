@@ -251,6 +251,15 @@ namespace LeagueSandbox.GameServer.Inventory
                 return false;
             }
 
+            // Reject items this map marks unpurchasable (Items.inibin "UnpurchasableItemList"). The client
+            // already greys these out (mbIsPurchasable=false, ItemShopFoundry buy gate), so this only
+            // hardens against a client that sends the buy anyway. Maps with no Items.json leave the set
+            // empty => no gating. Mode-specific lists are deferred until a mutator system exists.
+            if (_game.Map.MapData.UnpurchasableItems.Contains(itemId))
+            {
+                return false;
+            }
+
             var stats = _owner.Stats;
             var inventory = _owner.Inventory;
             var price = itemTemplate.TotalPrice;

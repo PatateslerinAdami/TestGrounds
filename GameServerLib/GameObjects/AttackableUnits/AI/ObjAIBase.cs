@@ -52,8 +52,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     public class ObjAIBase : AttackableUnit
     {
         public int hitCount = 0;
-        internal readonly List<AssistMarker> AlliedAssistMarkers = new List<AssistMarker>();
-        internal readonly List<AssistMarker> EnemyAssistMarkers = new List<AssistMarker>();
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
 
@@ -91,6 +89,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // drift still recomputes immediately.
         private float _lastChaseRepathMs = float.NegativeInfinity;
         private const float MIN_CHASE_REPATH_MS = 250.0f;
+
+        // Stand-cell cache: the attack stand position computed at (re)acquire, reused across
+        // chase-repaths while the target/range/walkability stay valid (see RefreshWaypoints).
+        private Vector2 _cachedStandPos;
+        private uint _cachedStandTargetNetId;
 
         // Stop+Hold reconciliation: pressing the Hold key sends AI_STOP immediately followed by
         // AI_HOLD (~65ms apart, verified on the wire), and the Hold packet does NOT carry the held
@@ -1332,11 +1335,40 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         }
                         else
                         {
-                            gotAttackPoint = _game.Map.PathingHandler.GetClosestAttackPoint(
-                                this, chaseUnit, idealRange, out recommended, out _, out _);
-                            pathDestination = gotAttackPoint
-                                ? recommended
-                                : _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange);
+                            // STAND-CELL CACHE (2026-07-04, the June-deferred stability fix):
+                            // compute the stand cell ONCE per (re)acquire and REUSE it across
+                            // chase-repaths while valid. Recomputing on every needRepath made the
+                            // whole attacking ring reshuffle continuously (chord≈60 micro-
+                            // repositions, wire106 trace) — every reshuffle another transit
+                            // through occupied space and another chance to overlap. Invalidate on
+                            // target switch, on the target dragging the cell out of attack range,
+                            // or the cell becoming unwalkable.
+                            bool standCacheValid = _cachedStandTargetNetId == chaseUnit.NetId
+                                && Vector2.DistanceSquared(_cachedStandPos, chaseUnit.Position)
+                                    <= idealRange * idealRange
+                                && _game.Map.PathingHandler.IsWalkable(_cachedStandPos, PathfindingRadius);
+                            if (standCacheValid)
+                            {
+                                gotAttackPoint = true;
+                                recommended = _cachedStandPos;
+                                pathDestination = _cachedStandPos;
+                            }
+                            else
+                            {
+                                gotAttackPoint = _game.Map.PathingHandler.GetClosestAttackPoint(
+                                    this, chaseUnit, idealRange, out recommended, out _, out _);
+                                // CommitStand on the geometric fallback: GetAttackStandPosition is
+                                // a pure function of the target — co-located attackers falling
+                                // back here (no path) got the IDENTICAL point and fused. The
+                                // distinct-cell guarantee relocates against live stand
+                                // reservations (lane minions only; pass-through otherwise).
+                                pathDestination = gotAttackPoint
+                                    ? recommended
+                                    : _game.Map.PathingHandler.CommitStand(this,
+                                        _game.Map.PathingHandler.GetAttackStandPosition(this, chaseUnit, idealRange));
+                                _cachedStandPos = pathDestination;
+                                _cachedStandTargetNetId = chaseUnit.NetId;
+                            }
                         }
                     }
 
@@ -1363,9 +1395,40 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // The fan-out therefore must come from the collision response, not path threading —
                     // that is the next step. Matches the forward-nav terrain-only change (same root).
                     // Champions/pets already used LOS-first; this just brings lane minions in line.
+                    //
+                    // UPDATE 2026-07-04: the LOS shortcut itself is now actor-gated in
+                    // NavigationGrid.GetPath (T2-faithful — GridLineOfSightTest2 runs HasStuckActor
+                    // within 1500u), so "LOS-first" means the straight line is taken only when it is
+                    // ALSO clear of stuck bodies; a blocked line falls into the actor-aware A*.
+                    // actorAwareChase=false still controls what it always did: whether the shortcut
+                    // is attempted at all (true would force the full A* on every chase repath).
+                    // In-range actor exemption for CHAMPION attack chases (2026-07-04): with the
+                    // actor-gated LOS shortcut, the direct line to the stand point would get
+                    // blocked by bodies packed around the target (co-attackers, the wave) and the
+                    // A*'s fixed 2-cell near-goal window is far smaller than an attack range — a
+                    // ranged champion would ROUTE AROUND the wave instead of walking straight
+                    // until in range. Riot's champions go through GetClosestAttackPoint, which
+                    // threads ignoreTargetRadius = effectiveRange − radii − halfCell into the
+                    // build (same formula as our GCAP, PathingHandler.cs:385-387) so actor
+                    // blocking is bypassed anywhere within attack range of the goal. Champions
+                    // bypass GCAP here (direct-line stand point, see above), so thread it
+                    // ourselves. NOT for minions: their approach build stays at the default —
+                    // the GCAP-internal endRelocated→0 full-blocking is the attacker-spread
+                    // mechanism (distinct stand cells), and a broad in-range exemption on the
+                    // second build would let co-attackers beeline through each other again.
+                    float chaseIgnoreTargetRadius = -1f;
+                    if (chaseUnit != null && this is Champion)
+                    {
+                        float halfCell = _game.Map.NavigationGrid.CellSize * 0.5f;
+                        chaseIgnoreTargetRadius = idealRange
+                            - (CollisionRadius + chaseUnit.CollisionRadius) - halfCell;
+                        // Negative (tiny melee ranges) falls back to GetPath's default near-goal
+                        // window — same convention as GCAP's unclamped formula.
+                    }
+
                     bool actorAwareChase = false;
                     var newWaypoints = _game.Map.PathingHandler.GetPath(this, pathDestination,
-                        skipLineOfSight: actorAwareChase);
+                        skipLineOfSight: actorAwareChase, ignoreTargetRadius: chaseIgnoreTargetRadius);
                     if (newWaypoints != null && newWaypoints.Count > 1)
                     {
                         SetWaypoints(newWaypoints, pathReason: "attack");
@@ -2058,7 +2121,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="enabled">Whether or not the new spell should be enabled.</param>
         /// <param name="networkOld">Whether or not to notify clients of this change using an older packet method.</param>
         /// <returns>Newly created spell set.</returns>
-        public Spell SetSpell(string name, byte slot, bool enabled, bool networkOld = false)
+        public Spell SetSpell(string name, byte slot, bool enabled, bool networkOld = false,
+            byte changeFlags = 0x0E)
         {
             if (!Spells.ContainsKey(slot) || Spells[slot].CastInfo.IsAutoAttack)
             {
@@ -2093,8 +2157,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (this is Champion champion)
             {
                 int userId = _game.PlayerManager.GetClientInfoByChampion(champion).ClientId;
-                // TODO: Verify if this is all that is needed.
-                _game.PacketNotifier.NotifyChangeSlotSpellData(userId, champion, slot, ChangeSlotSpellDataType.SpellName, slot == 4 || slot == 5, newName: name);
+                // Bitfield: the 4.20 client reads ONLY bit 0 (isSummonerSpell) — exe handler
+                // 0x65bc10 does `and al, 0x1`. Riot's nonzero values (0x6E arming / 0x0E
+                // restoring, Sion W replay) are server-side garbage bits; we mirror them via
+                // changeFlags purely for byte-exact wirecompare.
+                _game.PacketNotifier.NotifyChangeSlotSpellData(userId, champion, slot, ChangeSlotSpellDataType.SpellName, slot == 4 || slot == 5, newName: name, extraFlags: changeFlags);
                 if (networkOld)
                 {
                     _game.PacketNotifier.NotifyS2C_SetSpellData(userId, NetId, name, slot);
@@ -2566,10 +2633,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Inventory.OnUpdate(diff);
             }
 
-            using (Profiler.Scope("ObjAI.AssistMarkers"))
-            {
-                UpdateAssistMarkers();
-            }
             using (Profiler.Scope("ObjAI.UpdateTarget"))
             {
                 UpdateTarget();
@@ -3415,67 +3478,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public void PauseAI(bool isPaused)
         {
             _aiPaused = isPaused;
-        }
-
-        internal void AddAssistMarker(ObjAIBase sourceUnit, float duration, DamageData damageData = null)
-        {
-            if (sourceUnit is Champion)
-            {
-                if (sourceUnit.Team == Team)
-                {
-                    AuxAddAssistMarker(AlliedAssistMarkers, sourceUnit, duration, damageData);
-                }
-                else
-                {
-                    AuxAddAssistMarker(EnemyAssistMarkers, sourceUnit, duration, damageData);
-                }
-            }
-        }
-
-        void AuxAddAssistMarker(List<AssistMarker> assistList, ObjAIBase sourceUnit, float duration, DamageData damageData = null)
-        {
-            AssistMarker assistMarker = assistList.Find(x => x.Source == sourceUnit);
-            if (assistMarker != null)
-            {
-                float desiredDuration = _game.GameTime + duration * 1000;
-                assistMarker.StartTime = _game.GameTime;
-                assistMarker.EndTime = assistMarker.EndTime < desiredDuration ? desiredDuration : assistMarker.EndTime;
-            }
-            else
-            {
-                assistMarker = new AssistMarker()
-                {
-                    Source = sourceUnit,
-                    StartTime = _game.GameTime,
-                    EndTime = _game.GameTime + duration * 1000,
-                };
-
-                assistList.Add(assistMarker);
-            }
-
-            if (damageData != null)
-            {
-                switch (damageData.DamageType)
-                {
-                    case DamageType.DAMAGE_TYPE_PHYSICAL:
-                        assistMarker.PhysicalDamage += damageData.Damage;
-                        break;
-                    case DamageType.DAMAGE_TYPE_MAGICAL:
-                        assistMarker.MagicalDamage += damageData.Damage;
-                        break;
-                    case DamageType.DAMAGE_TYPE_TRUE:
-                        assistMarker.TrueDamage += damageData.Damage;
-                        break;
-                }
-            }
-
-            assistList = assistList.OrderByDescending(x => x.StartTime).ToList();
-        }
-
-        void UpdateAssistMarkers()
-        {
-            AlliedAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
-            EnemyAssistMarkers.RemoveAll(x => x.EndTime < _game.GameTime);
         }
 
         protected override void UpdateFacing()

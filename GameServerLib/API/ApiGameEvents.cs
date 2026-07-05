@@ -92,35 +92,49 @@ namespace LeagueSandbox.GameServer.API
             ApiMapFunctionManager.NotifyAscendant();
         }
 
+        /// <summary>
+        /// Fills the shared ArgsMinionKill payload of the epic-monster kill announces
+        /// (OnKillDragon/OnKillWorm/OnKillSpiderBoss). Replay-verified (4.20, 3x OnKillDragon +
+        /// 1x OnKillWorm): OtherNetID = monster, GoldGiven = 0, assist list = champions with an
+        /// active assist marker on the monster (killer never included), MinionSkinNameHash =
+        /// lowercase-SDBM hash of the monster model (SRU_Dragon = 0x694958FC, SRU_Baron =
+        /// 0x68AC12C9), MinionSkinID and MinionMapSideTeamID = 0 (neutral).
+        /// </summary>
+        private static void FillEpicMonsterKillEvent(ArgsMinionKill killEvent, DeathData data)
+        {
+            killEvent.OtherNetID = data.Unit.NetId;
+            killEvent.GoldGiven = 0.0f;
+            var assists = data.Unit.GetEnemyChampionAssists(data.Killer);
+            killEvent.AssistCount = assists.Count;
+            for (int i = 0; i < assists.Count && i < killEvent.Assists.Length; i++)
+            {
+                killEvent.Assists[i] = assists[i].NetId;
+            }
+            killEvent.MinionSkinNameHash = GameServerCore.Content.HashFunctions.HashStringNorm(data.Unit.Model);
+            killEvent.MinionSkinID = data.Unit is ObjAIBase ai ? ai.SkinID : 0;
+            killEvent.MinionMapSideTeamID = 0;
+        }
+
         public static void AnnounceKillDragon(DeathData data)
         {
-            var killDragon = new OnKillDragon()
-            {
-                //TODO: Figure out all the parameters, their values look random(?).
-                //All Map11 replays have the same values in this event besides OtherNetId.
-                OtherNetID = data.Unit.NetId
-            };
+            var killDragon = new OnKillDragon();
+            FillEpicMonsterKillEvent(killDragon, data);
             _game.PacketNotifier.NotifyS2C_OnEventWorld(killDragon, data.Killer);
         }
 
         public static void AnnounceKillWorm(DeathData data)
         {
-            var killDragon = new OnKillWorm()
-            {
-                //TODO: Figure out all the parameters, their values look random(?).
-                OtherNetID = data.Unit.NetId
-            };
-            _game.PacketNotifier.NotifyS2C_OnEventWorld(killDragon, data.Killer);
+            var killWorm = new OnKillWorm();
+            FillEpicMonsterKillEvent(killWorm, data);
+            _game.PacketNotifier.NotifyS2C_OnEventWorld(killWorm, data.Killer);
         }
 
         public static void AnnounceKillSpiderBoss(DeathData data)
         {
-            var killDragon = new OnKillSpiderBoss()
-            {
-                //Couldn't find a replay with this event, but i assume it should follow the same logic as the other 2.
-                OtherNetID = data.Unit.NetId
-            };
-            _game.PacketNotifier.NotifyS2C_OnEventWorld(killDragon, data.Killer);
+            // No replay with this event captured; assumed to follow the dragon/worm shape.
+            var killSpiderBoss = new OnKillSpiderBoss();
+            FillEpicMonsterKillEvent(killSpiderBoss, data);
+            _game.PacketNotifier.NotifyS2C_OnEventWorld(killSpiderBoss, data.Killer);
         }
 
         public static void AnnounceMinionAscended(Minion minion)

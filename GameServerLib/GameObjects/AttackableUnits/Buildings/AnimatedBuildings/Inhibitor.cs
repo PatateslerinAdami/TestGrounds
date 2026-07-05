@@ -19,7 +19,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
 
         private List<int> _blockedNavCells;
 
-        // TODO assists
         public Inhibitor(
             Game game,
             string model,

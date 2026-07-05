@@ -506,7 +506,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // (RespawnTimer was still -1 when the packet was sent), which the client treats as a
             // completed/forced death. Set a valid respawn time first.
             RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
-                ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
+                ? Stats.GetRespawnTimer(_game.Map.MapData.GetDeathTime(Stats.Level, _game.GameTime / 1000.0f) * 1000.0f)
                 : 100.0f;
 
             if (data.BecomeZombie)

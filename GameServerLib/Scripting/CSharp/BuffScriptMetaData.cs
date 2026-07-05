@@ -7,6 +7,12 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public BuffType BuffType { get; set; } = BuffType.INTERNAL;
         public BuffAddType BuffAddType { get; set; } = BuffAddType.RENEW_EXISTING;
         public int MaxStacks { get; set; } = 1;
+        /// <summary>
+        /// Wire IsHidden flag: the client hides the HUD icon but still processes the buff fully
+        /// (4.17 decomp: BuffManager SetIsHidden is display-only; the OnBuffActivate/OnBuffCast
+        /// audio events fire regardless). Hidden buffs ARE replicated — this is NOT a
+        /// "server-internal" switch.
+        /// </summary>
         public bool IsHidden { get; set; } = false;
         public bool UpdateInfinite { get; set; } = false;
         

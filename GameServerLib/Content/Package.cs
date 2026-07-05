@@ -161,7 +161,8 @@ namespace LeagueSandbox.GameServer.Content
 
             if (deathTimefile.Values.ContainsKey("TimeDeadPerLevel"))
             {
-                for (int i = 1; i < deathTimefile.Values["TimeDeadPerLevel"].Count; i++)
+                // <= so the last entry (e.g. Level30 on Map1, Level20 on Map11) isn't dropped.
+                for (int i = 1; i <= deathTimefile.Values["TimeDeadPerLevel"].Count; i++)
                 {
                     if (i <= 9)
                     {
@@ -174,12 +175,30 @@ namespace LeagueSandbox.GameServer.Content
                 }
             }
 
+            if (deathTimefile.Values.ContainsKey("DeathTimeScaling"))
+            {
+                toReturnMapData.DeathTimeScalingStartTime = (int)deathTimefile.GetFloat("DeathTimeScaling", "StartTime", 0);
+                toReturnMapData.DeathTimeScalingIncrementTime = (int)deathTimefile.GetFloat("DeathTimeScaling", "IncrementTime", 0);
+                toReturnMapData.DeathTimeScalingPercentIncrease = deathTimefile.GetFloat("DeathTimeScaling", "PercentIncrease", 0);
+                toReturnMapData.DeathTimeScalingPercentCap = deathTimefile.GetFloat("DeathTimeScaling", "PercentCap", 0);
+            }
+
             if (statProgressionFile.Values.ContainsKey("PerLevelStatsFactor"))
             {
                 for (int i = 0; i < statProgressionFile.Values["PerLevelStatsFactor"].Count; i++)
                 {
                     toReturnMapData.StatsProgression.Add(statProgressionFile.GetFloat("PerLevelStatsFactor", $"Level{i}"));
                 }
+            }
+
+            // Per-map shop item lists (LEVELS/MapX/Items.inibin, converted to Items.json). Optional: maps
+            // without the file (e.g. Map16/Map31) leave every list empty, so nothing is gated. Mirrors
+            // ItemArray::CreateItemInstnace (mac 4.17): base UnpurchasableItemList => not buyable;
+            // per-mutator "UnpurchasableItemList_<mode>" only apply when that mutator is active (we store
+            // them for a future mutator system); ItemInclusionList is a display gate, not a buy gate.
+            if (_mapData.TryGetValue("Items", out var itemsRaw))
+            {
+                toReturnMapData.LoadItemLists(JsonConvert.DeserializeObject<ContentFile>(itemsRaw));
             }
 
             JObject serializedConstants = JsonConvert.DeserializeObject<JObject>(_mapData["Constants"]);

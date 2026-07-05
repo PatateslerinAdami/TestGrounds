@@ -393,9 +393,11 @@ namespace LeagueSandbox.GameServer.API
         /// </summary>
         /// <param name="team"></param>
         /// <param name="position"></param>
-        public static Fountain CreateFountain(TeamId team, Vector2 position, float radius = 1000.0f)
+        public static Fountain CreateFountain(TeamId team, Vector2 position)
         {
-            return new Fountain(_game, team, position, radius);
+            // Radius (and all regen rates) now come from GlobalData.SpawnPointVariables (sp_RegenRadius etc.)
+            // inside Fountain — no per-call radius; the previous 1000f default diverged from sp_RegenRadius=1100.
+            return new Fountain(_game, team, position);
         }
  
         /// <summary>
@@ -417,22 +419,84 @@ namespace LeagueSandbox.GameServer.API
         }
  
         /// <summary>
-        /// Sets the game to exit
+        /// Shared end-of-game ceremony. Riot's split (4.20 Lua): the map's LevelScript
+        /// (HandleDestroyedObject) triggers EndOfGameCeremony, whose shared default lives in
+        /// DATA/Scripts/EndOfGame.lua and which maps may override (Map8/Map12 ship their own).
+        /// Our map scripts calling this shared API mirror that layering exactly, so the ceremony
+        /// stays here; a map wanting a custom ceremony simply doesn't call it.
+        ///
+        /// Sequence and timings are replay-verified (rlp c3a95050, 4.20.0.319, Map11 nexus death):
+        /// T+0     Building_Die, 7× S2C_SetInputLockFlag, HUD off, shop closed, camera pan,
+        ///         greyscale off (ceremony start)
+        /// T+1.0s  S2C_FadeOutMainSFX fadeTime=2 (FadeOutMainSFXPhase, EOG_MAIN_SFX_FADE_DELAY_TIME)
+        /// T+3.5s  S2C_FadeMinions amount=0 time=2 (DestroyNexusPhase, GetEoGNexusChangeSkinTime)
+        /// T+5.5s  chat input lock + S2C_EndGame (ScoreboardPhase, +EOG_SCOREBOARD_PHASE_DELAY_TIME)
         /// </summary>
         /// <param name="losingTeam">The team who lost the game</param>
         /// <param name="finalCameraPosition">The position which the camera has to move to for the end-game screen</param>
-        /// <param name="endGameTimer">Offset for the Endgame screend (victory or defeat) to be actually announced</param>
+        /// <param name="endGameTimer">Delay until the end-game screen (victory or defeat) is announced</param>
         /// <param name="moveCamera">Wether or not the camera should move</param>
         /// <param name="cameraTimer">The ammount of time the camera has to arrive to it's destination</param>
         /// <param name="disableUI">Whether or not the UI should get disabled</param>
         /// <param name="deathData">DeathData of what triggered the End of the Game, such as necus death</param>
-        public static void EndGame(TeamId losingTeam, Vector3 finalCameraPosition, float endGameTimer = 5000.0f, bool moveCamera = true, float cameraTimer = 3.0f, bool disableUI = true, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null)
+        public static void EndGame(TeamId losingTeam, Vector3 finalCameraPosition, float endGameTimer = 5500.0f, bool moveCamera = true, float cameraTimer = 3.0f, bool disableUI = true, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null)
         {
-            //TODO: check if mapScripts should handle this directly
- 
             if (deathData != null)
             {
                 _game.PacketNotifier.NotifyBuilding_Die(deathData);
+            }
+
+            // Server-side ceremony state (EndOfGame.lua: SetBarracksSpawnEnabled(false), HaltAllAI,
+            // SetInvulnerable/SetTargetable on both HQs): no further waves, frozen AI, deathless nexuses.
+            _map.MapScript.MapScriptMetadata.MinionSpawnEnabled = false;
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is Nexus nexus)
+                {
+                    nexus.SetStatus(StatusFlags.Invulnerable, true);
+                    nexus.SetStatus(StatusFlags.Targetable, false);
+                }
+                else if (obj is ObjAIBase ai)
+                {
+                    ai.PauseAI(true);
+                }
+            }
+
+            // Input locks in Riot's exact send order (replay: one packet per flag; chat stays
+            // unlocked until the scoreboard phase).
+            var inputLocks = new[]
+            {
+                InputLockFlags.CameraLocking, InputLockFlags.CameraMovement, InputLockFlags.Abilities,
+                InputLockFlags.SummonerSpells, InputLockFlags.Movement, InputLockFlags.Shop,
+                InputLockFlags.MinimapMovement
+            };
+
+            var players = _game.PlayerManager.GetPlayers(false);
+            foreach (var player in players)
+            {
+                foreach (var flag in inputLocks)
+                {
+                    _game.PacketNotifier.NotifyS2C_SetInputLockFlag(player.ClientId, flag, true);
+                }
+                if (disableUI)
+                {
+                    _game.PacketNotifier.NotifyS2C_DisableHUDForEndOfGame(player);
+                }
+            }
+
+            // Force the store screen closed on all clients now that the game is over (S2C_CloseShop).
+            _game.PacketNotifier.NotifyCloseShop();
+
+            if (moveCamera)
+            {
+                foreach (var player in players)
+                {
+                    _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
+                }
+            }
+
+            if (deathData != null)
+            {
                 _game.PacketNotifier.NotifyS2C_SetGreyscaleEnabledWhenDead(false, deathData.Killer);
             }
             else
@@ -440,39 +504,29 @@ namespace LeagueSandbox.GameServer.API
                 _game.PacketNotifier.NotifyS2C_SetGreyscaleEnabledWhenDead(false);
             }
 
-            // Force the store screen closed on all clients now that the game is over (S2C_CloseShop).
-            _game.PacketNotifier.NotifyCloseShop();
-
-            // Fade out the losing team's minions over 2s as the game ends (S2C_FadeMinions) — replay-
-            // verified: sent ~2s before the end-game screen with FadeAmount 0 / FadeTime 2.0. Cosmetic.
-            _game.PacketNotifier.NotifyS2C_FadeMinions(losingTeam, 0.0f, 2.0f);
-
-            // Fade out the main SFX/audio bus over 2s as the game ends (S2C_FadeOutMainSFX) — replay-
-            // verified: ~4.5s before the end-game screen, FadeTime 2.0. Cosmetic audio.
-            _game.PacketNotifier.NotifyS2C_FadeOutMainSFX(2.0f);
-
-            var players = _game.PlayerManager.GetPlayers(false);
-            foreach (var player in players)
+            // FadeOutMainSFXPhase: main SFX bus fades over 2s, 1s into the ceremony.
+            ApiFunctionManager.CreateTimer(1.0f, () =>
             {
-                if (disableUI)
-                {
-                    _game.PacketNotifier.NotifyS2C_DisableHUDForEndOfGame(player);
-                }
-                if (moveCamera)
-                {
-                    _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
-                }
-            }
- 
-            //The way we handle the end of a game has to be reworked
-            var timer = new System.Timers.Timer(endGameTimer) { AutoReset = false };
-            timer.Elapsed += (a, b) =>
+                _game.PacketNotifier.NotifyS2C_FadeOutMainSFX(2.0f);
+            });
+
+            // DestroyNexusPhase: losing team's minions fade over 2s, 2s before the scoreboard.
+            ApiFunctionManager.CreateTimer(System.Math.Max(endGameTimer - 2000.0f, 0.0f) / 1000.0f, () =>
             {
+                _game.PacketNotifier.NotifyS2C_FadeMinions(losingTeam, 0.0f, 2.0f);
+            });
+
+            // ScoreboardPhase: chat locks only now, then the end-game screen.
+            ApiFunctionManager.CreateTimer(endGameTimer / 1000.0f, () =>
+            {
+                foreach (var player in players)
+                {
+                    _game.PacketNotifier.NotifyS2C_SetInputLockFlag(player.ClientId, InputLockFlags.Chat, true);
+                }
                 _game.Stop();
                 _game.PacketNotifier.NotifyS2C_EndGame(losingTeam);
                 _game.SetGameToExit();
-            };
-            timer.Start();
+            });
         }
  
         public static void AddTurretItems(BaseTurret turret, int[] items)

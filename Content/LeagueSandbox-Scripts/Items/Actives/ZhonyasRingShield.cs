@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using LeaguePackets.Game;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs
 {
@@ -29,6 +30,7 @@ namespace Buffs
             unit.StopMovement();
             unit.PauseAnimation(true);
             unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false); // stasis lock — M2
+            DestroyMissileForTarget(unit);
             unit.SetStatus(StatusFlags.Invulnerable, true);
             unit.SetStatus(StatusFlags.Targetable, false);
 
