@@ -164,7 +164,13 @@ public class SivirQMissileReturn : ISpellScript
 
     private void OnLaunchMissile(Spell spell, SpellMissile missile)
     {
+        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnSpellMissileEnd);
         ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnSpellMissileHit);
+    }
+
+    private void OnSpellMissileEnd(SpellMissile missile)
+    {
+        ApiEventManager.RemoveAllListenersForOwner(this);
     }
 
     private void OnSpellMissileHit(SpellMissile missile, AttackableUnit target)
@@ -196,6 +202,7 @@ public class SivirQMissileReturn : ISpellScript
 
         _hitUnits.Add(target);
     }
+    
 }
 
 public class SivirQMissileReturnDead : ISpellScript
