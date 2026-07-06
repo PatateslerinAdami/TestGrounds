@@ -22,8 +22,6 @@ internal class runeprison : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _ryze = ownerSpell.CastInfo.Owner;
-        // Rooted derived from BuffType.SNARE.
-        unit.StopMovement();
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

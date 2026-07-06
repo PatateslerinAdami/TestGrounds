@@ -2,6 +2,7 @@ using System.Numerics;
 using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -17,6 +18,7 @@ namespace Buffs;
 // to the AatroxQDescent self-buff which does the dive. The enemy knockup at landing is AatroxQKnockup.
 // lockActions:false — Riot does NOT seal Aatrox's spellbook during Q (CAN_CAST stays 1 the whole leap).
 internal class AatroxQ : IBuffGameScript {
+    private bool _cancelCast = false;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
@@ -46,6 +48,7 @@ internal class AatroxQ : IBuffGameScript {
         // back to 1 at landing); CanCast/CanMove stay enabled. Re-enabled in AatroxQDescent at landing.
         unit.SetStatus(StatusFlags.CanAttack, false);
 
+        ApiEventManager.OnAllowAddBuff.AddListener(this, unit, OnAllowAddBuff);
         var direction  = new Vector2(unit.Direction.X, unit.Direction.Z);
         var jumpTarget = unit.Position + direction * AscendDistance;
         ForceMove(unit, jumpTarget, AscendSpeed, gravity: 10f, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING, lockActions: false, movementName: "AatroxQAscend");
@@ -55,11 +58,24 @@ internal class AatroxQ : IBuffGameScript {
         // buff (script-controlled / infiniteduration, removed at landing).
         unit.RegisterTimer(new GameScriptTimer(JumpToDescentDelaySeconds, () => {
             RemoveBuff(unit, "AatroxQ");
-            if (!unit.IsDead) {
-                AddBuff("AatroxQDescent", 0f, 1, ownerSpell, unit, (ObjAIBase)unit, infiniteduration: true);
+            if (!unit.IsDead && !_cancelCast) {
+                AddBuff("AatroxQDescent", 5f, 1, ownerSpell, unit, (ObjAIBase)unit, infiniteduration: true);
+                RemoveBuff(unit, "AatroxQAscend");
             }
         }));
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
+    private bool OnAllowAddBuff(AttackableUnit target, AttackableUnit unit, Buff buff)
+    {
+        if (buff.BuffType is BuffType.KNOCKBACK or BuffType.KNOCKUP)
+        {
+            _cancelCast = true;
+        }
+        return true;
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        ApiEventManager.OnAllowAddBuff.RemoveListener(this, unit, OnAllowAddBuff);
+    }
 }

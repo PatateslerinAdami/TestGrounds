@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using Buffs;
 using GameServerCore.Enums;
@@ -19,7 +19,6 @@ namespace Spells
     public class AatroxQ : ISpellScript
     {
         private ObjAIBase _aatrox;
-        private Spell     _spell;
         private Vector2   _endPos2D;
         private Vector2   _castStartPos2D;
         private const float MaxDashRange = 650f;
@@ -37,7 +36,6 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _aatrox = owner;
-            _spell = spell;
             ApiEventManager.OnUpdateStats.AddListener(this, _aatrox, OnUpdateStats);
         }
 
@@ -47,8 +45,7 @@ namespace Spells
             _aatrox.Stats.CurrentHealth = Math.Max(1, _aatrox.Stats.CurrentHealth - healthCost);
             var buff = _aatrox.GetBuffWithName("AatroxPassive")?.BuffScript as AatroxPassive;
             buff?.AddBlood(healthCost);
-
-            _spell = spell;
+            
             _castStartPos2D = owner.Position;
             _endPos2D = end != Vector2.Zero
                 ? end
@@ -87,7 +84,7 @@ namespace Spells
             // explicit removal at the phase boundaries — AatroxQ is removed when the descent begins
             // (~0.40s), AatroxQDescent at landing. Replay 663eda09: AatroxQ life ~250-432ms,
             // AatroxQDescent ~250-630ms; both dur=0, never expire by duration.
-            AddBuff("AatroxQ", 0f, 1, spell, _aatrox, _aatrox, infiniteduration: true);
+            AddBuff("AatroxQ", 10f, 1, spell, _aatrox, _aatrox, infiniteduration: true);
         }
 
         private void OnUpdateStats(AttackableUnit unit, float diff) {
