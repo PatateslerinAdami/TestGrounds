@@ -17,20 +17,25 @@ namespace Spells
 {
     public class FioraFlurry : ISpellScript
     {
-        Spell Flurry;
-        ObjAIBase Fiora;
+        private Spell _spell;
+        private ObjAIBase _fiora;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
             IsDamagingSpell = true
         };
-        
+
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _fiora = owner;
+        }
+
         public void OnSpellCast(Spell spell)
         {
-            Fiora.CancelAutoAttack(true, false);
-            Flurry = spell;
-            Fiora = spell.CastInfo.Owner as Champion;
-            AddBuff("FioraFlurry", 3.0f, 1, spell, Fiora, Fiora);
+            _fiora.CancelAutoAttack(true, false);
+            _spell = spell;
+            _fiora = spell.CastInfo.Owner as Champion;
+            AddBuff("FioraFlurry", 3.0f, 1, spell, _fiora, _fiora);
         }
     }
 }
