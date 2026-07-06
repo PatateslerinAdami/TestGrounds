@@ -351,7 +351,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             SetPosition(spawnPos);
             float parToRestore = 0;
             // TODO: Find a better way to do this, perhaps through scripts. Otherwise, make sure all types are accounted for.
-            if (Stats.ParType == PrimaryAbilityResourceType.MANA || Stats.ParType == PrimaryAbilityResourceType.Energy || Stats.ParType == PrimaryAbilityResourceType.Wind)
+            if (Stats.ParType == PrimaryAbilityResourceType.Mana || Stats.ParType == PrimaryAbilityResourceType.Energy || Stats.ParType == PrimaryAbilityResourceType.Wind)
             {
                 parToRestore = Stats.ManaPoints.Total;
             }

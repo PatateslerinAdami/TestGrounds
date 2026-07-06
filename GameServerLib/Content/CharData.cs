@@ -104,7 +104,7 @@ namespace LeagueSandbox.GameServer.Content
         public int MoveSpeed { get; private set; } = 100;
         public float MpPerLevel { get; private set; } = 10.0f;
         public float MpRegenPerLevel { get; private set; }
-        public PrimaryAbilityResourceType ParType { get; private set; } = PrimaryAbilityResourceType.MANA;
+        public PrimaryAbilityResourceType ParType { get; private set; } = PrimaryAbilityResourceType.Mana;
         public float PathfindingCollisionRadius { get; private set; } = -1.0f;
         public float PerceptionBubbleRadius { get; private set; } = 0.0f;
         public bool ShouldFaceTarget { get; private set; } = true;

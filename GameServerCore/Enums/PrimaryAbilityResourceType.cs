@@ -2,7 +2,7 @@
 {
     public enum PrimaryAbilityResourceType : byte
     {
-        MANA = 0,
+        Mana = 0,
         Energy = 1,
         None = 2,
         Shield = 3,
@@ -14,6 +14,8 @@
         Ferocity = 9,
         BloodWell = 10,
         Wind = 11,
-        Other = 12
+        Other = 12,
+        Max = 13,
+        UseCharCurrent = 14
     }
 }

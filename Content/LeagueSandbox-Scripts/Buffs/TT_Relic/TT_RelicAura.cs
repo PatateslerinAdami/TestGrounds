@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Numerics;
 using System.Linq;
 using GameServerCore.Enums;
@@ -186,7 +186,7 @@ namespace Buffs
 
             float restore = unit.Stats.ParType switch
             {
-                PrimaryAbilityResourceType.MANA => 90 + 14 * (level - 1),
+                PrimaryAbilityResourceType.Mana => 90 + 14 * (level - 1),
                 PrimaryAbilityResourceType.Energy => 25,
                 PrimaryAbilityResourceType.Battlefury => 10,
                 PrimaryAbilityResourceType.Dragonfury => 10,
@@ -199,7 +199,7 @@ namespace Buffs
             if (restore > 0)
             {
                 unit.Stats.CurrentMana = Math.Min(unit.Stats.ManaPoints.Total, unit.Stats.CurrentMana + restore);
-                if (unit.Stats.ParType == PrimaryAbilityResourceType.MANA)
+                if (unit.Stats.ParType == PrimaryAbilityResourceType.Mana)
                 {
                     AddParticleTarget(unit, unit, "summoner_mana", unit);
                 }

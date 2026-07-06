@@ -31,7 +31,7 @@ namespace Buffs
 
             if (unit is Champion champ)
             {
-                if (champ.HasPARType(PrimaryAbilityResourceType.MANA))
+                if (champ.HasPARType(PrimaryAbilityResourceType.Mana))
                 {
                     particle = AddParticleTarget(unit, unit, "NeutralMonster_buf_blue_defense", unit, buff.Duration);
                     StatsModifier.ManaRegeneration.FlatBonus += 5 + unit.Stats.ManaPoints.Total * 0.05f;
