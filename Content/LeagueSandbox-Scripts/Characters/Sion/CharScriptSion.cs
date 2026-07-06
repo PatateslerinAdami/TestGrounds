@@ -1,0 +1,27 @@
+﻿using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
+namespace CharScripts;
+
+public class CharScriptSion : ICharScript {
+    private ObjAIBase _sion;
+    private Spell _spell;
+
+    public StatsModifier StatsModifier { get; } = new();
+
+    public void OnActivate(ObjAIBase owner, Spell spell) {
+        _sion = owner;
+        _spell = spell;
+    }
+
+    public void OnPostActivate(ObjAIBase owner, Spell spell = null)
+    {
+        AddBuff("SionPassive", 25000f, 1, spell, owner, owner, true);
+    }
+}
