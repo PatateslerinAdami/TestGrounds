@@ -27,6 +27,7 @@ namespace Spells
         
         public void OnSpellCast(Spell spell)
         {
+            Fiora.CancelAutoAttack(true, false);
             Flurry = spell;
             Fiora = spell.CastInfo.Owner as Champion;
             AddBuff("FioraFlurry", 3.0f, 1, spell, Fiora, Fiora);
