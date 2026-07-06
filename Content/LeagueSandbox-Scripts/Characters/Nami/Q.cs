@@ -28,6 +28,16 @@ public class NamiQ : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _nami = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var ap      = _nami.Stats.AbilityPower.Total * 0.5f;
+        var dmg     = 75f + (55f * _nami.GetSpell("NamiQ").CastInfo.SpellLevel - 1) + ap;
+        AddBuff("NamiQDebuff", 1.5f, 1, spell, target, _nami);
+        target.TakeDamage(_nami, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+            DamageResultType.RESULT_NORMAL);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
@@ -103,13 +113,9 @@ public class NamiQMissile : ISpellScript {
     private void OnMissileHit(SpellMissile missile, AttackableUnit target) {
         var center  = missile.Position;
         AddParticlePos(_nami, "Nami_Base_Q_pop", center, center);
-        var ap      = _nami.Stats.AbilityPower.Total * 0.5f;
-        var dmg     = 75f + (55f * _nami.GetSpell("NamiQ").CastInfo.SpellLevel - 1) + ap;
         var enemies = GetUnitsInRange(_nami, center, 200f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
         foreach (var enemy in enemies) {
-            AddBuff("NamiQDebuff", 1.5f, 1, _spell, enemy, _nami);
-            enemy.TakeDamage(_nami, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                DamageResultType.RESULT_NORMAL);
+            _nami.Spells[0].ApplyEffects(enemy);
         }
         var allies = GetUnitsInRange(_nami, center, 225f, true, SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes);
         foreach (var ally in allies) {
