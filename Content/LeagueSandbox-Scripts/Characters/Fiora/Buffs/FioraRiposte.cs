@@ -21,33 +21,35 @@ namespace Buffs
     {
         private Buff _buff;
         private ObjAIBase _fiora;
+
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             PersistsThroughDeath = true,
             BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING
         };
+
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _buff = buff;
             _fiora = ownerSpell.CastInfo.Owner;
             ApiEventManager.OnPreTakeDamage.AddListener(this, _fiora, OnPreTakeDamage);
         }
+
         private void OnPreTakeDamage(DamageData damageData)
         {
             if (damageData.DamageSource is not DamageSource.DAMAGE_SOURCE_ATTACK) return;
-            //_fiora.CancelAutoAttack(true);
+            _fiora.CancelAutoAttack(true, true);
             damageData.PostMitigationDamage = 0;
             SpellCast(_fiora, 4, SpellSlotType.ExtraSlots, true, damageData.Attacker, Vector2.Zero);
             RemoveBuff(_fiora, "FioraRiposteBuff");
         }
+
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            if (buff.TimeElapsed >= buff.Duration)
-            {
-                ApiEventManager.OnPreTakeDamage.RemoveListener(this, _fiora, OnPreTakeDamage);
-            }
+            ApiEventManager.OnPreTakeDamage.RemoveListener(this, _fiora, OnPreTakeDamage);
         }
     }
 }
