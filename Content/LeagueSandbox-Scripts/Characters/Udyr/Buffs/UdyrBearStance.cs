@@ -46,9 +46,8 @@ public class UdyrBearStance : IBuffGameScript {
         if (!IsValidTarget(_udyr, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes)) return;
         if (target.HasBuff("UdyrBearStunCheck") || _udyr.IsForceMoved) return;
 
-        _udyr.LungeToTarget(target, ChampionLungeSpeed, keepFacingLastDirection: false,
-                            followTargetMaxDistance: ChampionLungeDistance, travelTime: ChampionLungeTravelTime,
-                            lockActions: false);
+        ForceMove(_udyr, GetMovePositionByCollisionOffset(_udyr, target, 0f), ChampionLungeSpeed, 0, ForceMovementType.GET_NEAREST_IN_RANGE_INCLUDE_UNITS, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, false, ignoreTerrain: true, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER);
+        //_udyr.LungeToTarget(target, ChampionLungeSpeed, keepFacingLastDirection: false, followTargetMaxDistance: ChampionLungeDistance, travelTime: ChampionLungeTravelTime, lockActions: false);
     }
 
     private void OnHit(DamageData data) {
