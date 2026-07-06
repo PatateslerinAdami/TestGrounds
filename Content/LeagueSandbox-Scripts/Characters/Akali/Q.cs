@@ -20,8 +20,13 @@ public class AkaliMota : ISpellScript {
         MissileParameters = new MissileParameters {
             Type = MissileType.Target
         },
+        NotSingleTargetSpell = false,
+        DoesntBreakShields   = false,
         TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
+        CastingBreaksStealth = true,
+        IsDamagingSpell      = true,
+        PersistsThroughDeath = true,
+        IsNonDispellable = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

@@ -13,7 +13,7 @@ namespace Buffs;
 internal class AatroxEConeMissile : IBuffGameScript {
     private       ObjAIBase      _aatrox;
     private       AttackableUnit _unit;
-    private       Particle       _slow, _slow2;
+    private       Particle       _slow;
     private const float          _slowPercentage = 0.4f;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SLOW,
@@ -26,12 +26,8 @@ internal class AatroxEConeMissile : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _aatrox = ownerSpell.CastInfo.Owner;
         _unit  = unit;
-        
-        _slow  = AddParticleTarget(_aatrox, null, "Global_Slow.troy", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
-        switch (_aatrox.SkinID) {
-            
-        }
-        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow.troy", unit, flags: FXFlags.SimulateWhileOffScreen);
+
+        _slow = SpellEffectCreate("Aatrox_Base_E_Slow.troy", _aatrox, unit, unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _aatrox);
         ApplyAssistMarker(unit, _aatrox, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= _slowPercentage;
@@ -40,6 +36,5 @@ internal class AatroxEConeMissile : IBuffGameScript {
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         RemoveParticle(_slow);
-        RemoveParticle(_slow2);
     }
 }

@@ -22,12 +22,39 @@ public class AhriFoxFire : ISpellScript {
     private const float OrbRadius = 150.0f;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts = true
+        NotSingleTargetSpell = false,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true,
+        IsDamagingSpell = true,
+        SetSpellDamageRatio = 1f,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _ahri = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        AddParticleTarget(_ahri, target, "Ahri_FoxFire_tar", target);
+        var mainSpell = _ahri.GetSpell("AhriFoxFire");
+        var ap = _ahri.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient;
+        var damage = mainSpell.SpellData.EffectLevelAmount[1][mainSpell.CastInfo.SpellLevel] + ap;
+        
+             
+        // S1 AhriFoxFireMissileTwo.TargetExecuteBuildingBlocks: the FIRST foxfire to hit a target
+        // deals full damage; every subsequent foxfire on the SAME target deals half. The S1 reduced
+        // values {20,35,50,65,80}+0.1875·AP are exactly half of the full {40,70,100,130,160}+0.375·AP,
+        // so the rule is a clean ×0.5. "Already hit" is tracked with an AhriFoxFireMissileTwo buff on
+        // the target (resolves to BuffScriptEmpty — presence is all we need).
+        
+        if (target.HasBuff("AhriFoxFireMissileTwo")) {
+            damage *= 0.5f;
+        } else {
+            AddBuff("AhriFoxFireMissileTwo", 6f, 1, spell, target, _ahri);
+        }
+        target.TakeDamage(_ahri, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
     }
 
     public void OnSpellPostCast(Spell spell) {
@@ -62,10 +89,10 @@ public class AhriFoxFireMissile : ISpellScript {
     private ObjAIBase _ahri;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        IsDamagingSpell   = true,
         MissileParameters = new MissileParameters {
             Type = MissileType.Circle,
         },
+        NotSingleTargetSpell = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -123,10 +150,10 @@ public class AhriFoxFireMissileTwo : ISpellScript {
     private ObjAIBase _ahri;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        IsDamagingSpell   = true,
         MissileParameters = new MissileParameters {
             Type = MissileType.Target,
         },
+        NotSingleTargetSpell = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -136,22 +163,7 @@ public class AhriFoxFireMissileTwo : ISpellScript {
     
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!spell.SpellData.IsValidTarget(_ahri, target)) return;
-        var mainSpell = _ahri.GetSpell("AhriFoxFire");
-        var ap = _ahri.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient;
-        var damage = mainSpell.SpellData.EffectLevelAmount[1][mainSpell.CastInfo.SpellLevel] + ap;
-
-        // S1 AhriFoxFireMissileTwo.TargetExecuteBuildingBlocks: the FIRST foxfire to hit a target
-        // deals full damage; every subsequent foxfire on the SAME target deals half. The S1 reduced
-        // values {20,35,50,65,80}+0.1875·AP are exactly half of the full {40,70,100,130,160}+0.375·AP,
-        // so the rule is a clean ×0.5. "Already hit" is tracked with an AhriFoxFireMissileTwo buff on
-        // the target (resolves to BuffScriptEmpty — presence is all we need).
-        if (target.HasBuff("AhriFoxFireMissileTwo")) {
-            damage *= 0.5f;
-        } else {
-            AddBuff("AhriFoxFireMissileTwo", 6f, 1, spell, target, _ahri);
-        }
-
-        AddParticleTarget(_ahri, target, "Ahri_FoxFire_tar", target);
-        target.TakeDamage(_ahri, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
+        _ahri.Spells[1].ApplyEffects(target);
+        
     }
 }

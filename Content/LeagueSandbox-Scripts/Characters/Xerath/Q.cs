@@ -291,7 +291,7 @@ namespace Spells
             // Now that the wire default is 0, Xerath opts in explicitly.
             AddParticlePos(_xerath, "xerath_base_q_beam.troy", _startPos, _end,
                 lifetime: BeamLifetimeSeconds, overrideTargetHeight: beamElevation,
-                bone: "ROOT", targetBone: "TOP", skinColorSourceNetID: _xerath.NetId);
+                bone: "ROOT", targetBone: "TOP", keywordObject: _xerath);
 
             // Release the cast-recovery lockout (mirrors the disable above; no Rooted to clear).
             _xerath.SetStatus(StatusFlags.CanMove, true);
@@ -316,7 +316,7 @@ namespace Spells
                 
                 // Keyword=caster: replay shows the tar packets carry KeywordNetID=Xerath (wire default is now 0).
                 AddParticleTarget(_xerath, unit, "xerath_base_q_tar.troy", unit, lifetime: 3.0f,
-                    skinColorSourceNetID: _xerath.NetId);
+                    keywordObject: _xerath);
                 
                 unit.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false,
                     _spell);

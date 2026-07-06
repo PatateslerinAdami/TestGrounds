@@ -1124,12 +1124,12 @@ namespace LeagueSandbox.GameServer.API
             float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null, uint? skinColorSourceNetID = null,
+            float overrideTargetHeight = 0f, string enemyParticle = null, GameObject keywordObject = null,
             float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
+                enemyParticle, keywordObject?.NetId, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard);
             return p;
         }
 
@@ -1155,12 +1155,12 @@ namespace LeagueSandbox.GameServer.API
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint? skinColorSourceNetID = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
+            GameObject keywordObject = null, float fowVisionRadius = 0f, bool affectedByFoW = true,
             bool sendIfOnScreenOrDiscard = false, uint? packageHashOverride = null, bool sendUnbatched = false)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
+                enemyParticle, keywordObject?.NetId, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
                 packageHashOverride, sendUnbatched);
         }
 
@@ -1186,13 +1186,13 @@ namespace LeagueSandbox.GameServer.API
             GameObject target, float lifetime = 1.0f, float size = 1.0f, string bone = "", string targetBone = "",
             Vector3 direction = new Vector3(), bool followGroundTilt = false, TeamId teamOnly = TeamId.TEAM_ALL,
             GameObject unitOnly = null, FXFlags flags = FXFlags.SimulateWhileOffScreen, bool ignoreCasterVisibility = false,
-            float overrideTargetHeight = 0f, string enemyParticle = null, uint? skinColorSourceNetID = null,
+            float overrideTargetHeight = 0f, string enemyParticle = null, GameObject keywordObject = null,
             float fowVisionRadius = 0f, bool affectedByFoW = true, bool sendIfOnScreenOrDiscard = false,
             uint? packageHashOverride = null, bool sendUnbatched = false)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, skinColorSourceNetID, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
+                enemyParticle, keywordObject?.NetId, fowVisionRadius, affectedByFoW, sendIfOnScreenOrDiscard,
                 packageHashOverride, sendUnbatched);
             return p;
         }

@@ -378,7 +378,7 @@ namespace Spells
                 // EffectNameHash=0 (empty name), flags=0, no bones, TargetNetID=0, bind=target,
                 // KeywordNetID=Sion. Drives the client's on-hit/material audio for the target.
                 AddParticle(_sion, target, "", target.Position,
-                    flags: FXFlags.None, skinColorSourceNetID: _sion.NetId);
+                    flags: FXFlags.None, keywordObject: _sion);
 
                 // Wire: Qx_tar bound to the target (bind=tgt=unit, no bone, scale 2). The FLAIL
                 // variant (Q1_tar) additionally carries orientation = MINUS the cast direction
