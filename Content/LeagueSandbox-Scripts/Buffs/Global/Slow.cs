@@ -35,20 +35,13 @@ internal class Slow : IBuffGameScript
         _owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
 
         var movementSlowAmount = buff.Variables.GetFloat("slowPercent");
-        var attackSpeedSlowAmount = buff.Variables.GetFloat("attackSpeedSlowAmount");
 
         if (movementSlowAmount < 0.0f)
         {
             movementSlowAmount = -movementSlowAmount;
         }
-
-        if (attackSpeedSlowAmount < 0.0f)
-        {
-            attackSpeedSlowAmount = -attackSpeedSlowAmount;
-        }
         
         StatsModifier.MoveSpeed.PercentBonus -= movementSlowAmount;
-        StatsModifier.AttackSpeed.PercentBonus -= attackSpeedSlowAmount;
         _unit.AddStatModifier(StatsModifier);
 
         var particleCaster = _owner ?? unit;
@@ -70,14 +63,6 @@ internal class Slow : IBuffGameScript
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        if (_slow != null)
-        {
             RemoveParticle(_slow);
-            _slow = null;
-        }
-    }
-
-    public void OnUpdate(float diff)
-    {
     }
 }
