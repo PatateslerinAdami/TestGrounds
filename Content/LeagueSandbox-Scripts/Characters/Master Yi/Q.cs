@@ -152,10 +152,8 @@ public class AlphaStrikeTeleport : ISpellScript
     {
         _target = target;
         _previousPos = _masterYi.Position;
-
-        const float visualBuffer = 50f;
-        var overshoot = _masterYi.CollisionRadius + _target.CollisionRadius + visualBuffer;
-        _coords = CalcVector(overshoot, _masterYi.Position, _target.Position);
+        
+        _coords = GetMovePositionByCollisionOffset(_masterYi, _target, 50f);
 
         var landing3D = new Vector3(_coords.X, _masterYi.GetHeight(), _coords.Y);
         spell.CastInfo.TargetPosition = landing3D;
