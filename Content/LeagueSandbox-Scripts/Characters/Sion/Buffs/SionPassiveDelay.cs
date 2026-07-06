@@ -28,15 +28,17 @@ internal class SionPassiveDelay : IBuffGameScript
         PlayAnimation(unit, "SionReanimate");
         HideHealthBar(unit, hide: true);
         unit.SetStatus(StatusFlags.Targetable, false);
+        unit.SetStatus(StatusFlags.Invulnerable, true);
         unit.SetStatus(StatusFlags.CanMove, false);
         unit.SetStatus(StatusFlags.CanAttack, false);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         unit.SetStatus(StatusFlags.Targetable, true);
+        unit.SetStatus(StatusFlags.Invulnerable, false);
         unit.SetStatus(StatusFlags.CanMove, true);
         unit.SetStatus(StatusFlags.CanAttack, true);
         HideHealthBar(unit, hide: false);
-        AddBuff("SionPassiveZombie", 25000f, 1, ownerSpell, _sion, _sion);
+        AddBuff("SionPassiveZombie", 8f, 1, ownerSpell, _sion, _sion);
     }
 }
