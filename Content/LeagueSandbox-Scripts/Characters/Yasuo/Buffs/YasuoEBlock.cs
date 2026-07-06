@@ -85,7 +85,7 @@ namespace Buffs
                 AddParticleTarget(owner, owner, "yasuo_base_eq_cas", owner);
                 PlayAnimation(owner, "Spell1_Dash", timeScale: 0.8f);
                 
-                var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock); });
+                var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock); });
                 unit.RegisterTimer(timerAnm);
 
                 // The old code used a SingleTick SpellSector purely as a "fire once if an enemy is within

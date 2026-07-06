@@ -92,7 +92,7 @@ namespace Spells
         {
             if (missile.ObjectsHit.Count == 0)
             {
-                missile.CastInfo.Owner.StopAnimation("Spell1_IN", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
+                missile.CastInfo.Owner.StopAnimation("Spell1_IN", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
             }
         }
 
@@ -114,7 +114,7 @@ namespace Spells
             PlayAnimation(owner, "Spell1_GRAB", timeScale: 1f);
             owner.RegisterTimer(new GameScriptTimer(0.1f, () =>
             {
-                StopAnimation(owner, "Spell1_GRAB", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
+                StopAnimation(owner, "Spell1_GRAB", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
                 if (!target.IsDead && owner.GetSpell("ThreshQLeap") != null)
                 {
                     PlayAnimation(owner, "Spell1_PULL1_UpB", timeScale: 1.0f);

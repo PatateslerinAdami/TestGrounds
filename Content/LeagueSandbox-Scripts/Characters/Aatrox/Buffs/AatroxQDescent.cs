@@ -4,6 +4,7 @@ using System.Numerics;
 using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -71,8 +72,8 @@ internal class AatroxQDescent : IBuffGameScript {
         // Landing: release the ascend's CanAttack hold (Riot: CAN_ATTACK back to 1 on landing).
         unit.SetStatus(StatusFlags.CanAttack, true);
 
-        StopAnimation(unit, "Spell1", LeaguePackets.Game.Common.StopAnimationFlags.Fade | LeaguePackets.Game.Common.StopAnimationFlags.IgnoreLock);
-        StopAnimation(unit, "Spell1_CLose", LeaguePackets.Game.Common.StopAnimationFlags.Fade | LeaguePackets.Game.Common.StopAnimationFlags.IgnoreLock);
+        StopAnimation(unit, "Spell1", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
+        StopAnimation(unit, "Spell1_CLose", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
 
         AddParticle(unit, null, "Aatrox_Base_Q_Land", unit.Position);
 

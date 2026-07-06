@@ -53,9 +53,8 @@ class KatarinaRSound : IBuffGameScript
     {
         // Replay (id=67106 t=578760) StopAnimation: name="" flags=0x33 (Fade|IgnoreLock|Unknown_0x10|Unknown_0x20).
         // Unknown_0x10|Unknown_0x20 are the looped-spell-cast-stop signal; empty name pairs with them, NOT "Spell4".
-        StopAnimation(_katarina, "",
-            StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock
-          | StopAnimationFlags.Unknown_0x10 | StopAnimationFlags.Unknown_0x20);
+        StopAnimation(_katarina, "Spell4",
+            StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
         RemoveParticle(_p);
     }
 }

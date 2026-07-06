@@ -23,7 +23,7 @@ namespace Spells
         public void OnSpellEvolve(Spell spell)
         {
             _owner.SetSpell("KhazixWLong", spell.CastInfo.SpellSlot, true, true);
-            StopAnimation(_owner, "Hide_Spikes", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
+            StopAnimation(_owner, "Hide_Spikes", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
             SetSpell(_owner, "KhazixWEvo", SpellSlotType.ExtraSlots, 6, true);
             _owner.GetSpell("KhazixWEvo").Cast(default, default, null);
         }
