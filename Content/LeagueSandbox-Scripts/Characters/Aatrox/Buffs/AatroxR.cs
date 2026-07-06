@@ -38,6 +38,7 @@ internal class AatroxR : IBuffGameScript {
         // flash effect 
         //_flashEffectParticle = AddParticleTarget(_aatrox, _aatrox, _flashEffect, _aatrox, lifetime: buff.Duration);
         //AddParticleTarget(_aatrox, _aatrox, "Aatrox_Base_R_decal", _aatrox, buff.Duration, bone: "weapon");
+        AddParticleTarget(_aatrox, _aatrox, "Aatrox_Base_R_Aura_Self.troy", _aatrox, buff.Duration);
         
         _aatrox.SetAnimStates(new Dictionary<string, string> {
             { "attack1", "Attack1_ULT" },
@@ -98,6 +99,4 @@ internal class AatroxR : IBuffGameScript {
         PlayAnimation(_aatrox, "Spell4End");
         _aatrox.ResetAutoAttackSpell();
     }
-
-    public void OnUpdate(float diff) { }
 }

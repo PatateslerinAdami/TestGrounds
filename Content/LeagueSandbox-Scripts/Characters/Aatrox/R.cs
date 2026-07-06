@@ -41,7 +41,7 @@ public class AatroxR : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
 
-        AddParticleTarget(_aatrox, _aatrox, _pcastname, _aatrox);
+        AddParticleTarget(_aatrox, _aatrox, _pcastname, _aatrox, flags: FXFlags.SimulateWhileOffScreen);
 
         float apRatio = _aatrox.Stats.AbilityPower.Total;
         float damage  = 200 + (100 * spell.CastInfo.SpellLevel - 1) + apRatio;

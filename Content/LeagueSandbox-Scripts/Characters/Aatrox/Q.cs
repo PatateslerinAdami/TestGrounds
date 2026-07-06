@@ -54,7 +54,7 @@ namespace Spells
                 2 => "Aatrox_Skin02_Q_Hit",
                 _ => "Aatrox_Base_Q_Hit"
             };
-            AddParticleTarget(_aatrox, target, hitParticle, target);
+            AddParticleTarget(_aatrox, target, hitParticle, target, flags: FXFlags.SimulateWhileOffScreen);
             target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                 DamageResultType.RESULT_NORMAL);
         }
@@ -83,6 +83,7 @@ namespace Spells
 
         public void OnSpellCast(Spell spell)
         {
+            AddParticleTarget(_aatrox, _aatrox, "Aatrox_Base_Q_Cast.troy", _aatrox, bone: "Root", flags: FXFlags.SimulateWhileOffScreen);
             PlayAnimation(_aatrox, Vector2.Distance(_aatrox.Position, _endPos2D) <= 250f ? "Spell1_Close" : "Spell1", 1f);
             var allyCircleParticle = _aatrox.SkinID switch {
                 1 => "Aatrox_Skin01_Q_Tar_Green",
@@ -94,7 +95,7 @@ namespace Spells
                 2 => "Aatrox_Skin02_Q_Tar_Red",
                 _ => "Aatrox_Base_Q_Tar_Red"
             };
-            AddParticle(_aatrox, null, allyCircleParticle, _endPos2D, enemyParticle: enemyCircleParticle);
+            AddParticle(_aatrox, null, allyCircleParticle, _endPos2D, enemyParticle: enemyCircleParticle, flags: FXFlags.SimulateWhileOffScreen);
         }
 
         public void OnSpellPostCast(Spell spell)

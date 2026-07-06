@@ -60,7 +60,7 @@ public class BantamTrap : ISpellScript {
 
         // spawning shroom :3c
         _noxiousTrap = AddMinion(_teemo, "TeemoMushroom", "Noxious Trap", _truecoords,
-                                 _teemo.Team, _teemo.SkinID, targetable: false, ignoreCollision: true);
+                                 _teemo.Team, _teemo.SkinID, ignoreCollision: true);
         
         //buff for duration tracking and killing on end duration
         _noxiousTrap.Stats.ManaPoints.BaseValue   = 600f;

@@ -10,7 +10,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class AatroxEslow : IBuffGameScript {
+internal class AatroxEConeMissile : IBuffGameScript {
     private       ObjAIBase      _aatrox;
     private       AttackableUnit _unit;
     private       Particle       _slow, _slow2;
@@ -27,11 +27,11 @@ internal class AatroxEslow : IBuffGameScript {
         _aatrox = ownerSpell.CastInfo.Owner;
         _unit  = unit;
         
-        _slow  = AddParticleTarget(_aatrox, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
+        _slow  = AddParticleTarget(_aatrox, null, "Global_Slow.troy", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
         switch (_aatrox.SkinID) {
             
         }
-        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow", unit);
+        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow.troy", unit, flags: FXFlags.SimulateWhileOffScreen);
         ApplyAssistMarker(unit, _aatrox, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= _slowPercentage;

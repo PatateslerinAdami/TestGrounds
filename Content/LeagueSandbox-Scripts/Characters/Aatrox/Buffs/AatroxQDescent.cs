@@ -20,6 +20,7 @@ namespace Buffs;
 // caster, added ~0.40s after the ascend (AatroxQ). Drives the flat dive to the target and applies the
 // landing effects (AoE damage + the AatroxQKnockup airborne on enemies).
 internal class AatroxQDescent : IBuffGameScript {
+    private ObjAIBase _aatrox;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
@@ -42,6 +43,7 @@ internal class AatroxQDescent : IBuffGameScript {
     private bool _released;
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _aatrox = ownerSpell.CastInfo.Owner;
         _spell = ownerSpell;
         var script = ownerSpell.Script as Spells.AatroxQ;
         var castStart = script?.CastStart ?? unit.Position;
@@ -80,7 +82,14 @@ internal class AatroxQDescent : IBuffGameScript {
         StopAnimation(unit, "Spell1", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
         StopAnimation(unit, "Spell1_CLose", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
 
-        AddParticle(unit, null, "Aatrox_Base_Q_Land", unit.Position);
+        
+        var landParticle = _aatrox.SkinID switch {
+            1 => "Aatrox_Skin01_Q_Land.troy",
+            2 => "Aatrox_Skin02_Q_Land.troy",
+            _ => "Aatrox_Base_Q_Land.troy"
+        };
+        
+        AddParticle(unit, null, landParticle, unit.Position, bone: "Buffbone_Glb_Ground_Loc", flags: FXFlags.SimulateWhileOffScreen | FXFlags.OrientToGroundNormal | FXFlags.TargetDirection);
 
         var enemiesInKnockUpRange = GetUnitsInRange(unit, unit.Position, 150f, true,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
