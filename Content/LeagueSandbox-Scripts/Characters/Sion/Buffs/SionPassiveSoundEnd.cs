@@ -10,12 +10,11 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class SionPassiveZombie: IBuffGameScript
+internal class SionPassiveSoundEnd : IBuffGameScript
 {
-    private ObjAIBase _sion;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType = BuffType.INTERNAL,
-        BuffAddType = BuffAddType.RENEW_EXISTING,
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
         PersistsThroughDeath = true,
         IsHidden = true
     };
@@ -24,13 +23,8 @@ internal class SionPassiveZombie: IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _sion = ownerSpell.CastInfo.Owner;
-        unit.Stats.CurrentHealth = unit.Stats.HealthPoints.Total;
-        
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        AddBuff("SionPassiveSoundEnd", 1.5f, 1, ownerSpell, unit, _sion);
-        _sion.EndZombie();
     }
 }
