@@ -36,6 +36,10 @@ internal class AatroxQDescent : IBuffGameScript {
     private const float MaxDiveSpeed         = 3214f;
 
     private Spell _spell;
+    // Guards the single CanAttack re-enable so it fires exactly once no matter which end path runs
+    // (landing, no-dive, interrupted dive, or death-cull). Over-releasing would clamp at 0 and wrongly
+    // drop a concurrent CanAttack hold from another source.
+    private bool _released;
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _spell = ownerSpell;
@@ -53,9 +57,8 @@ internal class AatroxQDescent : IBuffGameScript {
 
         var distance = (dashTarget - unit.Position).Length();
         if (distance <= 1f) {
-            // No dive (already at target) → no landing event will fire; release the ascend's CanAttack
-            // hold and end this phase buff here.
-            unit.SetStatus(StatusFlags.CanAttack, true);
+            // No dive (already at target) → no landing event will fire; end this phase buff here. The
+            // CanAttack hold is released by OnDeactivate (the single re-enable path).
             RemoveBuff(unit, "AatroxQDescent");
             return;
         }
@@ -64,13 +67,15 @@ internal class AatroxQDescent : IBuffGameScript {
         // lockActions:false — keep CAN_CAST/CAN_MOVE enabled (Riot: castable through the whole Q).
         ForceMove(unit, endPos, speed, 0f, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, false, true, ForceMovementOrdersType.CANCEL_ORDER, "AatroxQDash");
         ApiEventManager.OnMoveSuccess.AddListener(this, unit, OnDiveLanded, true);
+        // The dive can also END WITHOUT landing — an enemy CC/knockup, a StopMovement, or death cancels
+        // the force-move, which fires OnMoveFailure (reason != Finished) instead of OnMoveSuccess. Without
+        // handling it, OnDiveLanded never runs and the ascend's CanAttack hold leaks forever.
+        ApiEventManager.OnMoveFailure.AddListener(this, unit, OnDiveInterrupted, true);
     }
 
     private void OnDiveLanded(AttackableUnit unit, ForceMovementParameters parameters) {
         if (parameters.MovementName != "AatroxQDash") return;
         var aatrox = (ObjAIBase)unit;
-        // Landing: release the ascend's CanAttack hold (Riot: CAN_ATTACK back to 1 on landing).
-        unit.SetStatus(StatusFlags.CanAttack, true);
 
         StopAnimation(unit, "Spell1", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
         StopAnimation(unit, "Spell1_CLose", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
@@ -92,9 +97,24 @@ internal class AatroxQDescent : IBuffGameScript {
         }
 
         // End of the descent phase — remove the (script-controlled) self-buff (Riot: AatroxQDescent
-        // removed at landing).
+        // removed at landing). OnDeactivate releases the CanAttack hold.
         RemoveBuff(unit, "AatroxQDescent");
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
+    private void OnDiveInterrupted(AttackableUnit unit, ForceMovementParameters parameters) {
+        if (parameters.MovementName != "AatroxQDash") return;
+        // Dive cancelled before landing (CC/knockup/StopMovement/death) — no landing effects, just end
+        // the phase so OnDeactivate releases the ascend's CanAttack hold instead of leaking it.
+        RemoveBuff(unit, "AatroxQDescent");
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        // Single re-enable point for the ascend's CanAttack hold, reached by every end path via
+        // RemoveBuff (landing, no-dive, interrupted dive) and by the death buff-cull. Guarded so the
+        // ref-counted hold is released exactly once.
+        if (!_released) {
+            _released = true;
+            unit.SetStatus(StatusFlags.CanAttack, true);
+        }
+    }
 }

@@ -19,6 +19,9 @@ namespace Buffs;
 // lockActions:false — Riot does NOT seal Aatrox's spellbook during Q (CAN_CAST stays 1 the whole leap).
 internal class AatroxQ : IBuffGameScript {
     private bool _cancelCast = false;
+    // True once the descent phase (which owns the CanAttack re-enable) has been created. If we never
+    // hand off, THIS buff must release the ascend's CanAttack hold itself (see OnDeactivate).
+    private bool _handedOff = false;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
@@ -57,11 +60,13 @@ internal class AatroxQ : IBuffGameScript {
         // Remove the ascend buff here (replay: AatroxQ lifetime ≈ this delay) and start the descent
         // buff (script-controlled / infiniteduration, removed at landing).
         unit.RegisterTimer(new GameScriptTimer(JumpToDescentDelaySeconds, () => {
-            RemoveBuff(unit, "AatroxQ");
+            // Decide the handoff BEFORE removing this buff so OnDeactivate sees the right _handedOff.
             if (!unit.IsDead && !_cancelCast) {
+                _handedOff = true;
                 AddBuff("AatroxQDescent", 5f, 1, ownerSpell, unit, (ObjAIBase)unit, infiniteduration: true);
                 RemoveBuff(unit, "AatroxQAscend");
             }
+            RemoveBuff(unit, "AatroxQ");
         }));
     }
 
@@ -77,5 +82,12 @@ internal class AatroxQ : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         ApiEventManager.OnAllowAddBuff.RemoveListener(this, unit, OnAllowAddBuff);
+        // If we never handed off to the descent phase (an enemy knockup/knockback cancelled the leap,
+        // or Aatrox died during the ascend), the descent's CanAttack re-enable never runs — so release
+        // the ascend's hold here. Otherwise it leaks permanently: CharacterState has no death/respawn
+        // reset, so a stuck CanAttack disable survives even dying. When handed off, the descent owns it.
+        if (!_handedOff) {
+            unit.SetStatus(StatusFlags.CanAttack, true);
+        }
     }
 }
