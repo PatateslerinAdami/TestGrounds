@@ -32,7 +32,7 @@ namespace Buffs
         
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            ownerSpell.SetCooldown(ownerSpell.CastInfo.SpellLevel, false);
+            ownerSpell.SetCooldown(ownerSpell.CastInfo.Cooldown, false);
         }
     }
 }
