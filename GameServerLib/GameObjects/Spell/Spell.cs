@@ -2315,6 +2315,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CurrentCastTime = 0;
             CurrentChannelDuration = 0;
             CurrentDelayTime = 0;
+            // A cancelled windup (CastCancelCheck: CC/force-move clears CanCast, or lost target) must
+            // also drop the owner's cast-spell pointer. CanMove()/CanChangeWaypoints() (ObjAIBase) gate
+            // on _castingSpell == null, so a dangling pointer freezes the unit's movement until death —
+            // Champion.Respawn is the only other SetCastSpell(null). Deactivate() already pairs these two;
+            // the CastCancelCheck path forgot the second step. Guarded so we only clear OUR own cast.
+            if (CastInfo.Owner.GetCastSpell() == this)
+            {
+                CastInfo.Owner.SetCastSpell(null);
+            }
         }
 
         /// <summary>
