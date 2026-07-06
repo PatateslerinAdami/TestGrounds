@@ -19,8 +19,8 @@ namespace Buffs
 {
     internal class FioraRiposte : IBuffGameScript
     {
-        Buff Riposte;
-        ObjAIBase Fiora;
+        private Buff _buff;
+        private ObjAIBase _fiora;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             PersistsThroughDeath = true,
@@ -30,23 +30,23 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Riposte = buff;
-            Fiora = ownerSpell.CastInfo.Owner as Champion;
-            ApiEventManager.OnTakeDamage.AddListener(this, Fiora, TakeDamage, false);
+            _buff = buff;
+            _fiora = ownerSpell.CastInfo.Owner;
+            ApiEventManager.OnPreTakeDamage.AddListener(this, _fiora, OnPreTakeDamage);
         }
-        public void TakeDamage(DamageData damageData)
+        private void OnPreTakeDamage(DamageData damageData)
         {
-            Riposte.DeactivateBuff();
-            Fiora.CancelAutoAttack(true);
-            damageData.Damage = 0;
-            SpellCast(Fiora, 4, SpellSlotType.ExtraSlots, true, damageData.Attacker, Vector2.Zero);
+            if (damageData.DamageSource is not DamageSource.DAMAGE_SOURCE_ATTACK) return;
+            //_fiora.CancelAutoAttack(true);
+            damageData.PostMitigationDamage = 0;
+            SpellCast(_fiora, 4, SpellSlotType.ExtraSlots, true, damageData.Attacker, Vector2.Zero);
+            RemoveBuff(_fiora, "FioraRiposteBuff");
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             if (buff.TimeElapsed >= buff.Duration)
             {
-                ApiEventManager.OnTakeDamage.RemoveListener(this);
-                //ApiEventManager.OnLaunchAttack.RemoveListener(this);
+                ApiEventManager.OnPreTakeDamage.RemoveListener(this, _fiora, OnPreTakeDamage);
             }
         }
     }
