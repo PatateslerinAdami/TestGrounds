@@ -14,6 +14,7 @@ internal class EvelynnW : IBuffGameScript {
     ObjAIBase        _evelynn;
     private Particle _haste;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.HASTE,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

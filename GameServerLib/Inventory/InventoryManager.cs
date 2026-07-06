@@ -221,6 +221,37 @@ namespace LeagueSandbox.GameServer.Inventory
             return _inventory.GetItemSlot(item);
         }
 
+        /// <summary>
+        /// Removes an item without emitting a per-op RemoveItemAns. Used by the shop undo path, which
+        /// re-syncs the whole inventory once via S2C_SetInventory_MapView instead (see Shop.HandleUndo).
+        /// Stat modifiers / item scripts are still updated.
+        /// </summary>
+        public void RemoveItemSilent(byte slot, ObjAIBase owner, int stacksToRemove = 1, bool force = false)
+        {
+            if (_inventory.Items[slot] == null)
+            {
+                return;
+            }
+
+            _inventory.RemoveItem(slot, owner, stacksToRemove, force);
+        }
+
+        /// <summary>
+        /// Places an item in a specific slot without emitting a per-op BuyItemAns. Used by the shop undo
+        /// path (restoring consumed components / a sold item), which re-syncs via S2C_SetInventory_MapView.
+        /// Stat modifiers, spell charges and item scripts are still initialized.
+        /// </summary>
+        public Item AddItemToSlotSilent(ItemData itemData, ObjAIBase owner, byte slot)
+        {
+            var item = _inventory.SetItemToSlot(itemData, owner, slot);
+            if (owner != null && item != null)
+            {
+                InitializeItemSpellCharges(owner, item);
+            }
+
+            return item;
+        }
+
         public void SwapItems(byte slot1, byte slot2)
         {
             _inventory.SwapItems(slot1, slot2);

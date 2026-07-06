@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -36,7 +35,7 @@ public class JudicatorReckoning : ISpellScript {
         _target = target;
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ad     = _kayle.Stats.AttackDamage.Total * _spell.SpellData.Coefficient;
         var ap     = _kayle.Stats.AbilityPower.Total * _spell.SpellData.Coefficient2;
         var damage = 60f + 50f * (_spell.CastInfo.SpellLevel - 1) + ap + ad;

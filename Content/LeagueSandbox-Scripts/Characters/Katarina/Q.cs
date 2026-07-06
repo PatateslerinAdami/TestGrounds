@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -30,8 +29,8 @@ namespace Spells;
 //   No per-bounce ForceCreateMissile, no S2C_ChainMissileSync. Bouncing handled in client.
 public class KatarinaQ : ISpellScript
 {
-    Spell _qMis;
-    ObjAIBase _katarina;
+    private Spell _qMis;
+    private ObjAIBase _katarina;
     private readonly Dictionary<uint, HashSet<AttackableUnit>> _chainHitUnits = new();
 
     public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -39,10 +38,17 @@ public class KatarinaQ : ISpellScript
         MissileParameters = new MissileParameters
         {
             Type = MissileType.Chained,
-            BounceSpellName = "KatarinaQMis",
+            BounceSpellNameEnemy = "KatarinaQMis",
             CanHitSameTarget = false,
             CanHitSameTargetConsecutively = false,
-            MaximumHits = 5
+            MaximumHits = 5,
+            CanHitEnemies =  true,
+            CanHitFriends = false,
+            CanHitCaster = false,
+            // 4.20 tooltip: "bounces to the 4 closest enemies" — replay-confirmed
+            // (segment-length median 0.37·BounceRadius vs 0.60·R for the random-class
+            // chains Fiddle E / Ryze E). The 2012-rework Q is the only Nearest chain.
+            BounceSelection = BounceSelection.Nearest,
         },
         TriggersSpellCasts = true,
         IsDamagingSpell = true,
@@ -56,26 +62,45 @@ public class KatarinaQ : ISpellScript
         ApiEventManager.OnUpdateStats.AddListener(this, _katarina, OnStatsUpdate);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        var ap = _katarina.Stats.AbilityPower.Total * 0.45f;
-        var dmg = 60 + 25 * (_katarina.GetSpell("KatarinaQ").CastInfo.SpellLevel - 1 - 1) + ap;
-        switch (_katarina.SkinID)
+        var ap = _katarina.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
+        
+        /*switch (_katarina.SkinID)
         {
             case 9: AddParticleTarget(_katarina, target, "Katarina_Skin09_Q_tar", target); break;
             case 7: AddParticleTarget(_katarina, target, "katarina_XMas_bouncingBlades_tar", target); break;
             case 6: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar_sand", target); break;
             default: AddParticleTarget(_katarina, target, "katarina_bouncingBlades_tar", target); break;
+        }*/
+
+        dmg -= dmg * (0.1f * (missile.HitCount - 1));
+
+        // Two-stage spell-shield check (replay-verified buff name + timing, see
+        // project_spell_shield_system memory): the 0.25s *SpellShieldCheck window buff goes on
+        // first; a spell shield (SivirE etc.) consumes it synchronously via OnUnitBuffActivated,
+        // blocking the whole hit (damage + mark) and eating the shield.
+        var check = AddBuff("KatarinaQMarkSpellShieldCheck", 0.25f, 1, spell, target, _katarina);
+        if (check == null || check.Elapsed())
+        {
+            return;
         }
+
         target.TakeDamage(_katarina, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
             false);
 
-        // Spell-shield bypass marker — replay-verified buff name. Consumed by spell-shields
-        // (Banshee/Sivir E/Yasuo W) within its 0.25s window, after which the real QMark is
-        // applied. Our codebase has no shield-consume logic yet (see project_spell_shield_
-        // system_deferred memory), so this is currently wire-fidelity only.
-        AddBuff("KatarinaQMarkSpellShieldCheck", 0.25f, 1, spell, target, _katarina);
-        AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
+        // Replay: BuffAdd2 KatarinaQMark lands ~68ms after the SpellShieldCheck buff (+584ms →
+        // +652ms, id=10953) — Riot delays the real effect past the shield-check phase. Re-check
+        // the window buff at apply time: gone → skip the mark (death strips it; a shield cast
+        // mid-window does NOT consume it — the hook only sees buffs added after the shield).
+        CreateTimer(0.068f, () =>
+        {
+            if (!check.Elapsed())
+            {
+                AddBuff("KatarinaQMark", 4.0f, 1, spell, target, _katarina);
+            }
+        });
     }
 
     private void OnStatsUpdate(AttackableUnit unit, float diff)

@@ -1,5 +1,6 @@
 using GameServerCore.Enums;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects
@@ -12,6 +13,8 @@ namespace LeagueSandbox.GameServer.GameObjects
     {
         // Function Vars
         private float _currentTime;
+        // Reused buffer for the per-tick RevealStealth scan (avoids allocating per query).
+        private readonly List<AttackableUnit> _revealScanBuffer = new List<AttackableUnit>();
 
         public int Type { get; }
         public GameObject CollisionUnit { get; }
@@ -27,6 +30,12 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public float Scale { get; }
         public float AdditionalSize { get; }
+        /// <summary>
+        /// Server-internal only: drives CollisionHandler registration. A LeagueSandbox
+        /// extension with no client counterpart — real client regions are vision-only.
+        /// Deliberately NOT on the wire (the AddRegion flags bit0 carries Riot's
+        /// RequiresLOS = !IgnoresLineOfSight instead). Do not re-map this onto bit0.
+        /// </summary>
         public bool HasCollision { get; }
         public bool GrantVision { get; }
         public bool RevealsStealth { get; }
@@ -200,8 +209,11 @@ namespace LeagueSandbox.GameServer.GameObjects
                     revealTeam = collisionUnit.Team;
                 }
 
-                var units = _game.ObjectManager.GetUnitsInRange(Position, VisionRadius, true);
-                foreach (var unit in units)
+                // Grid-backed query (O(local), exact via live distance-check) instead of the O(N)
+                // GetUnitsInRange full scan — this runs every tick per RevealStealth region (turrets,
+                // control wards), so the full scan was the #2 server hotspot.
+                _game.ObjectManager.QueryUnitsInRange(Position, VisionRadius, true, _revealScanBuffer);
+                foreach (var unit in _revealScanBuffer)
                 {
                     if (unit == null || unit.IsDead || unit == CollisionUnit)
                     {
@@ -255,6 +267,21 @@ namespace LeagueSandbox.GameServer.GameObjects
                 base.SetToRemove();
                 _game.PacketNotifier.NotifyRemoveRegion(this);
             }
+        }
+
+        /// <summary>
+        /// Moves a FREE (non-unit-attached) region to a new position and syncs the client bubble via
+        /// S2C_MoveRegion. No-op for unit-attached regions — those follow their CollisionUnit client-side
+        /// (AddRegion carries UnitNetID), so an explicit MoveRegion would fight that.
+        /// </summary>
+        public void MoveTo(Vector2 position)
+        {
+            if (CollisionUnit != null)
+            {
+                return;
+            }
+            Position = position;
+            _game.PacketNotifier.NotifyS2C_MoveRegion(this);
         }
     }
 }

@@ -25,12 +25,28 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public StatModifier MagicResist { get; } = new StatModifier();
         public StatModifier ManaPoints { get; } = new StatModifier();
         public StatModifier ManaRegeneration { get; } = new StatModifier();
+        public StatModifier MissChance { get; } = new StatModifier();
+        public StatModifier Dodge { get; } = new StatModifier();
         public StatModifier MoveSpeed { get; } = new StatModifier();
         public StatModifier Range { get; } = new StatModifier();
         public StatModifier Size { get; } = new StatModifier();
         public StatModifier SpellVamp { get; } = new StatModifier();
-        public StatModifier Tenacity { get; } = new StatModifier();
+
+        // Tenacity (CC-duration reduction), bucketed per the 4.17 decomp (ItemData.cpp:538-543).
+        // A single source contributes to exactly ONE bucket. Item/Mastery/Cleanse/Character combine
+        // by MAX within their bucket (identical unique passives don't stack — highest wins); Rune is
+        // additive. Buckets then combine multiplicatively into Stats.PercentCCReduction. Static
+        // equipped-item tenacity feeds TenacityItem (from ItemData JSON); buff/champ tenacity (Irelia,
+        // URF, Elixir) feeds TenacityCharacter. See docs/TENACITY_IMPLEMENTATION_PLAN.md.
+        public float TenacityItem { get; set; }
+        public float TenacityCharacter { get; set; }
+        public float TenacityRune { get; set; }
+        public float TenacityMastery { get; set; }
+        public float TenacityCleanse { get; set; }
+
         public float MultiplicativeSpeedBonus { get; set; }
+        // Slow-resist reduces slow MAGNITUDE (strength), applied in Stats.CalculateTrueMoveSpeed.
+        // Separate axis from tenacity, which reduces slow DURATION.
         public float SlowResistPercent { get; set; }
 
         /// <summary>

@@ -3,9 +3,17 @@
 namespace GameServerCore.Enums
 {
     /// <summary>
-    /// Enumerator containing all(?) possible spell flags found in spell data. Used in determining how a spell functions.
+    /// Spell flags from spell data ("Flags" JSON field) and script-side targeting filters.
+    /// Verified 2026-06-07 against the S4 mac decomp: matches Spell::Enums::SpellFlags
+    /// (Spell/Resource/SpellDataEnums.h) 1:1 for every member incl. the composite values
+    /// (AffectAllSides = 19456, AffectAllUnitTypes = 229376, NonTargetableAll = 25165824).
+    /// Single deliberate divergence: Riot's kSpellFlagIgnoreClones = 0x78000000 (bits
+    /// 27-30, overlapping AffectUseable + the Ignore*Minion bits) - a typo-looking
+    /// composite with NO consumer anywhere (not in 4.17/S1 code, not in 4.20 spell
+    /// JSONs - real data never sets bits above 27 - and not in Riot Lua). We keep
+    /// IgnoreClones = 1&lt;&lt;31 (free bit) because our SpellData.cs filter tests it
+    /// via HasFlag, which would break with a composite value.
     /// </summary>
-    /// TODO: Verify if this is finished.
     [Flags]
     public enum SpellDataFlags
     {

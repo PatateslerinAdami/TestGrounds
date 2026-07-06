@@ -37,7 +37,7 @@ public class UdyrTurtleActivation : IBuffGameScript {
         _udyr = spell.CastInfo.Owner;
         var ap    = _udyr.Stats.AbilityPower.Total * 0.45f;
         _shieldHealth  = 60f + 30 * (_udyr.GetSpell("UdyrTurtleStance").CastInfo.SpellLevel - 1) + ap;
-        _turtleShield = new Shield(_udyr, _udyr, true, true, _shieldHealth);
+        _turtleShield = new Shield(_udyr, _udyr, true, true, _shieldHealth, buff);
         unit.AddShield(_turtleShield);
         
         _particle3 = AddParticleTarget(_udyr, _udyr, "TurtleStance.troy", _udyr, 2f, size: _udyr.Stats.Size.Total, bone: "BUFFBONE_GLB_GROUND_LOC");

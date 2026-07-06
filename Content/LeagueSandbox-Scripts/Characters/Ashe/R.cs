@@ -13,7 +13,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -25,7 +24,7 @@ public class EnchantedCrystalArrow : ISpellScript {
     private ObjAIBase _ashe;
     public SpellScriptMetadata ScriptMetadata { get; }  = new () {
         MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         TriggersSpellCasts = true
     };
@@ -35,7 +34,7 @@ public class EnchantedCrystalArrow : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         if (target is not Champion) return;
         Vector2 castPosition = new Vector2(spell.CastInfo.SpellCastLaunchPosition.X, spell.CastInfo.SpellCastLaunchPosition.Z);

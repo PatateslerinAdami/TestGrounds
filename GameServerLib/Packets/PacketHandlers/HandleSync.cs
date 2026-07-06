@@ -39,6 +39,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 _logger.Debug("Accepted client version (" + req.Version + ") from client = " + req.ClientID + " & PlayerID = " + info.PlayerId);
             }
 
+            // Tell the client its game number + summoner name for client-side metrics/logging
+            // (World_SendGameNumber). We have no real Riot match ID → 0 placeholder; metrics-only, no gameplay.
+            _game.PacketNotifier.NotifyWorld_SendGameNumber(userId, 0L, info.Name);
+
             _game.PacketNotifier.NotifySynchVersion(
                 userId, _playerManager.GetPlayers(), Config.VERSION_STRING, _game.Config.GameConfig.GameMode, mapId
             );

@@ -18,7 +18,7 @@ public class Dread : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
     };
 
     public StatsModifier StatsModifier { get; } = new();

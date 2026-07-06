@@ -23,8 +23,17 @@ namespace LeagueSandbox.GameServer.GameObjects
         private readonly Game _game;
 
         // Function Vars.
-        private readonly bool _infiniteDuration;
         public bool Remove;
+
+        /// <summary>
+        /// Wire duration used for "infinite" buffs. The S4 client renders a buff as permanent
+        /// (no decaying timer ring) once its span (mEndTime - mStartTime) is >= 20000s
+        /// (BuffInstance.cpp:256, kPermanentDuration). We use a margin above that threshold so
+        /// float rounding of (Duration - TimeElapsed) + TimeElapsed can never dip below it.
+        /// Server-side the buff is plain finite at this value (~7h) and is expected to be removed
+        /// explicitly long before it elapses.
+        /// </summary>
+        public const float PERMANENT_DURATION = 25000f;
 
         public Buff(
             Game game,
@@ -36,7 +45,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             ObjAIBase from,
             bool infiniteDuration = false,
             IEventSource parent = null,
-            BuffVariables buffVariables = null
+            BuffVariables buffVariables = null,
+            bool skipTenacity = false
         )
         {
             if (duration < 0)
@@ -44,7 +54,6 @@ namespace LeagueSandbox.GameServer.GameObjects
                 throw new ArgumentException("Error: Duration was set to under 0.");
             }
 
-            _infiniteDuration = infiniteDuration;
             _game = game;
             Remove = false;
             Name = buffName;
@@ -63,7 +72,27 @@ namespace LeagueSandbox.GameServer.GameObjects
             }
 
             BuffType = BuffScript.BuffMetaData.BuffType;
-            Duration = duration;
+            // "Infinite" buffs are just buffs with a permanent-on-the-wire duration; the client needs
+            // span >= 20000s to drop the decaying timer ring (see PERMANENT_DURATION). There is no
+            // separate server-side never-expire flag anymore — these are removed explicitly by scripts.
+            var effectiveDuration = infiniteDuration ? PERMANENT_DURATION : duration;
+
+            // Tenacity: shorten reducible CC durations by the target's aggregated PercentCCReduction
+            // (effectiveDuration = base * (1 - tenacity)), matching the 4.20 model — the reduction is
+            // applied once at buff creation and the shortened duration goes out on the wire; the client
+            // does not re-reduce (it uses mPercentCCReduction only to draw the LoC bar). See
+            // docs/TENACITY_IMPLEMENTATION_PLAN.md. skipTenacity avoids double-applying on internal
+            // buff reconstructions (STACKS_AND_CONTINUE) whose durations derive from already-reduced buffs.
+            if (!skipTenacity && !infiniteDuration && BuffType.IsTenacityReducible() && onto != null)
+            {
+                var tenacity = onto.Stats.PercentCCReduction;
+                if (tenacity > 0f)
+                {
+                    effectiveDuration *= 1f - tenacity;
+                }
+            }
+
+            Duration = effectiveDuration;
             Hidden = BuffScript.BuffMetaData.IsHidden;
             if (BuffScript.BuffMetaData.MaxStacks > 254 && BuffType != BuffType.COUNTER)
             {
@@ -102,7 +131,9 @@ namespace LeagueSandbox.GameServer.GameObjects
         public string Name { get; }
         public Spell OriginSpell { get; }
         public byte Slot { get; private set; }
-        public ObjAIBase SourceUnit { get; }
+        // Internal setter for the SetBuffCasterUnit script API (Riot BBSetBuffCasterUnit):
+        // scripts re-attribute a running buff's caster, e.g. hand a DoT's credit to another unit.
+        public ObjAIBase SourceUnit { get; internal set; }
         public AttackableUnit TargetUnit { get; }
         public float TimeElapsed { get; private set; }
         public BuffVariables Variables { get; }
@@ -148,6 +179,15 @@ namespace LeagueSandbox.GameServer.GameObjects
             {
                 _logger.Error(null, e);
             }
+
+            // Apply this buff's status effects (explicit SetStatusEffect + BuffType-derived CC state)
+            // the same tick it activates, instead of waiting for the target's next UpdateBuffs.
+            TargetUnit?.RecomputeBuffEffects();
+
+            // After the buff is fully registered and active, let buffs already on this unit react
+            // (Riot buff-script OnBuffAdded hook; spell-shields consume break-markers here — the
+            // handler may synchronously DeactivateBuff this very buff, callers check Elapsed()).
+            ApiEventManager.OnUnitBuffActivated.Publish(TargetUnit, this);
         }
 
         public void DeactivateBuff()
@@ -215,7 +255,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public bool IsBuffInfinite()
         {
-            return _infiniteDuration;
+            return Duration >= PERMANENT_DURATION;
         }
 
         public bool IsBuffSame(string buffName)
@@ -253,7 +293,10 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             if (result && sendPacket)
             {
-                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+                // Client computes mEndTime = now + duration (BuffInstance::ResizeClient), so the wire
+                // `duration` must be REMAINING time, not full — otherwise a mid-life stack change resets
+                // the timer ring to full. Renewal paths reset TimeElapsed first, so remaining == full there.
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
             }
             return result;
         }
@@ -272,7 +315,8 @@ namespace LeagueSandbox.GameServer.GameObjects
                 }
                 else if (sendPacket)
                 {
-                    _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+                    // Remaining duration, not full — see IncrementStackCount.
+                    _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
                 }
             }
             return result;
@@ -288,29 +332,26 @@ namespace LeagueSandbox.GameServer.GameObjects
             base.SetStacks(newStacks);
             if (sendPacket)
             {
-                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
+                // Remaining duration, not full — see IncrementStackCount.
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
             }
         }
 
         public void Refresh()
         {
             ResetTimeElapsed();
-            if (!IsHidden)
-            {
-                _game.PacketNotifier.NotifyNPC_BuffReplace(this);
-            }
+            // Hidden buffs are replicated too (wire IsHidden=1) — see BuffIsReplicated in
+            // AttackableUnit for the decomp evidence.
+            _game.PacketNotifier.NotifyNPC_BuffReplace(this);
         }
         public void Update(float diff)
         {
-            if (!_infiniteDuration)
-            {
-                TimeElapsed += diff / 1000.0f;
+            TimeElapsed += diff / 1000.0f;
 
-                if (!(Math.Abs(Duration) > Extensions.COMPARE_EPSILON))
-                {
-                    DeactivateBuff();
-                    return;
-                }
+            if (!(Math.Abs(Duration) > Extensions.COMPARE_EPSILON))
+            {
+                DeactivateBuff();
+                return;
             }
 
             try
@@ -323,7 +364,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 _logger.Error(null, e);
             }
 
-            if (!_infiniteDuration && TimeElapsed >= Duration)
+            if (TimeElapsed >= Duration)
             {
                 DeactivateBuff();
             }

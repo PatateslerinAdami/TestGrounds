@@ -16,4 +16,8 @@
     <ProjectReference Include="..\GameServerLib\GameServerLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Banner.txt" />
+  </ItemGroup>
+
 </Project>

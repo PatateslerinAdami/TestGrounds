@@ -33,7 +33,10 @@ public class ItemID_3206 : IItemScript {
 
     public void TargetExecute(DeathData deathData) {
         LoggerProvider.GetLogger().Info(deathData.Unit.CharData.UnitTags);
-        if (deathData.Unit.CharData.UnitTags is UnitTag.Champion) {
+        // HasTag (bit test), not `is`/equality: UnitTags is a bitfield, so a champion that also carries
+        // other tags (e.g. Champion | Champion_Clone) must still match. Equality only worked while the
+        // enum was accidentally non-flags (Champion == 0).
+        if (deathData.Unit.UnitTags.HasTag(UnitTag.Champion)) {
             deathData.Killer.Stats.AbilityPower.FlatBonus += 2f;
             _ap                                           += 2f;
         }

@@ -29,7 +29,7 @@ public class TrundleDesecrateBuffs : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _trundle                             = ownerSpell.CastInfo.Owner;
         _spell                               = ownerSpell;
-        ApiEventManager.OnReceiveHeal.AddListener(this, _trundle, OnHeal);
+        ApiEventManager.OnHeal.AddListener(this, _trundle, OnHeal);
         StatsModifier.MoveSpeed.PercentBonus = 0.2f + 0.05f * (_spell.CastInfo.SpellLevel - 1);
         StatsModifier.AttackSpeed.PercentBonus = 0.35f + 0.15f * (_spell.CastInfo.SpellLevel - 1);
         unit.AddStatModifier(StatsModifier);

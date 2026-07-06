@@ -25,7 +25,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 sender.Champion.Position,
                 "Worm",
                 "Worm",
-                AIScript: "BasicJungleMonsterAI"
+                AIScript: "JungleMonsterAI"
                 );
             Game.ObjectManager.AddObject(min);
         }

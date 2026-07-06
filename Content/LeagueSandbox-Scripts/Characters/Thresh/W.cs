@@ -65,6 +65,15 @@ namespace Spells
         public void OnMissileEnd(SpellMissile missile)
         {
             var lantern = AddMinion(_owner, "ThreshLantern", "ThreshLantern", missile.Position, _owner.Team, skinId: _owner.SkinID, ignoreCollision: true, targetable: false, isVisible: true, useSpells: true);
+            // Point the lantern's hover indicator (DirectionalCircle, from ThreshLantern's HoverIndicator*
+            // stats) at Thresh so the "click to dash" ring shows the dash destination, and ENABLE it —
+            // the client's hover-indicator flag defaults false and gates rendering, so both packets are
+            // required. Replay-verified: each lantern sends S2C_SetHoverIndicatorTarget (Thresh = target);
+            // the enable (S2C_SetHoverIndicatorEnabled) is vision-gated so it's absent from spectator POVs.
+            SetHoverIndicatorTarget(lantern, _owner);
+            // Enable only for Thresh's team so the dash affordance ring is ally-only (enemies still get
+            // the broadcast Target but render nothing without the enable flag).
+            SetHoverIndicatorEnabled(lantern, true, _owner.Team);
             AddParticle(_owner, lantern, "thresh_lantern.troy", default, teamOnly: _owner.Team);
             AddParticle(_owner, lantern, "Thresh_Lantern_Red.troy", default, teamOnly: CustomConvert.GetEnemyTeam(_owner.Team));
             AddParticle(_owner, lantern, "Thresh_LanternTimer.troy", default, teamOnly: _owner.Team);

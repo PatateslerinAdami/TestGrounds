@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System;
@@ -88,7 +87,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc
             },
             IsDamagingSpell = true
         };
@@ -98,7 +97,7 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             var owner = missile.CastInfo.Owner;
             var threshESpell = owner.GetSpell("ThreshE");
@@ -113,14 +112,14 @@ namespace Spells
             target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
 
 
-            Vector2 pushDir = new Vector2(missile.Direction.X, missile.Direction.Z);
+            // BBMoveAway: push the target away from the caster (Thresh) — the missile travels from
+            // Thresh, so away-from-Thresh ≙ the old missile-direction push.
             float horizontalDistance = 200f;
-            Vector2 pushEnd = target.Position + (pushDir * horizontalDistance);
             float desiredDuration = 0.75f;//1.2f
             float desiredHeight = 5.0f;
             float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
             float requiredSpeed = horizontalDistance / desiredDuration;
-            ForceMovement(target, "run", pushEnd, requiredSpeed, 0f, requiredGravity, 0f, true, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
+            ForceMoveAway(target, owner, horizontalDistance, requiredSpeed, gravity: requiredGravity, facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
             AddBuff("ThreshEStun", 1.0f, 1, threshESpell, target, owner);
             AddParticleTarget(owner, target, "Thresh_E_hit.troy", target, 1.0f);
         }

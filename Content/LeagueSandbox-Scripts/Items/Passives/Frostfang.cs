@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 
@@ -78,7 +77,7 @@ public class ItemID_3098 : IItemScript {
         }
     }
 
-    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ch = _owner as Champion;
         if ((_count < 3 && target is Champion) || (_count < 3 && target is BaseTurret)) {
             ch.AddGold(ch, 10f);

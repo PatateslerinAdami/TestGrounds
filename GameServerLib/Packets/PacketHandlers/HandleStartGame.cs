@@ -102,8 +102,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
             if (_game.IsRunning)
             {
-                var announcement = new OnReconnect { OtherNetID = player.Champion.NetId };
-                _game.PacketNotifier.NotifyS2C_OnEventWorld(announcement, player.Champion);
+                // Riot sends S2C_Reconnect (0x0F) for reconnects, NOT an OnReconnect world-event
+                // (replay-verified: 0x0F = 274x across 117 games; OnReconnect event 0x48 = 0x). The
+                // client resolves the reconnecting hero by ClientID and clears its reconnecting state.
+                _game.PacketNotifier.NotifyS2C_Reconnect(player.ClientId);
                 _game.PacketNotifier.NotifySyncMissionStartTimeS2C(player.ClientId, 0);
             }
             else _game.PacketNotifier.NotifySyncMissionStartTimeS2C(player.ClientId, _game.GameTime);
@@ -125,7 +127,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             systemTipsGroup.AddQuest(new UIQuestData
             {
                 QuestId = questManager.GetNextQuestId(),
-                Objective = "Welcome to League Sandbox!",
+                Objective = "Welcome to BloodWell!",
                 Tooltip = "This is a WIP project.",
                 IsTip = true
             });

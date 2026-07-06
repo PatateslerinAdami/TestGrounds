@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells
 {
@@ -35,7 +34,7 @@ namespace Spells
         public void OnSpellPostCast(Spell spell)
         {
             
-            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, false, isVisible: false);
+            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, isVisible: false);
             HideHealthBar(hiddenMinion);
             SpellCast(_velkoz, 2, SpellSlotType.ExtraSlots, true, hiddenMinion, Vector2.Zero);
             AddParticlePos(_velkoz, "Velkoz_Base_E_AOE_green.troy", _endPos, _endPos, lifetime: 0.8f, enemyParticle: "Velkoz_Base_E_AOE_red.troy");
@@ -60,7 +59,7 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
         }
 
-        private void OnSpellHit(Spell spell, AttackableUnit target,SpellMissile missile, SpellSector sector)
+        private void OnSpellHit(Spell spell, AttackableUnit target,SpellMissile missile)
         {
             AddParticle(_velkoz, default, "velkoz_base_e_explo.troy", missile.Position);
             var unitsInRange = GetUnitsInRange(_velkoz, missile.Position, 120f, true,

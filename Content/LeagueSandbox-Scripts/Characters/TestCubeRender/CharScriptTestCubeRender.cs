@@ -12,7 +12,7 @@ namespace CharScripts
         {
             SetStatus(owner, StatusFlags.CanMove, false);
             SetStatus(owner, StatusFlags.Ghosted, true);
-            SetStatus(owner, StatusFlags.Targetable, false);
+            SetStatus(owner, StatusFlags.Targetable, true);
             SetStatus(owner, StatusFlags.SuppressCallForHelp, true);
             SetStatus(owner, StatusFlags.IgnoreCallForHelp, true);
         }

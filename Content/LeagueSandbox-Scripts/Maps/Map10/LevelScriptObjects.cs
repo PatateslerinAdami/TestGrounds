@@ -22,7 +22,7 @@ namespace MapScripts.Map10
         public static Dictionary<TeamId, Dictionary<Lane, MapObject>> SpawnBarracks = new Dictionary<TeamId, Dictionary<Lane, MapObject>>();
         public static Dictionary<TeamId, bool> AllInhibitorsAreDead = new Dictionary<TeamId, bool> { { TeamId.TEAM_BLUE, false }, { TeamId.TEAM_PURPLE, false } };
         public static Dictionary<Lane, List<Vector2>> MinionPaths = new Dictionary<Lane, List<Vector2>> { { Lane.LANE_L, new List<Vector2>() }, { Lane.LANE_R, new List<Vector2>() } };
-        static List<Nexus> NexusList = new List<Nexus>();
+        public static List<Nexus> NexusList = new List<Nexus>();
         static string LaneTurretAI = "TurretAI";
 
         static Dictionary<TeamId, Dictionary<Inhibitor, float>> DeadInhibitors = new Dictionary<TeamId, Dictionary<Inhibitor, float>> 
@@ -31,7 +31,7 @@ namespace MapScripts.Map10
             { TeamId.TEAM_PURPLE, new Dictionary<Inhibitor, float>() } 
         };
 
-        static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
+        public static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
         {
             {TeamId.TEAM_BLUE, new Dictionary<Lane, List<LaneTurret>>{
                 { Lane.LANE_Unknown, new List<LaneTurret>()},
@@ -204,6 +204,9 @@ namespace MapScripts.Map10
         static void OnNexusDeath(DeathData deathaData)
         {
             var nexus = deathaData.Unit;
+            // Switch the destroyed team's nexus to its destruction skin (S2C_AnimatedBuildingSetCurrentSkin).
+            // Replay-verified on TT: team=loser, skinID=1, sent ~2s before the end-game screen.
+            SetAnimatedBuildingSkin(nexus.Team, 1);
             EndGame(nexus.Team, new Vector3(nexus.Position.X, nexus.GetHeight(), nexus.Position.Y), deathData: deathaData);
         }
 
@@ -269,7 +272,11 @@ namespace MapScripts.Map10
                 {
                     SpawnBarracks.Add(team, new Dictionary<Lane, MapObject>());
                 }
-                SpawnBarracks[team].Add(spawnBarrack.GetLaneID(), spawnBarrack);
+                // Lane from the spawn-barrack name's __L/__C/__R tag — Riot's single authoritative
+                // parser (Barracks::ComputeLane); matches GetSpawnBarrackLaneID used by the engine
+                // BarracksSpawnManager and by SetUpLaneMinion. (The spawn barracks are named
+                // __P_<team>_Spawn_Barracks__{L|R}01.)
+                SpawnBarracks[team].Add(spawnBarrack.GetSpawnBarrackLaneID(), spawnBarrack);
             }
         }
 
@@ -283,7 +290,9 @@ namespace MapScripts.Map10
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1700, nexusStats);
+                // sightRange 1350 = real Map10 ObjectCFG.cfg HQ_T1/T2 PerceptionBubbleRadius
+                // (verified; was an invented 1700). Intrinsic auto-vision, no RevealStealth.
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1350, nexusStats);
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
                 AddObject(nexus);
@@ -299,7 +308,9 @@ namespace MapScripts.Map10
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 0, inhibitorStats);
+                // sightRange 1350 = real Map10 ObjectCFG.cfg Barracks_T1/T2 PerceptionBubbleRadius
+                // (verified; was 0 = no vision, a bug). Intrinsic auto-vision, no RevealStealth.
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 1350, inhibitorStats);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;
@@ -392,10 +403,19 @@ namespace MapScripts.Map10
                         AddProtection(inhibitor, false, inhibitorTurret);
                     }
 
-                    // Adds Protection to Turrets
+                    // Adds Protection to Turrets. On Twisted Treeline each lane has exactly two
+                    // turrets: the inner-type turret (L_02/R_02) is the OUTERMOST turret a minion
+                    // meets and must stay targetable from the start (no protection entry), while the
+                    // inhibitor turret (C_06/C_07) sits behind it and is protected until the inner
+                    // turret falls. Mirror of Map1's per-type chain, minus the OUTER tier TT lacks.
+                    // (The old loop gave every lane turret an INNER dependency, so the inner turret
+                    // depended on itself and never became targetable.)
                     foreach (var turret in TurretList[inhibitor.Team][inhibitor.Lane])
                     {
-                        AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.INNER_TURRET));
+                        if (turret.Type == TurretType.INHIBITOR_TURRET)
+                        {
+                            AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.INNER_TURRET));
+                        }
                     }
                 }
                 foreach (var turret in TurretList[InhibTeam][Lane.LANE_C])

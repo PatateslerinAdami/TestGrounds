@@ -10,7 +10,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -62,7 +61,11 @@ public class SwainShadowGrasp : ISpellScript
         if (!_isActive) return;
         var ticks = _periodicTicker.ConsumeTicks(diff, 875f, false, 1, 1);
         if (ticks != 1) return;
-        var units = GetUnitsInRange(_swain, _position, 625f, true,
+        // Effect radius from SpellData.CastRadius (240) — the old hardcoded 625 was wrong (neither
+        // the 4.20 effect radius 240 nor the cast range 900; Averdrian S1 confirms ~250). Center
+        // stays _position (placed location); the resolver isn't used here because this is a delayed
+        // tick where CastInfo.TargetPosition could be stale.
+        var units = GetUnitsInRange(_swain, _position, _spell.SpellData.CastRadius[0], true,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes |
             SpellDataFlags.AffectMinions);
 

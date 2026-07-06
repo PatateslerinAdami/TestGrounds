@@ -46,7 +46,7 @@ internal class ZedRHandler : IBuffGameScript {
 
     public void SpawnShadow(Vector2 position, Vector2 facingPoint) {
         _currentShadowSwapped = false;
-        _shadow = AddMinion(_zed, "ZedShadow", "ZedWShadow", position, _zed.Team, _zed.SkinID, true, false, false,
+        _shadow = AddMinion(_zed, "ZedShadow", "ZedWShadow", position, _zed.Team, _zed.SkinID, true, false,
                             SpellDataFlags.NonTargetableAll, null, true, true);
         FaceDirection(facingPoint, _shadow, true);
         var shadowTrackerBuff = _zed.GetBuffWithName("ZedShadowHandler");

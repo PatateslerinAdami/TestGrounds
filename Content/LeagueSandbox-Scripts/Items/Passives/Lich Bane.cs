@@ -133,7 +133,7 @@ namespace Buffs
 
         private void OnHitUnit(DamageData damageData)
         {
-            if (damageData.IsAutoAttack && damageData.Target != null && !damageData.Target.IsDead)
+            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK && damageData.Target != null && !damageData.Target.IsDead)
             {
                 var sourceItemId = _buff.Variables.GetInt("sourceItemId", 3100);
                 var bonusDamage = _buff.Variables.GetFloat("damageAmount", 0.0f);

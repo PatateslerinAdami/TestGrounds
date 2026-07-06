@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using static LeaguePackets.Game.Common.CastInfo;
@@ -76,13 +75,13 @@ namespace Spells
             FaceDirection(TargetPos, Fiora, true);
             AddParticleTarget(Fiora, Fiora, "Fiora_Dance_windup.troy", Fiora);
             AddParticleTarget(Fiora, Fiora, "FioraQLunge_dashtrail.troy", Fiora);
-            ForceMovement(Fiora, null, TargetPos, 2200, 0, 0, 0, movementOrdersType: ForceMovementOrdersType.CANCEL_ORDER);
+            ForceMove(Fiora, TargetPos, 2200, orders: ForceMovementOrdersType.CANCEL_ORDER);
         }
         
         // AICI ESTE REPARAȚIA: Am adăugat parametrul ForceMovementParameters
         public void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)
         {
-            Fiora.SetDashingState(false);
+            Fiora.SetForceMovementState(false);
             Damage = 15 + (25f * Fiora.Spells[0].CastInfo.SpellLevel) + (Fiora.Stats.AttackDamage.FlatBonus * 1.2f);
             Target.TakeDamage(Fiora, Damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
             AddParticleTarget(Fiora, Target, "FioraQLunge_tar", Target);
@@ -96,7 +95,7 @@ namespace Spells
         // AICI ESTE REPARAȚIA: Am adăugat parametrul ForceMovementParameters
         public void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters)
         {
-            Fiora.SetDashingState(false);
+            Fiora.SetForceMovementState(false);
             SetStatus(Fiora, StatusFlags.Ghosted, false);
             StopAnimation(Fiora, "spell1", StopAnimationFlags.StopAll | StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
         }

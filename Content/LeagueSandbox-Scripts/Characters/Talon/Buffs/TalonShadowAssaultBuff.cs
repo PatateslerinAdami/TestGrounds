@@ -19,7 +19,7 @@ internal class TalonShadowAssaultBuff : IBuffGameScript {
     private ObjAIBase              _talon;
     private Buff           _buff;
     private AttackableUnit _unit;
-    private Particle       _p1;
+    private Particle       _p1, _p2;
     private Fade           _id;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
@@ -33,21 +33,47 @@ internal class TalonShadowAssaultBuff : IBuffGameScript {
         _buff  = buff;
         _talon = ownerSpell.CastInfo.Owner;
         _unit  = unit;
+        
+        ApiEventManager.OnSpellCast.AddListener(this, _talon.GetSpell("TalonRake"),            OnBreakCast);
+        ApiEventManager.OnSpellCast.AddListener(this, _talon.GetSpell("TalonCutthroat"),       OnBreakCast);
+        ApiEventManager.OnLaunchAttack.AddListener(this, _talon, OnBreakCast);
+        
         SetStatus(_talon, StatusFlags.RevealSpecificUnit, false);
         SetStatus(_talon, StatusFlags.Stealthed, true);
         SetStatus(_talon, StatusFlags.Ghosted,   true);
+        
         StatsModifier.MoveSpeed.PercentBonus += 0.4f;
-
         _unit.AddStatModifier(StatsModifier);
+        
         _p1 = AddParticleTarget(_talon, _talon, "talon_invis_cas", _talon, buff.Duration);
+        _p2 = AddParticleTarget(_talon, _talon, "global_haste", _talon, buff.Duration);
         _id = PushCharacterFade(_talon, 0.4f, 0.015f);
+    }
+    
+    private void OnBreakCast(Spell spell) {
+        RemoveBuff(_talon,"TalonShadowAssaultBuff");
+        /*_bladeTimer  = 0f;
+        _returnTimer = 0f;
+        for (var i = 0; i < BladeCount; i++) {
+            RemoveParticle(_neutral[i]);
+            RemoveParticle(_teamBased[i]);
+        }*/
     }
 
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        ApiEventManager.RemoveAllListenersForOwner(this);
+        
+        RemoveBuff(_talon, "TalonShadowAssaultMisBuff");
+        
         PushCharacterFade(_talon, 1f, 0.1f);
         RemoveParticle(_p1);
+        RemoveParticle(_p2);
+        
         SetStatus(_talon, StatusFlags.Stealthed, false);
         SetStatus(_talon, StatusFlags.Ghosted,   false);
+        
+        SetSpell(_talon, "TalonShadowAssault", SpellSlotType.SpellSlots, 3);
+        ownerSpell.SetCooldown(ownerSpell.CastInfo.Cooldown, false);
     }
 }

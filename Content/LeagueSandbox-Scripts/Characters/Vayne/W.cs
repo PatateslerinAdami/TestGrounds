@@ -49,7 +49,7 @@ public class VayneSilveredBolts : ISpellScript {
 
     private void OnHit(DamageData data) {
         if (_spell.CastInfo.SpellLevel <= 0) return;
-        if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK || !data.IsAutoAttack) return;
+        if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK) return;
 
         var invalidDamageResult = data.DamageResultType == DamageResultType.RESULT_MISS ||
                                   data.DamageResultType == DamageResultType.RESULT_DODGE ||

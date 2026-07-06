@@ -40,11 +40,11 @@ namespace Buffs
         }
         public void OnTakeDamage(DamageData data)
         {
-            if (data.IsAutoAttack)
+            if (data.DamageSource is DamageSource.DAMAGE_SOURCE_ATTACK)
             {
                 var attacker = data.Attacker;
                 p = AddParticleTarget(owner, attacker, "thornmail_tar.troy", attacker);
-                attacker.TakeDamage(owner, 50f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, sp);
+                attacker.TakeDamage(owner, 50f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_REACTIVE, false, sp);
             }
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

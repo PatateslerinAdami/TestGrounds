@@ -103,13 +103,24 @@ namespace GameServerLib.GameObjects
         {
         }
 
+        /// <summary>
+        /// Absolute respawn time in game-SECONDS, for the HUD respawn timer carried in
+        /// S2C_Neutral_Camp_Empty.TimerExpire (only meaningful for camps with a TimerType != 0, i.e.
+        /// Baron/Dragon). The camp-empty packet is only sent while the camp is dead and RespawnTimer is
+        /// counting down, so GameTime + RespawnTimer is the (constant) absolute respawn time.
+        /// </summary>
+        public float GetTimerExpire()
+        {
+            return (_game.GameTime + RespawnTimer) / 1000f;
+        }
+
         public Monster AddMonster(Monster monster)
         {
             var aiscript = monster.AIScript.ToString().Remove(0, 10);
             var campMonster = new Monster
             (
                 _game, monster.Name, monster.Model, monster.Position,
-                monster.Direction, this, monster.Team, 0,
+                monster.FacePoint, this, monster.Team, 0,
                 monster.SpawnAnimation, monster.IsTargetable, monster.IgnoresCollision, null, aiscript,
                 monster.DamageBonus, monster.HealthBonus, monster.InitialLevel
             );
@@ -120,6 +131,8 @@ namespace GameServerLib.GameObjects
             Monsters.Add(campMonster);
             ApiEventManager.OnDeath.AddListener(campMonster, campMonster, OnMonsterDeath, true);
             _game.ObjectManager.AddObject(campMonster);
+            // (Spawn facing is carried by S2C_CreateNeutral.FaceDirectionPosition — see
+            // PacketNotifier.ConstructCreateNeutralPacket. No separate FaceDirection needed here.)
 
             IsAlive = true;
             foreach(TeamId team in _playerTeams)

@@ -25,7 +25,11 @@ namespace LeaguePackets.Game
         public float SizeMultiplier { get; set; }
         public float SizeAdditive { get; set; }
 
-        public bool HasCollision { get; set; }
+        // Flags byte: see GameServerCore.Enums.RegionFlags. Riot reads only bits 0-2
+        // (bit0 = RequiresLOS, bit1 = GrantVision, bit2 = RevealStealth); bits 3-7 are
+        // uninitialized junk. bit0 carries Riot's RequiresLOS — the server's separate
+        // HasCollision concept is server-internal and deliberately NOT on the wire.
+        public bool RequiresLOS { get; set; }
         public bool GrantVision { get; set; }
         public bool RevealStealth { get; set; }
 
@@ -47,7 +51,7 @@ namespace LeaguePackets.Game
             this.SizeMultiplier = reader.ReadFloat();
             this.SizeAdditive = reader.ReadFloat();
             byte flags = reader.ReadByte();
-            this.HasCollision = (flags & 1) != 0;
+            this.RequiresLOS = (flags & 1) != 0;
             this.GrantVision = (flags & 2) != 0;
             this.RevealStealth = (flags & 4) != 0;
 
@@ -68,7 +72,7 @@ namespace LeaguePackets.Game
             writer.WriteFloat(SizeMultiplier);
             writer.WriteFloat(SizeAdditive);
             byte flags = 0;
-            if(HasCollision)
+            if(RequiresLOS)
             {
                 flags |= 1;
             }

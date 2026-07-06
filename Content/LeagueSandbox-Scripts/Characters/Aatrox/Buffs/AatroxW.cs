@@ -16,6 +16,7 @@ namespace Buffs;
 
 public class AatroxW : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COUNTER,
         BuffAddType = BuffAddType.STACKS_AND_RENEWS,
         MaxStacks   = 3,

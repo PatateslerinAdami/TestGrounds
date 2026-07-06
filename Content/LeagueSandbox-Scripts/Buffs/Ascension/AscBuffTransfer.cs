@@ -48,7 +48,7 @@ namespace Buffs
             AddParticle(unit, unit, "AscTurnToStone", unit.Position, buff.Duration, flags: (FXFlags)32);
 
             buff.SetStatusEffect(StatusFlags.Targetable, false);
-            buff.SetStatusEffect(StatusFlags.Stunned, true);
+            buff.SetStatusEffect(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false); // stun via buff layer — M2
             buff.SetStatusEffect(StatusFlags.Invulnerable, true);
         }
 

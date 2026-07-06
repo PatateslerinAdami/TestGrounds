@@ -18,7 +18,15 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             var peerInfo = _game.PlayerManager.GetPeerInfo(userId);
             peerInfo.IsStartedClient = true;
             peerInfo.IsDisconnected = false;
-            _game.ObjectManager.OnReconnect(userId, peerInfo.Team);
+            // C2S_SoftReconnect is the faithful soft-reconnect trigger; HandleSpawn also runs the
+            // mark-sweep when a SpawnRequest arrives mid-game. ReconnectSpawnReady guards against doing
+            // the resync twice if a reconnecting client sends both — whichever arrives first does it.
+            if (!peerInfo.ReconnectSpawnReady)
+            {
+                _game.ObjectManager.OnReconnect(userId, peerInfo.Team);
+                peerInfo.ReconnectSpawnReady = true;
+            }
+            _game.TryFinishReconnectStart(userId);
             return true;
         }
     }

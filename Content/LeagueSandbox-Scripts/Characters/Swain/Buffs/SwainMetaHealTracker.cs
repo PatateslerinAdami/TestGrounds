@@ -10,7 +10,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -64,7 +63,7 @@ public class SwainMetaHealTracker : IBuffGameScript
         _buff.DeactivateBuff();
     }
 
-    private void OnSpellHitNuke(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHitNuke(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         var dmg = 50f + 30f * (_swain.GetSpell("SwainMetamorphism").CastInfo.SpellLevel - 1f) +
                   _swain.Stats.AbilityPower.Total * 0.2f;
@@ -85,7 +84,7 @@ public class SwainMetaHealTracker : IBuffGameScript
         _ravensSent++;
     }
 
-    private void OnSpellHitHeal(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHitHeal(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         if (_pendingHeals.Count == 0) return;
         _swain.TakeHeal(_swain, _pendingHeals.Dequeue(), HealType.SelfHeal);

@@ -14,6 +14,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            PersistsThroughDeath = true,
             BuffType = BuffType.INTERNAL,
             BuffAddType = BuffAddType.RENEW_EXISTING,
             MaxStacks = 1

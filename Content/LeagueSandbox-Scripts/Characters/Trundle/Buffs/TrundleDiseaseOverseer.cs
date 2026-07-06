@@ -26,6 +26,7 @@ public class TrundleDiseaseOverseer : IBuffGameScript {
     private ObjAIBase _trundle;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.HEAL,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1

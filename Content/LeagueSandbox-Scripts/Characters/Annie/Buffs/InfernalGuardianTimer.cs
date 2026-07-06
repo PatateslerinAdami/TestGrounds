@@ -7,6 +7,7 @@ namespace Buffs;
 
 internal class InfernalGuardianTimer : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType = BuffType.COMBAT_ENCHANCER
     };
 

@@ -45,6 +45,17 @@ namespace LeagueSandbox.GameServer.Handlers
         /// MapProperties specific to a Map Id. Contains information about passive gold gen, lane minion spawns, experience to level, etc.
         /// </summary>
         public IMapScript MapScript { get; private set; }
+        /// <summary>
+        /// Engine-side per-barrack lane-minion spawn driver (Riot's obj_Barracks model). Ticked from
+        /// <see cref="Update"/>. See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
+        /// </summary>
+        public BarracksSpawnManager BarracksSpawnManager { get; private set; }
+        /// <summary>
+        /// Engine-side capture-point driver (Twisted Treeline altars / Dominion control points).
+        /// Capture points are registered by the content map script once the altar units exist; ticked
+        /// from <see cref="Update"/>. See project_tt_altars_420.
+        /// </summary>
+        public CapturePointManager CapturePointManager { get; private set; }
         public uint ScriptNameHash { get; private set; }
         public IEventSource ParentScript => null;
 
@@ -52,6 +63,7 @@ namespace LeagueSandbox.GameServer.Handlers
 
         //Consider moving this to MapScripts(?)
         public readonly Dictionary<TeamId, SurrenderHandler> Surrenders = new Dictionary<TeamId, SurrenderHandler>();
+        public readonly Dictionary<TeamId, TeamBalanceHandler> TeamBalances = new Dictionary<TeamId, TeamBalanceHandler>();
 
         /// <summary>
         /// Instantiates map related game settings such as collision handler, navigation grid, announcer events, and map properties.
@@ -108,11 +120,31 @@ namespace LeagueSandbox.GameServer.Handlers
                 MapScript.Update(diff);
             }
 
+            // Engine-side per-barrack spawn drivers. Phase 1: SpawnBarrack.Update is a no-op stub,
+            // so this ticks but the legacy LevelScript loop still drives spawning (wire unchanged).
+            using (Profiler.Scope("BarracksSpawnManager.Update", "scripts"))
+            {
+                BarracksSpawnManager?.Update(diff);
+            }
+
+            using (Profiler.Scope("CapturePointManager.Update", "scripts"))
+            {
+                CapturePointManager?.Update(diff);
+            }
+
             using (Profiler.Scope("Surrenders.Update"))
             {
                 foreach (var surrender in Surrenders.Values)
                 {
                     surrender.Update(diff);
+                }
+            }
+
+            using (Profiler.Scope("TeamBalances.Update"))
+            {
+                foreach (var balance in TeamBalances.Values)
+                {
+                    balance.Update(diff);
                 }
             }
         }
@@ -125,9 +157,22 @@ namespace LeagueSandbox.GameServer.Handlers
             MapData = _game.Config.ContentManager.GetMapData(Id);
             GlobalData.Init(MapData.MapConstants);
             // Load data package
+            var mapObjects = LoadMapObjects();
+
+            // Build the engine-side per-barrack spawn drivers from the loaded barrack objects.
+            BarracksSpawnManager = new BarracksSpawnManager(_game, MapScript);
+            if (mapObjects.TryGetValue(GameObjectTypes.ObjBuildingBarracks, out var barrackObjects))
+            {
+                BarracksSpawnManager.Init(barrackObjects);
+            }
+
+            // Capture points (TT altars) are registered by the content map script once the altar units
+            // are spawned; the manager just needs to exist to receive them and tick.
+            CapturePointManager = new CapturePointManager(_game);
+
             try
             {
-                MapScript.Init(LoadMapObjects());
+                MapScript.Init(mapObjects);
             }
             catch (Exception e)
             {

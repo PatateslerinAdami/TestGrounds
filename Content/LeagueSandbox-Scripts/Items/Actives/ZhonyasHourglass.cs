@@ -12,8 +12,8 @@ namespace ItemSpells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            // TODO
-            TriggersSpellCasts = true,
+            TriggersSpellCasts = false,
+            CastingBreaksStealth = true
         };
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

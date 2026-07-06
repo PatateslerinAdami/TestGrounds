@@ -47,7 +47,49 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.ProtectionManager.AddProtection(unit, dependOnAll, dependOn);
         }
- 
+
+        /// <summary>
+        /// Registers an engine-driven capture point on <paramref name="altar"/> (Twisted Treeline
+        /// altar / Dominion control point). The altar's PrimaryAbilityResource (mana, max =
+        /// <paramref name="goal"/>) becomes the replicated capture meter. Returns the
+        /// <see cref="CapturePoint"/> so the map script can subscribe to OnCaptured/OnUnlocked.
+        /// 4.20 TT values (wire-derived): goal 60000, neutral 40000, fill 2400/s, decay 214/s, lock 90000ms, unlock 180000ms.
+        /// The meter is a tug-of-war: BLUE pushes the PAR up to goal, PURPLE down to the mirrored value;
+        /// it rests at neutralValue (so the altar isn't one team's colour at the start).
+        /// </summary>
+        public static CapturePoint AddCapturePoint(AttackableUnit altar, float goal, float neutralValue, float fillRate,
+            float decayRate, float lockDuration, float captureRadius, float unlockTime)
+        {
+            return _map.CapturePointManager.AddCapturePoint(altar, goal, neutralValue, fillRate, decayRate, lockDuration, captureRadius, unlockTime);
+        }
+
+        /// <summary>
+        /// Updates a team's Dragon Slayer stack count on all clients' HUD (S2C_TeamUpdateDragonBuffCount).
+        /// Call once per dragon kill with the killing team's new total.
+        /// </summary>
+        public static void NotifyTeamDragonBuffCount(TeamId team, int count)
+        {
+            _game.PacketNotifier.NotifyS2C_TeamUpdateDragonBuffCount(team, count);
+        }
+
+        /// <summary>
+        /// Sets a team's Nexus skin (S2C_AnimatedBuildingSetCurrentSkin). Used on ARAM/TT for the nexus
+        /// destruction skin at game end (replay-verified: TT sends team=loser, skinID=1 ~2s before end).
+        /// </summary>
+        public static void SetAnimatedBuildingSkin(TeamId team, uint skinID)
+        {
+            _game.PacketNotifier.NotifyS2C_AnimatedBuildingSetCurrentSkin(team, skinID);
+        }
+
+        /// <summary>
+        /// Mutes or unmutes an audio volume category on clients (S2C_MuteVolumeCategory) — e.g. mute
+        /// Music or Announcer during a scripted moment. Broadcast to all players (map-wide).
+        /// </summary>
+        public static void MuteVolumeCategory(VolumeCategory category, bool mute)
+        {
+            _game.PacketNotifier.NotifyS2C_MuteVolumeCategory(category, mute);
+        }
+
         public static GameObject CreateShop(string name, Vector2 position, TeamId team)
         {
             var shop = new GameObject(_game, position, team: team, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
@@ -82,9 +124,9 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="inhibRadius"></param>
         /// <param name="sightRange"></param>
         /// <returns></returns>
-        public static Inhibitor CreateInhibitor(string name, string model, Vector2 position, TeamId team, Lane lane, int inhibRadius, int sightRange, Stats stats = null)
+        public static Inhibitor CreateInhibitor(string name, string model, Vector2 position, TeamId team, Lane lane, int inhibRadius, int sightRange, Stats stats = null, int pathfindingRadius = 0)
         {
-            return new Inhibitor(_game, model, lane, team, inhibRadius, position, sightRange, stats, Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
+            return new Inhibitor(_game, model, lane, team, inhibRadius, position, sightRange, stats, Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000, pathfindingRadius);
         }
  
         public static MapObject CreateLaneMinionSpawnPos(string name, Vector3 position)
@@ -133,15 +175,41 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="minionNo"></param>
         /// <param name="barracksName"></param>
         /// <param name="waypoints"></param>
-        public static void CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null)
+        public static LaneMinion CreateLaneMinion(List<MinionSpawnType> list, Vector2 position, TeamId team, int minionNo, string barracksName, List<Vector2> waypoints, string laneMinionAI, bool isFirstWave = false, Vector2? outerTurretPosition = null, int waveNumber = 0, IReadOnlyList<BaseTurret> enemyLaneTurretsAhead = null, IReadOnlyList<int> enemyLaneTurretWaypointIndices = null, Lane lane = Lane.LANE_C, StatsModifier statModifier = null, int initialLevel = 0, float goldGiven = -1f, float expGiven = -1f)
         {
             if (list.Count <= minionNo)
             {
-                return;
+                return null;
             }
 
-            var m = new LaneMinion(_game, list[minionNo], position, barracksName, waypoints, _map.MapScript.MinionModels[team][list[minionNo]], 0, team, null, laneMinionAI, isFirstWave, outerTurretPosition, waveNumber, enemyLaneTurretsAhead, enemyLaneTurretWaypointIndices);
+            var m = new LaneMinion(_game, list[minionNo], position, barracksName, waypoints, _map.MapScript.MinionModels[team][list[minionNo]], 0, team, null, laneMinionAI, isFirstWave, outerTurretPosition, waveNumber, enemyLaneTurretsAhead, enemyLaneTurretWaypointIndices, lane);
+
+            // Apply the per-wave stat ramp BEFORE AddObject — AddObject -> SpawnObject builds the spawn
+            // packet (0xBA embedding Barrack_SpawnUnit + 0xAE health) synchronously, so the bonuses and
+            // level must be on the unit's Stats by now or the client receives the un-ramped values.
+            m.ApplySpawnStatRamp(statModifier, initialLevel, goldGiven, expGiven);
+
             _game.ObjectManager.AddObject(m);
+            return m;
+        }
+
+        /// <summary>
+        /// Number of currently-alive lane minions across BOTH teams — the server-side meaning of Riot's
+        /// GetTotalTeamMinionsSpawned() (the S1 client decomp stubs it to 0; Averdrian's server reimpl
+        /// returns the equivalent of LaneMinion.Manager.Count). Drives the map script's endgame minion
+        /// throttle. See Map1 LevelScript / docs S8.
+        /// </summary>
+        public static int CountAllLaneMinions()
+        {
+            int count = 0;
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is LaneMinion minion && !minion.IsDead)
+                {
+                    count++;
+                }
+            }
+            return count;
         }
  
         /// <summary>
@@ -163,10 +231,10 @@ namespace LeagueSandbox.GameServer.API
         public static Minion CreateMinion(
             string name, string model, Vector2 position, ObjAIBase owner = null, uint netId = 0,
             TeamId team = TeamId.TEAM_NEUTRAL, int skinId = 0, bool ignoreCollision = false,
-            bool isTargetable = false, bool isWard = false, string aiScript = "", int damageBonus = 0,
+            bool isTargetable = false, string aiScript = "", int damageBonus = 0,
             int healthBonus = 0, int initialLevel = 1)
         {
-            var m = new Minion(_game, owner, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, isWard, null, null, aiScript, damageBonus, healthBonus, initialLevel);
+            var m = new Minion(_game, owner, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, null, null, aiScript, damageBonus, healthBonus, initialLevel);
             _game.ObjectManager.AddObject(m);
             return m;
         }
@@ -174,10 +242,10 @@ namespace LeagueSandbox.GameServer.API
         public static Minion CreateMinionTemplete(
             string name, string model, Vector2 position, uint netId = 0,
             TeamId team = TeamId.TEAM_NEUTRAL, int skinId = 0, bool ignoreCollision = false,
-            bool isTargetable = false, bool isWard = false, string aiScript = "", int damageBonus = 0,
+            bool isTargetable = false, string aiScript = "", int damageBonus = 0,
             int healthBonus = 0, int initialLevel = 1)
         {
-            return new Minion(_game, null, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, isWard, null, null, aiScript, damageBonus, healthBonus, initialLevel);
+            return new Minion(_game, null, position, model, name, netId, team, skinId, ignoreCollision, isTargetable, null, null, aiScript, damageBonus, healthBonus, initialLevel);
         }
  
         /// <summary>
@@ -233,6 +301,8 @@ namespace LeagueSandbox.GameServer.API
             int damageBonus = 0, int healthBonus = 0, int initialLevel = 1
         )
         {
+            // faceDirection is the camp's look-at WORLD POINT (Lua CampFacePoints). The Monster ctor
+            // stores it as FacePoint (sent verbatim in S2C_CreateNeutral) and derives the heading.
             return new Monster(_game, name, model, position, faceDirection, monsterCamp, team, netId, spawnAnimation, isTargetable, ignoresCollision, null, aiScript, damageBonus, healthBonus, initialLevel);
         }
  
@@ -299,15 +369,35 @@ namespace LeagueSandbox.GameServer.API
             if (_map.Surrenders.ContainsKey(who.Team))
                 _map.Surrenders[who.Team].HandleSurrender(userId, who, vote);
         }
+
+        /// <summary>
+        /// Sets up the team-balance vote (catch-up compensation for the disadvantaged team).
+        /// Timing params mirror AddSurrender (time/restTime in ms, length in seconds). The grant
+        /// amounts (gold/exp/towers) are content-owned and NOT 4.20-decomp-verified — tune per map.
+        /// </summary>
+        public static void AddTeamBalance(float time, float restTime, float length,
+            float goldGranted, int experienceGranted, int towersGranted)
+        {
+            _map.TeamBalances.Add(TeamId.TEAM_BLUE, new TeamBalanceHandler(_game, TeamId.TEAM_BLUE, time, restTime, length, goldGranted, experienceGranted, towersGranted));
+            _map.TeamBalances.Add(TeamId.TEAM_PURPLE, new TeamBalanceHandler(_game, TeamId.TEAM_PURPLE, time, restTime, length, goldGranted, experienceGranted, towersGranted));
+        }
+
+        public static void HandleTeamBalanceVote(int userId, Champion who, bool vote)
+        {
+            if (_map.TeamBalances.ContainsKey(who.Team))
+                _map.TeamBalances[who.Team].HandleTeamBalanceVote(userId, who, vote);
+        }
  
         /// <summary>
         /// Adds a fountain
         /// </summary>
         /// <param name="team"></param>
         /// <param name="position"></param>
-        public static Fountain CreateFountain(TeamId team, Vector2 position, float radius = 1000.0f)
+        public static Fountain CreateFountain(TeamId team, Vector2 position)
         {
-            return new Fountain(_game, team, position, radius);
+            // Radius (and all regen rates) now come from GlobalData.SpawnPointVariables (sp_RegenRadius etc.)
+            // inside Fountain — no per-call radius; the previous 1000f default diverged from sp_RegenRadius=1100.
+            return new Fountain(_game, team, position);
         }
  
         /// <summary>
@@ -329,51 +419,114 @@ namespace LeagueSandbox.GameServer.API
         }
  
         /// <summary>
-        /// Sets the game to exit
+        /// Shared end-of-game ceremony. Riot's split (4.20 Lua): the map's LevelScript
+        /// (HandleDestroyedObject) triggers EndOfGameCeremony, whose shared default lives in
+        /// DATA/Scripts/EndOfGame.lua and which maps may override (Map8/Map12 ship their own).
+        /// Our map scripts calling this shared API mirror that layering exactly, so the ceremony
+        /// stays here; a map wanting a custom ceremony simply doesn't call it.
+        ///
+        /// Sequence and timings are replay-verified (rlp c3a95050, 4.20.0.319, Map11 nexus death):
+        /// T+0     Building_Die, 7× S2C_SetInputLockFlag, HUD off, shop closed, camera pan,
+        ///         greyscale off (ceremony start)
+        /// T+1.0s  S2C_FadeOutMainSFX fadeTime=2 (FadeOutMainSFXPhase, EOG_MAIN_SFX_FADE_DELAY_TIME)
+        /// T+3.5s  S2C_FadeMinions amount=0 time=2 (DestroyNexusPhase, GetEoGNexusChangeSkinTime)
+        /// T+5.5s  chat input lock + S2C_EndGame (ScoreboardPhase, +EOG_SCOREBOARD_PHASE_DELAY_TIME)
         /// </summary>
         /// <param name="losingTeam">The team who lost the game</param>
         /// <param name="finalCameraPosition">The position which the camera has to move to for the end-game screen</param>
-        /// <param name="endGameTimer">Offset for the Endgame screend (victory or defeat) to be actually announced</param>
+        /// <param name="endGameTimer">Delay until the end-game screen (victory or defeat) is announced</param>
         /// <param name="moveCamera">Wether or not the camera should move</param>
         /// <param name="cameraTimer">The ammount of time the camera has to arrive to it's destination</param>
         /// <param name="disableUI">Whether or not the UI should get disabled</param>
         /// <param name="deathData">DeathData of what triggered the End of the Game, such as necus death</param>
-        public static void EndGame(TeamId losingTeam, Vector3 finalCameraPosition, float endGameTimer = 5000.0f, bool moveCamera = true, float cameraTimer = 3.0f, bool disableUI = true, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null)
+        public static void EndGame(TeamId losingTeam, Vector3 finalCameraPosition, float endGameTimer = 5500.0f, bool moveCamera = true, float cameraTimer = 3.0f, bool disableUI = true, GameServerLib.GameObjects.AttackableUnits.DeathData deathData = null)
         {
-            //TODO: check if mapScripts should handle this directly
- 
             if (deathData != null)
             {
                 _game.PacketNotifier.NotifyBuilding_Die(deathData);
+            }
+
+            // Server-side ceremony state (EndOfGame.lua: SetBarracksSpawnEnabled(false), HaltAllAI,
+            // SetInvulnerable/SetTargetable on both HQs): no further waves, frozen AI, deathless nexuses.
+            _map.MapScript.MapScriptMetadata.MinionSpawnEnabled = false;
+            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            {
+                if (obj is Nexus nexus)
+                {
+                    nexus.SetStatus(StatusFlags.Invulnerable, true);
+                    nexus.SetStatus(StatusFlags.Targetable, false);
+                }
+                else if (obj is ObjAIBase ai)
+                {
+                    ai.PauseAI(true);
+                }
+            }
+
+            // Input locks in Riot's exact send order (replay: one packet per flag; chat stays
+            // unlocked until the scoreboard phase).
+            var inputLocks = new[]
+            {
+                InputLockFlags.CameraLocking, InputLockFlags.CameraMovement, InputLockFlags.Abilities,
+                InputLockFlags.SummonerSpells, InputLockFlags.Movement, InputLockFlags.Shop,
+                InputLockFlags.MinimapMovement
+            };
+
+            var players = _game.PlayerManager.GetPlayers(false);
+            foreach (var player in players)
+            {
+                foreach (var flag in inputLocks)
+                {
+                    _game.PacketNotifier.NotifyS2C_SetInputLockFlag(player.ClientId, flag, true);
+                }
+                if (disableUI)
+                {
+                    _game.PacketNotifier.NotifyS2C_DisableHUDForEndOfGame(player);
+                }
+            }
+
+            // Force the store screen closed on all clients now that the game is over (S2C_CloseShop).
+            _game.PacketNotifier.NotifyCloseShop();
+
+            if (moveCamera)
+            {
+                foreach (var player in players)
+                {
+                    _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
+                }
+            }
+
+            if (deathData != null)
+            {
                 _game.PacketNotifier.NotifyS2C_SetGreyscaleEnabledWhenDead(false, deathData.Killer);
             }
             else
             {
                 _game.PacketNotifier.NotifyS2C_SetGreyscaleEnabledWhenDead(false);
             }
- 
-            var players = _game.PlayerManager.GetPlayers(false);
-            foreach (var player in players)
+
+            // FadeOutMainSFXPhase: main SFX bus fades over 2s, 1s into the ceremony.
+            ApiFunctionManager.CreateTimer(1.0f, () =>
             {
-                if (disableUI)
-                {
-                    _game.PacketNotifier.NotifyS2C_DisableHUDForEndOfGame(player);
-                }
-                if (moveCamera)
-                {
-                    _game.PacketNotifier.NotifyS2C_MoveCameraToPoint(player, Vector3.Zero, finalCameraPosition, cameraTimer);
-                }
-            }
- 
-            //The way we handle the end of a game has to be reworked
-            var timer = new System.Timers.Timer(endGameTimer) { AutoReset = false };
-            timer.Elapsed += (a, b) =>
+                _game.PacketNotifier.NotifyS2C_FadeOutMainSFX(2.0f);
+            });
+
+            // DestroyNexusPhase: losing team's minions fade over 2s, 2s before the scoreboard.
+            ApiFunctionManager.CreateTimer(System.Math.Max(endGameTimer - 2000.0f, 0.0f) / 1000.0f, () =>
             {
+                _game.PacketNotifier.NotifyS2C_FadeMinions(losingTeam, 0.0f, 2.0f);
+            });
+
+            // ScoreboardPhase: chat locks only now, then the end-game screen.
+            ApiFunctionManager.CreateTimer(endGameTimer / 1000.0f, () =>
+            {
+                foreach (var player in players)
+                {
+                    _game.PacketNotifier.NotifyS2C_SetInputLockFlag(player.ClientId, InputLockFlags.Chat, true);
+                }
                 _game.Stop();
                 _game.PacketNotifier.NotifyS2C_EndGame(losingTeam);
                 _game.SetGameToExit();
-            };
-            timer.Start();
+            });
         }
  
         public static void AddTurretItems(BaseTurret turret, int[] items)
@@ -402,13 +555,21 @@ namespace LeagueSandbox.GameServer.API
         /// <returns></returns>
         public static int GetPlayerAverageLevel()
         {
-            float average = 0;
             var players = _game.PlayerManager.GetPlayers(true);
+            if (players.Count == 0)
+            {
+                return 0;
+            }
+            // Sum first, then divide once: dividing each term by Count inline is integer
+            // division (byte/int), which floors every champion's level to 0 below level Count.
+            // Jungle camp scaling (NeutralMinionSpawn.SpawnCamp -> MonsterDataTable) reads this,
+            // so the floored average must match Riot's spawn-time average champion level.
+            float sum = 0;
             foreach (var player in players)
             {
-                average += player.Champion.Stats.Level / players.Count;
+                sum += player.Champion.Stats.Level;
             }
-            return (int)average;
+            return (int)(sum / players.Count);
         }
  
         public static void NotifyGameScore(TeamId team, float score)

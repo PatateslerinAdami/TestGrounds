@@ -13,6 +13,7 @@ internal class PotionOfBrilliance : IBuffGameScript {
     private Particle _potion;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.STACKS_AND_CONTINUE,
         MaxStacks   = 5

@@ -8,9 +8,14 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 
 namespace Buffs;
 
+// Visible Focus counter (0..100). Riot sends this as a plain AURA buff (replay-verified:
+// NPC_BuffAdd2 BuffType=1) and drives the number via the Count field + ShowInTrackerUI, NOT
+// as a COUNTER-type buff. Sending BuffType=COUNTER (26) makes the 4.20 client mishandle the
+// buff (extra NPC_BuffUpdateNumCounter + wrong client-side structure) → !mStack.empty() →
+// ACCESS_VIOLATION on the guaranteed-crit auto attack. Keep it AURA.
 public class AsheCritChance : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COUNTER,
+        BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         MaxStacks   = 100,
     };
@@ -18,8 +23,6 @@ public class AsheCritChance : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        // Display-only tracker buff. Keep stacks in a safe range.
-        if (buff.StackCount != 0) buff.SetStacks(0);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

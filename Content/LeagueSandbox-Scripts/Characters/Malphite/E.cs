@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -36,7 +35,8 @@ public class Landslide : ISpellScript {
     }
     
     private void ApplyAreaDamage( Spell spell, AttackableUnit target) {
-        var units = GetUnitsInRange(_malphite, _malphite.Position, 400, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions| SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=400, matches the prior hardcode).
+        var units = GetUnitsHitBySpell(spell);
         foreach (var unit in units) {
             var ap         = _malphite.Stats.Armor.Total        * 0.3f;
             var armor      = _malphite.Stats.AbilityPower.Total * 0.2f;

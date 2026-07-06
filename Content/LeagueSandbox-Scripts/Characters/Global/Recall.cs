@@ -26,6 +26,8 @@ namespace Spells
             recallParticle = AddParticleTarget(owner, owner, "TeleportHome", owner, 8.0f, flags: 0);
             AddBuff("Recall", 7.9f, 1, spell, owner, owner);
             owner.IconInfo.ChangeBorder("Recall", "recall");
+            // Recall channel start — play the champion's recall lead-in contextual VO/animation.
+            NotifyContextualSituation(owner, "RecallLeadIn");
         }
 
         public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
@@ -39,6 +41,8 @@ namespace Spells
         public void OnSpellPostChannel(Spell spell)
         {
             var owner = spell.CastInfo.Owner as Champion;
+            // Recall completed — play the wind-down contextual situation (only on success; cancel skips it).
+            NotifyContextualSituation(owner, "RecallWindDown");
             owner.Recall();
             AddParticleTarget(owner, owner, "TeleportArrive", owner, flags: 0);
             owner.IconInfo.ResetBorder();

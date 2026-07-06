@@ -10,7 +10,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -72,7 +71,7 @@ public class ZedShadowDashMissile : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle,
+            Type = MissileType.Arc,
         },
     };
 

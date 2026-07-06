@@ -44,8 +44,8 @@ namespace Spells
             AddBuff("RivenTriCleave", 4.0f, 1, spell, _owner, _owner);
             AddBuff("RivenPassiveAABoost", 5f, 1, spell, _owner, _owner, false);
 
-            var buff = _owner.GetBuffWithName("RivenTriCleave");
-            _currentQStage = buff != null ? buff.StackCount : 1;
+            var count = GetBuffStackCount(_owner, "RivenTriCleave", _owner);
+            _currentQStage = count;
 
             ApiEventManager.OnMoveEnd.AddListener(this, _owner, OnDashFinished, true);
 
@@ -73,7 +73,7 @@ namespace Spells
                     animName = "Spell1C";
                     trailParticle = "Riven_Base_Q_03_Wpn_Trail.troy";
                     range = q3Range;
-                    buff?.DeactivateBuff();
+                    RemoveBuff(_owner, "RivenTriCleave");
                     break;
             }
 
@@ -85,7 +85,7 @@ namespace Spells
             var newSpeed = (dashSpeedBase / range) * distance;
             float verticalSpeed = (_currentQStage == 3) ? 50 : 0;
 
-            ForceMovement(_owner, animName, dashPos, newSpeed, 0, verticalSpeed, 0, false);
+            ForceMove(_owner, dashPos, newSpeed, gravity: verticalSpeed, lockActions: false);
 
             if (!string.IsNullOrEmpty(trailParticle))
             {

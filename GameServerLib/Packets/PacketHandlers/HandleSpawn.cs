@@ -32,7 +32,12 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             var om = _game.ObjectManager as ObjectManager;
             if (_game.IsRunning)
             {
-                om.OnReconnect(userId, userInfo.Team);
+                // Mid-game spawn = a reconnect. Skip the mark-sweep if C2S_SoftReconnect already ran it
+                // this reconnect (ReconnectSpawnReady guard) so we don't resync twice.
+                if (!userInfo.ReconnectSpawnReady)
+                {
+                    om.OnReconnect(userId, userInfo.Team);
+                }
                 userInfo.ReconnectSpawnReady = true;
             }
             else
@@ -41,6 +46,14 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             _game.PacketNotifier.NotifySpawnEnd(userId);
+
+            // Enable the shop UI for this player's own champion (S2C_SetShopEnabled). Without it the
+            // client leaves the buy/sell buttons disabled. See docs/SHOP_PACKETS_PLAN.md (P0).
+            if (userInfo.Champion != null)
+            {
+                _game.PacketNotifier.NotifySetShopEnabled(userInfo.Champion);
+            }
+
             if (_game.IsRunning)
             {
                 _game.TryFinishReconnectStart(userId);

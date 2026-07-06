@@ -22,6 +22,7 @@ public class Pantheon_Aegis_Counter : IBuffGameScript
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
+            PersistsThroughDeath = true,
         BuffType = BuffType.AURA,
         BuffAddType = BuffAddType.STACKS_AND_OVERLAPS,
         MaxStacks = 4

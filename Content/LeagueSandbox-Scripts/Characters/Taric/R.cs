@@ -26,9 +26,8 @@ public class TaricHammerSmash : ISpellScript {
         var dmg = 150f + 100f * (spell.CastInfo.SpellLevel - 1) + _taric.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         AddParticleTarget(_taric, _taric, "TaricHammerSmash_shatter", _taric);
         AddParticleTarget(_taric, _taric, "TaricHammerSmash_nova", _taric);
-        var enemies = GetUnitsInRange(_taric, _taric.Position, 375f, true,
-                                      SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                      SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=400, was hardcoded 375).
+        var enemies = GetUnitsHitBySpell(spell);
         foreach (var enemy in enemies) {
             AddParticleTarget(_taric, enemy, "Taric_GemStorm_Tar", enemy, size: 1.25f);
             enemy.TakeDamage(_taric, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,

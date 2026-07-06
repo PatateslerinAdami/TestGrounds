@@ -26,6 +26,7 @@ internal class JinxQ : IBuffGameScript {
     private          Buff      _buff;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
@@ -44,14 +45,23 @@ internal class JinxQ : IBuffGameScript {
         
         // Set correct animation states for Jinx with Fishbones
         _jinx.SetAnimStates(new Dictionary<string, string> {
-            { "idle1_base", "R_idle1_BASE" },
-            { "idle2_base", "R_idle2_BASE" },
-            { "idle3_base", "R_idle3_BASE" },
-            { "idle1", "R_idle1" },
-            { "run", "R_Run" },
-            { "run_base", "R_Run_BASE" },
-            { "attack1", "R_Attack1" },
-            { "attack2", "R_Attack2" }
+            { "RUN", "R_RUN" },
+            { "RUN2", "R_RUN2" },
+            { "RUN_FAST", "R_RUN_FAST" },
+            { "IDLE1", "R_IDLE1" },
+            { "IDLE2", "R_IDLE2" },
+            { "IDLE3", "R_IDLE3" },
+            { "DEATH", "R_DEATH" },
+            { "ATTACK1", "R_ATTACK1" },
+            { "ATTACK2", "R_ATTACK2" },
+            { "SPELL1", "R_SPELL1" },
+            { "SPELL2", "R_SPELL2" },
+            { "SPELL3", "R_SPELL3" },
+            { "SPELL3_RUN", "R_SPELL3_RUN" },
+            { "SPELL4", "R_SPELL4" },
+            { "TAUNT", "R_TAUNT" },
+            { "JOKE", "R_JOKE" },
+            { "LAUGH", "R_LAUGH" }
         });
 
         // Q rank range bonus: +75 then +25 per additional rank.
@@ -85,6 +95,9 @@ internal class JinxQ : IBuffGameScript {
 
         // Fishbones mana cost per Rocket.
         _jinx.Stats.CurrentMana -= 20f;
+        // Rocket impact FX — Riot spawns this server-side on every hit (replay: Jinx_Q_Rocket_tar.troy via
+        // FX_Create_Group, 220/221 hits). AA-override hit FX lives in the script (OnHitUnit), not the engine
+        // HitEffect path, which is gated off for auto-attacks (matches Kayle/Ashe/Jax/Malphite convention).
         AddParticleTarget(_jinx, data.Target, "Jinx_Q_Rocket_tar.troy", data.Target);
 
         // Splash damage around the primary target.

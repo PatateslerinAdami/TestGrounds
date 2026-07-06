@@ -68,6 +68,24 @@ namespace LeagueSandbox.GameServer.Content
             return obj ?? defaultValue;
         }
 
+        /// <summary>
+        /// Reads a value straight out of UNKNOWN_HASHES by its raw inibin key hash, bypassing the
+        /// (section, name) lookup. Used for fields whose Riot field name is not known — the inibin
+        /// stores keys as a 32-bit hash, and some keys (e.g. the form-changer alternate-spell block)
+        /// are absent from every available hash→name dictionary, so they can only be read by hash.
+        /// </summary>
+        public string GetStringByHash(uint hash, string defaultValue = "")
+        {
+            if (Values.ContainsKey("UNKNOWN_HASHES")
+                && Values["UNKNOWN_HASHES"].TryGetValue(hash.ToString(), out var value)
+                && !string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            return defaultValue;
+        }
+
         public float GetFloat(string section, string name, float defaultValue = 0)
         {
             var obj = GetObject(section, name);

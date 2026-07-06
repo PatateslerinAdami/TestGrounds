@@ -36,10 +36,12 @@ internal class SiegeCommander : IBuffGameScript {
             unit.AddStatModifier(StatsModifier);
         }
 
-        ApiEventManager.OnDealDamage.AddListener(this, unit, OnDealDamage);
+        // OnPreDealDamage (not OnDealDamage): OnDealDamage fires AFTER the HP subtraction, so the bonus
+        // was added too late and never reached health. OnPreDealDamage fires before HP (after mitigation).
+        ApiEventManager.OnPreDealDamage.AddListener(this, unit, OnPreDealDamage);
     }
 
-    private void OnDealDamage(DamageData data) {
+    private void OnPreDealDamage(DamageData data) {
         if (_owner == null) return;
         if (!IsValidTarget(_owner, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets)) return;
 

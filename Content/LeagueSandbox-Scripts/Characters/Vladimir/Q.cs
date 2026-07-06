@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -59,7 +58,7 @@ public class VladimirTansfusionHeal : ISpellScript
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
     
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         var transfusion = _vladimir.GetSpell("VladimirTransfusion");
         var ap = _vladimir.Stats.AbilityPower.Total * transfusion.SpellData.Coefficient2;

@@ -47,11 +47,11 @@ internal class TurretShield : IBuffGameScript {
         if (IsUnitInRange(_turret, _unit.Position, 1000f, true))
         {
             if (_vanguardAllyShield.Amount > 300f) return;
-            ApiEventManager.IncShield(_vanguardAllyShield, ShieldAmountPerSecond);
+            IncShield(_vanguardAllyShield, ShieldAmountPerSecond);
         }
         else
         {
-            ApiEventManager.ReduceShield(_vanguardAllyShield, ShieldAmountPerSecond);
+            ReduceShield(_vanguardAllyShield, ShieldAmountPerSecond);
         }
     }
 

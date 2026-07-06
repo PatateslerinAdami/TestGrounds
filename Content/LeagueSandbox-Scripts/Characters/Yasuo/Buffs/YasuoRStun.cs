@@ -10,19 +10,21 @@ namespace Buffs
 {
     internal class YasuoRStun : IBuffGameScript
     {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.STUN, BuffAddType = BuffAddType.REPLACE_EXISTING };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
+        {
+            PersistsThroughDeath = true, 
+            BuffType = BuffType.KNOCKUP, 
+            BuffAddType = BuffAddType.REPLACE_EXISTING
+        };
+
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanMove, false);
-            unit.SetStatus(StatusFlags.CanAttack, false);
-            unit.SetStatus(StatusFlags.CanCast, false);
         }
+
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanMove, true);
-            unit.SetStatus(StatusFlags.CanAttack, true);
-            unit.SetStatus(StatusFlags.CanCast, true);
         }
     }
 }

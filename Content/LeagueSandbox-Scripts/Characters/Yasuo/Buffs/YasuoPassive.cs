@@ -18,7 +18,8 @@ namespace Buffs
     {
         // Hidden carrier hosting the flow logic (replay: type AURA, IsHidden, permanent,
         // never updated, the visible flow meter lives on YasuoPassiveMSCharge).
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData { BuffType = BuffType.AURA, IsHidden = true };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData {
+            PersistsThroughDeath = true, BuffType = BuffType.AURA, IsHidden = true };
         public StatsModifier StatsModifier { get; set; } = new StatsModifier();
 
         private Vector2 _lastPos;

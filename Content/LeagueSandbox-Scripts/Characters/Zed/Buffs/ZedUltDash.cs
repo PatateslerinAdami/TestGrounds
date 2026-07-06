@@ -94,7 +94,7 @@ internal class ZedUltDash : IBuffGameScript {
         _zedRShadowHandler?.SpawnShadow(_zed.Position, _target.Position);
         HideHealthBar(_zed, -1, true);
         _zed.UpdateMoveOrder(OrderType.Stop);
-        _zed.SetStatus(StatusFlags.Rooted,     true);
+        _zed.SetStatus(StatusFlags.CanMove,    false); // (was Rooted) — M2
         _zed.SetStatus(StatusFlags.Ghosted,    true);
         _zed.SetStatus(StatusFlags.Targetable, false);
         _zed.SetStatus(StatusFlags.CanAttack, false);
@@ -117,11 +117,11 @@ internal class ZedUltDash : IBuffGameScript {
             }
         }
 
-        if (_pendingPostTargetDash && !_dashResolved && !_cancelledByOwnerDeath && _zed.MovementParameters == null) {
+        if (_pendingPostTargetDash && !_dashResolved && !_cancelledByOwnerDeath && !_zed.IsForceMoved) {
             _pendingPostTargetDash = false;
             _postTargetDashStarted = true;
             StartShadowPostTargetDash();
-            _zed.DashToLocation(_pendingPostTargetDashEndPoint, DashSpeed, "zed_spell4_strike");
+            ForceMove(_zed, _pendingPostTargetDashEndPoint, DashSpeed);
         }
 
         if (_stepCount >= MaxStepCount || _dashResolved) return;
@@ -148,7 +148,7 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion1.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow1(ultMinion1);
         FaceDirection(_target.Position, ultMinion1, true);
-        ultMinion1.DashToTarget(_target, DashSpeed, "zed_spell4_strike", followTargetMaxDistance: TargetTrackBreakDistance);
+        ForceMoveToUnit(ultMinion1, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion1, "Zed_R_Dash", ultMinion1);
 
         var ultMinion2 = AddMinion(_zed, "ZedShadow", "ZedRShadow", GetPositionByOffset(-60f, 600f), _zed.Team, _zed.SkinID,
@@ -158,7 +158,7 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion2.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow2(ultMinion2);
         FaceDirection(_target.Position, ultMinion2, true);
-        ultMinion2.DashToTarget(_target, DashSpeed, "zed_spell4_strike", followTargetMaxDistance: TargetTrackBreakDistance);
+        ForceMoveToUnit(ultMinion2, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion2, "Zed_R_Dash", ultMinion2);
 
         var ultMinion3 = AddMinion(_zed, "ZedShadow", "ZedRShadow", GetPositionByOffset(-180f, 600f), _zed.Team, _zed.SkinID,
@@ -168,10 +168,10 @@ internal class ZedUltDash : IBuffGameScript {
         ultMinion3.SetStatus(StatusFlags.CanAttack, false);
         shadowAnimationBuff.AddShadow3(ultMinion3);
         FaceDirection(_target.Position, ultMinion3, true);
-        ultMinion3.DashToTarget(_target, DashSpeed, "zed_spell4_strike", followTargetMaxDistance: TargetTrackBreakDistance);
+        ForceMoveToUnit(ultMinion3, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         AddParticleTarget(_zed, ultMinion3, "Zed_R_Dash", ultMinion3);
 
-        _zed.DashToTarget(_target, DashSpeed, "zed_spell4_strike", followTargetMaxDistance: TargetTrackBreakDistance);
+        ForceMoveToUnit(_zed, _target, DashSpeed, followMaxDistance: TargetTrackBreakDistance);
         ApiEventManager.OnMoveSuccess.AddListener(this, _zed, OnMoveSuccess);
         ApiEventManager.OnMoveFailure.AddListener(this, _zed, OnMoveFailure);
         _stepCount++;
@@ -181,7 +181,7 @@ internal class ZedUltDash : IBuffGameScript {
         RemoveBuff(_zed, "ZedDashCloneMaker");
         _zed.SetStatus(StatusFlags.NoRender, false);
         HideHealthBar(_zed, -1, false);
-        _zed.SetStatus(StatusFlags.Rooted, false);
+        _zed.SetStatus(StatusFlags.CanMove, true); // (was Rooted) — M2
         if (!_zed.IsDead) {
             _zed.SetStatus(StatusFlags.Targetable, true);
             _zed.SetStatus(StatusFlags.CanAttack, true);
@@ -257,8 +257,8 @@ internal class ZedUltDash : IBuffGameScript {
         _cancelledByOwnerDeath = true;
         _dashResolved          = true;
 
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.Death);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.Death);
         }
 
         RemoveRShadow();
@@ -288,8 +288,8 @@ internal class ZedUltDash : IBuffGameScript {
         _dashInterrupted = true;
         _dashResolved    = true;
 
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.HeroReincarnate);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.HeroReincarnate);
         }
 
         _buff.DeactivateBuff();
@@ -337,10 +337,10 @@ internal class ZedUltDash : IBuffGameScript {
                                               ZedDashForwardDistance);
 
         _ignoreNextMoveFailure = true;
-        if (_zed.MovementParameters != null) {
-            _zed.SetDashingState(false, MoveStopReason.ForceMovement);
+        if (_zed.IsForceMoved) {
+            _zed.SetForceMovementState(false, MoveStopReason.ForceMovement);
         }
-        _zed.DashToLocation(endPoint, DashSpeed, "zed_spell4_strike");
+        ForceMove(_zed, endPoint, DashSpeed);
     }
 
     private void StartShadowPostTargetDash() {
@@ -356,8 +356,8 @@ internal class ZedUltDash : IBuffGameScript {
     private void StartShadowPostTargetDash(Minion shadow, Vector2 dashCastPosition) {
         if (shadow == null || shadow.IsDead) return;
 
-        if (shadow.MovementParameters != null) {
-            shadow.SetDashingState(false, MoveStopReason.ForceMovement);
+        if (shadow.IsForceMoved) {
+            shadow.SetForceMovementState(false, MoveStopReason.ForceMovement);
         }
 
         var finalDashEndPoint = GetFinalDashEndPoint(shadow, dashCastPosition);
@@ -368,7 +368,7 @@ internal class ZedUltDash : IBuffGameScript {
             return;
         }
 
-        shadow.DashToLocation(finalDashEndPoint, DashSpeed, "zed_spell4_strike");
+        ForceMove(shadow, finalDashEndPoint, DashSpeed);
         ScheduleShadowCleanup(shadow, dashDistance / DashSpeed);
     }
 

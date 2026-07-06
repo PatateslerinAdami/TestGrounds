@@ -42,7 +42,7 @@ public class KarmaSolKimShieldLocket : IBuffGameScript {
         _unit  = unit;
         var ap    = _karma.Stats.AbilityPower.Total * 0.45f;
         _shieldHealth  = 60f + 30 * (_karma.GetSpell("KarmaSolKimShield").CastInfo.SpellLevel - 1) + ap;
-        _solKimShieldLocket = new Shield(_karma, _karma, true, true, _shieldHealth);
+        _solKimShieldLocket = new Shield(_karma, _karma, true, true, _shieldHealth, buff);
         _particle3 = AddParticleTarget(_karma,_karma, "Karma_Base_E_shield_R_01",_karma,buff.Duration, size: _karma.Stats.Size.Total, bone: "C_BUFFBONE_GLB_CENTER_LOC");
         _particle2 = AddParticleTarget(_karma,_karma,"Karma_Base_E_speed_buf", _karma, buff.Duration, size: _karma.Stats.Size.Total);
         _particle1 = AddParticleTarget(_karma,_unit, "Karma_Base_E_shield_01",_unit,buff.Duration, size: _karma.Stats.Size.Total, "C_BUFFBONE_GLB_CENTER_LOC");

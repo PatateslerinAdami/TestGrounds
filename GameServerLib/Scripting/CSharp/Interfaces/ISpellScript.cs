@@ -53,9 +53,40 @@ namespace GameServerCore.Scripting.CSharp
         {
         }
 
+        // === CHARGE pipeline (UseChargeChanneling=1 spells, e.g. Varus Q) ===
+        // For charge-style spells the engine fires these INSTEAD of the OnSpellChannel* family.
+        // Routing: Spell pipeline checks SpellData.UseChargeChanneling and publishes the
+        // charge-specific event when true.
+
+        // Charge begins (analogous to OnSpellChannel). Particle/buff/animation setup goes here.
+        void OnSpellChargeStart(Spell spell)
+        {
+        }
+
+        // Per-server-tick during charge (analogous to OnSpellChannelUpdate). Charge-entry call
+        // passes diff=0f synchronous with OnSpellChargeStart. Scripts use this for periodic FX
+        // or charge-progress reactions.
+        void OnSpellChargeTick(Spell spell, float diff)
+        {
+        }
+
+        // Charge complete — player released OR max charge time elapsed. Missile fire goes here.
+        // Engine handles the wire-side fire (re-broadcast NPC_CastSpellAns with Unknown1=true) so
+        // the script's job is just spawning the actual missile + cleanup.
+        void OnSpellChargeFire(Spell spell)
+        {
+        }
+
+        // Real interrupt (stun/silence/death/casting-another-spell). NOT called on normal fire-release;
+        // the release-path goes through OnSpellChargeFire instead. Scripts use this for charge-cleanup
+        // (remove charge particles, refund mana, etc).
+        void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
+        {
+        }
+
         // Fires when the client sends C2S_SpellChargeUpdateReq during a channel e.g. player adjusting
-        // aim/charge target. NOT time-driven (use OnSpellChannelUpdate for that). `forceStop`=true
-        // signals button release; engine cancels the channel right after this hook returns.
+        // aim/charge target. NOT time-driven (use OnSpellChargeTick for that). `forceStop`=true
+        // signals button release; engine fires OnSpellChargeFire right after this hook returns.
         void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
         }

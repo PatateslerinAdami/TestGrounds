@@ -10,8 +10,7 @@ namespace CharScripts
     {
         public void OnActivate(ObjAIBase owner, Spell spell = null)
         {
-            SetStatus(owner, StatusFlags.Rooted, true);
-            SetStatus(owner, StatusFlags.CanMove, false);
+            SetStatus(owner, StatusFlags.CanMove, false); // (was Rooted + CanMove; Rooted was redundant) — M2
             SetStatus(owner, StatusFlags.Ghosted, true);
             SetStatus(owner, StatusFlags.Targetable, false);
             SetStatus(owner, StatusFlags.SuppressCallForHelp, true);

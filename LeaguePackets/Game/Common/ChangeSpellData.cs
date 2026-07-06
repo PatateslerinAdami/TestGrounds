@@ -10,6 +10,16 @@ namespace LeaguePackets.Game.Common
         public abstract ChangeSlotSpellDataType ChangeSlotSpellDataType { get; }
         public byte SpellSlot { get; set; }
         public bool IsSummonerSpell { get; set; }
+        /// <summary>
+        /// Remaining bitfield bits beyond IsSummonerSpell (bit 0). DECODED 2026-07-05 from the
+        /// 4.20 client exe (handler at 0x65bc10): the client does `and al, 0x1` — it reads ONLY
+        /// bit 0; all other bits are IGNORED. Riot's wire still carries nonzero garbage here
+        /// (Sion W replay: 0x6E arming the override spell, 0x0E restoring — presumably
+        /// uninitialized server-side struct bytes, same phenomenon as the AnimationFlags
+        /// Junk5-7 bits). We replicate the observed values purely for byte-exact wirecompare;
+        /// they have zero client effect.
+        /// </summary>
+        public byte ExtraFlags { get; set; }
 
         public abstract void ReadBodyInternal(ByteReader reader);
         public abstract void WriteBodyInternal(ByteWriter writer);
@@ -25,6 +35,7 @@ namespace LeaguePackets.Game.Common
 
             byte bitfield = reader.ReadByte();
             bool isSummonerSpell = (bitfield & 0x01) != 0;
+            byte extraFlags = (byte)(bitfield & ~0x01);
 
             ChangeSlotSpellDataType type = (ChangeSlotSpellDataType)reader.ReadUInt32();
             switch (type)
@@ -57,6 +68,7 @@ namespace LeaguePackets.Game.Common
 
             data.SpellSlot = spellSlot;
             data.IsSummonerSpell = isSummonerSpell;
+            data.ExtraFlags = extraFlags;
             data.ReadBodyInternal(reader);
             return data;
         }
@@ -64,7 +76,7 @@ namespace LeaguePackets.Game.Common
         {
             writer.WriteByte(data.SpellSlot);
 
-            byte bitfield = 0;
+            byte bitfield = (byte)(data.ExtraFlags & ~0x01);
             if (data.IsSummonerSpell)
                 bitfield |= 0x01;
 
@@ -113,7 +125,11 @@ namespace LeaguePackets.Game.Common
         }
         public override void WriteBodyInternal(ByteWriter writer)
         {
-            writer.WriteFixedStringLast(SpellName, 128);
+            // Riot sends the name VARIABLE-length + single null terminator (replay: Sion W swap
+            // packets are 25/17 bytes total), not padded to 128. The client reads a C-string.
+            var bytes = System.Text.Encoding.UTF8.GetBytes(SpellName ?? "");
+            writer.WriteBytes(bytes);
+            writer.WriteByte(0);
         }
     }
 

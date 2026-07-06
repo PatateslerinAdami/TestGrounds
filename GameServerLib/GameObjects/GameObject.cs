@@ -95,8 +95,30 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public float VisionRadius { get; protected set; }
 
+        // Per-object vision-radius SCALE (S4 Riot::Region::GetSizeModifiersBasedOnAttachment ->
+        // AttackableUnit::GetVisionScale). The effective vision radius is
+        //   VisionRadius * VisionScaleMultiplier + VisionScaleAdditive
+        // mirroring S4 CircleRegion::GetActualRadius() = mRadius * mult + add (Region.cpp:425).
+        // Base GameObject has no scale (mult=1, add=0); AttackableUnit overrides to apply
+        // vision-range buff/item bonuses (obj_AI_Base::GetVisionScale = 1+pct, flat). Vision
+        // queries (ObjectManager) use GetEffectiveVisionRadius() so dynamic vision bonuses take
+        // effect without re-baking VisionRadius.
+        public virtual float VisionScaleMultiplier => 1f;
+        public virtual float VisionScaleAdditive => 0f;
+        public float GetEffectiveVisionRadius() => VisionRadius * VisionScaleMultiplier + VisionScaleAdditive;
+
+
         public virtual bool IsAffectedByFoW => false;
         public virtual bool SpawnShouldBeHidden => false;
+
+        /// <summary>
+        /// Whether this object auto-registers as a team vision provider on spawn / team change.
+        /// Wards opt out (see <see cref="Minion.IsWard"/>): a ward's vision comes solely from an
+        /// explicit perception-bubble Region, so the per-ward radius and reveal-stealth live in one
+        /// place. This matches Riot, where a ward's vision IS its networked region (bound to the
+        /// ward unit) rather than the unit's intrinsic perception — and avoids double-providing.
+        /// </summary>
+        public virtual bool AutoProvidesVision => true;
 
         /// <summary>
         /// Instantiation of an object which represents the base class for all objects in League of Legends.
@@ -137,7 +159,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         public virtual void OnAdded()
         {
             _game.Map.CollisionHandler.AddObject(this);
-            _game.ObjectManager.AddVisionProvider(this, Team);
+            if (AutoProvidesVision)
+            {
+                _game.ObjectManager.AddVisionProvider(this, Team);
+            }
         }
 
         /// <summary>
@@ -190,7 +215,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Mostly used for packets.
         /// </summary>
         /// <returns>Vector3 position.</returns>
-        public Vector3 GetPosition3D()
+        public virtual Vector3 GetPosition3D()
         {
             return new Vector3(Position.X, GetHeight(), Position.Y);
         }
@@ -359,7 +384,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         {
             _game.ObjectManager.RemoveVisionProvider(this, Team);
             Team = team;
-            _game.ObjectManager.AddVisionProvider(this, Team);
+            if (AutoProvidesVision)
+            {
+                _game.ObjectManager.AddVisionProvider(this, Team);
+            }
             if (_game.IsRunning)
             {
                 _game.PacketNotifier.NotifySetTeam(this as AttackableUnit);

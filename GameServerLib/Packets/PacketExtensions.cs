@@ -11,6 +11,55 @@ namespace PacketDefinitions420
 {
     public static class PacketExtensions
     {
+        private static long _movementSyncEpochMs = -1;
+
+        /// <summary>
+        /// The single shared server-side "sync clock" stamped into EVERY syncID-bearing wire field.
+        /// Replay a6db3774 (decoded 2026-06-20) shows Riot reads ONE per-client, session-relative
+        /// monotonic clock for all of them — WaypointGroup (0x61) / WaypointGroupWithSpeed (0x64) /
+        /// WaypointListHeroWithSpeed (0x83) headers, the MovementData embedded in the spawn
+        /// OnEnterVisibilityClient (0xBA) via WriteMovementDataWithHeader, the NPC_CastSpellAns
+        /// casterPosSyncID, AND OnReplication (0xC4). Proof they share one clock: in the replay the
+        /// OnReplication and WaypointGroup syncIDs interleave at the same magnitude (rep=682 @t=125640
+        /// vs wp=697 @t=125706) and both advance ~0.67/ms even while idle, both starting at ~0 on
+        /// client join.
+        ///
+        /// The clock is ~2/3 per millisecond. We reproduce its SHAPE with a global clock that starts
+        /// at ~0 on the first packet (= game start for our single-game-per-process server, where
+        /// game-relative == session-relative because all clients join at start) and scales elapsed ms
+        /// by 2/3. A single global value is mandatory because BroadcastPacketVision serializes one
+        /// packet for all viewers (a true per-client origin would need per-client serialization).
+        ///
+        /// Several of these feed the SAME per-object client gate (AIManager_Client::CanSyncUpdate —
+        /// the 3 callers are WaypointGroup, Pause/Stop and CastSpell's casterPosSyncID): a packet is
+        /// dropped unless its syncID >= the last that object saw. So mixing scales is a real bug, not
+        /// just cosmetics: e.g. a huge TickCount casterPosSyncID followed by small WaypointGroup
+        /// values poisons mSyncID and the client drops every post-cast move order ("can't move after
+        /// casting"). OnReplication uses its OWN separate gate variables (mSyncIDClientOnly etc.) so
+        /// its scale can't break movement — but it samples the same clock on the wire, so we keep it
+        /// here for fidelity. Behaviour is identical to any monotonic source; the value choice is
+        /// cosmetic, the SINGLE-SOURCE rule is not. See docs/LANE_MINION_WIRE_VERIFICATION.md.
+        /// </summary>
+        public static int WireSyncID
+        {
+            get
+            {
+                long now = Environment.TickCount64;
+                if (_movementSyncEpochMs < 0)
+                {
+                    _movementSyncEpochMs = now;
+                }
+                // Mask to 31 bits so the value stays NON-NEGATIVE for unbounded uptime. Without this the
+                // (int) cast of the scaled elapsed-ms goes negative once it exceeds int.MaxValue (~37 days
+                // of continuous uptime), which breaks the monotonicity CanSyncUpdate demands → the client
+                // would drop all movement. Masking instead wraps cleanly 2^31-1 → 0; that single backward
+                // step is ~2^31, well past the client's 0x40000000 wrap tolerance, so it is accepted and
+                // monotonicity resumes from 0. (64-bit TickCount64 already avoids the 24.8-day signed-ms
+                // wrap; this guards the final 32-bit projection.)
+                return (int)(((now - _movementSyncEpochMs) * 2 / 3) & 0x7FFFFFFFL);
+            }
+        }
+
         /// <summary>
         /// Converts the given list of Vector2s into a list of CompressedWaypoints compatible with LeaguePackets, which are Vector2s with their origin at the center of the map.
         /// </summary>
@@ -76,7 +125,7 @@ namespace PacketDefinitions420
         {
             return new MovementDataStop
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 Position = o.Position,
                 Forward = new Vector2(o.Direction.X, o.Direction.Z)
             };
@@ -103,9 +152,47 @@ namespace PacketDefinitions420
             // Building the list explicitly from CurrentWaypointKey forward keeps it [Position] (=
             // stationary) once the path is done.
             var result = new List<Vector2> { unit.Position };
+
+            // Waypoint budget. Champions carry their FULL remaining route every broadcast (they are
+            // event-driven; the client walks autonomously until the next real change — see the
+            // 2026-06-08 "stopped then teleported" fix). Fresh orders (FullPathBroadcastPending)
+            // always send full.
+            //
+            // Non-champions: DISTANCE-based runway (2026-07-05, tt122 "client minions are somewhere
+            // completely different"). The old Position+3 waypoint-count trim was calibrated to the
+            // 100u keepalive streamer ("3 lookahead always covers the gap") and broke SILENTLY
+            // twice: the keepalive stride was raised (100→325→650 experiments) and the SmoothPath
+            // port's SubdividePath shortened waypoint spacing to ~85-170u near the path start —
+            // 3 waypoints ≈ 250-500u of runway vs a 650u anchor stride. The client copy RAN OUT of
+            // path mid-window, stood, and was teleported forward by the next re-anchor — measured
+            // as a uniform 145.9u worst-yank on EVERY minion (stand → teleport → stand, hugely
+            // visible). The runway must always exceed the largest non-champion keepalive stride
+            // (NONCHAMPION_KEEPALIVE, plus margin for timing jitter) — expressed as DISTANCE so
+            // neither future keepalive tuning nor waypoint-density changes can silently break the
+            // invariant again. Riot's minion legs always reach the next lane node (776-1341u
+            // measured), so the client never runs dry there either.
+            const float NonChampionRunway = 800f;
+            // LaneMinions send the FULL remaining route (2026-07-05, wobble invention audit):
+            // Riot sends the full leg to the node (776-1341u measured), and their 650u travel
+            // keepalive (see AttackableUnit) must be a pure same-path re-anchor — carrying the
+            // whole remaining leg keeps every re-anchor identical in shape to the original
+            // issue (wp0 re-seeded, rest unchanged) and the client can never run its path dry
+            // between anchors regardless of future cadence tuning.
+            bool needsFullRoute = unit.FullPathBroadcastPending
+                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Champion
+                || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.LaneMinion;
+            float runway = 0f;
+            Vector2 prev = unit.Position;
             for (int i = unit.CurrentWaypointKey; i < unit.Waypoints.Count; i++)
             {
-                result.Add(unit.Waypoints[i]);
+                if (!needsFullRoute && runway >= NonChampionRunway)
+                {
+                    break;
+                }
+                Vector2 w = unit.Waypoints[i];
+                runway += Vector2.Distance(prev, w);
+                prev = w;
+                result.Add(w);
             }
             return result.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
         }
@@ -121,7 +208,7 @@ namespace PacketDefinitions420
         {
             return new MovementDataNormal
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
@@ -156,7 +243,7 @@ namespace PacketDefinitions420
 
             return new MovementDataWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = WireSyncID,
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
@@ -170,33 +257,8 @@ namespace PacketDefinitions420
                     Facing = unit.MovementParameters.KeepFacingDirection,
                     FollowNetID = unit.MovementParameters.FollowNetID,
                     FollowDistance = unit.MovementParameters.FollowDistance,
-                    FollowBackDistance = unit.MovementParameters.FollowBackDistance,
+                    MoveBackBy = unit.MovementParameters.MoveBackBy,
                     FollowTravelTime = unit.MovementParameters.FollowTravelTime
-                }
-            };
-        }
-        public static MovementDataWithSpeed CreateCustomMovementDataWithSpeed(AttackableUnit unit, NavigationGrid grid, Vector2 targetPos, float speed, float gravity, Vector2 parabolicStartPoint)
-        {
-            var waypoints = new List<Vector2> { parabolicStartPoint, unit.Position };
-            var compressedWaypoints = waypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
-
-            return new MovementDataWithSpeed
-            {
-                SyncID = Environment.TickCount,
-                TeleportNetID = unit.NetId,
-                HasTeleportID = false,
-                TeleportID = 0,
-                Waypoints = compressedWaypoints,
-                SpeedParams = new SpeedParams
-                {
-                    PathSpeedOverride = speed,
-                    ParabolicGravity = gravity,
-                    ParabolicStartPoint = parabolicStartPoint, 
-                    Facing = false,
-                    FollowNetID = 0,
-                    FollowDistance = 0,
-                    FollowBackDistance = 0,
-                    FollowTravelTime = 0
                 }
             };
         }

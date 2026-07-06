@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -73,7 +72,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle,
+                Type = MissileType.Arc,
             },
             IsDamagingSpell = true,
         };
@@ -91,13 +90,13 @@ namespace Spells
 
         public void OnMissileEnd(SpellMissile missile)
         {
-            if (missile is SpellCircleMissile circleMissile && circleMissile.ObjectsHit.Count == 0)
+            if (missile.ObjectsHit.Count == 0)
             {
                 missile.CastInfo.Owner.StopAnimation("Spell1_IN", StopAnimationFlags.Fade | StopAnimationFlags.IgnoreLock);
             }
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             var owner = spell.CastInfo.Owner;
             target.TakeDamage(owner, 80f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, spell);
@@ -148,7 +147,7 @@ namespace Spells
             if ((distance > 300f && secondTug) || !secondTug)
             {
                 var pullPosition = target.Position + (dir * 150f);
-                target.DashToLocation(pullPosition, 1000f, "RUN", consideredCC: true);
+                ForceMove(target, pullPosition, 1000f);
             }
         }
     }
@@ -174,7 +173,7 @@ namespace Spells
             if (hookedTarget != null && Vector2.Distance(owner.Position, hookedTarget.Position) <= 3000f)
             {
 
-                owner.DashToTarget(hookedTarget, 1000f, "Spell1_Dash", consideredCC: false, keepFacingLastDirection: false);
+                ForceMoveToUnit(owner, hookedTarget, 1000f, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
                 ApiEventManager.OnMoveEnd.AddListener(this, owner, (unit, movementParams) =>
                 {
                     if (reg != null && !reg.IsToRemove())

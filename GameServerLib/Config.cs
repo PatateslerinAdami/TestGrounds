@@ -271,14 +271,49 @@ public class MapData
     public float LevelDifferenceExpMultiple { get; set; }
     public float MinimumExpMultiple { get; set; }
     /// <summary>
-    /// Amount of time death should last depending on level.
+    /// Amount of time death should last depending on level (TimeDeadPerLevel, 1-based:
+    /// index 0 = Level01). Query through <see cref="GetDeathTime"/>.
     /// </summary>
     public List<float> DeathTimes { get; private set; }
+    /// <summary>
+    /// Late-game death-timer scaling (DeathTimeScaling section of the map's DeathTimes file):
+    /// after StartTime seconds of game time, the base death time scales by PercentIncrease per
+    /// full IncrementTime elapsed, capped at PercentCap (a multiplier cap, e.g. 1.5 = ×1.5).
+    /// Map1: 1500/60, Map11: 2100/30, Map12: 1440/60 ×1.25 (client inibins, patch 4.20).
+    /// </summary>
+    public int DeathTimeScalingStartTime { get; set; }
+    public int DeathTimeScalingIncrementTime { get; set; }
+    public float DeathTimeScalingPercentIncrease { get; set; }
+    public float DeathTimeScalingPercentCap { get; set; }
     /// <summary>
     /// Potential progression of stats per-level of jungle monsters.
     /// </summary>
     /// TODO: Figure out what this is and how to implement it.
     public List<float> StatsProgression { get; private set; }
+
+    /// <summary>
+    /// Item ids that cannot be purchased in this map's shop (Items.inibin "UnpurchasableItemList").
+    /// Faithful to the client: ItemArray::CreateItemInstnace sets mbIsPurchasable=false for any id in
+    /// this set, and ItemShopFoundry rejects the buy (mac 4.17 decomp). This is the ALWAYS-active base
+    /// list; per-mode "UnpurchasableItemList_&lt;mutator&gt;" categories live in <see cref="ModeUnpurchasableItems"/>.
+    /// </summary>
+    public HashSet<int> UnpurchasableItems { get; private set; }
+
+    /// <summary>
+    /// Per-mutator unpurchasable-item categories from Items.inibin ("UnpurchasableItemList_ASCENSION",
+    /// "_ARAM", ...), keyed by mutator name. The client only applies these when the matching mutator is
+    /// in <c>GameStartData::GetMutators()</c>. We have no mutator system yet, so these are parsed and
+    /// stored but NOT gated on — wire them in once mutators/game-modes exist (e.g. Map8 = ODIN).
+    /// </summary>
+    public Dictionary<string, HashSet<int>> ModeUnpurchasableItems { get; private set; }
+
+    /// <summary>
+    /// Item ids in this map's "ItemInclusionList". NOTE: this is a shop-DISPLAY (mInStore) gate that the
+    /// client only honors when it_UseExplicitItemInclusion (a CVar, off by default) or tutorial mode is
+    /// set — it is NOT a purchase gate in normal play (mac 4.17 decomp, ItemArray.cpp:341/426). Stored for
+    /// completeness; do not reject buys based on it.
+    /// </summary>
+    public HashSet<int> ItemInclusionList { get; private set; }
 
     public MapData(int mapId)
     {
@@ -289,6 +324,79 @@ public class MapData
         ExpCurve = new List<float>();
         DeathTimes = new List<float>();
         StatsProgression = new List<float>();
+        UnpurchasableItems = new HashSet<int>();
+        ModeUnpurchasableItems = new Dictionary<string, HashSet<int>>();
+        ItemInclusionList = new HashSet<int>();
+    }
+
+    /// <summary>
+    /// Populates the per-map shop item lists from a converted Items.inibin (Items.json) ContentFile.
+    /// Mirrors ItemArray::CreateItemInstnace (mac 4.17): the base "UnpurchasableItemList" is always
+    /// active (=> not buyable); "UnpurchasableItemList_&lt;mutator&gt;" categories are stored per mode but
+    /// only take effect once a mutator system applies them; "ItemInclusionList" is a display gate the
+    /// client honors only under it_UseExplicitItemInclusion/tutorial, so it is stored but never gated.
+    /// </summary>
+    public void LoadItemLists(ContentFile itemsFile)
+    {
+        const string unpurchasablePrefix = "UnpurchasableItemList_";
+        foreach (var section in itemsFile.Values.Keys)
+        {
+            if (section.Equals("UnpurchasableItemList", StringComparison.OrdinalIgnoreCase))
+            {
+                AddItemIds(itemsFile.Values[section], UnpurchasableItems);
+            }
+            else if (section.StartsWith(unpurchasablePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var mode = section.Substring(unpurchasablePrefix.Length);
+                var set = new HashSet<int>();
+                AddItemIds(itemsFile.Values[section], set);
+                ModeUnpurchasableItems[mode] = set;
+            }
+            else if (section.Equals("ItemInclusionList", StringComparison.OrdinalIgnoreCase))
+            {
+                AddItemIds(itemsFile.Values[section], ItemInclusionList);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Parses "Item0", "Item1", ... string entries into <paramref name="target"/> as ints, skipping
+    /// non-numeric and 0 ids (0 is the client's end-of-list terminator in ReadCFG_I).
+    /// </summary>
+    private static void AddItemIds(Dictionary<string, string> entries, HashSet<int> target)
+    {
+        foreach (var value in entries.Values)
+        {
+            if (int.TryParse(value, out var id) && id != 0)
+            {
+                target.Add(id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Base death time in seconds for a champion of the given level at the given game time.
+    /// Faithful port of AIHeroDeathTimer::Manager::DeathTimes::GetDeathTime (4.17 mac decomp):
+    /// TimeDeadPerLevel is 1-based (Level01 = level 1), the scaling increment count is floored,
+    /// and PercentCap caps the multiplier itself. Replay-verified against 4.20.0.319 Map11
+    /// (rlp c3a95050: 95/104 hero deaths fit exactly incl. the ×1.5 cap at 75s; the misses are
+    /// level-tracking gaps of the analysis, all offset by exactly one level).
+    /// </summary>
+    public float GetDeathTime(int level, float gameTimeSeconds)
+    {
+        if (DeathTimes.Count == 0)
+        {
+            return 0.0f;
+        }
+
+        float deathTime = DeathTimes[Math.Clamp(level - 1, 0, DeathTimes.Count - 1)];
+        if (DeathTimeScalingStartTime > 0 && DeathTimeScalingIncrementTime > 0
+            && gameTimeSeconds > DeathTimeScalingStartTime)
+        {
+            int increments = (int)((gameTimeSeconds - DeathTimeScalingStartTime) / DeathTimeScalingIncrementTime);
+            deathTime *= Math.Min(1.0f + DeathTimeScalingPercentIncrease * increments, DeathTimeScalingPercentCap);
+        }
+        return deathTime;
     }
 }
 

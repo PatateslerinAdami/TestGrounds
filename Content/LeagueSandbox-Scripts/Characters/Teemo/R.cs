@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net.Repository.Hierarchy;
@@ -118,8 +117,7 @@ public class BantamTrap : ISpellScript {
 
         _bounceCounter += 1;
         // dash/bounce to new location
-        _noxiousTrap.DashToLocation(nextPos, 1000f, leapGravity: 50f,
-                                    keepFacingLastDirection: false, consideredCC: false);
+        ForceMove(_noxiousTrap, nextPos, 1000f, gravity: 50f, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, lockActions: false);
 
         
     }

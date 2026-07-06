@@ -16,6 +16,7 @@ namespace Buffs;
 
 public class JaxPassive  : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.STACKS_AND_RENEWS,
         MaxStacks   = 3,

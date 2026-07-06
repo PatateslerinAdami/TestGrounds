@@ -17,6 +17,7 @@ namespace Buffs;
 public class UdyrPassiveBuff : IBuffGameScript {
     private ObjAIBase _udyr;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

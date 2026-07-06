@@ -97,7 +97,13 @@ namespace LeagueSandbox.GameServer.Inventory
             
             MoveSpeed.FlatBonus = file.GetFloat("Data", "FlatMovementSpeedMod");
             MoveSpeed.PercentBonus = file.GetFloat("Data", "PercentMovementSpeedMod");
-            
+
+            // Tenacity (CC-duration reduction) feeds the Item bucket, which combines by MAX across all
+            // equipped tenacity items — so Mercury's Treads + Moonflair/Zephyr grant it only once (highest
+            // wins), matching Riot's shared-unique-passive behavior. Slow resist reduces slow MAGNITUDE
+            // (separate axis from tenacity's duration cut). See docs/TENACITY_IMPLEMENTATION_PLAN.md.
+            TenacityItem = file.GetFloat("Data", "PercentTenacityItemMod");
+            SlowResistPercent = file.GetFloat("Data", "PercentSlowResistMod");
 
             //itemInfo.SafeGetFloat("Data", "PercentEXPBonus"); // TODO
 

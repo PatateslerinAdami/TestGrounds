@@ -17,6 +17,13 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, AutoAttackOptionRequest req)
         {
+            // Store the player's "Auto Acquire Target" option (was previously discarded). Mirrors
+            // Riot's PushAutoAcquireTargetToServer → server-side IsAutoAcquireTargetEnabled gate.
+            var champion = _game.PlayerManager.GetPeerInfo(userId)?.Champion;
+            if (champion != null)
+            {
+                champion.AutoAcquireTargetEnabled = req.Activated;
+            }
             return true;
         }
     }

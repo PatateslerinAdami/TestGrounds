@@ -19,7 +19,7 @@ public class CharScriptMordekaiser : ICharScript {
         ApiEventManager.OnLevelUp.AddListener(this, owner, OnLevelUp);
         ApiEventManager.OnResurrect.AddListener(this, owner, OnResurrect);
         ApiEventManager.OnDeath.AddListener(this, owner, OnDeath);
-        AddBuff("MorderkaiserIronMan", 25000f, 1, spell, _mordekaiser, _mordekaiser, true);
+        AddBuff("MordekaiserIronMan", 25000f, 1, spell, _mordekaiser, _mordekaiser, true);
         _mordekaiser.SpendPAR(_mordekaiser.GetPAR());
     }
 

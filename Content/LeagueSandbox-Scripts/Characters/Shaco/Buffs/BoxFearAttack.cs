@@ -33,12 +33,10 @@ namespace Buffs
             if (boxMinion == null) return;
             boxMinion.Stats.ManaPoints.BaseValue = 5.0f;
             boxMinion.Stats.CurrentMana = 5f;
-            boxMinion.SetStatus(StatusFlags.Invulnerable, false);
 
-            if (!boxMinion.IsDead)
-            {
-                CheckForTargets(boxMinion);
-            }
+            // Target selection + the ShacoBoxSpell attack-cast are owned by ShacoBoxAI (the box's
+            // AiScript) — this buff only marks the box "active" (ShacoBoxAI gates on it), applies the
+            // fear pulse below, and runs the mana/lifetime death in OnUpdate.
 
             var units = EnumerateValidUnitsInRange(boxMinion, boxMinion.Position, 500f, true,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
@@ -60,18 +58,6 @@ namespace Buffs
                 return;
             }
 
-            if (!boxMinion.IsAttacking)
-            {
-                CheckForTargets(boxMinion);
-            }
-
-            if (boxMinion.TargetUnit != null &&
-                Vector2.DistanceSquared(boxMinion.Position, boxMinion.TargetUnit.Position) >
-                (boxMinion.Stats.Range.Total * boxMinion.Stats.Range.Total))
-            {
-                boxMinion.SetTargetUnit(null, true);
-            }
-
             _manaTimer += diff;
             if (_manaTimer >= 1000f)
             {
@@ -85,49 +71,5 @@ namespace Buffs
             }
         }
 
-        public void CheckForTargets(Minion boxMinion)
-        {
-            if (boxMinion == null) return;
-
-            var units = GetUnitsInRange(boxMinion, boxMinion.Position, boxMinion.Stats.Range.Total - 50f, true,
-                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral);
-            AttackableUnit nextTarget = null;
-            var nextTargetPriority = ClassifyUnit.DEFAULT;
-
-            foreach (var u in units)
-            {
-                if (u.Status.HasFlag(StatusFlags.Stealthed) || u == boxMinion)
-                {
-                    continue;
-                }
-
-                if (boxMinion.TargetUnit == null)
-                {
-                    var priority = boxMinion.ClassifyTarget(u);
-                    if (priority < nextTargetPriority)
-                    {
-                        nextTarget = u;
-                        nextTargetPriority = priority;
-                    }
-                }
-                else
-                {
-                    if (boxMinion.TargetUnit is Champion)
-                    {
-                        continue;
-                    }
-
-                    if (!(u is Champion)) continue;
-
-                    nextTarget = u;
-                    break;
-                }
-            }
-
-            if (nextTarget != null)
-            {
-                boxMinion.SetTargetUnit(nextTarget, true);
-            }
-        }
     }
 }

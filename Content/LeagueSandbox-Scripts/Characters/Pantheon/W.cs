@@ -69,8 +69,8 @@ public class PantheonW : ISpellScript
         PlayAnimation(_pantheon, "Spell2", animFactor);
 
         _leapInProgress = true;
-        ForceMovement(_pantheon, _target, null, speedVar, 0f, gravityVar, 0f, -1f, true,
-            ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType.CANCEL_ORDER);
+        ForceMoveToUnit(_pantheon, _target, speedVar, travelTime: -1f, gravity: gravityVar,
+            orders: ForceMovementOrdersType.CANCEL_ORDER);
     }
 
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters)

@@ -20,6 +20,7 @@ public class UdyrTurtleStance : IBuffGameScript {
     private Buff      _buff;
     private Particle  _particle1;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1

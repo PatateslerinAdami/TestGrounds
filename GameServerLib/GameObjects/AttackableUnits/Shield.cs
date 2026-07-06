@@ -1,4 +1,6 @@
-﻿using GameServerCore.Enums;
+﻿using System;
+using GameServerCore.Enums;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
@@ -6,13 +8,20 @@ namespace GameServerLib.GameObjects.AttackableUnits
 {
     public class Shield
     {
-        public Shield(ObjAIBase sourceUnit, AttackableUnit targetUnit, bool physical, bool magical, float amount)
+        // The buff that owns this shield, if any. Shields created by a buff script pass the buff
+        // so the engine can read Riot's OnPreDamagePriority / DoOnPreDamageInExpirationOrder off
+        // its metadata and its remaining lifetime — these drive the consumption order in
+        // AttackableUnit.ConsumeShields. Item procs and buff-less shields leave it null.
+        private readonly Buff _owner;
+
+        public Shield(ObjAIBase sourceUnit, AttackableUnit targetUnit, bool physical, bool magical, float amount, Buff owner = null)
         {
             SourceUnit = sourceUnit;
             TargetUnit = targetUnit;
             Physical = physical;
             Magical = magical;
             Amount = amount;
+            _owner = owner;
         }
 
         public ObjAIBase SourceUnit { get; }
@@ -20,6 +29,22 @@ namespace GameServerLib.GameObjects.AttackableUnits
         public bool Physical { get; }
         public bool Magical { get; }
         public float Amount { get; protected set; }
+
+        // Riot scriptBaseBuff::OnPreDamagePriority — higher priority shields consume incoming
+        // damage first. Riot's default is -1; buff-less shields here default to 0, which only
+        // affects the relative order among a unit's shields (the only observable effect).
+        public int Priority => _owner?.BuffScript?.BuffMetaData?.OnPreDamagePriority ?? 0;
+
+        // Riot DoOnPreDamageInExpirationOrder (4.20-new): when set, this shield is consumed
+        // before same-priority shields that expire later — spend the one about to vanish first.
+        public bool ConsumeInExpirationOrder => _owner?.BuffScript?.BuffMetaData?.DoOnPreDamageInExpirationOrder ?? false;
+
+        // Remaining lifetime of the owning buff, used as the expiration-order sort key.
+        // Infinite and buff-less shields sort last (never "about to expire").
+        public float RemainingTime =>
+            _owner == null || _owner.IsBuffInfinite()
+                ? float.MaxValue
+                : Math.Max(0f, _owner.Duration - _owner.TimeElapsed);
 
         public float Consume(DamageData damageData)
         {

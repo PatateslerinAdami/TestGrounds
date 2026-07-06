@@ -26,7 +26,11 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// </summary>
         public DamageType DamageType { get; set; }
         /// <summary>
-        /// Whether or not the damage came from an autoatack or a Spell
+        /// True only for a GENUINE basic-attack swing (set exclusively by ObjAIBase.AutoAttackHit —
+        /// the real auto-attack damage-application, fired on missile arrival for ranged). On-hit
+        /// SPELLS that deal DAMAGE_SOURCE_ATTACK to proc on-hit effects (Alpha Strike, Yasuo Q,
+        /// Ezreal Q, ...) leave this false. Scripts that want "attack-source damage" (on-hit effects)
+        /// must test <see cref="DamageSource"/> == DAMAGE_SOURCE_ATTACK, NOT this flag.
         /// </summary>
         public bool IsAutoAttack { get; set; }
         /// <summary>
@@ -37,5 +41,13 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// Unit that will receive the damage.
         /// </summary>
         public AttackableUnit Target { get; set; }
+        /// <summary>
+        /// Forces an "important" Call For Help on this damage (Riot DamageEffect::ForceCallForHelp,
+        /// DamageCallback.h:0x56) — routed to <see cref="GameServerCore.Scripting.CSharp.IAIScript.OnReceiveImportantCallForHelp"/>
+        /// in addition to the regular Call For Help. Drives the turret focus-lock (tower-dive aggro).
+        /// A spell/buff script can set this to force the lock; champion-vs-champion damage triggers it
+        /// implicitly regardless (see ObjAIBase.TakeDamage).
+        /// </summary>
+        public bool ForceCallForHelp { get; set; }
     }
 }

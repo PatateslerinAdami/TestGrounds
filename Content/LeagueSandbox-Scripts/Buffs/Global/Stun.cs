@@ -23,14 +23,15 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            stun = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
-            unit.SetStatus(StatusFlags.Stunned, true);
-            unit.StopMovement();
+            // Wire (Sion Q test replay, LOC_Stun.troy groups): flags 0x0020, bone
+            // C_BuffBone_Glb_Center_Loc, bind = the stunned unit, TargetNetID = 0 —
+            // so AddParticle (not AddParticleTarget) and the center buffbone, not "head".
+            stun = AddParticle(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit.Position, buff.Duration,
+                bone: "C_BuffBone_Glb_Center_Loc");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Stunned, false);
         }
     }
 }

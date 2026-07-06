@@ -16,6 +16,7 @@ namespace Buffs
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
+            PersistsThroughDeath = true,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             BuffType = BuffType.KNOCKUP,
             IsHidden = false,
@@ -27,22 +28,10 @@ namespace Buffs
         {
             float desiredDuration = 1.2f;//1.2f
             float desiredHeight = 8.0f;
-            Vector2 startPosition = unit.Position;
-            Vector2 endPosition = new Vector2(startPosition.X + 2.0f, startPosition.Y);// 2f
-            float horizontalDistance = Vector2.Distance(startPosition, endPosition);
-            float requiredSpeed = horizontalDistance / desiredDuration;
-            float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
-
-            ForceMovement(
-            unit,
-            "RUN",
-            endPosition,
-            requiredSpeed,
-            0,
-            requiredGravity,
-            0,
-            movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING
-            );
+            // In-place knockup = BBMove with gravity (no BBKnockup): tiny +2u nudge, arc from gravity.
+            ForceMove(unit, new Vector2(unit.Position.X + 2.0f, unit.Position.Y),
+                2.0f / desiredDuration, gravity: desiredHeight / (desiredDuration * desiredDuration),
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
 
         }
 

@@ -6,7 +6,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
@@ -25,7 +24,9 @@ namespace Buffs
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
-        public SpellSector QHit;
+        // Owner-anchored AreaTriggerSphere id (was a SpellSector). -1 = none. _bonked gates to one hit.
+        private int _zoneId = -1;
+        private bool _bonked = false;
         private List<GameScriptTimer> _timers = new List<GameScriptTimer>();
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         public StatsModifier StatsModifier2 { get; private set; } = new StatsModifier();
@@ -43,27 +44,30 @@ namespace Buffs
             owner.SetStatus(StatusFlags.Ghosted, true);
             owner.AddStatModifier(StatsModifier);
 
-            ApiEventManager.OnSpellHit.AddListener(this, ownerSpell, TargetExecute, true);
-            QHit = ownerSpell.CreateSpellSector(new SectorParameters
-            {
-                BindObject = owner,
-                Length = owner.CollisionRadius + 60f,
-                Tickrate = 30,
-                CanHitSameTargetConsecutively = true,
-                OverrideFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes,
-                Type = SectorType.Area
-            });
+            // Powerball contact zone as an owner-anchored AreaTriggerSphere (was a SpellSector). The first
+            // enemy to ENTER the roll radius gets bonked (Riot AreaTrigger OnEnter); _bonked gates it to one
+            // hit. Radius = collisionRadius + 60 == old SectorParameters.Length. Removed in OnDeactivate
+            // (the old sector had Lifetime=-1 and was never removed — a latent leak now fixed).
+            _bonked = false;
+            _zoneId = CreateAreaTriggerSphereAttached(owner, owner.CollisionRadius + 60f, onEnter: OnPowerballEnter);
         }
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void OnPowerballEnter(AttackableUnit target)
         {
+            // First enemy contact only (AreaTrigger fires for all units and re-fires per entry).
+            if (_bonked || target == null || target.Team == owner.Team)
+            {
+                return;
+            }
+            _bonked = true;
+
             float AP = owner.Stats.AbilityPower.Total * 0.01f;
 
-            float damage = target.Stats.CurrentHealth * 0.015f * (spell.CastInfo.SpellLevel) + AP;
+            float damage = target.Stats.CurrentHealth * 0.015f * sp.CastInfo.SpellLevel + AP;
 
             target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, sp);
             AddParticleTarget(owner, owner, "powerballhit.troy", owner);
             var goTo = owner.Position + (new Vector2(owner.Direction.X, owner.Direction.Z)) * 20f;
-            ForceMovement(owner, "RUN", goTo, 100, 0, 0, 0);
+            ForceMove(owner, goTo, 100);
             //AddParticleTarget(owner, owner, "powerballstop.troy", owner);
             var deactivationTimer = new GameScriptTimer(0.15f, () =>
             {
@@ -76,6 +80,11 @@ namespace Buffs
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            if (_zoneId >= 0)
+            {
+                DeleteAreaTrigger(_zoneId);
+                _zoneId = -1;
+            }
             AddParticleTarget(owner, owner, "powerballstop.troy", owner);
             for (int i = 0; i < count; i++)
             {

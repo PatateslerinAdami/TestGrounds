@@ -21,7 +21,9 @@ public class UdyrPhoenixStance : IBuffGameScript {
     private Buff      _buff;
     private Particle  _particle1,  _particle2;
     private int       _attackCount = 0;
+    private bool _isFirstCast = true;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1
@@ -40,7 +42,14 @@ public class UdyrPhoenixStance : IBuffGameScript {
     }
 
     private void OnHit(DamageData data) {
-        if (_attackCount == 2) {
+        if (_isFirstCast)
+        {
+            _particle2 = AddParticleTarget(_udyr,_udyr,"Udyr_PhoenixBreath_cas",data.Target);
+            Vector2 targetPos = GetPointFromUnit(_udyr, 400f, 0);
+            SpellCast(_udyr, 0, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);
+            _isFirstCast = false;
+        }
+        if (_attackCount == 2 ) {
          _particle2 = AddParticleTarget(_udyr,_udyr,"Udyr_PhoenixBreath_cas",data.Target);
          Vector2 targetPos = GetPointFromUnit(_udyr, 400f, 0);
          SpellCast(_udyr, 0, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);

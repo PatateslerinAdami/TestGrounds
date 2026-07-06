@@ -11,7 +11,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -200,7 +199,7 @@ public class ZedShurikenMisOne : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };
@@ -232,7 +231,7 @@ public class ZedShurikenMisOne : ISpellScript {
         ZedShurikenCastTracker.OnMissileEnd(missile);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ad     = _owner.Stats.AttackDamage.FlatBonus;
         var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
         var damage = 75f + 35f * (qLevel - 1) + ad;
@@ -254,7 +253,7 @@ public class ZedShurikenMisTwo : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };
@@ -286,7 +285,7 @@ public class ZedShurikenMisTwo : ISpellScript {
         ZedShurikenCastTracker.OnMissileEnd(missile);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ad     = _owner.Stats.AttackDamage.FlatBonus;
         var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
         var damage = 75f + 35f * (qLevel - 1) + ad;
@@ -308,7 +307,7 @@ public class ZedShurikenMisThree : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         MissileParameters = new MissileParameters {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
         IsDamagingSpell = true
     };
@@ -340,7 +339,7 @@ public class ZedShurikenMisThree : ISpellScript {
         ZedShurikenCastTracker.OnMissileEnd(missile);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ad     = _owner.Stats.AttackDamage.FlatBonus;
         var qLevel = _owner.GetSpell("ZedShuriken").CastInfo.SpellLevel;
         var damage = 75f + 40f * (qLevel - 1) + ad;

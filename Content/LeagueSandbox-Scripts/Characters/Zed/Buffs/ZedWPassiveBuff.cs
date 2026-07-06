@@ -15,6 +15,7 @@ namespace Buffs;
 internal class ZedWPassiveBuff : IBuffGameScript {
     ObjAIBase _zed;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         IsHidden    = false

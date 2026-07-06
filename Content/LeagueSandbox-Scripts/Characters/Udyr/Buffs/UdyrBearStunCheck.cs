@@ -16,6 +16,7 @@ public class UdyrBearStunCheck : IBuffGameScript {
     private ObjAIBase _udyr;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1

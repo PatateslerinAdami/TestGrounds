@@ -61,7 +61,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         TeamId team = TeamId.TEAM_BLUE,
                         Stats stats = null,
                         string AIScript = "")
-            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats, AIScript)
+            // Default player champions to the minimal HeroAI so they run the shared
+            // CrowdControlComponent (AI-driven fear/flee, Riot's uniform model). Bots that were given
+            // a specific AI script keep it. See AIScripts/HeroAI.cs, project_cc_model_architecture.
+            : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats,
+                string.IsNullOrEmpty(AIScript) ? "HeroAI" : AIScript)
         {
             //TODO: Champion.ClientInfo?
             ClientId = clientInfo.ClientId;
@@ -92,7 +96,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (clientInfo.PlayerId == -1)
             {
-                IsBot = false; // This change was necessary for my customized bot names to work. If you are going to be serious about bot dev and the true value of this is needed somewhere, feel free to revert it
+                // Bot (no real client). Riot flags bots IsBot=true on S2C_CreateHero (replay-verified);
+                // the client renders the name as "(Champion) Bot". Faithful over the custom-name gimmick.
+                IsBot = true;
             }
             PlayerQuestManager = new PlayerQuestManager(game, this);
         }
@@ -153,6 +159,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         protected override void OnSpawn(int userId, TeamId team, bool doVision)
         {
             var peerInfo = _game.PlayerManager.GetClientInfoByChampion(this);
+            // NOTE: bots spawn via the normal S2C_CreateHero path too. The dedicated SpawnBotS2C (0xCF)
+            // packet was tried (NotifyS2C_SpawnBot) but the 4.20 client mis-positions the bot from it
+            // (turret homed off-map) — it's a pre-4.18 path (BotRank deprecated) the client no longer
+            // positions heroes from. CreateHero renders bots correctly, so we keep it.
             _game.PacketNotifier.NotifyS2C_CreateHero(peerInfo, userId, doVision);
             _game.PacketNotifier.NotifyAvatarInfo(peerInfo, userId);
 
@@ -270,6 +280,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.Update(diff);
 
+            // Shop upkeep: clears the undo stack once the champion leaves the fountain (see Shop.OnUpdate).
+            Shop.OnUpdate(diff);
+
             if (Stats.IsGeneratingGold && Stats.GoldPerGoldTick.Total > 0)
             {
                 _goldTimer -= diff;
@@ -301,10 +314,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (RespawnTimer > 0)
             {
                 RespawnTimer -= diff;
-                if (RespawnTimer <= 0)
-                {
-                    Respawn();
-                }
+            }
+            // Respawn when the timer expires. During the zombie phase IsDead is false (Model B), so a
+            // zombie never respawns mid-phase; EndZombie() sets IsDead=true at the real death and the
+            // (already counted-down) timer then completes here. The timer runs from death to match
+            // the client HUD.
+            if (IsDead && RespawnTimer <= 0)
+            {
+                Respawn();
             }
 
             if (_championHitFlagTimer > 0)
@@ -327,6 +344,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public void Respawn()
         {
+            // Safety: clear any lingering zombie state so a respawned champion is never a zombie.
+            IsZombie = false;
+            _zombieDeath = null;
             var spawnPos = GetRespawnPosition();
             SetPosition(spawnPos);
             float parToRestore = 0;
@@ -339,8 +359,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _game.PacketNotifier.NotifyHeroReincarnateAlive(this, parToRestore);
             Stats.CurrentHealth = Stats.HealthPoints.Total;
             IsDead = false;
+            // Back at the fountain and alive: drop the dead-state force-enable (normal location gate).
+            Shop.SetShopState(true, false);
             RespawnTimer = -1;
-            SetDashingState(false, MoveStopReason.HeroReincarnate);
+            SetForceMovementState(false, MoveStopReason.HeroReincarnate);
             ApiEventManager.OnResurrect.Publish(this);
             SetCastSpell(null);
         }
@@ -412,6 +434,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     ChampStats.NeutralMinionsKilled += 1;
                 }
+                else if (deathData.Unit is LaneMinion)
+                {
+                    // Lane CS is reconstructed client-side (NOT replicated): players who saw the minion
+                    // die count it from the vision-gated NPC_Die; tell the rest explicitly so their
+                    // scoreboard CS for this champion stays correct. (Runs before NotifyDeath in Die(),
+                    // so the minion's SpawnedForPlayers set still reflects who will get the death.)
+                    _game.PacketNotifier.NotifyS2C_IncrementMinionKills(this, deathData.Unit);
+                }
 
                 var gold = deathData.Unit.Stats.GoldGivenOnDeath.Total;
                 if (gold <= 0)
@@ -437,13 +467,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public override void Die(DeathData data)
         {
             IsDead = true;
-            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
-                ? Stats.GetRespawnTimer(_game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f)
-                : 100.0f;
+            // Dead champions may still shop (recall-less fountain shopping): force-enable the shop so
+            // the location gate is bypassed. Re-disabled on respawn. See docs/SHOP_PACKETS_PLAN.md.
+            Shop.SetShopState(true, true);
             ChampStats.Deaths++;
 
             _game.ObjectManager.StopTargeting(this);
-            SetDashingState(false, MoveStopReason.Death);
+            SetForceMovementState(false, MoveStopReason.Death);
+            // Stop and clear the current path (Riot DoDeath zeroes Velocity + AI_actor.HandleDeath).
+            // Without this a champion that dies mid-move keeps sliding to its last waypoint — visible
+            // for zombies (Karthus Death Defied), which stay in the world instead of being removed.
+            StopMovement(MoveStopReason.Death);
+            // OnDeath before the zombie decision (Riot DoDeath ordering) so a death-reactive buff
+            // (Karthus DeathDefied) can arm data.BecomeZombie from its OnDeath handler.
             ApiEventManager.OnDeath.Publish(data.Unit, data);
             data.Unit.SetStatus(StatusFlags.Ghosted, true);
 
@@ -457,9 +493,62 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 ChampionDeathHandler.ProcessKill(data);
             }
 
-            _game.PacketNotifier.NotifyNPC_Hero_Die(data);
+            // Kill credit fires immediately (the killing blow earns the kill even if the victim
+            // lingers as a zombie).
             EventHistory.Clear();
             ApiEventManager.OnKill.Publish(data.Killer, data);
+
+            // Replay-verified (Karthus rlp f3ad103e): the die packet + death timer are sent AT death
+            // with the real respawn duration — even for a zombie. The client keeps the model and
+            // champion indicator and skips ONLY the death animation when BecomeZombie is set
+            // (AIHeroClient::DoDeath gates those on !bBecomeZombie) while still showing the death
+            // screen + death timer. The earlier model/HP-bar loss was a NEGATIVE DeathDuration
+            // (RespawnTimer was still -1 when the packet was sent), which the client treats as a
+            // completed/forced death. Set a valid respawn time first.
+            RespawnTimer = _game.Config.GameFeatures.HasFlag(FeatureFlags.EnableDeathTimer)
+                ? Stats.GetRespawnTimer(_game.Map.MapData.GetDeathTime(Stats.Level, _game.GameTime / 1000.0f) * 1000.0f)
+                : 100.0f;
+
+            if (data.BecomeZombie)
+            {
+                // Zombie champion (Karthus Death Defied). Model B (faithful to Riot DoDeath, which
+                // sets bZombie but NOT the dead flag): a zombie is NOT counted as dead — clear IsDead
+                // so it behaves like a live unit (moves, holds vision, is targetable) until its real
+                // death in EndZombie(). The die packet + death timer were already sent above; the
+                // respawn countdown runs from here but Respawn() only fires once IsDead is true again.
+                IsZombie = true;
+                IsDead = false;
+                _zombieDeath = data;
+                ApiEventManager.OnZombie.Publish(data.Unit, data);
+            }
+
+            _game.PacketNotifier.NotifyNPC_Hero_Die(data);
+        }
+
+        /// <summary>
+        /// Ends a zombie champion's phase (deferred from <see cref="Die"/>) and starts the real
+        /// respawn countdown. Champions are never SetToRemove'd, so this overrides the base
+        /// removal-based <see cref="AttackableUnit.EndZombie"/>.
+        /// </summary>
+        public override void EndZombie()
+        {
+            if (!IsZombie)
+            {
+                return;
+            }
+
+            // The zombie truly dies now: clear the zombie state and set IsDead so the (already
+            // running) respawn countdown can complete in OnUpdate.
+            IsZombie = false;
+            IsDead = true;
+            _zombieDeath = null;
+
+            // Replay-verified (Karthus rlp f3ad103e): at the zombie→real-death boundary the server
+            // sends NPC_ForceDead (0x1B). That drives the client's DoForceDead → SetDeathScreen(true)
+            // + the HUD death timer (with the remaining respawn duration). The BecomeZombie die packet
+            // sent at Die() only puts the client into the controllable zombie state; THIS is what
+            // flips it into the real grey-screen death.
+            _game.PacketNotifier.NotifyNPC_ForceDead(this, RespawnTimer / 1000f);
         }
 
         private T CreateEventForHistory<T>(AttackableUnit source, IEventSource sourceScript) where T: ArgsForClient, new()

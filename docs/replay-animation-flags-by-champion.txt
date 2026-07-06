@@ -1,0 +1,492 @@
+=== champion / animation / flags(lower5) — all replays ===
+
+--- Aatrox ---
+  Death                            lo=00101 (0x05) x    3   hi-spread:1
+  Passive_Death                    lo=00101 (0x05) x   19   hi-spread:3
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell1                           lo=00001 (0x01) x  121   hi-spread:3
+  Spell1_Close                     lo=00001 (0x01) x   22   hi-spread:3
+  Spell4End                        lo=10000 (0x10) x   32   hi-spread:3
+  idle1                            lo=00101 (0x05) x    3   hi-spread:1
+
+--- Ahri ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:1
+  Spell2                           lo=00001 (0x01) x  108   hi-spread:1
+  Spell4                           lo=00101 (0x05) x   40   hi-spread:1
+
+--- Akali ---
+  Dance                            lo=00100 (0x04) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Spell1                           lo=00000 (0x00) x   32   hi-spread:4
+  Spell2                           lo=00000 (0x00) x    8   hi-spread:2
+  Spell4                           lo=00101 (0x05) x  176   hi-spread:4
+
+--- Alistar ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00100 (0x04) x   20   hi-spread:1
+
+--- Amumu ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell2                           lo=00101 (0x05) x   64   hi-spread:2
+
+--- Ashe ---
+  Dance                            lo=00100 (0x04) x    6   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    5   hi-spread:4
+
+--- Blitzcrank ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Visor                            lo=00100 (0x04) x   30   hi-spread:1
+
+--- Brand ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+
+--- Braum ---
+  Recall_Winddown                  lo=00110 (0x06) x   17   hi-spread:3
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell2                           lo=00101 (0x05) x   64   hi-spread:3
+  Spell3_leap                      lo=00101 (0x05) x    3   hi-spread:2
+
+--- Caitlyn ---
+  Channel                          lo=00101 (0x05) x    3   hi-spread:1
+  Dance                            lo=00100 (0x04) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    5   hi-spread:4
+
+--- Chogath ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Corki ---
+  Channel                          lo=00101 (0x05) x    7   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Spell2                           lo=00101 (0x05) x   66   hi-spread:4
+
+--- Darius ---
+  Dance                            lo=00100 (0x04) x    2   hi-spread:1
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+  Spell1                           lo=00000 (0x00) x  474   hi-spread:4
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- Diana ---
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell2                           lo=00000 (0x00) x  124   hi-spread:1
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- DrMundo ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Ezreal ---
+  Dance                            lo=00100 (0x04) x    4   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+
+--- FiddleSticks ---
+  Dance                            lo=00100 (0x04) x    4   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:1
+
+--- Fizz ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell1                           lo=00100 (0x04) x  139   hi-spread:3
+  Spell3a                          lo=00000 (0x00) x  121   hi-spread:3
+  Spell3c                          lo=00001 (0x01) x   58   hi-spread:3
+  Spell3c                          lo=00100 (0x04) x   58   hi-spread:3
+  Spell3d                          lo=00000 (0x00) x   60   hi-spread:3
+
+--- Garen ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell3                           lo=00000 (0x00) x  178   hi-spread:3
+
+--- Gnar ---
+  Dance                            lo=00100 (0x04) x    7   hi-spread:1
+  Death_Big                        lo=00101 (0x05) x    7   hi-spread:2
+  Rage                             lo=00100 (0x04) x   59   hi-spread:2
+  Rage1                            lo=00100 (0x04) x   81   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Revert                           lo=00010 (0x02) x   61   hi-spread:2
+  Spell1_Catch                     lo=00000 (0x00) x  307   hi-spread:2
+  Spell1_Tran                      lo=00000 (0x00) x   14   hi-spread:2
+  Spell2                           lo=00000 (0x00) x   93   hi-spread:2
+  Spell2_Tran                      lo=00000 (0x00) x   16   hi-spread:2
+  Spell3                           lo=00000 (0x00) x  119   hi-spread:2
+  Spell3_Bounce                    lo=00000 (0x00) x   32   hi-spread:2
+  Spell3_TRAN                      lo=00000 (0x00) x   12   hi-spread:2
+
+--- Heimerdinger ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell4                           lo=00100 (0x04) x   14   hi-spread:1
+  Spell4_WindDown                  lo=00100 (0x04) x   14   hi-spread:1
+
+--- Irelia ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell4                           lo=00001 (0x01) x   36   hi-spread:1
+  spell1                           lo=00001 (0x01) x  219   hi-spread:2
+
+--- Janna ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Spell1                           lo=00100 (0x04) x  190   hi-spread:4
+  Spell3                           lo=00100 (0x04) x  147   hi-spread:4
+
+--- JarvanIV ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Spell3                           lo=00000 (0x00) x  269   hi-spread:4
+
+--- Jayce ---
+  Melee_Passive                    lo=00100 (0x04) x  215   hi-spread:1
+  Ranged_Passive                   lo=00100 (0x04) x  207   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell1                           lo=00101 (0x05) x   95   hi-spread:2
+  ranged_spell3                    lo=00000 (0x00) x   86   hi-spread:1
+
+--- Jinx ---
+  Channel                          lo=00101 (0x05) x    7   hi-spread:2
+  Minigun_To_Rlauncher             lo=10100 (0x14) x  272   hi-spread:6
+  Respawn                          lo=00110 (0x06) x    8   hi-spread:6
+  Rlauncher_To_Minigun             lo=10100 (0x14) x  273   hi-spread:6
+  Spell1                           lo=00000 (0x00) x  541   hi-spread:6
+  Spell3                           lo=00000 (0x00) x   46   hi-spread:6
+  Spell3_Run                       lo=00000 (0x00) x  126   hi-spread:6
+
+--- Kalista ---
+  Attack1_Dash                     lo=00001 (0x01) x  235   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spear_Invisibility               lo=00010 (0x02) x   12   hi-spread:1
+  Spell1                           lo=00100 (0x04) x   16   hi-spread:1
+  Spell1_Dash                      lo=00001 (0x01) x   12   hi-spread:1
+  Spell3                           lo=00000 (0x00) x    3   hi-spread:1
+  Spell4_Throw                     lo=00010 (0x02) x    1   hi-spread:1
+
+--- Karma ---
+  Dance                            lo=00100 (0x04) x    1   hi-spread:1
+  DiskSpin                         lo=00100 (0x04) x  104   hi-spread:3
+  DiskSpinOnce                     lo=00100 (0x04) x   90   hi-spread:3
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+
+--- Katarina ---
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+  Spell4                           lo=00101 (0x05) x   51   hi-spread:3
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+  spell2                           lo=00000 (0x00) x  519   hi-spread:3
+  spell3                           lo=00100 (0x04) x  259   hi-spread:3
+
+--- Kayle ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00100 (0x04) x   72   hi-spread:1
+  Spell3                           lo=00100 (0x04) x   97   hi-spread:1
+  Spell4                           lo=00100 (0x04) x   10   hi-spread:1
+
+--- Kennen ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Khazix ---
+  Respawn                          lo=00110 (0x06) x    5   hi-spread:5
+  Spell3                           lo=00100 (0x04) x   96   hi-spread:5
+  Spell3_evo                       lo=00100 (0x04) x  135   hi-spread:5
+  Spell3_landing                   lo=00000 (0x00) x  224   hi-spread:1
+  Spell3_standup                   lo=00110 (0x06) x   91   hi-spread:5
+  spell3_evo_standup               lo=00110 (0x06) x  131   hi-spread:5
+
+--- Leblanc ---
+  Channel                          lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00101 (0x05) x   94   hi-spread:1
+
+--- LeeSin ---
+  Channel                          lo=00101 (0x05) x    3   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    7   hi-spread:5
+  Spell1b                          lo=00101 (0x05) x  444   hi-spread:5
+  Spell2                           lo=00101 (0x05) x  192   hi-spread:5
+  Spell2b                          lo=00100 (0x04) x  214   hi-spread:5
+
+--- Leona ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+  Spell2_close                     lo=00000 (0x00) x   92   hi-spread:4
+  Spell2_open                      lo=00000 (0x00) x   93   hi-spread:4
+
+--- Lucian ---
+  Dance                            lo=00100 (0x04) x    8   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Lux ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+
+--- Malphite ---
+  Dance                            lo=00100 (0x04) x    6   hi-spread:1
+  Spell4                           lo=00101 (0x05) x   18   hi-spread:1
+
+--- Malzahar ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00000 (0x00) x    3   hi-spread:1
+
+--- Maokai ---
+  Channel                          lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell2a                          lo=00001 (0x01) x   70   hi-spread:2
+  Spell2b                          lo=00000 (0x00) x   70   hi-spread:2
+
+--- MasterYi ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell4                           lo=00000 (0x00) x   37   hi-spread:3
+
+--- MissFortune ---
+  Channel                          lo=00101 (0x05) x    1   hi-spread:1
+  Dance                            lo=00100 (0x04) x    4   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    7   hi-spread:7
+
+--- Morgana ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+
+--- Nami ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell3                           lo=00100 (0x04) x  158   hi-spread:3
+
+--- Nasus ---
+  Channel                          lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+
+--- Nautilus ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell1_dash                      lo=00100 (0x04) x   32   hi-spread:2
+  Spell1_idle                      lo=00000 (0x00) x   39   hi-spread:2
+  visor_CLOSED                     lo=10000 (0x10) x   75   hi-spread:2
+  visor_OPEN                       lo=00000 (0x00) x    2   hi-spread:2
+  visor_OPEN                       lo=10000 (0x10) x   75   hi-spread:2
+
+--- Nidalee ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:2
+  Spell2                           lo=00001 (0x01) x  282   hi-spread:2
+  Spell2_Hunt                      lo=00001 (0x01) x   16   hi-spread:2
+
+--- Nocturne ---
+  Dance                            lo=00100 (0x04) x    2   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00000 (0x00) x   15   hi-spread:1
+  Spell3                           lo=00101 (0x05) x   42   hi-spread:1
+  Spell4                           lo=00000 (0x00) x    5   hi-spread:1
+  Spell4b                          lo=00100 (0x04) x    6   hi-spread:1
+
+--- Nunu ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Orianna ---
+  Dance                            lo=00100 (0x04) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell1                           lo=00100 (0x04) x   35   hi-spread:1
+  Spell1b                          lo=00100 (0x04) x   98   hi-spread:1
+  Spell2                           lo=00000 (0x00) x   76   hi-spread:1
+  Spell3                           lo=00000 (0x00) x   40   hi-spread:1
+
+--- Pantheon ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell2                           lo=00101 (0x05) x  105   hi-spread:3
+
+--- Poppy ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  RunUlt                           lo=00101 (0x05) x   40   hi-spread:1
+
+--- Quinn ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:1
+  Spell3                           lo=00000 (0x00) x    5   hi-spread:1
+  Spell3_dash                      lo=00000 (0x00) x   34   hi-spread:1
+  Spell3_flip                      lo=00001 (0x01) x   34   hi-spread:1
+  Spell4_IN                        lo=00101 (0x05) x    8   hi-spread:1
+
+--- Renekton ---
+  Furnace_Open                     lo=00100 (0x04) x   11   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell1                           lo=00101 (0x05) x  210   hi-spread:2
+  Spell3                           lo=00101 (0x05) x  210   hi-spread:2
+  shoulderpads                     lo=00100 (0x04) x    8   hi-spread:2
+
+--- Rengar ---
+  Channel                          lo=00101 (0x05) x    3   hi-spread:1
+  Dance                            lo=00100 (0x04) x    5   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    6   hi-spread:5
+  Spell2                           lo=00000 (0x00) x  435   hi-spread:5
+  Spell5                           lo=00100 (0x04) x  183   hi-spread:5
+
+--- Riven ---
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell1a                          lo=00001 (0x01) x  219   hi-spread:3
+  Spell1b                          lo=00001 (0x01) x  211   hi-spread:3
+  Spell1c                          lo=00001 (0x01) x  207   hi-spread:3
+  Spell3                           lo=00000 (0x00) x  251   hi-spread:3
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- Rumble ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell2                           lo=00100 (0x04) x   37   hi-spread:1
+
+--- Ryze ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+
+--- Shaco ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:4
+
+--- Shen ---
+  Dash                             lo=00101 (0x05) x   46   hi-spread:1
+
+--- Shyvana ---
+  Channel                          lo=00101 (0x05) x    3   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell4                           lo=00101 (0x05) x   14   hi-spread:1
+  Spell4_land                      lo=00001 (0x01) x   12   hi-spread:1
+
+--- Sion ---
+  Channel                          lo=00101 (0x05) x    1   hi-spread:1
+  Dance                            lo=00100 (0x04) x    8   hi-spread:1
+  Passive_Death                    lo=00001 (0x01) x    8   hi-spread:1
+  Passive_idle1                    lo=00101 (0x05) x    9   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell1_Hit1                      lo=00101 (0x05) x   26   hi-spread:2
+  Spell1_Hit2                      lo=00101 (0x05) x   91   hi-spread:2
+  Spell2                           lo=00000 (0x00) x  106   hi-spread:2
+  Spell2_B                         lo=00100 (0x04) x   75   hi-spread:2
+  Spell4                           lo=00100 (0x04) x    4   hi-spread:2
+  Spell4_Hit                       lo=00100 (0x04) x   17   hi-spread:2
+  Spell4_STOP                      lo=01101 (0x0d) x    4   hi-spread:2
+
+--- Sivir ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell1_catch                     lo=00000 (0x00) x  141   hi-spread:2
+  Spell4                           lo=00100 (0x04) x   19   hi-spread:2
+
+--- Skarner ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell1                           lo=00000 (0x00) x  160   hi-spread:1
+  Spell2                           lo=00100 (0x04) x   57   hi-spread:1
+  Spell4_Idleback                  lo=00100 (0x04) x    8   hi-spread:1
+
+--- Sona ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell1                           lo=00000 (0x00) x  437   hi-spread:4
+  Spell2                           lo=00000 (0x00) x  465   hi-spread:4
+  Spell3                           lo=00000 (0x00) x  274   hi-spread:4
+
+--- Soraka ---
+  Dance                            lo=00100 (0x04) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Talon ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+  Spell4                           lo=00100 (0x04) x   50   hi-spread:1
+
+--- Taric ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:1
+
+--- Teemo ---
+  Attack1                          lo=00001 (0x01) x    1   hi-spread:1
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+
+--- Thresh ---
+  Dance                            lo=00100 (0x04) x    2   hi-spread:1
+  Lantern_Null                     lo=00010 (0x02) x  253   hi-spread:4
+  Lantern_Null                     lo=00110 (0x06) x   38   hi-spread:4
+  Lantern_Open                     lo=00100 (0x04) x  713   hi-spread:4
+  Respawn                          lo=00110 (0x06) x    8   hi-spread:4
+  Sickle_Null                      lo=00000 (0x00) x   64   hi-spread:4
+  Sickle_Null                      lo=00010 (0x02) x 2730   hi-spread:4
+  Spell1_DASH                      lo=00000 (0x00) x   40   hi-spread:4
+  Spell1_GRAB                      lo=00000 (0x00) x   12   hi-spread:4
+  Spell1_OUT                       lo=00000 (0x00) x   78   hi-spread:4
+  Spell1_PULL1                     lo=00010 (0x02) x  122   hi-spread:4
+  Spell1_PULL2                     lo=00010 (0x02) x  112   hi-spread:4
+  Spell1_Pull1                     lo=00000 (0x00) x   33   hi-spread:4
+  Spell2                           lo=00010 (0x02) x  127   hi-spread:4
+
+--- Tristana ---
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+  Spell2                           lo=00100 (0x04) x  151   hi-spread:3
+
+--- Tryndamere ---
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:3
+  Spell3                           lo=00101 (0x05) x  312   hi-spread:4
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- TwistedFate ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell4                           lo=00001 (0x01) x   14   hi-spread:2
+
+--- Urgot ---
+  Channel                          lo=00101 (0x05) x    2   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  teleDwn                          lo=00101 (0x05) x    8   hi-spread:1
+  teleUp                           lo=00101 (0x05) x    8   hi-spread:1
+
+--- Varus ---
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:2
+  Spell1                           lo=00000 (0x00) x  202   hi-spread:2
+  Spell1_Fire                      lo=00100 (0x04) x  199   hi-spread:2
+  weapon_mask                      lo=00100 (0x04) x   30   hi-spread:2
+
+--- Vayne ---
+  Dance                            lo=00100 (0x04) x    2   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    5   hi-spread:5
+  Spell1                           lo=00101 (0x05) x  430   hi-spread:1
+
+--- Veigar ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Velkoz ---
+  Additive_Activate_Spell1         lo=00000 (0x00) x  164   hi-spread:2
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell2                           lo=00100 (0x04) x  188   hi-spread:2
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- Vi ---
+  GlassesOff_Loop                  lo=00100 (0x04) x    7   hi-spread:2
+  Respawn                          lo=00110 (0x06) x    3   hi-spread:2
+  Shake_Gloves                     lo=00100 (0x04) x   77   hi-spread:1
+  Spell1                           lo=00000 (0x00) x  142   hi-spread:2
+  Spell1_end                       lo=00000 (0x00) x  144   hi-spread:2
+  Spell4_hit                       lo=00001 (0x01) x   19   hi-spread:1
+  Spell4_run                       lo=00101 (0x05) x   20   hi-spread:2
+
+--- Viktor ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  Spell3                           lo=00100 (0x04) x   91   hi-spread:1
+
+--- Volibear ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:1
+
+--- Warwick ---
+  Dance                            lo=00100 (0x04) x    7   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+
+--- Xerath ---
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    4   hi-spread:3
+  Spell1Finish                     lo=00101 (0x05) x  553   hi-spread:3
+  Spell4                           lo=00000 (0x00) x  308   hi-spread:3
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+  ironforge_foot                   lo=00100 (0x04) x    3   hi-spread:1
+
+--- Yasuo ---
+  Death                            lo=00100 (0x04) x   49   hi-spread:3
+  Death                            lo=00101 (0x05) x    1   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    6   hi-spread:3
+  Sheath                           lo=00010 (0x02) x  524   hi-spread:3
+  Spell1_Dash                      lo=00101 (0x05) x  108   hi-spread:3
+  Spell1_Wind                      lo=00100 (0x04) x  270   hi-spread:3
+  Spell3                           lo=00101 (0x05) x  540   hi-spread:3
+  Spell4                           lo=00001 (0x01) x   29   hi-spread:3
+  idle1                            lo=00101 (0x05) x    1   hi-spread:1
+
+--- Zed ---
+  Respawn                          lo=00110 (0x06) x    2   hi-spread:2
+  Spell2_cast                      lo=00100 (0x04) x  269   hi-spread:3
+  Spell3                           lo=00100 (0x04) x  346   hi-spread:3
+  Spell4                           lo=00001 (0x01) x   57   hi-spread:3
+  Spell4_strike                    lo=00101 (0x05) x   55   hi-spread:3
+
+--- Ziggs ---
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+
+--- Zilean ---
+  Death                            lo=00101 (0x05) x    7   hi-spread:1
+  Respawn                          lo=00110 (0x06) x    1   hi-spread:1
+  clockspin                        lo=00100 (0x04) x   10   hi-spread:1
+  idle1                            lo=00101 (0x05) x    7   hi-spread:1

@@ -9,7 +9,6 @@ using System.Numerics;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 
 namespace LeagueSandbox.GameServer.Chatbox.Commands
 {
@@ -25,8 +24,15 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
         private static readonly Dictionary<uint, List<Particle>> _arrowParticlesList = new Dictionary<uint, List<Particle>>();
         private enum DebugMode: int
         {
-            None, Self, Champions, Minions, Projectiles, Sectors, All
+            None, Self, Champions, Minions, Projectiles, Sectors, Navpoints, All
         }
+        // Lane-navpoint markers (the lane polyline each LaneMinion walks). Not keyed by unit — the
+        // points are static map locations — so they live in their own list, re-spawned on a slow
+        // cadence (they don't move; only re-spawned to outlive the short DebugCircle troy).
+        private static readonly List<Particle> _navpointParticles = new List<Particle>();
+        private float _lastNavpointDraw = float.NegativeInfinity;
+        private const float _navpointRedrawMs = 500f;   // re-spawn cadence (static markers)
+        private const float _navpointLifetimeS = 0.7f;  // > redraw cadence so they never blink out
         private DebugMode _debugMode = DebugMode.None;
 
         public override string Command => "debugmode";
@@ -98,13 +104,21 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                         }
                         _arrowParticlesList.Clear();
                     }
+                    if (_navpointParticles.Count != 0)
+                    {
+                        foreach (var p in _navpointParticles)
+                        {
+                            p.SetToRemove();
+                        }
+                        _navpointParticles.Clear();
+                    }
                 }
                 else
                 {
                     // Arbitrary ratio is required for the DebugCircle particle to look accurate
                     var circlesize = _debugCircleScale * _userChampion.PathfindingRadius;
 
-                    var startdebugmsg = $"Started debugging {_modes[idx]}. Your Debug Circle Radius: {_debugCircleScale} * {_userChampion.PathfindingRadius} = {circlesize}";
+                    var startdebugmsg = $"Started debugging {_modes[idx]}. Your Debug Arc Radius: {_debugCircleScale} * {_userChampion.PathfindingRadius} = {circlesize}";
                     _logger.Debug(startdebugmsg);
                     ChatCommandManager.SendDebugMsgFormatted(DebugMsgType.NORMAL, startdebugmsg);
 
@@ -139,9 +153,9 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 {
                     DrawProjectiles(_userId);
                 }
-                else if (_debugMode == DebugMode.Sectors)
+                else if (_debugMode == DebugMode.Navpoints)
                 {
-                    DrawSectors(_userId);
+                    DrawNavpoints(_userId);
                 }
                 else if (_debugMode == DebugMode.All)
                 {
@@ -248,6 +262,67 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             }
         }
 
+        // Draws a marker at every LANE NAVPOINT (the lane polyline each LaneMinion walks). Sources the
+        // polylines from the live lane minions' PathingWaypoints (one distinct list per lane/team), so
+        // it needs at least one alive lane minion per lane to show that lane's points. Re-spawns each
+        // draw (the markers are static map locations, not unit-keyed).
+        public void DrawNavpoints(int userId)
+        {
+            // Slow cadence: the points are static, we only re-spawn to outlive the short troy.
+            if (_game.GameTime - _lastNavpointDraw < _navpointRedrawMs)
+            {
+                return;
+            }
+            _lastNavpointDraw = _game.GameTime;
+
+            try
+            {
+                foreach (var p in _navpointParticles)
+                {
+                    p.SetToRemove();
+                }
+                _navpointParticles.Clear();
+
+                // First pass: collect the distinct navpoints (dedupe by VALUE — different waves get
+                // separate PathingWaypoints copies but share the same lane polyline coordinates, so a
+                // reference-dedupe would draw each lane N-waves times). Cap defensively so a pathological
+                // count can never burst-spawn enough FX to take down the client.
+                var points = new HashSet<Vector2>();
+                foreach (GameObject obj in _game.ObjectManager.GetObjects().Values)
+                {
+                    if (obj is LaneMinion lm && lm.PathingWaypoints != null && lm.PathingWaypoints.Count > 0)
+                    {
+                        foreach (Vector2 wp in lm.PathingWaypoints)
+                        {
+                            points.Add(wp);
+                        }
+                    }
+                }
+
+                const int maxNavpoints = 256;
+                int spawned = 0;
+                foreach (Vector2 wp in points)
+                {
+                    if (spawned >= maxNavpoints)
+                    {
+                        break;
+                    }
+
+                    var particle = new Particle(_game, null, null, wp, "DebugCircle_green.troy",
+                        0.4f, "", "", 0, default, false, _navpointLifetimeS);
+                    _navpointParticles.Add(particle);
+                    spawned++;
+                }
+
+                _logger.Debug($"DrawNavpoints: {points.Count} distinct navpoints, {spawned} markers spawned.");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"DrawNavpoints threw — disabling navpoint debug. {ex}");
+                _debugMode = DebugMode.None;
+            }
+        }
+
         // Draws the collision radius and waypoints of all projectiles
         public void DrawProjectiles(int userId)
         {
@@ -309,7 +384,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
                             //_game.PacketNotifier.NotifyFXCreateGroup(arrowparticle, userId);
                         }
-                        else if (missile is SpellCircleMissile skillshot)
+                        else if (missile.HasDestination())
                         {
                             if (!_arrowParticlesList.ContainsKey(missile.NetId))
                             {
@@ -318,7 +393,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
 
                             var current = new Vector2(missile.CastInfo.SpellCastLaunchPosition.X, missile.CastInfo.SpellCastLaunchPosition.Z);
 
-                            var wpTarget = skillshot.Destination;
+                            var wpTarget = missile.Destination;
 
                             // Points the arrow towards the target
                             var dirTangent = Extensions.Rotate(new Vector2(missile.Direction.X, missile.Direction.Z), 90.0f) * missile.CollisionRadius;
@@ -347,76 +422,6 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                             var arrowParticleStart3 = new Particle(_game, null, arrowParticleEnd3Temp, new Vector2(current.X + dirTangent2.X, current.Y + dirTangent2.Y), "Global_Indicator_Line_Beam.troy", 1.0f, "", "", 0, missile.Direction, false, 0.1f);
                             _arrowParticlesList[missile.NetId].Add(arrowParticleStart3);
                             //_game.PacketNotifier.NotifyFXCreateGroup(arrowParticleStart3, userId);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Draws the effected area of all sectors
-        public void DrawSectors(int userId)
-        {
-            var tempObjects = Game.ObjectManager.GetObjects();
-
-            foreach (KeyValuePair<uint, GameObject> obj in tempObjects)
-            {
-                if (obj.Value is SpellSector sector)
-                {
-                    // Arbitrary ratio is required for the DebugCircle particle to look accurate
-                    var circlesize = _debugCircleScale * sector.CollisionRadius;
-                    if (sector.Parameters.Width < 5)
-                    {
-                        circlesize = _debugCircleScale * 35;
-                    }
-
-                    // Clear circle particles every draw in case the unit changes its position
-                    if (_circleParticles.ContainsKey(sector.NetId))
-                    {
-                        if (_circleParticles[sector.NetId] != null)
-                        {
-                            _circleParticles.Remove(sector.NetId);
-                        }
-                    }
-
-                    if (sector.CastInfo.Targets[0] != null || (sector.CastInfo.TargetPosition != Vector3.Zero && sector.CastInfo.TargetPositionEnd != Vector3.Zero))
-                    {
-                        // Clear arrow particles every draw in case the unit changes its waypoints
-                        if (_arrowParticlesList.ContainsKey(sector.NetId))
-                        {
-                            if (_arrowParticlesList[sector.NetId].Count != 0)
-                            {
-                                _arrowParticlesList[sector.NetId].Clear();
-                                _arrowParticlesList.Remove(sector.NetId);
-                            }
-                        }
-
-                        if (sector is SpellSectorPolygon polygon)
-                        {
-                            if (!_arrowParticlesList.ContainsKey(polygon.NetId))
-                            {
-                                _arrowParticlesList.Add(polygon.NetId, new List<Particle>());
-                            }
-
-                            var current = polygon.Position;
-                            var bindObj = polygon.Parameters.BindObject;
-                            var wpTarget = polygon.CastInfo.TargetPositionEnd;
-
-                            if (bindObj == null)
-                            {
-                                return;
-                            }
-
-                            var circleparticle = new Particle(_game, null, null, polygon.Position, "DebugCircle_green.troy", circlesize, "", "", 0, default, false, 0.1f);
-                            _circleParticles.Add(polygon.NetId, circleparticle);
-                            //_game.PacketNotifier.NotifyFXCreateGroup(circleparticle, userId);
-
-                            foreach (Vector2 vert in polygon.GetPolygonVertices())
-                            {
-                                var truePos = bindObj.Position + Extensions.Rotate(vert, -Extensions.UnitVectorToAngle(new Vector2(bindObj.Direction.X, bindObj.Direction.Z)) + 90f);
-                                var arrowParticleVert = new Particle(_game, null, null, truePos, "DebugArrow_green.troy", 0.5f, "", "", 0, bindObj.Direction, false, 0.1f);
-                                _arrowParticlesList[polygon.NetId].Add(arrowParticleVert);
-                                //_game.PacketNotifier.NotifyFXCreateGroup(arrowParticleVert, userId);
-                            }
                         }
                     }
                 }

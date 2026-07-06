@@ -17,6 +17,7 @@ internal class MalphiteShieldRemoval : IBuffGameScript {
     Particle _graniteShieldParticle;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.INTERNAL,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

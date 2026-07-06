@@ -20,12 +20,17 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; }
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Taunted, true);
-            if (unit is ObjAIBase oa) oa.SetTargetUnit(ownerSpell.CastInfo.Owner, true);
+            // Taunted is DERIVED from BuffType.TAUNT (AttackableUnit.RecomputeBuffEffects) — overlap-safe.
+            if (unit is ObjAIBase oa)
+            {
+                // The AI-driven CrowdControlComponent walks the taunted unit to the taunter (and the
+                // engine attacks it); it reads the taunter from CrowdControlSource.
+                oa.CrowdControlSource = ownerSpell.CastInfo.Owner;
+            }
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Taunted, false);
+            if (unit is ObjAIBase oa) oa.CrowdControlSource = null;
         }
     }
 }

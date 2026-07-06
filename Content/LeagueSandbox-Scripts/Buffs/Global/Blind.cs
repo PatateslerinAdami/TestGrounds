@@ -17,12 +17,17 @@ internal class Blind : IBuffGameScript {
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
 
-    public StatsModifier StatsModifier { get; }
+    public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        // Blind = guaranteed miss: raise the unit's miss chance to 100%. The engine rolls
+        // it per auto attack (ObjAIBase.RollAutoAttackMiss) → HIT_Miss → 0 damage, no on-hit.
+        // Auto-removed on deactivate by Buff.DeactivateBuff. Mirrors Riot's IncFlatMissChanceMod(1.0).
+        StatsModifier.MissChance.FlatBonus = 1.0f;
+        unit.AddStatModifier(StatsModifier);
         _blind = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Blind ", unit, buff.Duration, bone: "head");
     }
-    
+
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { RemoveParticle(_blind); }
 }
 

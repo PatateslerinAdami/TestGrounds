@@ -12,7 +12,11 @@ namespace LeagueSandbox.GameServer.Content
         public string PassiveLuaName { get; set; } = "";
         public string PassiveNameStr { get; set; } = "";
 
-        //TODO: Extend into handling several passives, when we decide on a format for that case.
+        // Single passive is sufficient: patch 4.20 stores exactly one passive per champion.
+        // Verified by hashing every char-stat .json key (ihash "Data*Passive{i}{field}", 65599 algo)
+        // against the UNKNOWN_HASHES sections of all 173 champions — no Passive2..6 field (Name/
+        // LuaName/AbilityName/Desc/Range) exists in the 4.20 data. Riot's S1 engine loop-parsed a
+        // Passives[] array (bipedmodel.cpp), but only index 1 is ever populated in this era.
     }
 
     public class CharData
@@ -31,13 +35,38 @@ namespace LeagueSandbox.GameServer.Content
         public float ArmorPerLevel { get; private set; } = 1.0f;
         public float AttackCastTime { get; private set; } = 0.0f;
         public float AttackDelayCastOffsetPercent { get; private set; } = 0.0f;
-        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
+        // Riot default = 1.0 (NOT 0): the auto-attack WINDUP fully scales with attack speed. This is the
+        // ratio in Spell::ComputeCharacterAttackCastDelay's Lerp(unscaledWindup, AS-scaledWindup, ratio):
+        // 1 = windup shrinks with AS like everyone expects; <1 keeps it partly unscaled (Kalista 0.5,
+        // Thresh 0.25 — they specify it). Standard ADCs (Caitlyn/Jinx/Tristana/Ezreal) OMIT the field and
+        // rely on this default. With the old 0.0 default their server windup stayed at the slow base value
+        // while the client scaled it down → at high attack speed the server launched the missile/dealt the
+        // hit visibly late (desync vs the client's missile). Champions that genuinely want an unscaled
+        // windup set 0 explicitly.
+        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 1.0f;
         public float AttackDelayOffsetPercent { get; private set; } = 0.0f;
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
+        /// <summary>
+        /// JSON field present in many stats files. NOT in the 4.17 decomp (literal "Chasing" appears
+        /// nowhere; `CharacterData::FillCharacterRecordFromIniFromMyMembers` reads every field by
+        /// literal ReadCFG string — none match), so it is a 4.20 addition the 4.17 engine predates.
+        /// WIRED 2026-06-21 (ObjAIBase auto-attack/RefreshWaypoints): while chasing, the unit commits
+        /// to within attackRange × this percent before it stops + engages (anti-kite). Default 0.95
+        /// (≈ engage near full range); units whose stats omit it fall back to 0.95. Inferred semantics
+        /// — verify in-game. See memory `project_chardata_chasing_postattack_loaded.md`.
+        /// </summary>
+        public float ChasingAttackRangePercent { get; private set; } = 0.95f;
+        /// <summary>
+        /// JSON field present in many character stats files but VERIFIED 2026-05-10 to be
+        /// unread by the S4 client (same verification trail as <see cref="ChasingAttackRangePercent"/>).
+        /// Loaded for forward-compat, NOT wired into gameplay.
+        /// </summary>
+        public float PostAttackMoveDelay { get; private set; } = 0.0f;
         // S4 default 1.0 (CharacterData.cpp:966) the slot 0 catches the whole roll unless
-        // the data explicitly lowers it (alternating champs use 0.5).
+        // the data explicitly lowers it (alternating champs use 0.5). Keep 1.0 (current
+        // branch's verified value) over experimental's stale 0.5.
         public float BaseAttackProbability { get; private set; } = 1.0f;
         public float BaseDamage { get; private set; } = 10.0f;
         public float BaseHp { get; private set; } = 100.0f;
@@ -47,7 +76,9 @@ namespace LeagueSandbox.GameServer.Content
         public float CooldownSpellSlot { get; private set; } = 0.0f;
         public float CritDamageBonus { get; private set; } = 2.0f;
         public float CritAttackDelayCastOffsetPercent { get; private set; } = 0.0f;
-        public float CritAttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
+        // Riot default = 1.0 (crit-attack windup scales with attack speed too); same reasoning as the
+        // non-crit AttackDelayCastOffsetPercentAttackSpeedRatio above.
+        public float CritAttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 1.0f;
         public float CritAttackDelayOffsetPercent { get; private set; } = 0.0f;
         // S4 default 2.0 (CharacterData.cpp:1008 loads every non-base slot incl. crit
         // with the 2.0 catch-all default). The crit walk's first slot always catches.
@@ -83,6 +114,15 @@ namespace LeagueSandbox.GameServer.Content
 
         public string[] SpellNames { get; private set; } = new string[4];
         public string[] ExtraSpells { get; private set; } = new string[16];
+
+        // Form-changer (Elise/Jayce/Nidalee/Shyvana/Udyr) alternate-form data. The inibin keys are a
+        // 4.20-era addition absent from every hash→name dictionary, so they have no recoverable field
+        // name and are read directly by their raw inibin key hash (see ContentFile.GetStringByHash).
+        // AlternateFormSpells = the alternate form's Q/W/E/R; empty for stance/reuse forms (Shyvana,
+        // Udyr) that don't carry a 4-slot alternate spellbook. AlternateCharacterName = the alternate
+        // form's character/model (EliseSpider, JayceCannon, Nidalee_Cougar, ShyvanaDragon, UdyrPhoenix).
+        public string[] AlternateFormSpells { get; private set; } = new string[4];
+        public string AlternateCharacterName { get; private set; } = "";
         public int[] MaxLevels { get; private set; } = { 5, 5, 5, 3 };
 
         public int[][] SpellsUpLevels { get; private set; } =
@@ -117,6 +157,8 @@ namespace LeagueSandbox.GameServer.Content
             AttackRange = file.GetFloat("Data", "AttackRange", AttackRange);
             AttackSpeedPerLevel = file.GetFloat("Data", "AttackSpeedPerLevel", AttackSpeedPerLevel);
             AttackTotalTime = file.GetFloat("Data", "AttackTotalTime", AttackTotalTime);
+            ChasingAttackRangePercent = file.GetFloat("Data", "ChasingAttackRangePercent", ChasingAttackRangePercent);
+            PostAttackMoveDelay = file.GetFloat("Data", "PostAttackMoveDelay", PostAttackMoveDelay);
 
             BaseAttackProbability = file.GetFloat("Data", "BaseAttack_Probability", BaseAttackProbability);
             BaseDamage = file.GetFloat("Data", "BaseDamage", BaseDamage);
@@ -186,6 +228,15 @@ namespace LeagueSandbox.GameServer.Content
                 ExtraSpells[i] = file.GetString("Data", $"ExtraSpell{i + 1}", "");
             }
 
+            // Alternate-form spells live under four consecutive inibin key hashes (2074622752..2074622755
+            // = alt-form Spell1..4); the alternate character/model is hash 3309724546. These have no
+            // known field name (see AlternateFormSpells declaration), so they are read by raw hash.
+            for (var i = 0; i < 4; i++)
+            {
+                AlternateFormSpells[i] = file.GetStringByHash(2074622752u + (uint)i, "");
+            }
+            AlternateCharacterName = file.GetStringByHash(3309724546u, "");
+
             for (var i = 0; i < 4; i++)
             {
                 var defaultLevels = SpellsUpLevels[i];
@@ -194,6 +245,13 @@ namespace LeagueSandbox.GameServer.Content
             }
 
             PassiveData.PassiveLuaName = file.GetString("Data", "Passive1LuaName", "");
+
+            // PassiveLevels[i] = the champion level at which passive rank i+1 unlocks
+            // (Passive1Level1..6 in the data, e.g. 1/4/7/10/13/16). Absent keys stay 0.
+            for (var i = 0; i < PassiveData.PassiveLevels.Length; i++)
+            {
+                PassiveData.PassiveLevels[i] = file.GetInt("Data", $"Passive1Level{i + 1}", 0);
+            }
 
             MaxLevels = file.GetIntArray("Data", "MaxLevels", MaxLevels);
 

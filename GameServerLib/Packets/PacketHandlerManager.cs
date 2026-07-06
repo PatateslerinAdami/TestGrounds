@@ -12,6 +12,7 @@ using Channel = GameServerCore.Packets.Enums.Channel;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer;
+using LeagueSandbox.GameServer.Logging;
 
 namespace PacketDefinitions420
 {
@@ -51,6 +52,15 @@ namespace PacketDefinitions420
             _playerManager = _game.PlayerManager;
             _netReq = netReq;
             _netResp = netResp;
+            // Opt-in outbound packet capture (replay-comparable JSON-lines). Set the env var
+            // PACKET_LOG to a path (or "1" for ./packetlog.jsonl) to record every packet we send.
+            PacketLogger.Enable(Environment.GetEnvironmentVariable("PACKET_LOG"));
+            // Opt-in collision-push diagnostic (server-vs-client divergence magnitude). Set
+            // COLLISION_LOG to a path (or "1" for ./collisionlog.jsonl). See CollisionLogger.
+            CollisionLogger.Enable(Environment.GetEnvironmentVariable("COLLISION_LOG"));
+            // Opt-in issued-path geometry diagnostic (chord/lookahead/detour/body-clearance, diffable
+            // against Riot via tools/minionroute.py). Set PATH_LOG to a path (or "1"). See PathLogger.
+            PathLogger.Enable(Environment.GetEnvironmentVariable("PATH_LOG"));
             _gameConvertorTable = new Dictionary<Tuple<GamePacketID, Channel>, RequestConvertor>();
             _loadScreenConvertorTable = new Dictionary<LoadScreenPacketID, RequestConvertor>();
             _fallbackConvertorTable = new Dictionary<GamePacketID, RequestConvertor>();
@@ -169,6 +179,17 @@ namespace PacketDefinitions420
 
         public bool SendPacket(int userId, byte[] source, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
+            // Log once per logical send. Broadcast helpers (Team/Vision/Spawned) route their
+            // per-recipient sends through EnqueueUnicast (no logging) so a fan-out is still one
+            // line, matching how a single packet appears once in a replay.
+            PacketLogger.Log(source, channelNo, flag, _game.GameTime);
+            return EnqueueUnicast(userId, source, channelNo, flag);
+        }
+
+        // Per-recipient enqueue without logging. Internal callers that already logged the
+        // logical packet (the broadcast helpers below) use this to avoid duplicate log lines.
+        private bool EnqueueUnicast(int userId, byte[] source, Channel channelNo, PacketFlags flag)
+        {
             if (0 <= userId && userId < _sender.Peers.Length)
             {
                 _bridge.EnqueueOutbound(new OutboundUnicast(userId, source, channelNo, flag));
@@ -179,6 +200,7 @@ namespace PacketDefinitions420
 
         public bool BroadcastPacket(byte[] data, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             if (data.Length >= 8)
             {
                 // Fan out to one OutboundUnicast per configured slot. The net
@@ -203,11 +225,12 @@ namespace PacketDefinitions420
         public bool BroadcastPacketTeam(TeamId team, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (var ci in _playerManager.GetPlayers(false))
             {
                 if (ci.Team == team)
                 {
-                    SendPacket(ci.ClientId, data, channelNo, flag);
+                    EnqueueUnicast(ci.ClientId, data, channelNo, flag);
                 }
             }
 
@@ -217,9 +240,10 @@ namespace PacketDefinitions420
         public bool BroadcastPacketVision(GameObject o, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (int pid in o.VisibleForPlayers)
             {
-                SendPacket(pid, data, channelNo, flag);
+                EnqueueUnicast(pid, data, channelNo, flag);
             }
             return true;
         }
@@ -231,9 +255,29 @@ namespace PacketDefinitions420
         public bool BroadcastPacketSpawned(GameObject o, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
             foreach (int pid in o.SpawnedForPlayers)
             {
-                SendPacket(pid, data, channelNo, flag);
+                EnqueueUnicast(pid, data, channelNo, flag);
+            }
+            return true;
+        }
+
+        // Sends to every player that does NOT have `o` spawned — the complement of
+        // BroadcastPacketSpawned. Use to tell fogged players about something they can't observe directly
+        // (e.g. S2C_IncrementMinionKills: lane CS for a minion they never saw, which the spawned players
+        // already counted from the vision-gated death). Counted exactly once across the two sets.
+        public bool BroadcastPacketUnspawned(GameObject o, byte[] data, Channel channelNo,
+            PacketFlags flag = PacketFlags.RELIABLE)
+        {
+            PacketLogger.Log(data, channelNo, flag, _game.GameTime);
+            var spawned = new HashSet<int>(o.SpawnedForPlayers);
+            foreach (var ci in _playerManager.GetPlayers(false))
+            {
+                if (!spawned.Contains(ci.ClientId))
+                {
+                    EnqueueUnicast(ci.ClientId, data, channelNo, flag);
+                }
             }
             return true;
         }
@@ -242,6 +286,17 @@ namespace PacketDefinitions420
         {
             var peerInfo = _playerManager.GetPeerInfo(userId);
             return peerInfo?.Team ?? TeamId.TEAM_NEUTRAL;
+        }
+
+        /// <summary>
+        /// Whether <paramref name="userId"/> is the player who controls <paramref name="unit"/>. Used to gate
+        /// the owner-only replication bucket (CLIENT_ONLY: gold / cooldowns / mana costs), which Riot sends
+        /// only to the owning player (replay-verified). Only a champion has a controlling player; for every
+        /// other unit type this returns false (they carry no owner-only replication data anyway).
+        /// </summary>
+        public bool IsOwnedByPlayer(LeagueSandbox.GameServer.GameObjects.AttackableUnits.AttackableUnit unit, int userId)
+        {
+            return unit != null && _playerManager.GetPeerInfo(userId)?.Champion == unit;
         }
 
         // -------- Net-thread receive path --------
@@ -283,6 +338,14 @@ namespace PacketDefinitions420
             else
             {
                 var gamePacketId = (GamePacketID)reader.ReadByte();
+                // Extended packets (opcode > 0xFD, e.g. C2S_UndoItemReq 0x10A) arrive as
+                // [0xFE][senderNetID(4)][opcode LE(2)][body]; the real opcode is the 2 bytes at
+                // offset 5-6, not data[0]. Mirror GamePacket.Create's decode so they dispatch.
+                if (gamePacketId == GamePacketID.ExtendedPacket && data.Length >= 7)
+                {
+                    reader.ReadInt32(); // skip senderNetID
+                    gamePacketId = (GamePacketID)reader.ReadUInt16();
+                }
                 convertor = GetConvertor(gamePacketId, channelId);
             }
 
@@ -364,6 +427,8 @@ namespace PacketDefinitions420
 
             var annoucement = new OnLeave { OtherNetID = peerInfo.Champion.NetId };
             _game.PacketNotifier.NotifyS2C_OnEventWorld(annoucement, peerInfo.Champion);
+            // Show the disconnect indicator over the champion for its allies (S2C_Exit / ShowDisconnect).
+            _game.PacketNotifier.NotifyS2C_ShowDisconnect(peerInfo.Champion);
             peerInfo.IsDisconnected = true;
             peerInfo.IsStartedClient = false;
             peerInfo.ReconnectStartReady = false;

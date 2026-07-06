@@ -10,13 +10,10 @@
   <ItemGroup>
     <Compile Remove="Characters\Aatrox_New\**" />
     <Compile Remove="Characters\Fizz\**" />
-    <Compile Remove="Characters\Vayne\**" />
     <EmbeddedResource Remove="Characters\Aatrox_New\**" />
     <EmbeddedResource Remove="Characters\Fizz\**" />
-    <EmbeddedResource Remove="Characters\Vayne\**" />
     <None Remove="Characters\Aatrox_New\**" />
     <None Remove="Characters\Fizz\**" />
-    <None Remove="Characters\Vayne\**" />
   </ItemGroup>
 
   <ItemGroup>

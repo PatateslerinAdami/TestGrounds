@@ -55,7 +55,6 @@ public class TrundleCircle : IBuffGameScript {
         );
         foreach (var target in unitsInRange.Where(target => target != _pillar))
         {
-            CancelDash(target);
 
             var away = target.Position - _pillar.Position;
             if (!IsFiniteNonZero(away))
@@ -63,18 +62,12 @@ public class TrundleCircle : IBuffGameScript {
             away = NormalizeOrDefault(away, Vector2.UnitX);
 
             var targetPos = _pillar.Position + away * KnockbackDistance;
-            ForceMovement(
+            ForceMove(
                 target,
-                "RUN",
                 targetPos,
                 KnockbackSpeed,
-                0f,
-                0f,
-                0f,
-                true,
-                ForceMovementType.FURTHEST_WITHIN_RANGE,
-                ForceMovementOrdersType.CANCEL_ORDER,
-                ForceMovementOrdersFacing.KEEP_CURRENT_FACING
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
+                orders: ForceMovementOrdersType.CANCEL_ORDER
             );
         }
 

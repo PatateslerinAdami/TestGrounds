@@ -14,6 +14,7 @@ namespace Buffs;
 internal class arcanemastery : IBuffGameScript {
     private ObjAIBase        _ryze;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.HASTE,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };

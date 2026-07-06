@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using System.Numerics;
@@ -73,15 +72,19 @@ namespace Spells
             var owner = spell.CastInfo.Owner;
             AddBuff("YasoAnimTest", 4f, 1, spell, owner, owner);
             AddParticleTarget(owner, owner, "Yasuo_Q2_Hand", owner);
-            spell.CreateSpellSector(new SectorParameters
+            // Steel Tempest (2nd cast) = instant line hit — inline polygon query (nearest-first) + per-hit
+            // spell.ApplyEffects -> OnSpellHit -> TargetExecute, replacing the SpellSector. Geometry/flags
+            // identical to the old polygon sector (BindObject=owner; OverrideFlags 0 -> spell flags).
+            var dir = new Vector2(owner.Direction.X, owner.Direction.Z);
+            foreach (var target in GetUnitsInPolygon(owner, owner.Position, dir, 100f, 450f,
+                new Vector2[] { new Vector2(-1, 0), new Vector2(-1, 1), new Vector2(1, 1), new Vector2(1, 0) },
+                true, spell.SpellData.Flags))
             {
-                BindObject = owner, Length = 450f, Width = 100f,
-                PolygonVertices = new Vector2[] { new Vector2(-1, 0), new Vector2(-1, 1), new Vector2(1, 1), new Vector2(1, 0) },
-                SingleTick = true, Type = SectorType.Polygon
-            });
+                spell.ApplyEffects(target);
+            }
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             var owner = spell.CastInfo.Owner;
 

@@ -191,13 +191,21 @@ namespace MapScripts.Map1
                     DeadInhibitors[team][inhibitor] -= diff;
                     if (DeadInhibitors[team][inhibitor] <= 0)
                     {
+                        // Revive ONLY now, at the actual respawn. SetState(RespawningState) flips
+                        // IsDead=false (re)bakes the footprint and makes the inhibitor targetable
+                        // again via NotifyState. Doing this earlier made lane minions acquire the
+                        // not-yet-respawned inhibitor as a target (IsDead=false + the global
+                        // StatusFlags.Targetable still set) and bunch up "stuck" in front of it.
+                        inhibitor.SetState(DampenerState.RespawningState);
                         inhibitor.Stats.CurrentHealth = inhibitor.Stats.HealthPoints.Total;
                         inhibitor.NotifyState();
                         DeadInhibitors[inhibitor.Team].Remove(inhibitor);
-                    }
-                    else if (DeadInhibitors[team][inhibitor] <= 15.0f * 1000)
-                    {
-                        inhibitor.SetState(DampenerState.RespawningState);
+                        // A respawned inhibitor means the team is no longer fully down — recompute the
+                        // gate that drives DoubleSuperMinionWave. Without this it stays true forever once
+                        // all inhibitors were simultaneously dead, spawning double-supers permanently
+                        // (S4 recomputes totalNumberBarracks each wave). See docs/LANE_MINION_DECOMP_AUDIT.md.
+                        AllInhibitorsAreDead[inhibitor.Team] =
+                            DeadInhibitors[inhibitor.Team].Count == InhibitorList[inhibitor.Team].Count;
                     }
                 }
             }
@@ -219,6 +227,43 @@ namespace MapScripts.Map1
             {
                 AllInhibitorsAreDead[inhibitor.Team] = true;
             }
+        }
+
+        // Super minions spawn for only the first part of an inhibitor's down-window, then stop while
+        // it is still down. Riot (obj_Barracks::DisableInhibitor, mac decomp 4.17): the super-minion
+        // timer is set to (respawn − 2×waveSpawnInterval) and DisableSuperMinions fires when it
+        // expires; the inhibitor itself respawns at the full respawn time. With respawn = 240s and a
+        // 30s wave interval that is a 180s super window followed by a ~60s super-less tail. We derive
+        // the window from the existing respawn countdown (no separate timer): supers are active while
+        // the remaining respawn time is still greater than 2×waveSpawnInterval.
+        // See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md (Phase 4) / LANE_MINION_DECOMP_AUDIT.md (S5).
+        public const float SUPER_MINION_STOP_BEFORE_RESPAWN_MS = 2f * 30f * 1000f; // 2 × 30s wave interval
+
+        /// <summary>
+        /// True while the inhibitor of <paramref name="inhibitorTeam"/> in <paramref name="lane"/> is
+        /// down AND still within its super-minion window (the first respawn−60s of the down-window).
+        /// The enemy team's lane minions are super minions during this window.
+        /// </summary>
+        /// <summary>
+        /// Number of <paramref name="team"/>'s inhibitors currently down (within their respawn
+        /// window). Each one buffs the opposing team's minions (Riot ApplyBarracksDestructionBonuses,
+        /// applied team-wide per dead inhibitor, reversed at full respawn — hence the full down-window
+        /// count, not the 180s super window).
+        /// </summary>
+        public static int CountDeadInhibitors(TeamId team)
+        {
+            return DeadInhibitors.TryGetValue(team, out var dead) ? dead.Count : 0;
+        }
+
+        public static bool IsSuperMinionWindowActive(TeamId inhibitorTeam, Lane lane)
+        {
+            if (!InhibitorList.TryGetValue(inhibitorTeam, out var byLane)
+                || !byLane.TryGetValue(lane, out var inhibitor) || inhibitor == null)
+            {
+                return false;
+            }
+            return DeadInhibitors[inhibitorTeam].TryGetValue(inhibitor, out var respawnRemaining)
+                && respawnRemaining > SUPER_MINION_STOP_BEFORE_RESPAWN_MS;
         }
 
         static float timeCheck = 480.0f * 1000;
@@ -301,18 +346,25 @@ namespace MapScripts.Map1
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                // Riot ObjectCFG.cfg HQ_T1/T2 has Collision Radius=319.4445, PathfindingCollisionRadius=352.7778 (found this out with help of Yashiro)
-                // those values are what the client bakes into ITS internal nav grid (NOT_PASSABLE flags
-                // via NavCellFlagManager::WriteFlagsToFilledCircleOriginal at S4 obj_HQ.cpp:926). They are
-                // NOT the right values for the SERVER's body push collision-response radius: with 319,
-                // body push activates at distance < 319 + champion_radius (~65) = ~385 from nexus center,
-                // far beyond the visual model (~150 world units). Symptom: champion paths past the nexus,
-                // body-push triggers before visual contact, OnCollision-snap then drift-loops the unit
-                // back toward the nexus on each tick.
-                // Reduced both args to 150 to match visual size; pathing+body-push now both fire only at
-                // visible contact. Server diverges from client's internal pathing-blocker bake by design
-                // if I see this correctly the server's role is collision response and waypoint replication, not nav-grid sync.
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 150, 1700, nexusStats, 150);
+                // ObjectCFG.cfg HQ_T1/T2: Collision Radius = 319.4445, PathfindingCollisionRadius
+                // = 352.7778. Both restored 2026-06-07 (were 150/150): the old reduction targeted a
+                // body-push drift loop that no longer exists (buildings are excluded from the
+                // body-push quad; their footprints act via the nav grid only). The two values are
+                // COUPLED: with CR=150 and the 352.78 footprint, melee reach (125+65+150=340)
+                // couldn't touch the nexus — Riot's CR=319.44 gives reach 509 > 352.78.
+                //
+                // Position correction (2026-06-07): the HQ .sco header CentralPoint sits (-37,-13)
+                // off the mesh bbox center (same delta on both HQ_T1/T2 — shared mesh). The nexus
+                // geometry statically baked into the .aimesh navgrid is centered on the BBOX center
+                // (measured blue ≈ (1167,1441), purple ≈ (12800,13040)), as is the rendered scene
+                // mesh. Anchoring our 353 footprint at the raw CentralPoint pushed ~75u of blocked
+                // air one-sidedly toward (-X,-Z) past the visible building (purple: toward the left
+                // nexus turret; blue: toward the fountain).
+                position += new Vector2(37f, 13f);
+                // sightRange 1350 = real Map1 ObjectCFG.cfg HQ_T1/T2 PerceptionBubbleRadius
+                // (verified; the prior 1700 was invented). Vision is provided intrinsically via
+                // ObjBuilding auto-vision; no RevealStealth (structures grant sight, don't reveal).
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 319, 1350, nexusStats, 353);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
@@ -329,17 +381,25 @@ namespace MapScripts.Map1
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                // Riot ObjectCFG.cfg has Order Barracks_T1=186 / Chaos Barracks_T2=214 — the client's
-                // internal nav-grid NOT_PASSABLE bake (S1 barrackdampener.cpp:1896, S4 obj_HQ.cpp:926).
-                // Same reason as the nexus comment above: those are CLIENT pathing-blocker values, not
-                // suitable for the SERVER's body-push trigger which fires whenever
-                // distance < CollisionRadius + champion_radius. With 214, body-push triggers at ~280
-                // from inhib center while the visual model is ~100 — Vayne and other small-radius
-                // champions get caught in a drift loop where each OnCollision-snap pushes them deeper
-                // toward the inhib. Reduced to 100 to match visual: body-push and dynamic blocker now
-                // both fire only at visible contact. Server diverges from client pathing-blocker bake by
-                // design (server's role is response, not nav-grid sync).
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 100, 0, inhibitorStats);
+                // Pathing footprint restored to Riot's nav-grid bake (2026-06-07): ObjectCFG.cfg
+                // PathfindingCollisionRadius — Order Barracks_T1 ≈ 185.5-187.2 per lane, Chaos
+                // Barracks_T2 = 213.75. The earlier reduction to 100 targeted a body-push drift
+                // loop that no longer exists (buildings are excluded from the body-push quad;
+                // footprints act via the nav grid only). Without the full bake, lane minions cut
+                // the corner ~90-115u tighter than Riot's, bunch at the inhibitor and briefly
+                // stop on each other (replays show them passing on the wide arc without stopping).
+                // Gameplay CollisionRadius is COUPLED to the footprint like the nexus
+                // (HQ: CR 319.44 = bake 352.78 × 0.9055 — same ratio applied here). The old
+                // CR=100 made melee attack range (125 + 30 + 100 = 255 from center for Akali)
+                // fall short of the nearest standable spot outside the footprint
+                // (214 bake + ~35 terrain-exit margin ≈ 250-266) → champions ran to the
+                // recommended attack point and stood 10u out of range forever (2026-06-07).
+                int inhibFootprint = teamId == TeamId.TEAM_BLUE ? 187 : 214;
+                int inhibCollisionRadius = teamId == TeamId.TEAM_BLUE ? 169 : 194;
+                // sightRange 1350 = real Map1 ObjectCFG.cfg Barracks_T1/T2 PerceptionBubbleRadius
+                // (verified; was 0 = no vision, a bug — inhibitors DO grant sight). Intrinsic
+                // auto-vision via ObjBuilding; no RevealStealth.
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, inhibCollisionRadius, 1350, inhibitorStats, inhibFootprint);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;
@@ -356,6 +416,14 @@ namespace MapScripts.Map1
                     var fountainTurret = CreateLaneTurret(turretObj.Name + "_A", TowerModels[teamId][TurretType.FOUNTAIN_TURRET], position, teamId, TurretType.FOUNTAIN_TURRET, Lane.LANE_Unknown, LaneTurretAI, turretObj);
                     TurretList[teamId][lane].Add(fountainTurret);
                     AddObject(fountainTurret);
+                    // The fountain/shrine turret is the ONE permanently-indestructible structure
+                    // (engine-intrinsic in Riot; the level-script protection chain never covers it).
+                    // Invulnerable so it can never be damaged, and untargetable to the enemy so AI
+                    // units never path to it to attack an unkillable target (the inhibitor soft-lock
+                    // failure mode). It still fires at enemies in the fountain.
+                    var enemyOfTurret = teamId == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+                    fountainTurret.SetStatus(StatusFlags.Invulnerable, true);
+                    fountainTurret.SetIsTargetableToTeam(enemyOfTurret, false);
                     continue;
                 }
 

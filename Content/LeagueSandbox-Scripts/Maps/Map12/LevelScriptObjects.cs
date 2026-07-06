@@ -250,7 +250,8 @@ namespace MapScripts.Map12
                 nexusStats.HealthPoints.BaseValue = 5500.0f;
                 nexusStats.CurrentHealth = nexusStats.HealthPoints.BaseValue;
 
-                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 1700);
+                // sightRange 800 = real Map12 (ARAM) ObjectCFG.cfg HQ PerceptionBubbleRadius (was 1700).
+                var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 353, 800);
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
                 NexusList.Add(nexus);
                 AddObject(nexus);
@@ -266,7 +267,8 @@ namespace MapScripts.Map12
                 inhibitorStats.Armor.BaseValue = GlobalData.BarrackVariables.Armor;
                 inhibitorStats.CurrentHealth = inhibitorStats.HealthPoints.BaseValue;
 
-                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 0);
+                // sightRange 800 = real Map12 (ARAM) ObjectCFG.cfg Barracks PerceptionBubbleRadius (was 0).
+                var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, 214, 800);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
                 inhibitor.RespawnTime = 300.0f;
                 InhibitorList.Add(teamId, inhibitor);

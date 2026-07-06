@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
@@ -45,18 +44,22 @@ using GameServerCore.Packets.Enums;
 [OnMiss]
 [OnMissileEnd]
 [OnMissileUpdate]
+[OnMoveBegin]
 [OnMoveEnd]
 [OnMoveFailure]
 [OnMoveSuccess]
 [OnNearbyDeath]
+[OnPathToTargetBlocked]
+[OnCancelAttack] - in-progress auto-attack windup cancelled; carries AutoAttackStopReason. (wired)
 [OnPreAttack]
-[OnPreDamage]
+[OnPreDamage] - raw pre-mitigation damage; scripts may modify DamageData.Damage. (wired)
 [OnPreDealDamage]
-[OnPreMitigationDamage]
 [OnPreTakeDamage]
+(OnPreMitigationDamage was an S1-only hook; in 4.20 it no longer exists — merged into OnPreDamage.)
 [OnReconnect]
 [OnResurrect]
 [OnSpellCast] - start casting
+[OnSpellCooldownEnd] - spell's cooldown finished, back to STATE_READY (natural expiry + manual reset). (wired)
 [OnSpellChannel] - start channeling
 [OnSpellChannelCancel] - abrupt stop channeling
 [OnSpellChannelUpdate] - every server tick during channel; diff=0f at channel entry. Scripts pace via PeriodicTicker.
@@ -66,9 +69,9 @@ using GameServerCore.Packets.Enums;
 [OnSpellHit] - "ApplyEffects" function in Spell.
 [OnTakeDamage]
 [OnUpdateActions] - move order probably
-[OnUpdateAmmo]
+[OnUpdateAmmo] - spell ammo/charge count changed (recharge / restore / cast-consume); carries (owner, spell). (wired)
 [OnUpdateStats]
-[OnZombie]
+[OnZombie] - death produced a zombie (BecomeZombie); unit stays in world until EndZombie(). (wired)
  */
 
 namespace LeagueSandbox.GameServer.API
@@ -92,56 +95,7 @@ namespace LeagueSandbox.GameServer.API
             }
         }
 
-        // Reduces the given shield's Amount by `amount` and notifies the client so the
-        // shield-bar shrinks. If the shield drains to 0 it is removed from the unit and
-        // OnShieldBreak fires (same path as ConsumeShields). `amount` must be positive.
-        public static void ReduceShield(Shield shield, float amount)
-        {
-            if (shield == null || amount <= 0)
-            {
-                return;
-            }
-
-            float applied = shield.Reduce(amount);
-            if (applied <= 0)
-            {
-                return;
-            }
-
-            var unit = shield.TargetUnit;
-            if (unit != null)
-            {
-                _game.PacketNotifier.NotifyModifyShield(unit, -applied, shield.Physical, shield.Magical, false);
-                if (shield.IsConsumed())
-                {
-                    unit.RemoveShield(shield);
-                }
-            }
-        }
-
-        // Increases the given shield's Amount by `amount` and notifies the client so the
-        // shield-bar grows. `amount` must be positive.
-        public static void IncShield(Shield shield, float amount)
-        {
-            if (shield == null || amount <= 0)
-            {
-                return;
-            }
-
-            float applied = shield.Increase(amount);
-            if (applied <= 0)
-            {
-                return;
-            }
-
-            var unit = shield.TargetUnit;
-            if (unit != null)
-            {
-                _game.PacketNotifier.NotifyModifyShield(unit, applied, shield.Physical, shield.Magical, false);
-            }
-        }
-
-        // Unused
+        // Fires when primary ability resource (mana/energy/etc.) is added; published from AttackableUnit.
         public static Dispatcher<AttackableUnit, AttackableUnit> OnAddPAR
             = new Dispatcher<AttackableUnit, AttackableUnit>();
 
@@ -151,8 +105,8 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingHit
             = new Dispatcher<AttackableUnit, AttackableUnit>();
 
-        public static Dispatcher<AttackableUnit, Spell, SpellMissile, SpellSector> OnBeingSpellHit
-            = new Dispatcher<AttackableUnit, Spell, SpellMissile, SpellSector>();
+        public static Dispatcher<AttackableUnit, Spell, SpellMissile> OnBeingSpellHit
+            = new Dispatcher<AttackableUnit, Spell, SpellMissile>();
 
         public static Dispatcher<Buff> OnBuffDeactivated
             = new Dispatcher<Buff>();
@@ -166,9 +120,6 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<GameObject> OnCollisionTerrain
             = new Dispatcher<GameObject>();
 
-        public static Dispatcher<Spell, SpellSector> OnCreateSector
-            = new Dispatcher<Spell, SpellSector>();
-
         public static Dispatcher<ObjAIBase, DeathData> OnAssist
             = new Dispatcher<ObjAIBase, DeathData>();
 
@@ -177,6 +128,14 @@ namespace LeagueSandbox.GameServer.API
 
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnDeath
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
+
+        // Fires when a death produces a ZOMBIE rather than a normal death (DeathData.BecomeZombie
+        // set during the OnDeath pass). Faithful to Riot's BuffOnZombieBuildingBlocks (decomp:
+        // obj_AI_Base::DoDeath sets bZombie=true → buff OnZombie hooks). The zombie unit stays in
+        // the world (not removed) and acts until a script calls EndZombie() — e.g. Karthus
+        // DeathDefied: OnDeath arms BecomeZombie, OnZombie grants the 7s keep-casting buff.
+        public static Dispatcher<AttackableUnit, DeathData> OnZombie
+            = new Dispatcher<AttackableUnit, DeathData>();
 
         public static DataOnlyDispatcher<ObjAIBase, DamageData> OnHitUnit
             = new DataOnlyDispatcher<ObjAIBase, DamageData>();
@@ -218,6 +177,15 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell> OnLevelUpSpell
             = new Dispatcher<Spell>();
 
+        /// <summary>
+        /// Fired when a unit ENTERS forced movement (dash / leap / engine knock-arc) — symmetric with
+        /// <see cref="OnMoveEnd"/>. Lets components react to the transition (e.g. drop a CC-wander when a
+        /// knockup interrupts) instead of polling <c>MovementParameters != null</c> every tick.
+        /// Part of the forced-movement rewrite P1 (see docs/FORCED_MOVEMENT_REWRITE_PLAN.md).
+        /// </summary>
+        public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveBegin
+            = new Dispatcher<AttackableUnit, ForceMovementParameters>();
+
         public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveEnd
             = new Dispatcher<AttackableUnit, ForceMovementParameters>();
 
@@ -227,8 +195,36 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, ForceMovementParameters> OnMoveSuccess
             = new Dispatcher<AttackableUnit, ForceMovementParameters>();
 
+        /// <summary>
+        /// Fired when an ObjAIBase's navigation to its current attack target fails — the goal is
+        /// unreachable so the pathfinder returned no path (or only a partial path to the closest
+        /// reachable cell). Mirrors the engine-fired Lua callback `OnPathToTargetBlocked`
+        /// (Aggro.lua / Shared/Minions.lua / BaronMinionAI.lua): the AI briefly ignores the target
+        /// and re-acquires. Published deferred (top of the next Update tick) to avoid re-entrant
+        /// target/waypoint mutation inside the pathing pass. Data = the blocked target (may be null).
+        /// </summary>
+        public static DataOnlyDispatcher<ObjAIBase, AttackableUnit> OnPathToTargetBlocked
+            = new DataOnlyDispatcher<ObjAIBase, AttackableUnit>();
+
         public static DataOnlyDispatcher<ObjAIBase, Spell> OnPreAttack
             = new DataOnlyDispatcher<ObjAIBase, Spell>();
+
+        /// <summary>
+        /// Riot OnCancelAttack: fires on the attacking unit when an in-progress auto-attack windup is
+        /// cancelled, carrying the <see cref="AutoAttackStopReason"/> (Moving / TargetLost / OtherImmediately / …).
+        /// Decomp: BuffScriptInstance::HandleOnCancelAttack(obj_AI_Base*, AutoAttackStopReason).
+        /// </summary>
+        public static DataOnlyDispatcher<ObjAIBase, AutoAttackStopReason> OnCancelAttack
+            = new DataOnlyDispatcher<ObjAIBase, AutoAttackStopReason>();
+
+        /// <summary>
+        /// Riot 4.20 OnPreDamage: fires on the RAW (pre-mitigation) damage, before Armor/MR is applied.
+        /// Scripts may modify <c>DamageData.Damage</c> here and the engine mitigates the modified value.
+        /// Published for both attacker- and target-side buffs. (Riot also priority-orders this via
+        /// OnPreDamagePriority — not yet wired; see docs/DAMAGE_PIPELINE_FAITHFUL_PLAN.md P3.)
+        /// </summary>
+        public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreDamage
+            = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreDealDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
@@ -251,11 +247,20 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell, float> OnSpellChannelUpdate
             = new Dispatcher<Spell, float>();
 
-        public static Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector> OnSpellHit
-            = new Dispatcher<Spell, AttackableUnit, SpellMissile, SpellSector>();
+        public static Dispatcher<Spell, AttackableUnit, SpellMissile> OnSpellHit
+            = new Dispatcher<Spell, AttackableUnit, SpellMissile>();
 
         public static Dispatcher<SpellMissile> OnSpellMissileEnd
             = new Dispatcher<SpellMissile>();
+
+        // Fires ONCE when a chained missile's whole chain ends — the final hop that spawns no
+        // successor (bounce budget reached / no next target / fizzle / cancel / lifetime). Keyed by the
+        // ORIGIN spell (constant across a non-alternating chain), carries the final missile. Use this
+        // instead of per-hop OnSpellMissileEnd for "after the last bounce" logic (e.g. Master Yi Q
+        // reappear). NOTE: for alternating ally/enemy chains (Nami W) the origin switches per segment,
+        // so the key is the LAST segment's spell.
+        public static Dispatcher<Spell, SpellMissile> OnSpellChainMissileEnd
+            = new Dispatcher<Spell, SpellMissile>();
 
         public static Dispatcher<SpellMissile, AttackableUnit> OnSpellMissileHit
             = new Dispatcher<SpellMissile, AttackableUnit>();
@@ -266,32 +271,99 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Spell> OnSpellPostCast
             = new Dispatcher<Spell>();
 
+        // Fires when a spell's cooldown finishes and it returns to STATE_READY — both the natural
+        // per-tick expiry (Update) and manual resets to 0 (CDR procs / refunds via SetCooldown).
+        // Keyed by the Spell. Use for "off-cooldown" triggers (e.g. Master Yi E refresh logic).
+        public static Dispatcher<Spell> OnSpellCooldownEnd
+            = new Dispatcher<Spell>();
+
         public static Dispatcher<Spell> OnSpellPostChannel
             = new Dispatcher<Spell>();
 
-        public static Dispatcher<SpellSector, AttackableUnit> OnSpellSectorHit
-            = new Dispatcher<SpellSector, AttackableUnit>();
+        // CHARGE pipeline (UseChargeChanneling=1 spells like Varus Q). Parallel to OnSpellChannel/
+        // OnSpellChannelCancel/OnSpellChannelUpdate/OnSpellPostChannel but fires INSTEAD of those for
+        // charge-style spells. Engine routes via SpellData.UseChargeChanneling check.
+        // - OnSpellChargeStart: charge begins (analogous to OnSpellChannel)
+        // - OnSpellChargeTick: per-server-tick during charge (analogous to OnSpellChannelUpdate; diff in ms)
+        // - OnSpellChargeFire: release/timeout → missile fire (analogous to OnSpellPostChannel)
+        // - OnSpellChargeCancel: real interrupt (stun/silence/death/casting) (analogous to OnSpellChannelCancel)
+        // OnSpellChargeUpdate (client cursor update via C2S_SpellChargeUpdateReq) stays in ISpellScript
+        // directly because it's driven by an inbound packet, not by the channel lifecycle.
+        public static Dispatcher<Spell> OnSpellChargeStart
+            = new Dispatcher<Spell>();
+
+        public static Dispatcher<Spell, float> OnSpellChargeTick
+            = new Dispatcher<Spell, float>();
+
+        public static Dispatcher<Spell> OnSpellChargeFire
+            = new Dispatcher<Spell>();
+
+        public static Dispatcher<Spell, ChannelingStopSource> OnSpellChargeCancel
+            = new Dispatcher<Spell, ChannelingStopSource>();
 
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnTakeDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
-        public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnReceiveHeal 
+        public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnHeal 
             = new DataOnlyDispatcher<AttackableUnit, HealData>();
         
         public static readonly DataOnlyDispatcher<AttackableUnit, HealData> OnCastHeal 
             = new DataOnlyDispatcher<AttackableUnit, HealData>();
 
-        public static DataOnlyDispatcher<ObjAIBase, AttackableUnit> OnTargetLost
-            = new DataOnlyDispatcher<ObjAIBase, AttackableUnit>();
+        // Riot OnTargetLost(reason, unit): callback gets (owner, lostUnit, reason). LostVisibility drives
+        // the champion go-to-last-known re-acquisition (docs/LOST_TARGET_REACQUISITION_PLAN.md).
+        public static Dispatcher<ObjAIBase, AttackableUnit, TargetLostReason> OnTargetLost
+            = new Dispatcher<ObjAIBase, AttackableUnit, TargetLostReason>();
 
         public static Dispatcher<ObjAIBase, Emotions> OnEmote
             = new Dispatcher<ObjAIBase, Emotions>();
 
+        // Mirrors the Riot buff-script OnBuffAdded hook: a buff on a unit observing OTHER buffs
+        // being activated on that same unit. Primary consumer: spell-shield buffs (BuffType.SPELL_SHIELD,
+        // e.g. SivirE) consuming incoming "SpellShieldMarker"/"*SpellShieldCheck" break-attempt buffs
+        // (BuildingBlocksBase.lua BBBreakSpellShields; see project_spell_shield_system memory).
+        // Keyed by the receiving unit, carrying the newly activated buff. Published from Buff.ActivateBuff,
+        // i.e. only for genuinely new instances (new-add / REPLACE_EXISTING) — not for RENEW/STACK refreshes.
+        public static Dispatcher<AttackableUnit, Buff> OnUnitBuffActivated
+            = new Dispatcher<AttackableUnit, Buff>();
+
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
 
+        // Fires when the engine spell-shield gate (Spell.ApplyEffects → AttackableUnit.
+        // ConsumeSpellShield) blocks a hostile spell execution with an active SPELL_SHIELD buff.
+        // Keyed by the shield BUFF; data = the blocked spell. The shield's buff script does its
+        // on-block reaction here (self-removal, on-block FX, Sivir-E mana). If no handler
+        // deactivates the shield buff, ConsumeSpellShield force-removes it as fallback.
+        // Engine-convenience event: Riot's server-internal notification path is unknown — replays
+        // show only the shield's BuffRemove2 plus server-sent on-block FX at the consume instant
+        // (project_spell_shield_system memory, replay-verified 2026-07-05).
+        public static Dispatcher<Buff, Spell> OnSpellShieldBroken
+            = new Dispatcher<Buff, Spell>();
+
         public static Dispatcher<Shield> OnShieldBreak
             = new Dispatcher<Shield>();
+
+        // Engine-level shield lifecycle events. NOTE: these are NOT faithful Riot buff callbacks
+        // (Riot has no OnShield* handler — a shield there IS a buff, so its lifecycle is the buff's
+        // OnActivate/OnPreDamage/OnDeactivate). They mirror this engine's dedicated Shield-object
+        // system, extending the same convenience pattern as OnShieldBreak above.
+
+        // Fires when a shield is added to a unit. Keyed by the RECEIVING unit (the Shield does not
+        // exist yet at subscribe time), carrying the new Shield as data.
+        public static Dispatcher<AttackableUnit, Shield> OnShieldAdded
+            = new Dispatcher<AttackableUnit, Shield>();
+
+        // Fires when an existing shield's amount grows (IncShield). Keyed by the Shield, carrying
+        // the applied delta.
+        public static Dispatcher<Shield, float> OnShieldIncreased
+            = new Dispatcher<Shield, float>();
+
+        // Fires when a shield's amount shrinks — damage consumption (ConsumeShields) or ReduceShield.
+        // Keyed by the Shield, carrying the amount removed. A killing drain fires this (with the
+        // consumed delta) and then OnShieldBreak from RemoveShield when it hits 0.
+        public static Dispatcher<Shield, float> OnShieldReduced
+            = new Dispatcher<Shield, float>();
 
         // TODO: Handle crowd control the same as normal dashes.
         public static Dispatcher<AttackableUnit> OnUnitCrowdControlled
@@ -303,6 +375,14 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<AttackableUnit, float> OnUpdateStats
             = new Dispatcher<AttackableUnit, float>();
+
+        // Fires when a spell's ammo (charge) count changes. Faithful to Riot's
+        // obj_AI_Base::HandleOnAmmoUpdate(numStacks=currentAmmoCount, spellSlot) → buff-script
+        // BuffOnUpdateAmmo (decomp HandleUpdateAmmoBuff(ownerID, stacks, spellSlot)). Published
+        // only on an actual count change — recharge (+1), restore, or cast-consume (-1) — never
+        // per-tick. The Spell argument carries the owner, slot (CastInfo.SpellSlot) and CurrentAmmo.
+        public static Dispatcher<ObjAIBase, Spell> OnUpdateAmmo
+            = new Dispatcher<ObjAIBase, Spell>();
 
         public static Dispatcher<Spell, SpellCastInfo> OnSpellPress
             = new Dispatcher<Spell, SpellCastInfo>();
@@ -564,6 +644,15 @@ namespace LeagueSandbox.GameServer.API
             protected override void Call(Action<Data> callback)
             {
                 callback(_data);
+            }
+        }
+
+        public class
+            Dispatcher<Source, D1, D2> : VariableDispatcherBase<Source, (D1, D2), Action<Source, D1, D2>>
+        {
+            protected override void Call(Action<Source, D1, D2> callback)
+            {
+                callback(_source, _data.Item1, _data.Item2);
             }
         }
 

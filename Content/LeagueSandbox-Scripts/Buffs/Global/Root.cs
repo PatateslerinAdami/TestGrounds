@@ -25,13 +25,12 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             root = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Root", unit, buff.Duration);
-            unit.SetStatus(StatusFlags.Rooted, true);
+            // Rooted is DERIVED from BuffType.SNARE (AttackableUnit.RecomputeBuffEffects) — overlap-safe.
             unit.StopMovement();
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Rooted, false);
             RemoveParticle(root);
         }
     }

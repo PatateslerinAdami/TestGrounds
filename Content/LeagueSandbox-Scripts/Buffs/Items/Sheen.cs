@@ -45,7 +45,7 @@ namespace Buffs
 
         private void OnHitUnit(DamageData damageData)
         {
-            if (!damageData.IsAutoAttack || damageData.Target == null || damageData.Target.IsDead)
+            if (damageData.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK || damageData.Target.IsDead)
             {
                 return;
             }

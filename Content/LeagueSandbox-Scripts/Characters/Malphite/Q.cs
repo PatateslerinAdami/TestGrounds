@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -30,7 +29,7 @@ public class SeismicShard : ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ap     = _malphite.Stats.AbilityPower.Total * 0.6f;
         var damage = 70f  + 50f * (spell.CastInfo.SpellLevel - 1);
         

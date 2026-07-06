@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -30,7 +29,6 @@ public class JaxLeapStrike : ISpellScript {
         _jax   = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, _jax, OnUpdateStats);
-        ApiEventManager.OnMoveSuccess.AddListener(this, owner, OnMoveEnd);
         //ApiEventManager.OnMoveFailure.AddListener(this, owner, OnMoveFailure);
     }
 
@@ -48,6 +46,8 @@ public class JaxLeapStrike : ISpellScript {
         } else { FaceDirection(GetPositionByOffset(0f, -150f), _jax, true); }
 
         PlayAnimation(_jax, "Spell2", timeScale);
+        ApiEventManager.OnMoveSuccess.AddListener(this, _jax, OnMoveEnd);
+        
     }
 
     public void OnSpellPostCast(Spell spell) {
@@ -87,8 +87,7 @@ public class JaxLeapStrike : ISpellScript {
 
         FaceDirection(distance <= 150f ? _target.Position : GetPositionByOffset(0f, -150f), _jax, true);
 
-        _jax.DashToLocation(GetPositionByOffset(0f, -150f), speedVar, "", gravityVar,
-                            keepFacingLastDirection: false);
+        ForceMove(_jax, GetPositionByOffset(0f, -150f), speedVar, gravity: gravityVar, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
     }
 
     private Vector2 GetPositionByOffset(float angleOffset, float distanceOffset) {

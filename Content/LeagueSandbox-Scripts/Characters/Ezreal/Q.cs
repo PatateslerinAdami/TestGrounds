@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Numerics;
 using static GameServerCore.Content.HashFunctions;
@@ -46,7 +45,7 @@ namespace Spells
             var distance = Vector2.Distance(owner.Position, targetPos);
             FaceDirection(targetPos, owner);
 
-            if (distance > 1200.0)
+            if (distance > 1150.0)
             {
                 targetPos = GetPointFromUnit(owner, 1150.0f);
             }
@@ -70,7 +69,7 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Arc,
             },
             IsDamagingSpell = true
         };
@@ -80,7 +79,7 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             var owner = spell.CastInfo.Owner;
             var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;

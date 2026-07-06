@@ -14,6 +14,8 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
+            PersistsThroughDeath = true,
+            IsNonDispellable = true
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();

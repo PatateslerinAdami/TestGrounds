@@ -32,14 +32,20 @@
         public float PercentRespawnTimeModMinimum { get; set; } = -0.95f;
         /// <summary>
         /// The lowest GoldLostOnDeath Percent Mod bonus can go.
+        /// NOT APPLIED: there is no gold-lost-on-death percent-mod stat server-side to clamp (the
+        /// gold-loss-on-death system itself is unimplemented). Loaded for completeness; wire the clamp
+        /// when that system exists. See docs/CONSTANTS_VAR_AUDIT.md.
         /// </summary>
         public float PercentGoldLostOnDeathModMinimum { get; set; } = -0.95f;
         /// <summary>
         /// The lowest EXPBonus Percent Mod penalty can go.
+        /// NOT APPLIED: AddExperience grants raw experience with no percent EXP-bonus mod stat to clamp.
+        /// Loaded for completeness; wire the clamp when an EXP-bonus modifier exists. See docs/CONSTANTS_VAR_AUDIT.md.
         /// </summary>
         public float PercentEXPBonusMinimum { get; set; } = -1.0f;
         /// <summary>
         /// The highest EXPBonus Percent Mod bonus can go.
+        /// NOT APPLIED: see <see cref="PercentEXPBonusMinimum"/> — no EXP-bonus mod stat exists to cap.
         /// </summary>
         public float PercentEXPBonusMaximum { get; set; } = 5.0f;
         /// <summary>

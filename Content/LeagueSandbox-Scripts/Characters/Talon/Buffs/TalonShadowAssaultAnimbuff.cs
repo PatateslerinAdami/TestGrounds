@@ -24,7 +24,6 @@ internal class TalonShadowAssaultAnimBuff : IBuffGameScript {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         IsHidden = true
-        
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -34,9 +33,12 @@ internal class TalonShadowAssaultAnimBuff : IBuffGameScript {
         _talon = ownerSpell.CastInfo.Owner;
         _unit  = unit;
         PlayAnimation(_talon, "Spell4");
+        SetSpell(_talon, "TalonShadowAssaultToggle", SpellSlotType.SpellSlots, 3);
+        _talon.GetSpell("TalonShadowAssaultToggle").SetCooldown(buff.Duration, true);
     }
 
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { StopAnimation(_talon, "Spell4");
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { 
+        StopAnimation(_talon, "Spell4");
     }
 }

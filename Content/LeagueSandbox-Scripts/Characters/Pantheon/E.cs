@@ -10,7 +10,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -47,9 +46,7 @@ public class PantheonEChannel : ISpellScript
 {
     private ObjAIBase _pantheon;
     private Particle _p;
-    private const float Range = 600f;
-    private const float ConeAngle = 80f;
-    private Vector2 _direction;
+    private Spell _spell;
     private float _timer = 250f;
     private bool _isActive = false;
     private int _casts = 0;
@@ -67,15 +64,12 @@ public class PantheonEChannel : ISpellScript
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _pantheon = owner;
+        _spell = spell;
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _pantheon.StopMovement();
-        var targetDirection = end - _pantheon.Position;
-        _direction = targetDirection.LengthSquared() > float.Epsilon
-            ? Vector2.Normalize(targetDirection)
-            : new Vector2(_pantheon.Direction.X, _pantheon.Direction.Z);
     }
 
     public void OnSpellChannel(Spell spell)
@@ -84,8 +78,8 @@ public class PantheonEChannel : ISpellScript
         _casts = 0;
         _timer = 250f;
         _isActive = true;
-        _p = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_E_cas", _pantheon, 0.75f,
-            bone: "L_BUFFBONE_GLB_HAND_LOC", flags: FXFlags.UpdateOrientation, direction: -_pantheon.Direction);
+        _p = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_E_cas.troy", _pantheon, 0.75f,
+            bone: "L_BUFFBONE_GLB_HAND_LOC", flags: FXFlags.SimulateWhileOffScreen | FXFlags.TargetDirection, followGroundTilt: false);
     }
 
     public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
@@ -104,17 +98,10 @@ public class PantheonEChannel : ISpellScript
         if (!_isActive) return;
         _timer -= diff;
         if (_timer >= 0 || _casts >= 3) return;
-        foreach (var unit in GetUnitsInCone(
-                     _pantheon,
-                     _pantheon.Position,
-                     _direction,
-                     Range,
-                     ConeAngle,
-                     true,
-                     SpellDataFlags.AffectEnemies
-                     | SpellDataFlags.AffectHeroes
-                     | SpellDataFlags.AffectMinions
-                     | SpellDataFlags.AffectNeutral))
+        // Cone + target flags from SpellData (PantheonEChannel: 35° half, 675u, LockConeToPlayer=0
+        // → direction = cast point − caster, fixed since Pantheon is rooted via StopMovement during
+        // the channel). Replaces hardcoded 600u / 80° + manual flags.
+        foreach (var unit in GetUnitsHitBySpell(_spell))
         {
             DealDamage(unit);
         }

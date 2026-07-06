@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -64,12 +63,8 @@ namespace Spells
             _spell = spell;
         }
 
-        public void OnSpellChannel(Spell spell)
+        public void OnSpellCast(Spell spell)
         {
-            _periodicTicker.Reset();
-            SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
-            AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
-
             const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
             {
@@ -77,7 +72,16 @@ namespace Spells
                 case 7:  PlayAnimation(_katarina, "Spell4", timeScale: 0.2f, speedScale: 1f, flags: spell4Flags); break;
             }
         }
-        
+
+        public void OnSpellChannel(Spell spell)
+        {
+            _periodicTicker.Reset();
+            SpellCast(_katarina, 1, SpellSlotType.ExtraSlots, true, _katarina, _katarina.Position);
+            AddBuff("KatarinaRSound", 4f, 1, spell, _katarina, _katarina);
+
+            
+        }
+
         public void OnSpellChannelUpdate(Spell spell, float diff)
         {
             var ticks = _periodicTicker.ConsumeTicks(diff, 250f, true, 1, 10);
@@ -124,7 +128,7 @@ namespace Spells
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
         }
 
-        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             var mainSpell = _katarina.GetSpell("KatarinaR");
             var ap = _katarina.Stats.AbilityPower.Total * mainSpell.SpellData.Coefficient;

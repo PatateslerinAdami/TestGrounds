@@ -128,7 +128,7 @@ internal class ZedWHandler : IBuffGameScript {
             _swapOnSpawn          = false;
             _currentShadowSwapped = true;
         }
-        _shadow = AddMinion(_zed, "ZedShadow", "ZedWShadow", position, _zed.Team, _zed.SkinID, true, false, false,
+        _shadow = AddMinion(_zed, "ZedShadow", "ZedWShadow", position, _zed.Team, _zed.SkinID, true, false,
                             SpellDataFlags.NonTargetableAll, null, true, true);
         _shadowSpawnPending = false;
         FaceDirection(facingPoint, _shadow, true);
@@ -242,7 +242,7 @@ internal class ZedWHandler : IBuffGameScript {
     private bool IsUltDashActive() {
         if (_zed == null) return false;
 
-        return _zed.Status.HasFlag(StatusFlags.Rooted)
+        return !_zed.Status.HasFlag(StatusFlags.CanMove) // (was Rooted) — M2: ZedUltDash disables CanMove
                && _zed.Status.HasFlag(StatusFlags.Ghosted)
                && !_zed.Status.HasFlag(StatusFlags.Targetable)
                && !_zed.Status.HasFlag(StatusFlags.CanAttack);

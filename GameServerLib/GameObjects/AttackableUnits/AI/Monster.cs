@@ -10,6 +10,12 @@ namespace LeagueSandbox.GameServer.GameObjects
     {
         public MonsterCamp Camp { get; private set; }
         public string SpawnAnimation { get; private set; }
+        /// <summary>
+        /// The camp look-at WORLD POINT (Lua CampFacePoints). Transmitted verbatim as
+        /// S2C_CreateNeutral.FaceDirectionPosition; the spawn heading (Direction) is
+        /// normalize(FacePoint − spawn). Riot AIMinion::Create uses the same facing = FacingPos − Pos.
+        /// </summary>
+        public Vector3 FacePoint { get; private set; }
 
         public Monster(
             Game game,
@@ -32,13 +38,20 @@ namespace LeagueSandbox.GameServer.GameObjects
             (
                 game, null, position, model, name,
                 netId, team, 0, ignoresCollision, isTargetable,
-                false, null, stats, aiScript, damageBonus, healthBonus, initialLevel
+                null, stats, aiScript, damageBonus, healthBonus, initialLevel
             )
         {
             Camp = monsterCamp;
             Team = team;
             SpawnAnimation = spawnAnimation;
-            FaceDirection(faceDirection);
+            // faceDirection is the camp look-at WORLD POINT. Store it for the spawn packet and face the
+            // heading toward it (normalize(point − spawn)).
+            FacePoint = faceDirection;
+            var heading = Vector2.Normalize(new Vector2(faceDirection.X, faceDirection.Z) - position);
+            if (!float.IsNaN(heading.X))
+            {
+                FaceDirection(new Vector3(heading.X, 0f, heading.Y));
+            }
             IsTargetable = isTargetable;
             IgnoresCollision = ignoresCollision;
         }

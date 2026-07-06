@@ -39,7 +39,7 @@ public class TrinketTotemLvl3B : ISpellScript {
             truecoords = current + range;
         } else { truecoords = cursor; }
 
-        _ward = AddMinion(owner, "VisionWard", "VisionWard", truecoords, owner.Team, 0,true, true,true);
+        _ward = AddMinion(owner, "VisionWard", "VisionWard", truecoords, owner.Team, 0,true, true);
         AddParticle(owner, _ward, "TrinketOrbLvl1Audio", truecoords);
         AddParticle(owner, _ward, "Visionward", truecoords);
         if (owner.HasBuff("VisionWardTracker")) {

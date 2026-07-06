@@ -19,15 +19,10 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            SetStatus(unit, StatusFlags.CanMove, false);
-            SetStatus(unit, StatusFlags.CanAttack, false);
-            AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Global_Stun.troy", unit, buff.Duration, bone:"head");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            SetStatus(unit, StatusFlags.CanMove, true);
-            SetStatus(unit, StatusFlags.CanAttack, true);
         }
     }
 }

@@ -88,7 +88,7 @@ public class ItemID_3022 : IItemScript
             return false;
         }
 
-        if (!data.IsAutoAttack)
+        if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK)
         {
             return false;
         }

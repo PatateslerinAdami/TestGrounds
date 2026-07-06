@@ -1,7 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Linq;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -37,25 +36,21 @@ namespace Spells
                 //This particle get's displayed globably
                 AddParticle(owner, null, "cursor_moveto", start);
 
-                //TODO: Instead of baking AI here, make a general Pet AI script and set it as the default AI for Pet class.
-                var unitsInRange =
-                    EnumerateValidUnitsInRange(spell.CastInfo.Owner, end, 100.0f, true, SpellDataFlags.AffectEnemies)
-                        .ToList();
-                if (unitsInRange.Count > 0)
-                {
-                    Pet.UpdateMoveOrder(OrderType.PetHardAttack);
-                    Pet.SetTargetUnit(unitsInRange[0]);
-                    for (int i = 0; i < unitsInRange.Count; i++)
-                    {
-                        spell.CastInfo.SetTarget(unitsInRange[i], i);
-                    }
-                }
-                else
-                {
-                    Pet.SetTargetUnit(null, true);
-                    Pet.UpdateMoveOrder(OrderType.PetHardMove);
-                    Pet.SetWaypoints(GetPath(Pet.Position, end, Pet.PathfindingRadius));
-                }
+                // The R-press guide is MOVE-ONLY (Riot-faithful). Evidence: Annie's guide spell
+                // PetCommandParticle.lua is pure metadata with NO command/target-detection logic (unlike
+                // ViktorChaosStormGuide, which DOES proximity-target via BuildingBlocks); the client shows
+                // only the waypoint cursor; the cast carries no TargetNetID (verified live: targetNetID=0
+                // even when clicking directly on an enemy); and S1 had no Annie guide spell at all. So the
+                // guide just issues a hard move to the clicked point. Tibbers still attacks when steered
+                // onto an enemy — via the pet's OWN AI: on arrival it enters AI_PET_HARDIDLE and
+                // TimerFindEnemies auto-acquires any enemy in acquisition range. Explicit attack-on-target
+                // is the separate pet command (PetHardAttack, the alt-click pet bar), not the guide.
+                //
+                // Route through the pet's brain (PetAI.OnOrder), not its MoveOrder/waypoints directly:
+                // poking those bypasses the AI's _aiState, so its 0.15s timers (on a stale IDLE state)
+                // would immediately override the move with auto-return/acquire ("pet only moves while I
+                // spam the control"). A hard state (AI_PET_HARDMOVE) is respected by the timers.
+                Pet.IssueOrder(OrderType.PetHardMove, null, end);
             }
         }
     }

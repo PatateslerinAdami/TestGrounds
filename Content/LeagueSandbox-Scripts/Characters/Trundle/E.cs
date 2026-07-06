@@ -7,7 +7,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -40,7 +39,7 @@ public class TrundleCircle : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        _pillar = AddMinion(_trundle, "TrundleWall", "IcePillar", _end, _trundle.Team, _trundle.SkinID, false, false,
+        _pillar = AddMinion(_trundle, "TrundleWall", "IcePillar", _end, _trundle.Team, _trundle.SkinID, false, 
                             false,
                             SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
                             SpellDataFlags.AffectEnemies, isVisible: true);

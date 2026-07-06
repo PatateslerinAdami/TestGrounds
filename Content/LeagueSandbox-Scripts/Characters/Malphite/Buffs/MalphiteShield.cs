@@ -17,6 +17,7 @@ internal class MalphiteShield : IBuffGameScript {
     private ObjAIBase     _malphite;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         IsHidden = true

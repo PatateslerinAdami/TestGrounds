@@ -25,8 +25,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
             _nami   = ownerSpell.CastInfo.Owner;
-            CancelDash(unit);
-            ForceMovement(unit, "RUN", new Vector2(unit.Position.X + 10f, unit.Position.Y + 10f), 28f, 0, 16.5f, 0);
+            ForceMove(unit, new Vector2(unit.Position.X + 10f, unit.Position.Y + 10f), 28f, gravity: 16.5f);
             _rSplash = AddParticleTarget(_nami, unit, "Nami_Base_R_splash", unit, buff.Duration,default, bone: "C_BUFFBONE_GLB_CENTER_LOC");
             _rTar = AddParticleTarget(_nami, unit, "Nami_Base_R_tar", unit, buff.Duration,default, bone: "C_BUFFBONE_GLB_CENTER_LOC");
         }

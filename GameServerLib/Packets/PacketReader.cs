@@ -39,6 +39,30 @@ namespace PacketDefinitions420
             return new SellItemRequest(rq.Slot, rq.Sell);
         }
 
+        [PacketType(GamePacketID.C2S_OnShopOpened)]
+        public static OnShopOpenedRequest ReadOnShopOpenedRequest(byte[] data)
+        {
+            var rq = new C2S_OnShopOpened();
+            rq.Read(data);
+            return new OnShopOpenedRequest();
+        }
+
+        [PacketType(GamePacketID.C2S_UndoItemReq)]
+        public static UndoItemRequest ReadUndoItemRequest(byte[] data)
+        {
+            var rq = new C2S_UndoItemReq();
+            rq.Read(data);
+            return new UndoItemRequest();
+        }
+
+        [PacketType(GamePacketID.C2S_SoftReconnect)]
+        public static SoftReconnectRequest ReadSoftReconnectRequest(byte[] data)
+        {
+            var rq = new C2S_SoftReconnect();
+            rq.Read(data);
+            return new SoftReconnectRequest();
+        }
+
         [PacketType(GamePacketID.ResumePacket)]
         public static UnpauseRequest ReadUnpauseRequest(byte[] data)
         {
@@ -135,6 +159,14 @@ namespace PacketDefinitions420
             return new AttentionPingRequest(rq.Position, rq.TargetNetID, (Pings)rq.PingCategory);
         }
 
+        [PacketType(GamePacketID.C2S_PlayVOCommand)]
+        public static PlayVOCommandRequest ReadPlayVOCommandRequest(byte[] data)
+        {
+            var rq = new C2S_PlayVOCommand();
+            rq.Read(data);
+            return new PlayVOCommandRequest(rq.CommandID, rq.TargetNetID, rq.EventHash, rq.HighlightPlayerIcon, rq.FromPing, rq.AlliesOnly);
+        }
+
         [PacketType(LoadScreenPacketID.RequestJoinTeam)]
         public static JoinTeamRequest ReadClientJoinTeamRequest(byte[] data)
         {
@@ -168,7 +200,7 @@ namespace PacketDefinitions420
             {
                 return null;
             }
-            return new MovementRequest((OrderType)rq.OrderType, rq.Position, rq.TargetNetID, rq.MovementData.TeleportNetID, rq.MovementData.HasTeleportID, rq.MovementData.Waypoints.ConvertAll(WaypointToVector2));
+            return new MovementRequest((OrderType)rq.OrderType, rq.Position, rq.TargetNetID, rq.MovementData.TeleportNetID, rq.MovementData.HasTeleportID, rq.MovementData.Waypoints.ConvertAll(WaypointToVector2), rq.SenderNetID);
         }
 
         [PacketType(GamePacketID.Waypoint_Acc)]
@@ -224,6 +256,13 @@ namespace PacketDefinitions420
             var rq = new C2S_TeamSurrenderVote();
             rq.Read(data);
             return new SurrenderRequest(rq.VotedYes);
+        }
+        [PacketType(GamePacketID.C2S_TeamBalanceVote)]
+        public static TeamBalanceRequest ReadTeamBalanceRequest(byte[] data)
+        {
+            var rq = new C2S_TeamBalanceVote();
+            rq.Read(data);
+            return new TeamBalanceRequest(rq.VoteYes);
         }
 
         [PacketType(GamePacketID.OnReplication_Acc)]

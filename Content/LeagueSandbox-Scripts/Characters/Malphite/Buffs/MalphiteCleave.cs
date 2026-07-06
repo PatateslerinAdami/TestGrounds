@@ -18,6 +18,7 @@ namespace Buffs;
 internal class MalphiteCleave : IBuffGameScript {
     private ObjAIBase        _malphite;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         MaxStacks = 1

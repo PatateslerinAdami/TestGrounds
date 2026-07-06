@@ -24,6 +24,7 @@ using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Quests;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace LeagueSandbox.GameServer
 {
@@ -39,6 +40,14 @@ namespace LeagueSandbox.GameServer
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
+
+        // Whether we're on Windows — gates the winmm timer-resolution P/Invokes below so the server
+        // stays cross-platform (Linux/macOS sleep is already fine-grained; these are never called there).
+        private static readonly bool _isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        [DllImport("winmm.dll", EntryPoint = "timeBeginPeriod")]
+        private static extern uint TimeBeginPeriod(uint uMilliseconds);
+        [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
+        private static extern uint TimeEndPeriod(uint uMilliseconds);
         protected double RefreshRate =>
             Config.GameFeatures.HasFlag(FeatureFlags.EnableTournamentMode)
                 ? 1000.0 / 60.0
@@ -89,6 +98,12 @@ namespace LeagueSandbox.GameServer
         /// Interface containing all (public) functions used by ObjectManager. ObjectManager manages GameObjects, their properties, and their interactions such as being added, removed, colliding with other objects or terrain, vision, teams, etc.
         /// </summary>
         public ObjectManager ObjectManager { get; private set; }
+        /// <summary>
+        /// Server-side AreaTrigger registry (Riot LoL::AreaTriggerManager): persistent geometric trigger
+        /// regions (sphere/wall) with OnEnter/OnExit/OnUpdate/OnDestroyMissile callbacks. NOT replicated.
+        /// Faithful replacement for the SpellSector invention — see docs/AREATRIGGER_REWRITE_PLAN.md.
+        /// </summary>
+        public GameObjects.SpellNS.AreaTriggers.AreaTriggerManager AreaTriggerManager { get; private set; }
         /// <summary>
         /// Interface for all protection related functions.
         /// Protection is a mechanic which determines whether or not a unit is targetable.
@@ -172,6 +187,7 @@ namespace LeagueSandbox.GameServer
             PacketNotifier = new PacketNotifier(_packetServer.PacketHandlerManager, Map.NavigationGrid);
 
             ObjectManager = new ObjectManager(this);
+            AreaTriggerManager = new GameObjects.SpellNS.AreaTriggers.AreaTriggerManager(this);
             ProtectionManager = new ProtectionManager(this);
             ApiGameEvents.SetGame(this);
             ApiMapFunctionManager.SetGame(this, Map as MapScriptHandler);
@@ -207,6 +223,7 @@ namespace LeagueSandbox.GameServer
             // argument to interface ICoreRequest we will get an error cause our generic handlers use generic type
             // even with where statement that doesn't work
             RequestHandler.Register<AttentionPingRequest>(new HandleAttentionPing(this).HandlePacket);
+            RequestHandler.Register<PlayVOCommandRequest>(new HandlePlayVOCommand(this).HandlePacket);
             RequestHandler.Register<AutoAttackOptionRequest>(new HandleAutoAttackOption(this).HandlePacket);
             RequestHandler.Register<BlueTipClickedRequest>(new HandleBlueTipClicked(this).HandlePacket);
             RequestHandler.Register<BuyItemRequest>(new HandleBuyItem(this).HandlePacket);
@@ -221,6 +238,8 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<LockCameraRequest>(new HandleLockCamera(this).HandlePacket);
             RequestHandler.Register<JoinTeamRequest>(new HandleJoinTeam(this).HandlePacket);
             RequestHandler.Register<MovementRequest>(new HandleMove(this).HandlePacket);
+            RequestHandler.Register<OnShopOpenedRequest>(new HandleOnShopOpened(this).HandlePacket);
+            RequestHandler.Register<UndoItemRequest>(new HandleUndoItem(this).HandlePacket);
             RequestHandler.Register<MoveConfirmRequest>(new HandleMoveConfirm(this).HandlePacket);
             RequestHandler.Register<PauseRequest>(new HandlePauseReq(this).HandlePacket);
             RequestHandler.Register<QueryStatusRequest>(new HandleQueryStatus(this).HandlePacket);
@@ -234,7 +253,9 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<StartGameRequest>(_gameStartHandler.HandlePacket);
 
             RequestHandler.Register<ReplicationConfirmRequest>(new HandleStatsConfirm(this).HandlePacket);
+            RequestHandler.Register<SoftReconnectRequest>(new HandleSoftReconnect(this).HandlePacket);
             RequestHandler.Register<SurrenderRequest>(new HandleSurrender(this).HandlePacket);
+            RequestHandler.Register<TeamBalanceRequest>(new HandleTeamBalance(this).HandlePacket);
             RequestHandler.Register<SwapItemsRequest>(new HandleSwapItems(this).HandlePacket);
             RequestHandler.Register<SynchVersionRequest>(new HandleSync(this).HandlePacket);
             RequestHandler.Register<UnpauseRequest>(new HandleUnpauseReq(this).HandlePacket);
@@ -365,14 +386,20 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public void GameLoop()
         {
-            double refreshRate = RefreshRate;
-            double timeout = 0;
-
-            Stopwatch lastMapDurationWatch = new Stopwatch();
+            // Fixed simulation step (ms) = the server tick. Riot advances the sim by a FIXED amount
+            // per tick (30Hz = 33.3ms, tournament 60Hz = 16.7ms), NOT by the real elapsed wall-clock.
+            // We accumulate real time and run whole fixed steps, so the simulation is deterministic and
+            // identical run-to-run regardless of Thread.Sleep jitter / GC / load (matches Riot's ~33ms
+            // wire metronome). RefreshRate is constant per game (tournament flag only) → read once.
+            double step = RefreshRate;
+            // Cap catch-up: a startup stall (JIT/asset load can be 1-3s) or a GC hitch must NOT spawn
+            // dozens of steps (spiral of death) nor jump the world seconds in one frame. Excess time is
+            // dropped — the sim briefly lags real time, then the 10s SynchSimTime resync corrects clients.
+            // 5 steps = ~166ms@30Hz / ~83ms@60Hz max catch-up.
+            double maxAccum = step * 5;
+            double accumulator = 0;
 
             bool wasNotPaused = true;
-            bool firstCycle = true;
-
             float timeToForcedStart = Config.ForcedStart;
 
             // Kick off the dedicated I/O thread. From this point onwards, all
@@ -386,6 +413,16 @@ namespace LeagueSandbox.GameServer
                 Thread.CurrentThread.Name = "GameLoop";
             }
 
+            // Raise OS timer resolution to 1ms so the hybrid sleep+spin wait is precise. Windows
+            // defaults to ~15.6ms (Thread.Sleep overshoots the tick target → the loop oscillates
+            // 31/46ms); winmm fixes it. Guarded → no-op on Linux/macOS (already fine-grained),
+            // keeping the server cross-platform.
+            if (_isWindows) TimeBeginPeriod(1);
+
+            var clock = Stopwatch.StartNew();
+            double lastNow = clock.Elapsed.TotalMilliseconds;
+            double nextWake = lastNow;   // absolute schedule anchor (drift-free cadence)
+
             long tickNumber = 0;
             while (!SetToExit)
             {
@@ -393,8 +430,9 @@ namespace LeagueSandbox.GameServer
                 // same-name slices into one giant bar.
                 using var _tickScope = Profiler.Scope($"Tick {tickNumber++}");
 
-                double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                lastMapDurationWatch.Restart();
+                double now = clock.Elapsed.TotalMilliseconds;
+                double realElapsed = now - lastNow;
+                lastNow = now;
 
                 // Drain everything the net thread has produced since the last
                 // tick. Done at the very top so the rest of the tick sees a
@@ -405,19 +443,10 @@ namespace LeagueSandbox.GameServer
                     DrainInboundEvents();
                 }
                 
-                float deltaTime = (float)lastSleepDuration;
-                if(firstCycle)
-                {
-                    firstCycle = false;
-                    // To avoid Update(0)
-                    deltaTime = (float)refreshRate;
-                }
-
                 if (IsPaused)
                 {
                     if (wasNotPaused)
                     {
-                        refreshRate = 1000.0;
                         wasNotPaused = false;
                     }
                     else
@@ -442,43 +471,89 @@ namespace LeagueSandbox.GameServer
 
                 if (!IsPaused)
                 {
-                    refreshRate = RefreshRate;
                     wasNotPaused = true;
 
                     if(!IsRunning && timeToForcedStart > 0)
                     {
-                        if(timeToForcedStart <= deltaTime && !CheckIfAllPlayersLeft())
+                        if(timeToForcedStart <= realElapsed && !CheckIfAllPlayersLeft())
                         {
                             _logger.Info($"Patience is over. The game will start earlier.");
                             _gameStartHandler.ForceStart();
                         }
-                        timeToForcedStart -= deltaTime;
+                        timeToForcedStart -= (float)realElapsed;
                     }
 
                     if (IsRunning)
                     {
-                        using (Profiler.Scope("Game.Update"))
+                        // Fixed-timestep: convert elapsed real time into whole fixed steps. Normally
+                        // exactly 1 step/wake; >1 only to catch up after a hitch (bounded by maxAccum).
+                        accumulator += realElapsed;
+                        if (accumulator > maxAccum)
                         {
-                            Update(deltaTime);
+                            accumulator = maxAccum;
+                        }
+
+                        while (accumulator >= step)
+                        {
+                            using (Profiler.Scope("Game.Update"))
+                            {
+                                Update((float)step);
+                            }
+                            accumulator -= step;
                         }
                     }
                 }
 
-                double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                double oversleep = lastSleepDuration - timeout;
-                timeout = Math.Max(0, refreshRate - lastUpdateDuration - oversleep);
-
-                if (timeout > 0)
+                // Pace the loop: while paused, idle ~1s (PauseTimeLeft counts seconds); otherwise wait
+                // to the next fixed-step boundary on an absolute, drift-free schedule. If a slow tick
+                // put us behind, re-anchor to now (the accumulator already turned the lost time into
+                // catch-up steps) instead of busy-running a backlog of zero-length ticks.
+                if (IsPaused)
                 {
-                    Thread.Sleep((int)timeout);
+                    accumulator = 0;
+                    PreciseWait(clock, now + 1000.0);
+                    nextWake = clock.Elapsed.TotalMilliseconds;
+                }
+                else
+                {
+                    nextWake += step;
+                    double afterWork = clock.Elapsed.TotalMilliseconds;
+                    if (nextWake < afterWork)
+                    {
+                        nextWake = afterWork;
+                    }
+                    else
+                    {
+                        PreciseWait(clock, nextWake);
+                    }
                 }
             }
+
+            // Restore the OS timer resolution we raised for the loop (no-op on non-Windows).
+            if (_isWindows) TimeEndPeriod(1);
 
             _packetServer.StopNetThread();
 
             // Flush the CPU trace to disk. Safe to call even when the profiler
             // was disabled.
             Profiler.Shutdown();
+        }
+
+        // Waits until targetMs on the given clock with sub-ms precision: a coarse Thread.Sleep for the
+        // bulk (cheap, yields the core) then a short Stopwatch spin for the final ~1.5ms. Cross-platform;
+        // relies on a 1ms OS timer resolution (raised via timeBeginPeriod on Windows, native on Linux).
+        private static void PreciseWait(Stopwatch clock, double targetMs)
+        {
+            const double spinBudgetMs = 1.5;
+            int coarse = (int)(targetMs - clock.Elapsed.TotalMilliseconds - spinBudgetMs);
+            if (coarse > 0)
+            {
+                Thread.Sleep(coarse);
+            }
+            while (clock.Elapsed.TotalMilliseconds < targetMs)
+            {
+                Thread.SpinWait(50);
+            }
         }
 
         // Drains all events the net thread has queued for the game thread:
@@ -541,6 +616,12 @@ namespace LeagueSandbox.GameServer
             {
                 ObjectManager.Update(diff);
             }
+            // AreaTrigger regions (sphere/wall) — unit-scan + OnUpdate. Dormant (no-op) until a spell
+            // creates a trigger; ticked after objects so unit positions are current this frame.
+            using (Profiler.Scope("AreaTriggerManager.Update"))
+            {
+                AreaTriggerManager.Update(diff);
+            }
             // Protection (TODO: Move this into ObjectManager).
             using (Profiler.Scope("ProtectionManager.Update"))
             {
@@ -552,7 +633,13 @@ namespace LeagueSandbox.GameServer
             }
             using (Profiler.Scope("GameScriptTimers.Update", "scripts"))
             {
-                _gameScriptTimers.ForEach(gsTimer => gsTimer.Update(diff));
+                // Tick a snapshot: a callback may register further timers (added to the live list,
+                // ticked next frame) or spawn objects — iterating the live list would throw
+                // "Collection was modified".
+                foreach (var gsTimer in _gameScriptTimers.ToArray())
+                {
+                    gsTimer.Update(diff);
+                }
                 _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
             }
 
@@ -582,6 +669,9 @@ namespace LeagueSandbox.GameServer
         {
             _gameScriptTimers.Remove(timer);
         }
+
+        /// <summary>Game-loop ticks per second at the current refresh rate (30 or 60).</summary>
+        public double TicksPerSecond => 1000.0 / RefreshRate;
 
         /// <summary>
         /// Function to set the game as running. Allows the game loop to start.

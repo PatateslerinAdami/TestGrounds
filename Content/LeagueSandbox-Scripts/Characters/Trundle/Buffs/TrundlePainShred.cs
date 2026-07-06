@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -36,6 +35,7 @@ public class TrundlePainShred : IBuffGameScript {
     private Queue<float>   _pendingMagicResistBonus;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
@@ -122,7 +122,7 @@ public class TrundlePainShred : IBuffGameScript {
         _pendingMagicResistBonus.Enqueue(magicResistDelta);
     }
 
-    private void OnSpellHitHealMissile(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHitHealMissile(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (target != _trundle) return;
         if (_pendingHeals.Count == 0 || _pendingArmorBonus.Count == 0 || _pendingMagicResistBonus.Count == 0) return;
 

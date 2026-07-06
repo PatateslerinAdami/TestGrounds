@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -93,7 +92,7 @@ public class TrundlePainHealBig : ISpellScript {
         AddBuff("TrundlePainBuff", totalBuffDuration, 1, _spell, _trundle, _trundle, buffVariables: buffVariables);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (target != _trundle) return;
         if (_immediateHealAmount <= 0f) return;
         _trundle.TakeHeal(_trundle, _immediateHealAmount, HealType.Drain, spell);

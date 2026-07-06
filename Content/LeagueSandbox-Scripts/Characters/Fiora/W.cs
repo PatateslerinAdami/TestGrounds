@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 
@@ -55,7 +54,7 @@ namespace Spells
             Missile = spell.CreateSpellMissile(new MissileParameters { Type = MissileType.Target, });
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
         {
             AddParticleTarget(Fiora, target, "FioraRiposte_tar.troy.troy", Fiora, 1, 1, "Center");
             Damage = 10 + (50 * Fiora.Spells[1].CastInfo.SpellLevel) + Fiora.Stats.AbilityPower.FlatBonus;

@@ -6,8 +6,10 @@ using GameServerCore.Enums;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiGameEvents;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace MapScripts.Map10
 {
@@ -16,7 +18,6 @@ namespace MapScripts.Map10
         public MapScriptMetadata MapScriptMetadata { get; set; } = new MapScriptMetadata();
 
         public bool HasFirstBloodHappened { get; set; } = false;
-        public long NextSpawnTime { get; set; } = 45 * 1000;
         public string LaneMinionAI { get; set; } = "LaneMinionAI";
         public Dictionary<TeamId, Dictionary<int, Dictionary<int, Vector2>>> PlayerSpawnPoints { get; }
 
@@ -81,6 +82,12 @@ namespace MapScripts.Map10
         public void Init(Dictionary<GameObjectTypes, List<MapObject>> mapObjects)
         {
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
+            // Engine-driven spawn: the BarracksSpawnManager owns the wave/drip clock and calls
+            // SpawnBarrackMinion per barrack (same model as Map1). First wave at 75s (Map10
+            // INITIAL_TIME_TO_SPAWN; matches the 75s "minions have spawned" announcement — TT spawns
+            // earlier than SR's 90s). See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
+            MapScriptMetadata.EngineDrivenMinionSpawn = true;
+            MapScriptMetadata.FirstMinionSpawnTime = 75 * 1000;
             AddSurrender(1200000.0f, 300000.0f, 30.0f);
 
             LevelScriptObjects.LoadObjects(mapObjects);
@@ -91,6 +98,7 @@ namespace MapScripts.Map10
         {
             LevelScriptObjects.OnMatchStart();
             NeutralMinionSpawn.InitializeCamps();
+            Altars.Initialize();
         }
 
         //This function gets executed every server tick
@@ -99,32 +107,21 @@ namespace MapScripts.Map10
             LevelScriptObjects.OnUpdate(diff);
             NeutralMinionSpawn.OnUpdate(diff);
 
-            float gameTime = GameTime();
-
-            if (MapScriptMetadata.MinionSpawnEnabled)
+            // Lane-minion stat ramp (4.20 UpgradeMinionTimer): advance every type's bonus every 90s.
+            _minionUpgradeTimer += diff;
+            while (_minionUpgradeTimer >= UPGRADE_MINION_TIMER)
             {
-                if (_minionNumber > 0)
+                _minionUpgradeTimer -= UPGRADE_MINION_TIMER;
+                foreach (var ramp in _minionRamps.Values)
                 {
-                    // Spawn new Minion every 0.8s
-                    if (gameTime >= NextSpawnTime + _minionNumber * 8 * 100)
-                    {
-                        if (SetUpLaneMinion())
-                        {
-                            _minionNumber = 0;
-                            NextSpawnTime = (long)gameTime + MapScriptMetadata.SpawnInterval;
-                        }
-                        else
-                        {
-                            _minionNumber++;
-                        }
-                    }
-                }
-                else if (gameTime >= NextSpawnTime)
-                {
-                    SetUpLaneMinion();
-                    _minionNumber++;
+                    ramp.Tick();
                 }
             }
+
+            float gameTime = GameTime();
+
+            // Lane-minion spawning is driven engine-side by BarracksSpawnManager (it owns the wave/
+            // drip clock and calls SpawnBarrackMinion below).
 
             if (!AllAnnouncementsAnnounced)
             {
@@ -177,11 +174,12 @@ namespace MapScripts.Map10
         //Here you setup the conditions of which wave will be spawned
         public Tuple<int, List<MinionSpawnType>> MinionWaveToSpawn(float gameTime, int cannonMinionCount, bool isInhibitorDead, bool areAllInhibitorsDead)
         {
+            // Cannon-wave frequency (4.20 LEVELS/Map10: CANNON_MINION_SPAWN_FREQUENCY 3 -> 2 at
+            // INCREASE_CANNON_RATE_TIMER=720s; never reaches 1). cap = freq-1.
             var cannonMinionTimestamps = new List<Tuple<long, int>>
             {
                 new Tuple<long, int>(0, 2),
-                new Tuple<long, int>(20 * 60 * 1000, 1),
-                new Tuple<long, int>(35 * 60 * 1000, 0)
+                new Tuple<long, int>(720 * 1000, 1)
             };
             var cannonMinionCap = 2;
 
@@ -210,49 +208,112 @@ namespace MapScripts.Map10
             return new Tuple<int, List<MinionSpawnType>>(cannonMinionCap, MinionWaveTypes[list]);
         }
 
-        public int _minionNumber;
-        public int _cannonMinionCount;
-        public bool SetUpLaneMinion()
+        // 4.20 Map10 (Twisted Treeline) lane-minion stat ramp — values from LEVELS/Map10/Scripts/LevelScript.lua
+        // (same classic model as Map1: HP linear, Armor/MR ramp, no HpUpgradeGrowth).
+        private readonly Dictionary<MinionSpawnType, MinionStatRamp> _minionRamps = new Dictionary<MinionSpawnType, MinionStatRamp>
         {
-            int cannonMinionCap = 2;
-            foreach (var team in LevelScriptObjects.SpawnBarracks.Keys)
+            { MinionSpawnType.MINION_TYPE_MELEE, new MinionStatRamp { HpUpgrade = 10f, DamageUpgrade = 0.5f, ArmorUpgrade = 1f, MagicResistUpgrade = 0.625f, GoldUpgrade = 0.2f, GoldMaximumBonus = 12f, GoldGivenBase = 18.8f, ExpGivenBase = 64f } },
+            { MinionSpawnType.MINION_TYPE_CASTER, new MinionStatRamp { HpUpgrade = 7.5f, DamageUpgrade = 1f, ArmorUpgrade = 0.625f, MagicResistUpgrade = 1f, GoldUpgrade = 0.2f, GoldMaximumBonus = 8f, GoldGivenBase = 13.8f, ExpGivenBase = 32f } },
+            { MinionSpawnType.MINION_TYPE_CANNON, new MinionStatRamp { HpUpgrade = 13.5f, DamageUpgrade = 1.5f, ArmorUpgrade = 1.5f, MagicResistUpgrade = 1.5f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
+            { MinionSpawnType.MINION_TYPE_SUPER, new MinionStatRamp { HpUpgrade = 100f, DamageUpgrade = 5f, ArmorUpgrade = 0f, MagicResistUpgrade = 0f, GoldUpgrade = 0.5f, GoldMaximumBonus = 30f, GoldGivenBase = 39.5f, ExpGivenBase = 100f } },
+        };
+        private const float UPGRADE_MINION_TIMER = 90000f;
+        private float _minionUpgradeTimer = 0f;
+        // 4.20 Map10 EXP_GIVEN_RADIUS (LEVELS/Map10/Scripts/LevelScript.lua). TT = 1250 (SR = 1400).
+        private const float EXP_GIVEN_RADIUS = 1250f;
+
+        // Engine-driven spawn callback: the BarracksSpawnManager owns the wave/drip clock (the WHEN)
+        // and calls this once per barrack per drip tick for composition (the WHAT). Body is the former
+        // per-barrack loop of SetUpLaneMinion, parameterized by the manager's clock state. Map10 keeps
+        // its 2-lane waypoint logic (MinionPaths[lane] + the opposing barrack position).
+        public BarrackSpawnResult SpawnBarrackMinion(TeamId barrackTeam, TeamId opposingTeam, Lane lane, Vector2 position, string barracksName, int minionNumber, int waveCount, int cannonMinionCount)
+        {
+            MapObject opposedBarrack = LevelScriptObjects.SpawnBarracks[opposingTeam][lane];
+            Inhibitor inhibitor = LevelScriptObjects.InhibitorList[opposingTeam][lane];
+            bool isInhibitorDead = inhibitor.InhibitorState == DampenerState.RegenerationState;
+            Tuple<int, List<MinionSpawnType>> spawnWave = MinionWaveToSpawn(GameTime(), cannonMinionCount, isInhibitorDead, LevelScriptObjects.AllInhibitorsAreDead[opposingTeam]);
+
+            List<Vector2> waypoint = new List<Vector2>(LevelScriptObjects.MinionPaths[lane]);
+            if (barrackTeam == TeamId.TEAM_PURPLE)
             {
-                foreach (var barrack in LevelScriptObjects.SpawnBarracks[team].Values)
+                waypoint.Reverse();
+            }
+            waypoint.Add(new Vector2(opposedBarrack.CentralPoint.X, opposedBarrack.CentralPoint.Z));
+
+            // The per-lane __NAV path + barrack stops at the inhibitor; the central nexus turrets and
+            // the nexus sit further in. Extend the corridor to the enemy nexus (as Map1's MinionPaths
+            // already do) so that once the lane turrets fall the wave free-pushes through the base,
+            // acquiring the inhibitor and the central nexus turrets in range along the way instead of
+            // halting at the barrack.
+            var enemyNexus = LevelScriptObjects.NexusList.Find(n => n.Team == opposingTeam);
+            if (enemyNexus != null)
+            {
+                waypoint.Add(enemyNexus.Position);
+            }
+
+            // Per S4 NavPointManager::GetNextNavLocIter -> minions hold at the next alive enemy turret
+            // instead of beelining to the nexus. Mirror of Map1's per-lane turret-cap list: cap only
+            // on the lane's OWN turrets (INNER_TURRET outermost, then the INHIBITOR_TURRET behind it),
+            // sorted by appearance order. The central nexus turrets are intentionally NOT capped -
+            // like Map1 they are engaged during the post-inhibitor free-push via FindTargetInAcR (they
+            // stay untargetable until an inhibitor dies, so capping them would strand the wave at an
+            // unattackable turret). Without this list GetMaxAllowedWaypointIndex always returns the
+            // final waypoint, so the wave A*-paths past every turret straight to the nexus.
+            var enemyTurretsAhead = new List<BaseTurret>();
+            var enemyTurretIndices = new List<int>();
+            if (LevelScriptObjects.TurretList.TryGetValue(opposingTeam, out var enemyTurretsByLane)
+                && enemyTurretsByLane.TryGetValue(lane, out var enemyLaneTurrets))
+            {
+                var pairs = new List<(BaseTurret turret, int wpIdx)>();
+                foreach (var turret in enemyLaneTurrets)
                 {
-                    TeamId opposed_team = barrack.GetOpposingTeamID();
-                    Lane lane = barrack.GetSpawnBarrackLaneID();
-                    MapObject opposedBarrack = LevelScriptObjects.SpawnBarracks[opposed_team][lane];
-                    Inhibitor inhibitor = LevelScriptObjects.InhibitorList[opposed_team][lane];
-                    Vector2 position = new Vector2(barrack.CentralPoint.X, barrack.CentralPoint.Z);
-                    bool isInhibitorDead = inhibitor.InhibitorState == DampenerState.RegenerationState;
-                    Tuple<int, List<MinionSpawnType>> spawnWave = MinionWaveToSpawn(GameTime(), _cannonMinionCount, isInhibitorDead, LevelScriptObjects.AllInhibitorsAreDead[opposed_team]);
-                    cannonMinionCap = spawnWave.Item1;
+                    // FOUNTAIN_TURRET sits at the spawn shrine, never a frontier to hold against.
+                    if (turret.Type == TurretType.FOUNTAIN_TURRET) continue;
 
-                    List<Vector2> waypoint = new List<Vector2>(LevelScriptObjects.MinionPaths[lane]);
-                    if (team == TeamId.TEAM_PURPLE)
+                    int closestIdx = -1;
+                    float closestDistSq = float.MaxValue;
+                    for (int i = 0; i < waypoint.Count; i++)
                     {
-                        waypoint.Reverse();
+                        float d = Vector2.DistanceSquared(waypoint[i], turret.Position);
+                        if (d < closestDistSq)
+                        {
+                            closestDistSq = d;
+                            closestIdx = i;
+                        }
                     }
-
-                    waypoint.Add(new Vector2(opposedBarrack.CentralPoint.X, opposedBarrack.CentralPoint.Z));
-                    CreateLaneMinion(spawnWave.Item2, position, team, _minionNumber, barrack.Name, waypoint, LaneMinionAI);
+                    if (closestIdx >= 0) pairs.Add((turret, closestIdx));
+                }
+                pairs.Sort((a, b) => a.wpIdx.CompareTo(b.wpIdx));
+                foreach (var p in pairs)
+                {
+                    enemyTurretsAhead.Add(p.turret);
+                    enemyTurretIndices.Add(p.wpIdx);
                 }
             }
 
-            if (_minionNumber < 8)
+            StatsModifier rampModifier = null;
+            float rampGold = -1f, rampExp = -1f;
+            if (minionNumber < spawnWave.Item2.Count
+                && _minionRamps.TryGetValue(spawnWave.Item2[minionNumber], out var ramp))
             {
-                return false;
+                rampModifier = ramp.ToStatsModifier();
+                rampGold = ramp.GoldGiven;
+                rampExp = ramp.ExpGiven;
+            }
+            int minionLevel = Math.Max(1, GetPlayerAverageLevel());
+
+            var spawnedMinion = CreateLaneMinion(spawnWave.Item2, position, barrackTeam, minionNumber, barracksName, waypoint, LaneMinionAI,
+                enemyLaneTurretsAhead: enemyTurretsAhead, enemyLaneTurretWaypointIndices: enemyTurretIndices, lane: lane,
+                statModifier: rampModifier, initialLevel: minionLevel, goldGiven: rampGold, expGiven: rampExp);
+
+            // 4.20 Map10 EXP_GIVEN_RADIUS = 1250 (SR uses 1400). Gold is last-hit on TT too, so only
+            // the exp share radius is wired. See LEVELS/Map10/Scripts/LevelScript.lua.
+            if (spawnedMinion != null)
+            {
+                spawnedMinion.ExperienceGiveRadius = EXP_GIVEN_RADIUS;
             }
 
-            if (_cannonMinionCount >= cannonMinionCap)
-            {
-                _cannonMinionCount = 0;
-            }
-            else
-            {
-                _cannonMinionCount++;
-            }
-            return true;
+            return new BarrackSpawnResult { WaveSize = spawnWave.Item2.Count, CannonCap = spawnWave.Item1 };
         }
     }
 }

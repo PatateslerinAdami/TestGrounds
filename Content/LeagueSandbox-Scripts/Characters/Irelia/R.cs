@@ -9,7 +9,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -17,16 +16,18 @@ namespace Spells;
 
 public class IreliaTranscendentBlades : ISpellScript
 {
-    ObjAIBase _irelia;
-    AttackableUnit _target;
-    Spell _spell;
+    private ObjAIBase _irelia;
+    private Spell _spell;
     private Vector2 _targetPos;
     bool _firstCast = true;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
         TriggersSpellCasts = true,
-        IsDamagingSpell = true
+        CastingBreaksStealth = true,
+        IsDamagingSpell = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
@@ -38,10 +39,9 @@ public class IreliaTranscendentBlades : ISpellScript
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
-        _target = target;
+        _targetPos = end;
         if (_irelia.HasBuff("IreliaTranscendentBladesSpell"))
         {
-            LogInfo("StackCount: " + _irelia.GetBuffWithName("IreliaTranscendentBladesSpell").StackCount);
         }
         else
         {
@@ -51,16 +51,18 @@ public class IreliaTranscendentBlades : ISpellScript
         }
     }
 
-    public void OnSpellCast(Spell spell)
-    {
-        _targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-    }
-
     public void OnSpellPostCast(Spell spell)
     {
         SpellCast(_irelia, 0, SpellSlotType.ExtraSlots, _targetPos, _targetPos, true, _irelia.Position);
-        spell.SetCooldown(0.5f, true);
-        _irelia.GetBuffWithName("IreliaTranscendentBladesSpell").DecrementStackCount();
+        if (_irelia.GetBuffWithName("IreliaTranscendentBladesSpell").StackCount == 1)
+        {
+            RemoveBuff(_irelia, "IreliaTranscendentBladesSpell");
+        }
+        else
+        {
+            spell.SetCooldown(0.5f, true);
+            _irelia.GetBuffWithName("IreliaTranscendentBladesSpell").DecrementStackCount();
+        }
     }
 
     private void OnUpdateStats(AttackableUnit unit, float diff)
@@ -80,8 +82,11 @@ public class IreliaTranscendentBladesSpell : ISpellScript
     {
         MissileParameters = new MissileParameters
         {
-            Type = MissileType.Circle
+            Type = MissileType.Arc
         },
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = false,
+        CastingBreaksStealth = true,
         IsDamagingSpell = true
     };
 
@@ -91,9 +96,9 @@ public class IreliaTranscendentBladesSpell : ISpellScript
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        if (target.Team == _irelia.Team || target is ObjBuilding) return;
+        if (!IsValidTarget(_irelia, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         var mainSpell = _irelia.GetSpell("IreliaTranscendentBlades");
         
         float ad = _irelia.Stats.AttackDamage.FlatBonus * mainSpell.SpellData.Coefficient2;

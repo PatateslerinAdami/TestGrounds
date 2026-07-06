@@ -55,6 +55,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Expose internal members (e.g. Stats.GetMitigationMultiplier) to the test assembly. -->
+    <InternalsVisibleTo Include="GameServerLib.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\GameMaths\GameMaths.csproj" />
     <ProjectReference Include="..\GameServerCore\GameServerCore.csproj" />
     <ProjectReference Include="..\LeaguePackets\LeaguePackets.csproj" />

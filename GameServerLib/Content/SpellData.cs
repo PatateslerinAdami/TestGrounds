@@ -118,6 +118,7 @@ namespace LeagueSandbox.GameServer.Content
         public float LineMissileTargetHeightAugment { get; set; } = 100;
         public float LineMissileTimePulseBetweenCollisionSpellHits { get; set; }
         public bool LineMissileTrackUnits { get; set; }
+        public bool LineMissileTrackUnitsAndContinues { get; set; }
         public bool LineMissileUsesAccelerationForBounce { get; set; }
         //LineTargetingBaseTextureOverrideName
         //LineTargetingBaseTextureOverrideName
@@ -151,7 +152,32 @@ namespace LeagueSandbox.GameServer.Content
         public float MissileTargetHeightAugment { get; set; } = 100;
         public bool MissileUnblockable { get; set; }
         public bool NoWinddownIfCancelled { get; set; }
-        //NumSpellTargeters
+        /// <summary>
+        /// Number of <c>SpellTargeter{N}</c> JSON blocks (1..N). Drives the size of
+        /// <see cref="SpellTargeters"/>. 0 = no client-side cast indicators configured.
+        /// </summary>
+        public int NumSpellTargeters { get; set; }
+        /// <summary>
+        /// Parsed <c>SpellTargeter1</c>..<c>SpellTargeterN</c> JSON blocks (0-indexed here:
+        /// <c>SpellTargeters[0]</c> = SpellTargeter1). For charge spells, the range-growth
+        /// fields (<see cref="SpellTargeterData.RangeGrowthDuration"/>,
+        /// <see cref="SpellTargeterData.RangeGrowthMax"/>) describe client-bar visual
+        /// growth — distinct from <c>CastRangeGrowthDuration</c>/<c>CastRangeGrowthMax</c>
+        /// which describe actual cast-side range growth.
+        /// </summary>
+        public SpellTargeterData[] SpellTargeters { get; set; } = System.Array.Empty<SpellTargeterData>();
+        /// <summary>
+        /// Marker for the "channel-lock" charge-spell subcategory (Vel'Koz R, Sion R).
+        /// Distinct from the "tap-charge" subcategory (Varus Q, Xerath Q, Sion Q):
+        /// • Tap-charge: button release = fire (commit spell payload)
+        /// • Channel-lock: button release = interrupt (cancel channel, no payload)
+        /// <para>The 4.17 client itself doesn't read this field (no <c>ReadCFG_*</c> call,
+        /// no <c>kSpellParam</c> entry). Riot uses it semantically as a category marker
+        /// only — wire-side recast-blocking is implemented via <c>CancelChargeOnRecastTime</c>.
+        /// We parse it server-side to route <see cref="Spell.UpdateCharge"/> correctly
+        /// between the two subcategories.</para>
+        /// </summary>
+        public bool PreventChargingSecondCast { get; set; }
         //OrientRadiusTextureFromPlayer
         //OrientRangeIndicatorToCursor
         //OrientRangeIndicatorToFacing
@@ -161,6 +187,9 @@ namespace LeagueSandbox.GameServer.Content
         public string PointEffectName { get; set; } = "";
         //RangeIndicatorTextureName
         public string RequiredUnitTags { get; set; } = "";
+        // Parsed bitmask of RequiredUnitTags (set in Load). A spell with required tags can only target a
+        // unit carrying AT LEAST ONE of them (ContainsAny). UnitTag.None = no tag requirement.
+        public UnitTag RequiredUnitTagsMask { get; private set; } = UnitTag.None;
         public string SelectionPreference { get; set; } = "";
         //Sound_CastName
         //Sound_HitName
@@ -210,7 +239,13 @@ namespace LeagueSandbox.GameServer.Content
                 overrideTargetable = true;
             }
 
-            if (!target.Status.HasFlag(StatusFlags.Targetable) && target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
+            // Riot TargetHelper::ValidTargetCheck: reject when the target is untargetable EITHER globally OR
+            // to the caster's team (unless an override flag applies). GetIsTargetableToTeam already folds in
+            // the global Targetable status flag (returns false if it's clear), so !GetIsTargetableToTeam ==
+            // (!IsTargetable || !IsTargetableToTeam) — Riot's exact condition. (The old check ANDed the global
+            // flag with GetIsTargetableToTeam, which already includes it, so it was always false → dead code,
+            // letting untargetable units through to AoE/spell hit-detection.)
+            if (!target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
             {
                 return false;
             }
@@ -289,6 +324,18 @@ namespace LeagueSandbox.GameServer.Content
                 }
             }
 
+            // RequiredUnitTags (Riot): when set, the target must carry AT LEAST ONE of the listed tags —
+            // the data string is an OR-list (ContainsAny). E.g. Smite = "Monster_Large | Monster_Epic |
+            // Minion" so base Smite can't hit champions (the Duel/Ganker upgrades add Champion); Teleport =
+            // "Minion | Structure | Ward | Special_TeleportTarget". Tags come from target.CharData.UnitTags
+            // (server-internal classification; see reference_unit_tags_model). overrideFlags doesn't affect
+            // this — it's an intrinsic target-class gate, not a per-cast affect flag.
+            if (valid && RequiredUnitTagsMask != UnitTag.None
+                && !target.UnitTags.ContainsAny(RequiredUnitTagsMask))
+            {
+                valid = false;
+            }
+
             return valid;
         }
 
@@ -303,17 +350,29 @@ namespace LeagueSandbox.GameServer.Content
             return (1.0f + DelayTotalTimePercent) * 2.0f;
         }
 
-        // TODO: read Global Character Data constants from constants.var (gcd_AttackDelay = 1.600f, gcd_AttackDelayCastPercent = 0.300f)
+        // gcd_AttackDelay / gcd_AttackMinDelay / gcd_AttackMaxDelay are loaded per-map from
+        // Constants.var into GlobalData.GlobalCharacterDataConstants (Map1: 1.6 / 0.4 / 5.0).
+        // Pass float.NaN for the clamp bounds to fall back to the loaded gcd_ constants;
+        // C# default params must be compile-time constant, hence the NaN sentinel.
         public float GetCharacterAttackDelay
         (
             float attackSpeedMod,
             float attackDelayOffsetPercent,
-            float attackMinimumDelay = 0.4f,
-            float attackMaximumDelay = 5.0f
+            float maxAttackSpeedOverride = 0f,
+            float minAttackSpeedOverride = 0f
         )
         {
-            float result = ((attackDelayOffsetPercent + 1.0f) * 1.600f) / attackSpeedMod;
-            return System.Math.Clamp(result, attackMinimumDelay, attackMaximumDelay);
+            var gcd = GlobalData.GlobalCharacterDataConstants;
+            // Per-unit AS cap overrides (Riot Spell::ComputeCharacterAttackDelay, SpellMath.cpp:48-74):
+            // a MAX attack-speed override lowers the delay floor (1/maxAS); a MIN attack-speed override
+            // raises the delay ceiling (1/minAS). <= ~0 = no override → use the global gcd default.
+            float minDelay = maxAttackSpeedOverride > 0.00001f ? 1.0f / maxAttackSpeedOverride : gcd.AttackMinDelay;
+            float maxDelay = minAttackSpeedOverride > 0.00001f ? 1.0f / minAttackSpeedOverride : gcd.AttackMaxDelay;
+            float result = ((attackDelayOffsetPercent + 1.0f) * gcd.AttackDelay) / attackSpeedMod;
+            // Client clamp order: max check, then min (robust even if minDelay > maxDelay).
+            if (result > maxDelay) result = maxDelay;
+            if (minDelay > result) result = minDelay;
+            return result;
         }
 
         public float GetCharacterAttackCastDelay
@@ -322,14 +381,20 @@ namespace LeagueSandbox.GameServer.Content
             float attackDelayOffsetPercent,
             float attackDelayCastOffsetPercent,
             float attackDelayCastOffsetPercentAttackSpeedRatio,
-            float attackMinimumDelay = 0.4f,
-            float attackMaximumDelay = 5.0f
+            float maxAttackSpeedOverride = 0f,
+            float minAttackSpeedOverride = 0f
         )
         {
-            float castPercent = System.Math.Min(0.300f + attackDelayCastOffsetPercent, 0.0f);
-            float percentDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, attackMinimumDelay, attackMaximumDelay) * castPercent;
-            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayCastOffsetPercent, attackMinimumDelay, attackMaximumDelay);
-            float result = (((attackDelay * castPercent) - percentDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + percentDelay;
+            // Mirrors client Spell::ComputeCharacterAttackCastDelayInternal (SpellMath.cpp:80-96).
+            // castPercent is clamped to >= 0 (client: `if (castPercent < 0) castPercent = 0`).
+            float castPercent = System.Math.Max(GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + attackDelayCastOffsetPercent, 0.0f);
+            // Both the unscaled and AS-scaled cycle use the DELAY offset, not the cast offset; the
+            // per-unit AS cap overrides thread through to each clamp (see GetCharacterAttackDelay).
+            float originalCastDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, maxAttackSpeedOverride, minAttackSpeedOverride) * castPercent;
+            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayOffsetPercent, maxAttackSpeedOverride, minAttackSpeedOverride);
+            // Lerp(originalCastDelay, castPercent*attackDelay, ratio): ratio=1 => fully AS-scaled
+            // windup (castPercent*attackDelay); ratio<1 (Kalista/Thresh) => windup scales partially.
+            float result = (((attackDelay * castPercent) - originalCastDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + originalCastDelay;
             return System.Math.Min(result, attackDelay);
         }
 
@@ -457,6 +522,12 @@ namespace LeagueSandbox.GameServer.Content
             LineMissileTargetHeightAugment = file.GetFloat("SpellData", "LineMissileTargetHeightAugment", LineMissileTargetHeightAugment);
             LineMissileTimePulseBetweenCollisionSpellHits = file.GetFloat("SpellData", "LineMissileTimePulseBetweenCollisionSpellHits", LineMissileTimePulseBetweenCollisionSpellHits);
             LineMissileTrackUnits = file.GetBool("SpellData", "LineMissileTrackUnits", LineMissileTrackUnits);
+            // S4 SpellDataResource.cpp:584-589: the AndContinues variant implies TrackUnits.
+            LineMissileTrackUnitsAndContinues = file.GetBool("SpellData", "LineMissileTrackUnitsAndContinues", LineMissileTrackUnitsAndContinues);
+            if (LineMissileTrackUnitsAndContinues)
+            {
+                LineMissileTrackUnits = true;
+            }
             LineMissileUsesAccelerationForBounce = file.GetBool("SpellData", "LineMissileUsesAccelerationForBounce", LineMissileUsesAccelerationForBounce);
             //LineTargetingBaseTextureOverrideName
             //LineTargetingBaseTextureOverrideName
@@ -488,15 +559,25 @@ namespace LeagueSandbox.GameServer.Content
             MissileMinTravelTime = file.GetFloat("SpellData", "MissileMinTravelTime", MissileMinTravelTime);
             MissilePerceptionBubbleRadius = file.GetFloat("SpellData", "MissilePerceptionBubbleRadius", MissilePerceptionBubbleRadius);
             MissilePerceptionBubbleRevealsStealth = file.GetBool("SpellData", "MissilePerceptionBubbleRevealsStealth", MissilePerceptionBubbleRevealsStealth);
-            //MissileSpeed = file.GetFloat("SpellData", "MissileSpeed", MissileSpeed);
             MissileTargetHeightAugment = file.GetFloat("SpellData", "MissileTargetHeightAugment", MissileTargetHeightAugment);
             MissileUnblockable = file.GetBool("SpellData", "MissileUnblockable", MissileUnblockable);
             NoWinddownIfCancelled = file.GetBool("SpellData", "NoWinddownIfCancelled", NoWinddownIfCancelled);
-            //NumSpellTargeters
+
+            NumSpellTargeters = file.GetInt("SpellData", "NumSpellTargeters", NumSpellTargeters);
+            if (NumSpellTargeters > 0)
+            {
+                SpellTargeters = new SpellTargeterData[NumSpellTargeters];
+                for (int i = 0; i < NumSpellTargeters; i++)
+                {
+                    SpellTargeters[i] = new SpellTargeterData();
+                    SpellTargeters[i].Load(file, $"SpellTargeter{i + 1}");
+                }
+            }
             //OrientRadiusTextureFromPlayer
             //OrientRangeIndicatorToCursor
             //OrientRangeIndicatorToFacing
             OverrideCastTime = file.GetFloat("SpellData", "OverrideCastTime", OverrideCastTime);
+            PreventChargingSecondCast = file.GetBool("SpellData", "PreventChargingSecondCast", PreventChargingSecondCast);
             //public Vector3 ParticleStartOffset { get; set; } = new Vector3(0, 0, 0);
             var particleStartOffset = file.GetFloatArray("SpellData", "ParticleStartOffset", new[] { ParticleStartOffset.X, ParticleStartOffset.Y, ParticleStartOffset.Z });
             ParticleStartOffset = new Vector3(particleStartOffset[0], particleStartOffset[1], particleStartOffset[2]);
@@ -504,6 +585,17 @@ namespace LeagueSandbox.GameServer.Content
             PointEffectName = file.GetString("SpellData", "PointEffectName", PointEffectName);
             //RangeIndicatorTextureName
             RequiredUnitTags = file.GetString("SpellData", "RequiredUnitTags", RequiredUnitTags);
+            // Parse the pipe-separated tag list to a bitmask once (same convention as CharData.UnitTags).
+            // Unrecognised tokens (e.g. an unregistered tag) fail TryParse and are skipped — matching the
+            // 4.20 ParseUnitTagFlags, which ignores tags not in the registry.
+            RequiredUnitTagsMask = UnitTag.None;
+            foreach (var tag in RequiredUnitTags.Split(" | "))
+            {
+                if (System.Enum.TryParse(tag, out UnitTag parsedTag))
+                {
+                    RequiredUnitTagsMask |= parsedTag;
+                }
+            }
             SelectionPreference = file.GetString("SpellData", "SelectionPreference", SelectionPreference);
             //Sound_CastName
             //Sound_HitName

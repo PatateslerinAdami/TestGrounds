@@ -23,7 +23,8 @@ public class IreliaTranscendentBlades : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.INTERNAL,
         BuffAddType = BuffAddType.RENEW_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
+        IsNonDispellable = true
     };
     
     public StatsModifier StatsModifier { get; } = new();
@@ -51,7 +52,7 @@ public class IreliaTranscendentBlades : IBuffGameScript {
         ApiEventManager.OnSpellCast.RemoveListener(this, _irelia.GetSpell("IreliaTranscendentBlades"), OnSpellCastUlt);
     }
 
-    public void OnSpellCastUlt(Spell spell) {
+    private void OnSpellCastUlt(Spell spell) {
         if (_blades <= 0) return;
         
         switch (_blades) {

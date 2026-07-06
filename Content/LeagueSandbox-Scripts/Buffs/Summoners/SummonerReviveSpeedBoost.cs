@@ -13,7 +13,7 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.HASTE,
-            BuffAddType = BuffAddType.REPLACE_EXISTING
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();

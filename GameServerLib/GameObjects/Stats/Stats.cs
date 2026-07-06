@@ -52,12 +52,77 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat MagicPenetration { get; }
         public Stat ManaPoints { get; }
         public Stat ManaRegeneration { get; }
+        /// <summary>
+        /// Chance [0..1] that this unit's auto attacks miss (rolled per attack in
+        /// <see cref="ObjAIBase.RollAutoAttackMiss"/>). Raised to 1.0 by Blind.
+        /// Mirrors Riot's miss-chance stat (script API IncFlatMissChanceMod/GetMissChance).
+        /// </summary>
+        public Stat MissChance { get; }
+        /// <summary>
+        /// Chance [0..1] that this unit DODGES an incoming auto attack (rolled per attack against the
+        /// attacker in <see cref="ObjAIBase.RollDodge"/>). Target-side counterpart of <see cref="MissChance"/>.
+        /// Mirrors Riot's mDodge stat (script API IncFlatDodgeMod). Removed as a general stat after S1;
+        /// in 4.20 only set to 1.0 by abilities like Jax E (Counter Strike / JaxEvasion buff). Defaults to 0.
+        /// </summary>
+        public Stat Dodge { get; }
         public Stat MoveSpeed { get; }
         public Stat Range { get; }
         public Stat Size { get; }
         public Stat SpellVamp { get; }
-        public Stat Tenacity { get; }
         public Stat AcquisitionRange { get; set; }
+
+        // Tenacity (CC-duration reduction), bucketed per the 4.17 decomp (CharacterIntermediate.h:19-25,
+        // ItemData.cpp:538-543). Each active StatsModifier contributes to at most one bucket; within the
+        // max buckets only the strongest contribution counts (unique passives don't stack), so removal
+        // must recompute from the remaining contributions — hence per-modifier dictionaries (same pattern
+        // as _slows). Rune is a running additive sum. Combined multiplicatively by PercentCCReduction.
+        private readonly Dictionary<StatsModifier, float> _tenacityItem = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityCharacter = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityMastery = new();
+        private readonly Dictionary<StatsModifier, float> _tenacityCleanse = new();
+        private float _tenacityRune;
+
+        // Slow-resist (slow MAGNITUDE reduction) — same max-across-sources rule as the tenacity item
+        // bucket (decomp ItemData.cpp:543 std::max). Separate axis from tenacity's duration cut.
+        private readonly Dictionary<StatsModifier, float> _slowResist = new();
+
+        /// <summary>
+        /// Upper clamp on total tenacity. The client asserts CC reduction never reaches 100%
+        /// (HeroHealthBar.cpp:719), so we keep it just under 1.0.
+        /// </summary>
+        private const float MaxTenacity = 0.999f;
+
+        /// <summary>
+        /// Final aggregated CC-duration reduction [0..1), replicated to the client as
+        /// <c>mPercentCCReduction</c>. Buckets combine multiplicatively:
+        /// <c>1 - (1-rune)(1-mastery)(1-item)(1-character)(1-cleanse)</c>, each max-bucket taking its
+        /// strongest contribution. Consumed at buff creation to shorten reducible CC durations.
+        /// </summary>
+        public float PercentCCReduction
+        {
+            get
+            {
+                float item = MaxOrZero(_tenacityItem);
+                float character = MaxOrZero(_tenacityCharacter);
+                float mastery = MaxOrZero(_tenacityMastery);
+                float cleanse = MaxOrZero(_tenacityCleanse);
+                float reduction = 1f - (1f - _tenacityRune) * (1f - mastery) * (1f - item) * (1f - character) * (1f - cleanse);
+                return Math.Clamp(reduction, 0f, MaxTenacity);
+            }
+        }
+
+        private static float MaxOrZero(Dictionary<StatsModifier, float> bucket)
+        {
+            float max = 0f;
+            foreach (var v in bucket.Values)
+            {
+                if (v > max)
+                {
+                    max = v;
+                }
+            }
+            return max;
+        }
 
         public float Gold { get; set; }
         public byte Level { get; set; }
@@ -65,7 +130,22 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float Points { get; set; }
         public uint EvolvePoints { get; set; }
         public uint EvolveFlags { get; set; }
-        public float SlowResistPercent { get; set; }
+        /// <summary>
+        /// Slow-resist [0..1): reduces slow MAGNITUDE (applied in CalculateTrueMoveSpeed). Combines by
+        /// MAX across sources (decomp ItemData.cpp:543), so multiple slow-resist items (e.g. Boots of
+        /// Swiftness + a boot enchant) grant only the highest, not the sum. Separate axis from tenacity,
+        /// which cuts slow DURATION.
+        /// </summary>
+        public float SlowResistPercent => MaxOrZero(_slowResist);
+        /// <summary>
+        /// Epic-monster slow rejection (Baron/Dragon, Monster_Epic tag). Slows are a MoveSpeed stat-mod,
+        /// not a status flag, so they bypass the BuffType CC-flag suppression in AttackableUnit
+        /// .RecomputeBuffEffects — this flag rejects their movespeed effect in CalculateTrueMoveSpeed.
+        /// The slow buff object is still added (BuffAdd2 sent, replay-faithful); only its speed effect is
+        /// nullified, matching Riot's "buff added, internal CC rejected" model. See
+        /// reference_epic_monster_cc_immunity.
+        /// </summary>
+        public bool ImmuneToSlow { get; set; }
         public float MultiplicativeSpeedBonus { get; set; }
         // Slow registry: every active slow keyed by its StatsModifier instance (reference
         // identity this is robust against equal percentages from different buffs and against the
@@ -130,16 +210,20 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             MagicPenetration = new Stat();
             ManaPoints = new Stat();
             ManaRegeneration = new Stat();
+            MissChance = new Stat();
+            Dodge = new Stat();
             MoveSpeed = new Stat();
             Range = new Stat();
             Size = new Stat(1.0f, 0, 0, 0, 0);
             SpellVamp = new Stat();
-            Tenacity = new Stat();
             AcquisitionRange = new Stat();
         }
 
         public void LoadStats(CharData charData)
         {
+            // Epic monsters reject the slow EFFECT (tag-derived, same source as AttackableUnit
+            // .IsCrowdControlImmune); the slow buff still applies, only its movespeed reduction is nullified.
+            ImmuneToSlow = charData.UnitTags.HasTag(UnitTag.Monster_Epic);
             AcquisitionRange.BaseValue = charData.AcquisitionRange;
             AttackDamagePerLevel.BaseValue = charData.DamagePerLevel;
             Armor.BaseValue = charData.Armor;
@@ -189,6 +273,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             AddPenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.ApplyStatModifier(modifier.ManaPoints);
             ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
+            MissChance.ApplyStatModifier(modifier.MissChance);
+            Dodge.ApplyStatModifier(modifier.Dodge);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
@@ -205,8 +291,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Range.ApplyStatModifier(modifier.Range);
             Size.ApplyStatModifier(modifier.Size);
             SpellVamp.ApplyStatModifier(modifier.SpellVamp);
-            Tenacity.ApplyStatModifier(modifier.Tenacity);
-            SlowResistPercent += modifier.SlowResistPercent;
+            ApplyTenacityBuckets(modifier);
             MultiplicativeSpeedBonus += modifier.MultiplicativeSpeedBonus;
         }
 
@@ -231,6 +316,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             RemovePenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.RemoveStatModifier(modifier.ManaPoints);
             ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
+            MissChance.RemoveStatModifier(modifier.MissChance);
+            Dodge.RemoveStatModifier(modifier.Dodge);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
@@ -245,19 +332,59 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Range.RemoveStatModifier(modifier.Range);
             Size.RemoveStatModifier(modifier.Size);
             SpellVamp.RemoveStatModifier(modifier.SpellVamp);
-            Tenacity.RemoveStatModifier(modifier.Tenacity);
-            SlowResistPercent -= modifier.SlowResistPercent;
+            RemoveTenacityBuckets(modifier);
             MultiplicativeSpeedBonus -= modifier.MultiplicativeSpeedBonus;
+        }
+
+        private void ApplyTenacityBuckets(StatsModifier modifier)
+        {
+            // Dictionary assignment (not Add) so re-applying the same modifier with a new value
+            // (e.g. Irelia's enemy-count-scaled passive) updates its contribution in place.
+            if (modifier.TenacityItem != 0f) _tenacityItem[modifier] = modifier.TenacityItem;
+            if (modifier.TenacityCharacter != 0f) _tenacityCharacter[modifier] = modifier.TenacityCharacter;
+            if (modifier.TenacityMastery != 0f) _tenacityMastery[modifier] = modifier.TenacityMastery;
+            if (modifier.TenacityCleanse != 0f) _tenacityCleanse[modifier] = modifier.TenacityCleanse;
+            _tenacityRune += modifier.TenacityRune;
+            if (modifier.SlowResistPercent != 0f) _slowResist[modifier] = modifier.SlowResistPercent;
+        }
+
+        private void RemoveTenacityBuckets(StatsModifier modifier)
+        {
+            _tenacityItem.Remove(modifier);
+            _tenacityCharacter.Remove(modifier);
+            _tenacityMastery.Remove(modifier);
+            _tenacityCleanse.Remove(modifier);
+            _tenacityRune -= modifier.TenacityRune;
+            _slowResist.Remove(modifier);
         }
 
         public float GetTotalAttackSpeed()
         {
-            return AttackSpeedFlat * AttackSpeedMultiplier.Total;
+            // Floor the attack-speed multiplier at 1 + gcd_PercentAttackSpeedModMinimum. Constants.var
+            // (Map1:25): "The lowest Attack Speed Percent Mod penalty can go" = -0.95, i.e. the multiplier
+            // bottoms out at 0.05 (a slow can remove at most 95% attack speed). Clamp semantics are taken
+            // from the Riot Constants.var comment — the 4.17 decomp's application site was not recovered.
+            var minMultiplier = 1.0f + GlobalData.GlobalCharacterDataConstants.PercentAttackSpeedModMinimum;
+            return AttackSpeedFlat * Math.Max(AttackSpeedMultiplier.Total, minMultiplier);
+        }
+
+        /// <summary>
+        /// Cooldown-reduction mod floored at gcd_PercentCooldownModMinimum (Constants.var: "The lowest
+        /// Cooldown Percent Mod bonus can go" — -0.4 on SR, overridden to -0.8 in URF). CooldownReduction
+        /// is stored negative-for-reduction, so this floor caps how much CDR can shorten a cooldown.
+        /// Comment-sourced from Constants.var; the 4.17 decomp clamp site was not recovered.
+        /// </summary>
+        public float GetClampedCooldownReduction()
+        {
+            return Math.Max(CooldownReduction.Total, GlobalData.GlobalCharacterDataConstants.PercentCooldownModMinimum);
         }
 
         public float GetRespawnTimer(float baseTimer)
         {
-            return Math.Max(1000.0f, baseTimer * (1 + DeathTimerReduction.Total));
+            // Floor the respawn-time mod at gcd_PercentRespawnTimeModMinimum (-0.95) before applying it,
+            // then keep the existing 1000ms resulting-time floor. Comment-sourced from Constants.var.
+            var mod = Math.Max(DeathTimerReduction.Total, GlobalData.GlobalCharacterDataConstants.PercentRespawnTimeModMinimum);
+            return Math.Max(1000.0f, baseTimer * (1 + mod));
         }
 
         public float GetTrueMoveSpeed()
@@ -525,7 +652,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             return magicResist * percentMagicMultiplier * percentBonusMagicMultiplier - flatMagicPenetration;
         }
 
-        private static float GetMitigationMultiplier(float resistance)
+        // internal (not private) so the test assembly can pin the Riot armor/MR mitigation curve directly.
+        internal static float GetMitigationMultiplier(float resistance)
         {
             if (resistance >= 0.0f)
             {
@@ -583,7 +711,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
             speed = speed * (1 + MoveSpeed.PercentBonus) * (1 + MultiplicativeSpeedBonus);
 
-            if (_slows.Count > 0)
+            if (_slows.Count > 0 && !ImmuneToSlow)
             {
                 // Stage 1: named-effect dedup: the same effect never stacks with itself,
                 // not even from different casters (wiki: Exhaust re-apply = duration reset

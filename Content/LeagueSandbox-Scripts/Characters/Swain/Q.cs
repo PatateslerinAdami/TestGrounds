@@ -8,7 +8,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -37,7 +36,7 @@ public class SwainDecrepify : ISpellScript
         _target = target;
         _ravenPos = GetPointFromUnit(_swain, 100, 0);
         PlayAnimation(_swain, "Spell1");
-        _beatrix = AddMinion(_swain, "SwainBeam", "HiddenMinion", _ravenPos, _swain.Team, _swain.SkinID, true, false,
+        _beatrix = AddMinion(_swain, "SwainBeam", "HiddenMinion", _ravenPos, _swain.Team, _swain.SkinID, true, 
             false, SpellDataFlags.NoClick);
         FaceDirection(_target.Position, _beatrix, true);
         AddBuff("SwainDecrepify", 3f, 1, spell, _beatrix, _swain);

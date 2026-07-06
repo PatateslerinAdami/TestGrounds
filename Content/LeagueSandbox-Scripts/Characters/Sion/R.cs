@@ -19,7 +19,8 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            ChannelDuration = 8.0f,
+            // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
+            // SionR.json ChannelDuration = 8.0 (SpellTargeter blocks have no RangeGrowthDuration).
             TriggersSpellCasts = true,
             AutoFaceDirection = true
         };
@@ -33,6 +34,13 @@ namespace Spells
         private float _unitHitboxRadius = 160f;
         private float _wallCheckRadius = 60f;
         private float _collisionGracePeriod = 0.25f;
+
+        // Final-leap parameters measured from replay bae83ecc (Sion netid 1073741857, leap at t=1108417):
+        // a force-move with gravity 0, ~268 world-units at speed 605 (the leap's 0x64 WaypointGroupWithSpeed).
+        // The leap fires ONLY on clean release/timeout — a wall/champion collision slams in place with NO
+        // force-move (the collided-branch in OnUpdate FireCharges at the current position; replay-confirmed).
+        private const float LeapDistance = 268f;
+        private const float LeapSpeed = 605f;
 
         private StatsModifier _speedModifier;
         private float _currentBonusSpeed;
@@ -49,12 +57,15 @@ namespace Spells
             _spell = spell;
         }
 
-        public void OnSpellChannel(Spell spell)
+        public void OnSpellChargeStart(Spell spell)
         {
-            b = AddBuff("SionR", 8f, 1, spell, _owner, _owner);
+            b = AddBuff("SionR", 8.5f, 1, spell, _owner, _owner);
             _isCharging = true;
             _chargeTime = 0f;
             _waypointUpdateTimer = 0f;
+
+            // Lock/steer the caster's camera for the charge (replay-verified, distance 900).
+            LockCamera(_owner, true);
 
             _owner.IgnoreMoveOrders = true;
             spell.SpellData.CanMoveWhileChanneling = true;
@@ -80,7 +91,7 @@ namespace Spells
             _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);
         }
 
-        public void OnUpdate(float diff)
+        public void OnSpellChargeTick(Spell spell, float diff)
         {
             if (!_isCharging || _owner == null || _owner.IsDead) return;
 
@@ -142,14 +153,19 @@ namespace Spells
                     if ((from unit in nearbyUnits
                             let dist = Vector2.Distance(_owner.Position, unit.Position)
                             where dist <= _unitHitboxRadius + unit.CollisionRadius
-                            select unit).Any())
+                            select unit).FirstOrDefault() != null)
                     {
+                        
                         collided = true;
                     }
                 }
 
                 if (collided)
                 {
+                    
+                    // Collision-triggered slam — clear charge HUD; impact lands at Sion's
+                    // current position (where the collision happened, no leap).
+                    spell.FireCharge(_owner.Position);
                     StopCharge(true);
                     return;
                 }
@@ -164,13 +180,17 @@ namespace Spells
             }
         }
 
-        public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
+        public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
         {
             StopCharge(false);
         }
 
-        public void OnSpellPostChannel(Spell spell)
+        public void OnSpellChargeFire(Spell spell)
         {
+            // Recast or duration timeout — both trigger the slam after the forward leap.
+            // Clear charge HUD; impact lands at the leap endpoint.
+            Vector2 dir2D = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
+            spell.FireCharge(_owner.Position + dir2D * LeapDistance);
             StopCharge(false);
         }
 
@@ -181,6 +201,9 @@ namespace Spells
 
             if (_owner != null)
             {
+                // Release the camera lock now the charge has ended (cancel / recast / timeout / collision).
+                LockCamera(_owner, false);
+
                 _owner.IgnoreMoveOrders = false;
                 _owner.SetStatus(StatusFlags.Ghosted, false);
                 _owner.StopMovement();
@@ -215,9 +238,10 @@ namespace Spells
                     {
                         if (!_owner.IsDead)
                         {
-                            _owner.DashToLocation(_owner.Position + dir2D * 300, 545, "Spell4_Stop", 0.0f,
-                                false); //0.55 
-                            _owner.RegisterTimer(new GameScriptTimer(0.55f, () => { OnHit(); }));
+                            PlayAnimation(_owner, "Spell4_STOP", flags: AnimationFlags.Lock | AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk6 | AnimationFlags.Junk7);
+                            ForceMove(_owner, _owner.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0.0f,
+                                facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+                            _owner.RegisterTimer(new GameScriptTimer(GetForceMoveTravelTime(LeapDistance, LeapSpeed), () => { OnHit(); }));
                         }
                     }));
                 }

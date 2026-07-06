@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using LeaguePackets.Game;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs
 {
@@ -28,18 +29,18 @@ namespace Buffs
         {
             unit.StopMovement();
             unit.PauseAnimation(true);
-            unit.SetStatus(StatusFlags.Stunned, true);
+            unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false); // stasis lock — M2
+            DestroyMissileForTarget(unit);
+            unit.SetStatus(StatusFlags.Invulnerable, true);
             unit.SetStatus(StatusFlags.Targetable, false);
 
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             unit.PauseAnimation(false);
-            unit.SetStatus(StatusFlags.Stunned, false);
+            unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, true); // un-stasis — M2
+            unit.SetStatus(StatusFlags.Invulnerable, false);
             unit.SetStatus(StatusFlags.Targetable, true);
-        }
-        public void OnUpdate(float diff)
-        {
         }
     }
 }

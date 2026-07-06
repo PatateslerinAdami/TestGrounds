@@ -14,10 +14,9 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            CastingBreaksStealth = false,
             TriggersSpellCasts = false,
+            CastingBreaksStealth = false,
             NotSingleTargetSpell = true
-            // TODO
         };
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

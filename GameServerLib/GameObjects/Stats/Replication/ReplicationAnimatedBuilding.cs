@@ -1,4 +1,5 @@
-﻿using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
+using GameServerCore.Enums;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 
 namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 {
@@ -10,10 +11,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         }
         public override void Update()
         {
-            UpdateFloat(Stats.CurrentHealth, 1, 0); //mHP
-            UpdateBool(Stats.IsInvulnerable, 1, 1); //IsInvulnerable
-            UpdateBool(Stats.IsTargetable, 5, 0); //mIsTargetable
-            UpdateUint((uint)Stats.IsTargetableToTeam, 5, 1); //mIsTargetableToTeamFlags
+            UpdateFloat(Stats.CurrentHealth, ReplicationBucket.Local1, 0); //mHP
+            UpdateBool(Stats.IsInvulnerable, ReplicationBucket.Local1, 1); //IsInvulnerable
+            UpdateBool(Stats.IsTargetable, ReplicationBucket.Global, 0); //mIsTargetable
+            UpdateUint((uint)Stats.IsTargetableToTeam, ReplicationBucket.Global, 1); //mIsTargetableToTeamFlags
         }
     }
 }

@@ -5,7 +5,6 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -27,9 +26,8 @@ public class AkaliShadowSwipe : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        var unitsInRange = GetUnitsInRange(_akali, _akali.Position, 300f, true,
-                        SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
-                        SpellDataFlags.AffectNeutral);
+        // SelfAOE radius + flags from SpellData (CastRadius=325, was hardcoded 300).
+        var unitsInRange = GetUnitsHitBySpell(spell);
 
         foreach (var unit in unitsInRange) {
             SlashTarget(unit);
