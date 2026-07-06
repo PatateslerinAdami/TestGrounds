@@ -2221,6 +2221,19 @@ namespace LeagueSandbox.GameServer.API
             return result;
         }
 
+        public static Vector2 GetMovePositionByCollisionOffset(AttackableUnit unit, AttackableUnit target, float offset, bool isBehind = false)
+        {
+            float overshoot = unit.CollisionRadius + target.CollisionRadius + offset;
+            if (isBehind)
+            {
+                return target.Position - (unit.Position - target.Position).Normalized() * (!IsWalkable(target.Position.X, target.Position.Y) ? - overshoot : overshoot);
+            }
+            else
+            {
+                return target.Position + (unit.Position - target.Position).Normalized() * (!IsWalkable(target.Position.X, target.Position.Y) ? - overshoot : overshoot);
+            }
+        }
+
         /// <summary>
         /// Programmatic item purchase for a bot (Riot bot API BuyItem): gold check → add to inventory
         /// (InventoryManager.AddItem notifies the owner) → deduct gold. Returns false if unaffordable or
