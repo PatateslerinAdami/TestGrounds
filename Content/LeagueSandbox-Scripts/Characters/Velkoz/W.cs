@@ -23,7 +23,6 @@ namespace Spells
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
-            IsDamagingSpell = true,
             AmmoPerCharge = 2,
         };
 
@@ -108,6 +107,8 @@ namespace Spells
                 // override here server-side.
                 OverrideHeightAugment = 0f,
             },
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = false,
             TriggersSpellCasts = false,
             IsDamagingSpell = true
         };

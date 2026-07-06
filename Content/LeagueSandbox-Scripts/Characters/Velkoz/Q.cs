@@ -18,6 +18,7 @@ namespace Spells
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
+            NotSingleTargetSpell = false,
             TriggersSpellCasts = true,
             IsDamagingSpell = true
         };
@@ -68,6 +69,9 @@ namespace Spells
             {
                 Type = MissileType.Arc
             },
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = true,
+            TriggersSpellCasts = false,
             IsDamagingSpell = true
         };
 
@@ -160,7 +164,10 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = true,
             TriggersSpellCasts = true,
+            CastingBreaksStealth = false,
             IsDamagingSpell = false
         };
 

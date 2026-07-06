@@ -17,7 +17,10 @@ namespace Spells
         private Vector2 _endPos;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = true,
             TriggersSpellCasts = true,
+            SpellToggleSlot = 3,
             IsDamagingSpell = true
         };
 

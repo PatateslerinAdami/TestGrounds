@@ -18,6 +18,7 @@ namespace Spells
         {
             // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
             // VelkozR.json ChannelDuration = 2.6 (no SpellTargeter block in this JSON).
+            NotSingleTargetSpell = false,
             TriggersSpellCasts = true,
             IsDamagingSpell = true,
             AutoFaceDirection = false
