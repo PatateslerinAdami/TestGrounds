@@ -7,6 +7,7 @@ using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -30,13 +31,32 @@ namespace Spells
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
+            NotSingleTargetSpell = true,
+            DoesntBreakShields = true,
             TriggersSpellCasts = true,
+            IsDeathRecapSource = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _aatrox = owner;
             ApiEventManager.OnUpdateStats.AddListener(this, _aatrox, OnUpdateStats);
+            ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+        }
+
+        private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+        {
+            var ad  = _aatrox.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
+            var dmg = 70f + 45f * (spell.CastInfo.SpellLevel - 1) + ad;
+
+            var hitParticle = _aatrox.SkinID switch {
+                1 => "Aatrox_Skin01_Q_Hit",
+                2 => "Aatrox_Skin02_Q_Hit",
+                _ => "Aatrox_Base_Q_Hit"
+            };
+            AddParticleTarget(_aatrox, target, hitParticle, target);
+            target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                DamageResultType.RESULT_NORMAL);
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

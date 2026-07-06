@@ -62,7 +62,7 @@ internal class AatroxQDescent : IBuffGameScript {
 
         var speed = Math.Min(distance / LandingDashDurationS, MaxDiveSpeed);
         // lockActions:false — keep CAN_CAST/CAN_MOVE enabled (Riot: castable through the whole Q).
-        ForceMove(unit, endPos, speed, lockActions: false, movementName: "AatroxQDash");
+        ForceMove(unit, endPos, speed, 0f, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, false, true, ForceMovementOrdersType.CANCEL_ORDER, "AatroxQDash");
         ApiEventManager.OnMoveSuccess.AddListener(this, unit, OnDiveLanded, true);
     }
 
@@ -87,18 +87,8 @@ internal class AatroxQDescent : IBuffGameScript {
         var enemiesInRange = GetUnitsInRange(unit, unit.Position, 300f, true,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
             SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-        var ad  = unit.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
-        var dmg = 70f + 45f * (_spell.CastInfo.SpellLevel - 1) + ad;
-
-        var hitParticle = aatrox.SkinID switch {
-            1 => "Aatrox_Skin01_Q_Hit",
-            2 => "Aatrox_Skin02_Q_Hit",
-            _ => "Aatrox_Base_Q_Hit"
-        };
         foreach (var enemy in enemiesInRange) {
-            AddParticleTarget(unit, enemy, hitParticle, enemy);
-            enemy.TakeDamage(unit, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                DamageResultType.RESULT_NORMAL);
+            _spell.ApplyEffects(enemy);
         }
 
         // End of the descent phase — remove the (script-controlled) self-buff (Riot: AatroxQDescent
