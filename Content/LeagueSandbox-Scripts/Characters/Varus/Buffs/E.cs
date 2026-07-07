@@ -46,7 +46,7 @@ namespace Buffs
         {
             _owner = ownerSpell.CastInfo.Owner;
             _spell = ownerSpell;
-            _targetPos = new Vector2(buff.Variables.GetFloat("TargetX"), buff.Variables.GetFloat("TargetY"));
+            _targetPos = new Vector2(buff.BuffVars.GetFloat("TargetX"), buff.BuffVars.GetFloat("TargetY"));
 
             var mainMissile = CreateCustomMissile(_owner, "VarusEMissile", _owner.Position, _targetPos,
                 new MissileParameters { Type = MissileType.Arc });

@@ -24,7 +24,7 @@ public class AkaliWStealth : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        var isFirstCast = buff.Variables.GetBool("isFirstCast");
+        var isFirstCast = buff.BuffVars.GetBool("isFirstCast");
         _akali                             = ownerSpell.CastInfo.Owner;
         SetStatus(_akali, StatusFlags.RevealSpecificUnit, false);
         SetStatus(_akali, StatusFlags.Stealthed, true);

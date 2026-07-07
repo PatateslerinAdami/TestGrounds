@@ -30,7 +30,7 @@ public class IcebornGauntletSlow : IBuffGameScript
     {
         _unit = unit;
 
-        var slowPercent = buff.Variables.GetFloat("slowPercent", 0.30f);
+        var slowPercent = buff.BuffVars.GetFloat("slowPercent", 0.30f);
         if (slowPercent < 0.0f)
         {
             slowPercent = -slowPercent;

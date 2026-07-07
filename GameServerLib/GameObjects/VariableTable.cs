@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 namespace LeagueSandbox.GameServer.GameObjects
 {
-    public sealed class BuffVariables
+    public sealed class VariableTable
     {
         private readonly Dictionary<string, object> _values;
 
-        public BuffVariables() : this(null) { }
+        public VariableTable() : this(null) { }
 
-        public BuffVariables(IDictionary<string, object> values)
+        public VariableTable(IDictionary<string, object> values)
         {
             _values = values != null
                 ? new Dictionary<string, object>(values, StringComparer.Ordinal)
@@ -72,9 +72,9 @@ namespace LeagueSandbox.GameServer.GameObjects
             return TryGet<bool>(key, out var value) ? value : defaultValue;
         }
 
-        public BuffVariables Clone()
+        public VariableTable Clone()
         {
-            return new BuffVariables(_values);
+            return new VariableTable(_values);
         }
     }
 }

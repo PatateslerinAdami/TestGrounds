@@ -34,7 +34,7 @@ namespace Buffs
             // Alistar stands on the target, so his live position would be degenerate. The DISTANCE is a
             // fixed 650 in 4.20 (replay-verified: charge-distance-independent), speed 1500, gravity 20.
             // FURTHEST_WITHIN_RANGE trims it to the last walkable cell at walls, exactly like the replay.
-            var castOrigin = new Vector2(buff.Variables.GetFloat("castOriginX"), buff.Variables.GetFloat("castOriginY"));
+            var castOrigin = new Vector2(buff.BuffVars.GetFloat("castOriginX"), buff.BuffVars.GetFloat("castOriginY"));
             ForceMoveAway(unit, _alistar, 650f, 1500, 20, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.KEEP_CURRENT_FACING, ForceMovementOrdersType.CANCEL_ORDER, awayFrom: castOrigin);
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

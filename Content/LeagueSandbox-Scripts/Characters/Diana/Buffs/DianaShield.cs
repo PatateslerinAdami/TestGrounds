@@ -34,7 +34,7 @@ public class DianaShield : IBuffGameScript {
         _diana = spell.CastInfo.Owner;
         var ap    = _diana.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         _shieldHealth  = 40f + 15f * (spell.CastInfo.SpellLevel - 1) + ap;
-        var isRefresh = buff.Variables.GetBool("isRefresh");
+        var isRefresh = buff.BuffVars.GetBool("isRefresh");
         if (isRefresh)
         {
             _shieldHealth *= 2;

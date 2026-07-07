@@ -58,10 +58,10 @@ public class Headbutt : ISpellScript {
         var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
         _target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
             DamageResultType.RESULT_NORMAL);
-        var buffVars = new BuffVariables();
+        var buffVars = new VariableTable();
         buffVars.Set("castOriginX", _castOrigin.X);
         buffVars.Set("castOriginY", _castOrigin.Y);
-        AddBuff("HeadbuttTarget", 1f, 1, _spell, _target, _alistar, buffVariables: buffVars);
+        AddBuff("HeadbuttTarget", 1f, 1, _spell, _target, _alistar, variableTable: buffVars);
 
         ApiEventManager.OnMoveSuccess.RemoveListener(this, _alistar, OnMoveSuccess);
     }

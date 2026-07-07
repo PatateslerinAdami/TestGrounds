@@ -34,12 +34,12 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            DamageType damageType = buff.Variables.Get("damageType", DamageType.DAMAGE_TYPE_PHYSICAL);
-            DamageResultType damageResultType = buff.Variables.Get("damageResultType", DamageResultType.RESULT_NORMAL);
-            AttackableUnit target = buff.Variables.Get<AttackableUnit>("target");
+            DamageType damageType = buff.BuffVars.Get("damageType", DamageType.DAMAGE_TYPE_PHYSICAL);
+            DamageResultType damageResultType = buff.BuffVars.Get("damageResultType", DamageResultType.RESULT_NORMAL);
+            AttackableUnit target = buff.BuffVars.Get<AttackableUnit>("target");
             if (!target.IsDead)
             {
-                target.TakeDamage(_masterYi, buff.Variables.GetFloat("damage", 0f) * 0.5f, damageType,
+                target.TakeDamage(_masterYi, buff.BuffVars.GetFloat("damage", 0f) * 0.5f, damageType,
                     DamageSource.DAMAGE_SOURCE_ATTACK, damageResultType);
             }
             _masterYi.ResetAutoAttackSpell();

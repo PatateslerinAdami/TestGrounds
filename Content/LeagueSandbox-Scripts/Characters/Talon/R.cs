@@ -62,13 +62,13 @@ public class TalonShadowAssault : ISpellScript {
         AddParticleTarget(_talon, _talon, "talon_ult_sound", _talon);
         AddParticleTarget(_talon, null, "talon_ult_cas",   _talon, bone: "root");
         
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("positions", _positions);
-        AddBuff("TalonShadowAssaultMisBuff", 2.5f, 1, spell, _talon, _talon, buffVariables: variables);
+        AddBuff("TalonShadowAssaultMisBuff", 2.5f, 1, spell, _talon, _talon, variableTable: variables);
         AddBuff("TalonShadowAssaultAnimBuff", 0.5f, 1, spell, _talon, _talon);
         AddBuff("TalonShadowAssaultBuff", 2.5f, 1, spell, _talon, _talon);
         
-        spell.CastInfo.Variables.Set("hitOutgoing", new HashSet<AttackableUnit>());
+        spell.CastInfo.InstanceVars.Set("hitOutgoing", new HashSet<AttackableUnit>());
         for (var i = 0; i < BladeCount; i++) {
             SpellCast(_talon, 3, SpellSlotType.ExtraSlots, _positions[i], _positions[i], true, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
             SpellCast(_talon, 5, SpellSlotType.ExtraSlots, _positions2[i], _positions2[i], true, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
@@ -129,7 +129,7 @@ public class TalonShadowAssaultMisOne : ISpellScript {
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return;
         }
@@ -164,7 +164,7 @@ public class TalonShadowAssaultMisOneHalf : ISpellScript {
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return;
         }
@@ -198,7 +198,7 @@ public class TalonShadowAssaultMisTwo : ISpellScript {
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_talon, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions)) return;
         
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return;
         }

@@ -50,8 +50,8 @@ namespace Buffs
                 return;
             }
 
-            var sourceItemId = _buff.Variables.GetInt("sourceItemId", 0);
-            var damageAmount = _buff.Variables.GetFloat("damageAmount", 0.0f);
+            var sourceItemId = _buff.BuffVars.GetInt("sourceItemId", 0);
+            var damageAmount = _buff.BuffVars.GetFloat("damageAmount", 0.0f);
 
             if (sourceItemId == 3057)
             {

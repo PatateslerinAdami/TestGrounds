@@ -49,9 +49,9 @@ public class TalonCutthroat : ISpellScript {
         FaceDirection(target.Position, owner, true);
 
         //slow
-        var variables      = new BuffVariables();
+        var variables      = new VariableTable();
         variables.Set("slowPercent", 0.99f);
-        AddBuff("Slow", 0.25f, 1, spell, target, owner, buffVariables: variables);
+        AddBuff("Slow", 0.25f, 1, spell, target, owner, variableTable: variables);
         
         AddParticleTarget(owner, target, "talon_E_tar", target);
         

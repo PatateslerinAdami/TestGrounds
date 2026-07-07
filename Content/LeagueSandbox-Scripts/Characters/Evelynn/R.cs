@@ -58,9 +58,9 @@ public class EvelynnRNuke : ISpellScript {
         var units = GetUnitsInRange(_evelynn, _targetPosition, 250f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions| SpellDataFlags.AffectNeutral);
         foreach (var unit in units) {
             AddParticleTarget(_evelynn, unit, "Evelynn_R_tar", unit);
-            var variables      = new BuffVariables();
+            var variables      = new VariableTable();
             variables.Set("slowPercent", 0.3f + 0.2f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1));
-            AddBuff("Slow", 2f, 1, _evelynn.GetSpell("EvelynnR"), unit, _evelynn, buffVariables: variables);
+            AddBuff("Slow", 2f, 1, _evelynn.GetSpell("EvelynnR"), unit, _evelynn, variableTable: variables);
             unit.TakeDamage(_evelynn, IsValidTarget(_evelynn, unit, SpellDataFlags.AffectNeutral) ? Math.Min(1000f, unit.Stats.CurrentHealth * 0.15f + 0.05f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1) + ap) 
                                           : unit.Stats.CurrentHealth * 0.15f + 0.05f * (_evelynn.GetSpell("EvelynnR").CastInfo.SpellLevel - 1) + ap, 
                             DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
@@ -86,9 +86,9 @@ public class EvelynnRHeal : ISpellScript {
         _targetPosition = start;
         var units = GetUnitsInRange(_evelynn, _targetPosition, 250f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
         if (units.Count == 0) return;
-        var variables    = new BuffVariables();
+        var variables    = new VariableTable();
         variables.Set("shieldAmount", units.Sum(unit => 150f));
         AddParticleTarget(_evelynn, _evelynn, "Evelynn_R_heal", _evelynn);
-        AddBuff("EvelynnRShield", 6f, 1, _evelynn.GetSpell("EvelynnR"), _evelynn, _evelynn, buffVariables: variables);
+        AddBuff("EvelynnRShield", 6f, 1, _evelynn.GetSpell("EvelynnR"), _evelynn, _evelynn, variableTable: variables);
     }
 }

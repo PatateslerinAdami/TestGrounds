@@ -134,10 +134,10 @@ public class AkaliSmokeBomb : ISpellScript {
 
         if (isInsideShroud && _invisibilityBreakRemainingMs <= 0f) {
             if (!_akali.HasBuff(StealthBuffName) && !_akali.HasBuff(LegacyStealthBuffName)) {
-                var variables = new BuffVariables();
+                var variables = new VariableTable();
                 variables.Set("isFirstCast", !_hasAppliedStealthThisCast);
                 AddBuff(StealthBuffName, GetRemainingDurationSeconds(), 1, _spell, _akali, _akali,
-                        buffVariables: variables);
+                        variableTable: variables);
                 _hasAppliedStealthThisCast = true;
             }
         } else if (_akali.HasBuff(StealthBuffName) || _akali.HasBuff(LegacyStealthBuffName)) {
@@ -168,11 +168,11 @@ public class AkaliSmokeBomb : ISpellScript {
         }
 
         foreach (var unit in unitsInShroud.Where(unit => !_slowTargets.Contains(unit))) {
-            var variables = new BuffVariables();
+            var variables = new VariableTable();
             variables.Set("slowPercent", 0.14f + 0.04f * (_spell.CastInfo.SpellLevel - 1));
             variables.Set("attackSpeedSlowAmount", 0f);
             AddBuff("AkaliWDebuff", GetRemainingDurationSeconds(), 1, _spell, unit, _akali,
-                    buffVariables: variables);
+                    variableTable: variables);
             _slowTargets.Add(unit);
         }
     }

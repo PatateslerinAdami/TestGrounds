@@ -53,7 +53,7 @@ public class ItemID_3116 : IItemScript
             return;
         }
 
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("slowPercent", slowPercent);
         variables.Set("attackSpeedSlowAmount", 0.0f);
 
@@ -67,7 +67,7 @@ public class ItemID_3116 : IItemScript
             null,
             data.Target,
             _owner,
-            buffVariables: variables
+            variableTable: variables
         );
     }
 
@@ -127,7 +127,7 @@ public class ItemID_3116 : IItemScript
         };
     }
 
-    private void ApplyInternalSlow(AttackableUnit target, float slowPercent, BuffVariables variables)
+    private void ApplyInternalSlow(AttackableUnit target, float slowPercent, VariableTable variables)
     {
         var normalizedNewSlow = slowPercent;
         if (normalizedNewSlow < 0.0f)
@@ -146,7 +146,7 @@ public class ItemID_3116 : IItemScript
                 continue;
             }
 
-            var existingSlow = existing.Variables.GetFloat("slowPercent", 0.0f);
+            var existingSlow = existing.BuffVars.GetFloat("slowPercent", 0.0f);
             if (existingSlow < 0.0f)
             {
                 existingSlow = -existingSlow;
@@ -173,7 +173,7 @@ public class ItemID_3116 : IItemScript
             null,
             target,
             _owner,
-            buffVariables: variables
+            variableTable: variables
         );
     }
 }

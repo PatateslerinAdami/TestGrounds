@@ -58,9 +58,9 @@ public class KarmaWNonMantra : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("rootDuration", 1f + 0.25f *(_karma.GetSpell("KarmaSpiritBind").CastInfo.SpellLevel - 1));
-        AddBuff("KarmaSpiritBind", 2f, 1, _karma.GetSpell("KarmaSpiritBind"), _target, _karma, buffVariables: variables);
+        AddBuff("KarmaSpiritBind", 2f, 1, _karma.GetSpell("KarmaSpiritBind"), _target, _karma, variableTable: variables);
     }
 
     public void OnSpellPostCast(Spell spell) {
@@ -82,10 +82,10 @@ public class KarmaWMantra : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("rootDuration", 1f + 0.25f *(_karma.GetSpell("KarmaSpiritBind").CastInfo.SpellLevel - 1));
         variables.Set("isMantra",     true);
-        AddBuff("KarmaSpiritBind", 2f, 1, _karma.GetSpell("KarmaSpiritBind"), _target, _karma, buffVariables: variables);
+        AddBuff("KarmaSpiritBind", 2f, 1, _karma.GetSpell("KarmaSpiritBind"), _target, _karma, variableTable: variables);
     }
 
     public void OnSpellPostCast(Spell spell) {

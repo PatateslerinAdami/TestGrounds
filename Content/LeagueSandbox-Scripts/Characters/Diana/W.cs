@@ -32,7 +32,7 @@ public class DianaOrbs : ISpellScript {
 
     public void OnSpellPostCast(Spell spell) {
         var orbsBuff = AddBuff("DianaOrbs", 5f, 1, spell, _diana, _diana);
-        orbsBuff.Variables.Set("orbsConsumed", 0);
+        orbsBuff.BuffVars.Set("orbsConsumed", 0);
         AddBuff("DianaShield", 5f, 1, spell, _diana, _diana);
         var owner = spell.CastInfo.Owner;
         var facing = new Vector2(owner.Direction.X, owner.Direction.Z);
@@ -94,14 +94,14 @@ public class DianaOrbsMissile : ISpellScript {
         
         var orbsBuff = _diana.GetBuffWithName("DianaOrbs");
         if (orbsBuff != null) {
-            var consumed = orbsBuff.Variables.GetInt("orbsConsumed") + 1;
-            orbsBuff.Variables.Set("orbsConsumed", consumed);
+            var consumed = orbsBuff.BuffVars.GetInt("orbsConsumed") + 1;
+            orbsBuff.BuffVars.Set("orbsConsumed", consumed);
             if (consumed >= 3) {
                 var oldShield = _diana.GetBuffWithName("DianaShield");
                 if (oldShield != null) _diana.RemoveBuff(oldShield);
-                var refreshVars = new BuffVariables();
+                var refreshVars = new VariableTable();
                 refreshVars.Set("isRefresh", true);
-                AddBuff("DianaShield", 5f, 1, spell, _diana, _diana, buffVariables: refreshVars);
+                AddBuff("DianaShield", 5f, 1, spell, _diana, _diana, variableTable: refreshVars);
             }
         }
 

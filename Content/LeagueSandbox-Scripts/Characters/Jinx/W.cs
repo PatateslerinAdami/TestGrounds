@@ -97,9 +97,9 @@ public class JinxWMissile : ISpellScript {
         AddParticleTarget(_jinx, target, "Jinx_W_Tar", target);
         target.TakeDamage(_jinx, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
 
-        var variables      = new BuffVariables();
+        var variables      = new VariableTable();
         variables.Set("slowPercent", 0.3f + 0.1f * (_jinx.GetSpell("JinxW").CastInfo.SpellLevel - 1));
-        AddBuff("Slow", 2f, 1, spell, target, _jinx, buffVariables: variables);
+        AddBuff("Slow", 2f, 1, spell, target, _jinx, variableTable: variables);
         AddBuff("JinxWSight", 2f, 1, spell, target, _jinx);
 
         missile.SetToRemove();

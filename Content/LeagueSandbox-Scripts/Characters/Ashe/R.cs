@@ -44,17 +44,17 @@ public class EnchantedCrystalArrow : ISpellScript {
         var dmg = 250f + (175f * spell.CastInfo.SpellLevel - 1) * _ashe.Stats.AbilityPower.Total;
         AddBuff("Stun", _stunDuration, 1, spell, target, _ashe);
             
-        var buffVariables1 = new BuffVariables();
+        var buffVariables1 = new VariableTable();
         buffVariables1.Set("slowPercent", 0.5f);
-        AddBuff("Chilled", 3f, 1, spell, target, _ashe, buffVariables: buffVariables1);
+        AddBuff("Chilled", 3f, 1, spell, target, _ashe, variableTable: buffVariables1);
         target.TakeDamage(_ashe, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
         AddParticleTarget(_ashe, target, "Ashe_Base_R_tar", target);
         var units= GetUnitsInRange(_ashe, target.Position, 400, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral).Where(unit => unit != target);
 
         foreach (var unit in units) {
-            var buffVariables = new BuffVariables();
+            var buffVariables = new VariableTable();
             buffVariables.Set("slowPercent", 0.5f);
-            AddBuff("Chilled", 3f, 1, spell, unit, _ashe, buffVariables: buffVariables);
+            AddBuff("Chilled", 3f, 1, spell, unit, _ashe, variableTable: buffVariables);
             unit.TakeDamage(_ashe, dmg * 0.5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
         }
         missile.SetToRemove();

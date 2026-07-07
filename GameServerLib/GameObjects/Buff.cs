@@ -45,7 +45,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             ObjAIBase from,
             bool infiniteDuration = false,
             IEventSource parent = null,
-            BuffVariables buffVariables = null,
+            VariableTable variableTable = null,
             bool skipTenacity = false
         )
         {
@@ -120,7 +120,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             TargetUnit = onto;
 
             ToolTipData = new ToolTipData(TargetUnit, null, this);
-            Variables = buffVariables ?? new BuffVariables();
+            BuffVars = variableTable ?? new VariableTable();
         }
 
         public BuffAddType BuffAddType { get; }
@@ -136,7 +136,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public ObjAIBase SourceUnit { get; internal set; }
         public AttackableUnit TargetUnit { get; }
         public float TimeElapsed { get; private set; }
-        public BuffVariables Variables { get; }
+        public VariableTable BuffVars { get; }
 
         /// <summary>
         /// Script instance for this buff. Casting to a specific buff class gives access its functions and variables.

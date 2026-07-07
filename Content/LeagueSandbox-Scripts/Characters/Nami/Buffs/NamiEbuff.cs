@@ -47,9 +47,9 @@ namespace Buffs
                 data.Target.TakeDamage(_unit, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
                 
                 //slow
-                var variables      = new BuffVariables();
+                var variables      = new VariableTable();
                 variables.Set("slowPercent", 0.15f + 0.05f * (_tideCallersBlessing.CastInfo.SpellLevel - 1) + 0.05f * (_nami.Stats.AbilityPower.Total % 100f));
-                AddBuff("Slow", 1f, 1, _tideCallersBlessing, data.Target, _nami, buffVariables: variables);
+                AddBuff("Slow", 1f, 1, _tideCallersBlessing, data.Target, _nami, variableTable: variables);
                 
                 
                 AddBuff("NamiEHitParticle", 1f, 1, _tideCallersBlessing, data.Target, _nami);

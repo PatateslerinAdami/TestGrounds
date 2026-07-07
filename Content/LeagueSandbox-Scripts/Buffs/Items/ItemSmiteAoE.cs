@@ -29,8 +29,8 @@ internal class ItemSmiteAoE : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _owner  = buff.SourceUnit;
         _unit   = unit;
-        _health = buff.Variables.GetFloat("healthAmount");
-        _mana   = buff.Variables.GetFloat("manaAmount");
+        _health = buff.BuffVars.GetFloat("healthAmount");
+        _mana   = buff.BuffVars.GetFloat("manaAmount");
     }
 
     public void OnUpdate(float diff) {

@@ -42,7 +42,7 @@ public class TalentReaper : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell)
     {
-        _itemID = buff.Variables.GetInt("itemid");
+        _itemID = buff.BuffVars.GetInt("itemid");
 
         _owner = ownerspell.CastInfo.Owner;
         _buff = buff;

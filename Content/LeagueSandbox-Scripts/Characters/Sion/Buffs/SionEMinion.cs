@@ -49,8 +49,8 @@ namespace Buffs
             // mispredicts by ~220u). So knockback length = 1350 - hitDistance. Terrain stops the
             // flight early (observed 516/601/901/1006/1176); full flights end at 1272-1347 from
             // the cast origin (navgrid snap), never beyond 1350. Speed 2100, gravity 0 (wire).
-            var start = buff.Variables.Get("start", Vector2.Zero);
-            var aim = buff.Variables.Get("end", Vector2.Zero);
+            var start = buff.BuffVars.Get("start", Vector2.Zero);
+            var aim = buff.BuffVars.Get("end", Vector2.Zero);
             var dirVec = aim - start;
             var dir = dirVec.LengthSquared() > 0.001f ? Vector2.Normalize(dirVec) : new Vector2(1, 0);
             var flingTarget = start + dir * 1350f;

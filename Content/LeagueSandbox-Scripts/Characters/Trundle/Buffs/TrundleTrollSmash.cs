@@ -63,9 +63,9 @@ internal class TrundleTrollSmash : IBuffGameScript {
         
         var dmg = 20f                              + 20f   * (_spell.CastInfo.SpellLevel - 1);
         data.PostMitigationDamage += dmg;
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("slowPercent", 0.75f);
-        AddBuff("Slow", 0.1f, 1, _spell, data.Target, _trundle, buffVariables: variables);
+        AddBuff("Slow", 0.1f, 1, _spell, data.Target, _trundle, variableTable: variables);
         AddBuff("TrundleQDebuff", 8f, 1, _spell, data.Target, _trundle);
         AddBuff("TrundleQ", 8f, 1, _spell, _trundle, _trundle);
         _buff.DeactivateBuff();

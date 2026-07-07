@@ -47,9 +47,9 @@ internal class MordekaiserMaceOfSpades : IBuffGameScript {
             }
             AddBuff("MordekaiserMaceOfSpadesDmg", 1f, 1, _spell, data.Target, _mordekaiser);
         } else {
-            var variables3 = new BuffVariables();
+            var variables3 = new VariableTable();
             variables3.Set("isSingleTarget", true);
-            AddBuff("MordekaiserMaceOfSpadesDmg", 1f, 1, _spell, data.Target, _mordekaiser, buffVariables: variables3);
+            AddBuff("MordekaiserMaceOfSpadesDmg", 1f, 1, _spell, data.Target, _mordekaiser, variableTable: variables3);
         }
         _buff.DeactivateBuff();
     }

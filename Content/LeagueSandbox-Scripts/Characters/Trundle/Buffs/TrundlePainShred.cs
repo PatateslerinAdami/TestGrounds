@@ -47,11 +47,11 @@ public class TrundlePainShred : IBuffGameScript {
         _spell   = ownerSpell;
         _trundle = ownerSpell.CastInfo.Owner;
         ApiEventManager.OnSpellHit.AddListener(this, _trundle.GetSpell("TrundlePainHeal"), OnSpellHitHealMissile);
-        if (!buff.Variables.TryGet<float>("halfArmorSteal", out _halfArmorSteal))
+        if (!buff.BuffVars.TryGet<float>("halfArmorSteal", out _halfArmorSteal))
             _halfArmorSteal = unit.Stats.Armor.Total * 0.2f;
-        if (!buff.Variables.TryGet<float>("halfMagicResistSteal", out _halfMagicResistSteal))
+        if (!buff.BuffVars.TryGet<float>("halfMagicResistSteal", out _halfMagicResistSteal))
             _halfMagicResistSteal = unit.Stats.MagicResist.Total * 0.2f;
-        if (!buff.Variables.TryGet<float>("periodicDamageTotal", out _periodicDamageTotal))
+        if (!buff.BuffVars.TryGet<float>("periodicDamageTotal", out _periodicDamageTotal))
             _periodicDamageTotal = unit.Stats.HealthPoints.Total *
                                    (0.2f + (_trundle.Stats.AbilityPower.Total / 50f) * 0.01f) * 0.5f;
 

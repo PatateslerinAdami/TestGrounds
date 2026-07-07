@@ -42,11 +42,11 @@ public class TalonRake : ISpellScript {
         // given unit. Two quick casts (CDR) never dedup against each other. Riot tracks this
         // server-internally with zero wire trace (the TalonRakeMissileOneMarker client stub
         // is the replay-era leftover of that server script) — so no networked buffs for it.
-        // The hit sets live in the cast's Variables bag (Riot's InstanceVars equivalent):
+        // The hit sets live in the cast's InstanceVars bag (Riot's InstanceVars equivalent):
         // all blade casts inherit it below, so every missile of THIS cast — outgoing and
         // return — shares the two sets, and overlapping casts stay isolated for free.
-        spell.CastInfo.Variables.Set("hitOutgoing", new HashSet<AttackableUnit>());
-        spell.CastInfo.Variables.Set("hitReturn", new HashSet<AttackableUnit>());
+        spell.CastInfo.InstanceVars.Set("hitOutgoing", new HashSet<AttackableUnit>());
+        spell.CastInfo.InstanceVars.Set("hitReturn", new HashSet<AttackableUnit>());
 
         // Replay-verified (55 casts): target points at exactly 750 units / +20°, 0°, −20° of
         // the cast direction. The 750 targets only define the directions — the missiles stop
@@ -104,9 +104,9 @@ public class TalonRakeMissileOne : ISpellScript {
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         // One blade hit per unit per outgoing pass — the set lives in the cast's shared
-        // Variables bag (set up by TalonRake per cast), so all three blades of this cast
+        // InstanceVars bag (set up by TalonRake per cast), so all three blades of this cast
         // dedup against each other while overlapping casts stay independent.
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return; // already hit by another blade of this pass — server-internal, nothing networked
         }
@@ -136,7 +136,7 @@ public class TalonRakeMissileOne : ISpellScript {
         // HOME onto Talon: LineMissileTrackUnits=1 re-aims server- and client-side at
         // Targets[0] every frame (S4 SpellLineMissile.cpp:923-930); en-route enemies are hit
         // by the native line collision and the blade ends when it reaches Talon.
-        // inheritVariablesFrom: the return cast joins the originating cast's Variables bag,
+        // inheritVariablesFrom: the return cast joins the originating cast's InstanceVars bag,
         // so the return blades share the per-cast "hitReturn" set.
         SpellCast(_talon, 2, SpellSlotType.ExtraSlots, true, _talon, missile.Position,
                   inheritVariablesFrom: missile.CastInfo);
@@ -193,7 +193,7 @@ public class TalonRakeMissileTwo : ISpellScript {
         }
         // One blade hit per unit per return pass — shared per-cast set, inherited from the
         // originating cast via inheritVariablesFrom (see TalonRakeMissileOne.OnMissileEnd).
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitReturn");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitReturn");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return; // already hit by another blade of this return pass
         }

@@ -339,6 +339,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public AttackableUnit TargetUnit { get; set; }
         public Dictionary<short, Spell> Spells { get; }
+        /// <summary>
+        /// Persistent per-champion variable table, mirroring Riot's BB "CharVars" table
+        /// (LuaBuildingBlockHelper): a string→value bag that survives across spell casts, buffs and
+        /// time — the champion's private mutable state store (passive-active flags, combo counters,
+        /// toggle states, …). Distinct in SCOPE from spell-instance vars (<see cref="CastInfo"/>.
+        /// InstanceVars) and buff-instance vars (Buff.InstanceVars, Riot's "InstanceVars", staged as
+        /// "NextBuffVars"): those die with their instance, CharVars lives with the unit. Reuses the
+        /// same bag type (<see cref="VariableTable"/>) — Riot's tables are all the same kind of thing,
+        /// scoped only by where they live. Script sugar: ApiFunctionManager SetCharVar/GetCharVar.
+        /// </summary>
+        public VariableTable CharVars { get; } = new();
         public ICharScript CharScript { get; private set; }
         public bool IsBot { get; set; }
         public bool IgnoreMoveOrders { get; set; }

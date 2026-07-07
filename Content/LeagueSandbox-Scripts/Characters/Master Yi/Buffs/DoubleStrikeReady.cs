@@ -40,12 +40,12 @@ namespace Buffs
             // (they deal DAMAGE_SOURCE_ATTACK but IsAutoAttack is now false for script-dealt damage).
             // OnHitUnit fires at damage application (missile arrival for ranged), so the timing is right.
             if (!data.IsAutoAttack) return;
-            var variables = new BuffVariables();
+            var variables = new VariableTable();
             variables.Set("damage", data.Damage);
             variables.Set("damageResultType", data.DamageResultType);
             variables.Set("damageType", data.DamageType);
             variables.Set("target", data.Target);
-            AddBuff("DoubleStrike", 0.25f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi, buffVariables: variables);
+            AddBuff("DoubleStrike", 0.25f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi, variableTable: variables);
             foreach (var buff in _masterYi.GetBuffsWithName("DoubleStrikeStacks"))
             {
                 RemoveBuff(buff);

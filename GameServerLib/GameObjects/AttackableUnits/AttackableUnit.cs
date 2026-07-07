@@ -3489,7 +3489,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         // skipTenacity: durationToAdd derives from buffs already tenacity-reduced at their
                         // own creation; reducing again here would double-apply.
                         var continuingBuff = new Buff(_game, b.Name, durationToAdd, parentBuff.StackCount, b.OriginSpell,
-                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.Variables?.Clone(), skipTenacity: true);
+                            b.TargetUnit, b.SourceUnit, b.IsBuffInfinite(), b.ParentScript, b.BuffVars?.Clone(), skipTenacity: true);
 
                         // Reuse the parent slot for this stack group.
                         RemoveBuffSlot(b);

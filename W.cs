@@ -122,7 +122,7 @@ namespace Spells
 
                     target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
                     
-                    var buffVariables = new BuffVariables();
+                    var buffVariables = new TableVariables();
                     buffVariables.Set("slowPercent", 0.5f);
                     AddBuff( "Slow", 2.0f, 1, spell, target, _owner, buffVariables: buffVariables);
                 }

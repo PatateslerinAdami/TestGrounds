@@ -56,9 +56,9 @@ public class NoxiousTrap : IBuffGameScript {
             if (unitsInRange.Count == 0) return;
             foreach (var unit in unitsInRange) {
                 AddBuff("BantamTrap", 4f, 1, _spell, unit, _teemo);
-                var variables = new BuffVariables();
+                var variables = new VariableTable();
                 variables.Set("slowPercent", 0.3f + 0.1f * (_spell.CastInfo.SpellLevel - 1));
-                AddBuff("Slow", 4f, 1, _spell, unit, _teemo, buffVariables: variables);
+                AddBuff("Slow", 4f, 1, _spell, unit, _teemo, variableTable: variables);
             }
 
             SetVisible();

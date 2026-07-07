@@ -169,22 +169,22 @@ public static class SpellbladeManager
 
     private static void AddDamageProc(ObjAIBase owner, Spell spell, SpellbladeProc proc)
     {
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("sourceItemId", proc.ItemId);
         variables.Set("damageAmount", proc.DamageAmount);
 
         if (proc.ItemId == LichBaneItemId)
         {
-            AddBuff("LichBane", ProcBuffDuration, 1, spell, owner, owner, buffVariables: variables);
+            AddBuff("LichBane", ProcBuffDuration, 1, spell, owner, owner, variableTable: variables);
             return;
         }
 
-        AddBuff("Sheen", ProcBuffDuration, 1, spell, owner, owner, buffVariables: variables);
+        AddBuff("Sheen", ProcBuffDuration, 1, spell, owner, owner, variableTable: variables);
     }
 
     private static void AddIcebornProc(ObjAIBase owner, Spell spell, bool dealDamage, float damageAmount)
     {
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("dealDamage", dealDamage);
         variables.Set("damageAmount", damageAmount);
         variables.Set("damageMultiplier", 1.25f);
@@ -194,7 +194,7 @@ public static class SpellbladeManager
         variables.Set("sourceItemId", IcebornGauntletItemId);
 
         AddBuff("ItemFrozenFist", ProcBuffDuration, 1, spell, owner, owner);
-        AddBuff("IcebornGauntletProc", ProcBuffDuration, 1, spell, owner, owner, buffVariables: variables);
+        AddBuff("IcebornGauntletProc", ProcBuffDuration, 1, spell, owner, owner, variableTable: variables);
     }
 
     private static bool IsItemReady(ObjAIBase owner, int itemId)

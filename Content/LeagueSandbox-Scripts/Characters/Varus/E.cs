@@ -29,7 +29,7 @@ namespace Spells
         {
             var targetPos = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
 
-            var vars = new BuffVariables();
+            var vars = new VariableTable();
             vars.Set("TargetX", targetPos.X);
             vars.Set("TargetY", targetPos.Y);
 

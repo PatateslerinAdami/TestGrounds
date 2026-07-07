@@ -403,10 +403,10 @@ namespace Spells
                     // the engine reduces THAT by tenacity once, at add time.
                     AddBuff("SionQSoundAfterHalfHit", 0.25f, 1, spell, target, _sion);
                     AddBuff("SionQSoundBeforeHalfHit", 0.25f, 1, spell, target, _sion);
-                    var vars = new BuffVariables();
+                    var vars = new VariableTable();
                     vars.Set("KnockupTime", knockupTime);
                     vars.Set("StunTail", stunTotal - knockupTime);
-                    AddBuff("SionQKnockUp", stunTotal, 1, spell, target, _sion, buffVariables: vars);
+                    AddBuff("SionQKnockUp", stunTotal, 1, spell, target, _sion, variableTable: vars);
                 }
                 else
                 {

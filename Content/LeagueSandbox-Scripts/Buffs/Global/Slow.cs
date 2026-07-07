@@ -34,7 +34,7 @@ internal class Slow : IBuffGameScript
         // Null-safe for item passives such as Rylai that pass originSpell = null.
         _owner = ownerSpell?.CastInfo?.Owner ?? buff.SourceUnit as ObjAIBase;
 
-        var movementSlowAmount = buff.Variables.GetFloat("slowPercent");
+        var movementSlowAmount = buff.BuffVars.GetFloat("slowPercent");
 
         if (movementSlowAmount < 0.0f)
         {

@@ -82,14 +82,14 @@ public class TrundlePainHealBig : ISpellScript {
         _target.TakeDamage(_trundle, immediateRawDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                            DamageResultType.RESULT_NORMAL);
 
-        var buffVariables = new BuffVariables();
+        var buffVariables = new VariableTable();
         buffVariables.Set("halfArmorSteal", halfArmorSteal);
         buffVariables.Set("halfMagicResistSteal", halfMagicResistSteal);
         buffVariables.Set("periodicDamageTotal", totalRawDamage * 0.5f);
 
         var totalBuffDuration = DrainDurationSeconds + ReturnDelaySeconds;
-        AddBuff("TrundlePainShred", totalBuffDuration, 1, _spell, _target, _trundle, buffVariables: buffVariables);
-        AddBuff("TrundlePainBuff", totalBuffDuration, 1, _spell, _trundle, _trundle, buffVariables: buffVariables);
+        AddBuff("TrundlePainShred", totalBuffDuration, 1, _spell, _target, _trundle, variableTable: buffVariables);
+        AddBuff("TrundlePainBuff", totalBuffDuration, 1, _spell, _trundle, _trundle, variableTable: buffVariables);
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {

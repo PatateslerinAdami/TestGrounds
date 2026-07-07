@@ -57,7 +57,7 @@ namespace Spells
             // moment the bolt reaches the endpoint. Replay: Riot FX_Kills the indicator on
             // Q-end (~0.65s, variable — hit/max-range/recast), NOT a fixed timer; the 1.5s
             // lifetime is only a backstop.
-            spell.CastInfo.Variables.Set("QEndIndicator", endIndicator);
+            spell.CastInfo.InstanceVars.Set("QEndIndicator", endIndicator);
         }
     }
 
@@ -97,7 +97,7 @@ namespace Spells
             AddBuff("VelkozQSlow", 1.0f + (0.25f * missile.SpellOrigin.CastInfo.SpellLevel), 1, missile.SpellOrigin,
                 target, owner);
             // Record the hit in the shared per-cast bag (Riot's LuaVars pattern) so the split
-            // missiles — which inherit this same Variables bag — won't hit this target again.
+            // missiles — which inherit this same InstanceVars bag — won't hit this target again.
             VelkozQHitTracking.GetHitSet(missile.SpellOrigin.CastInfo).Add(target.NetId);
             AddParticleTarget(owner, null, "velkoz_base_q_missile_tar.troy", target, lifetime: 1.0f);
             missile.SetToRemove();
@@ -116,7 +116,7 @@ namespace Spells
             // Kill the end indicator now that the bolt has reached the endpoint (matches Riot's
             // FX_Kill-on-Q-end). The particle was stashed in the shared per-cast bag by
             // VelkozQ.OnSpellPostCast.
-            if (parentCastInfo.Variables.TryGet<Particle>("QEndIndicator", out var endIndicator))
+            if (parentCastInfo.InstanceVars.TryGet<Particle>("QEndIndicator", out var endIndicator))
             {
                 RemoveParticle(endIndicator);
             }
@@ -235,8 +235,8 @@ namespace Spells
     }
 
     /// <summary>
-    /// "Hit once per Q cast" tracking. The set lives in the shared per-cast Variables bag
-    /// (CastInfo.Variables = Riot's LuaVars), which the main VelkozQMissile and both split
+    /// "Hit once per Q cast" tracking. The set lives in the shared per-cast InstanceVars bag
+    /// (CastInfo.InstanceVars = Riot's LuaVars), which the main VelkozQMissile and both split
     /// VelkozQMissileSplit missiles share via SpellCast(inheritVariablesFrom:). Replaces the
     /// old VelkozQSplitImmunity buff hack — Riot has no such buff (its de-dup is engine/cast
     /// state, not a debuff on the target).
@@ -247,10 +247,10 @@ namespace Spells
 
         public static HashSet<uint> GetHitSet(CastInfo castInfo)
         {
-            if (!castInfo.Variables.TryGet<HashSet<uint>>(HitSetKey, out var set))
+            if (!castInfo.InstanceVars.TryGet<HashSet<uint>>(HitSetKey, out var set))
             {
                 set = new HashSet<uint>();
-                castInfo.Variables.Set(HitSetKey, set);
+                castInfo.InstanceVars.Set(HitSetKey, set);
             }
             return set;
         }

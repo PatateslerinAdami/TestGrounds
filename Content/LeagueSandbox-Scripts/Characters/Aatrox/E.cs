@@ -70,7 +70,7 @@ public class AatroxE : ISpellScript {
         Vector2 startingPosLeft = GetPointFromUnit(_aatrox, 115f, 270);
         Vector2 endPos = GetPointFromUnit(_aatrox, 1000f, 0);
         _targetPosition = endPos;
-        spell.CastInfo.Variables.Set("hitOutgoing", new HashSet<AttackableUnit>());
+        spell.CastInfo.InstanceVars.Set("hitOutgoing", new HashSet<AttackableUnit>());
         SpellCast(_aatrox, 0, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, _aatrox.Position, inheritVariablesFrom: spell.CastInfo);
         SpellCast(_aatrox, 1, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, startingPosLeft, inheritVariablesFrom: spell.CastInfo);
         SpellCast(_aatrox, 1, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, startingPosRight, inheritVariablesFrom: spell.CastInfo);
@@ -102,7 +102,7 @@ public class AatroxEConeMissile : ISpellScript {
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return; // already hit by another blade of this pass, server-internal, nothing networked
         }
@@ -129,7 +129,7 @@ public class AatroxEConeMissile2 : ISpellScript {
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
-        var hitThisPass = missile?.CastInfo.Variables.Get<HashSet<AttackableUnit>>("hitOutgoing");
+        var hitThisPass = missile?.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("hitOutgoing");
         if (hitThisPass == null || !hitThisPass.Add(target)) {
             return; // already hit by another blade of this pass, server-internal, nothing networked
         }

@@ -44,7 +44,7 @@ internal class TalonShadowAssaultMisBuff : IBuffGameScript
         _buff = buff;
         _talon = ownerSpell.CastInfo.Owner;
         _unit = unit;
-        _positions = buff.Variables.Get("positions", new Vector2[BladeCount]);
+        _positions = buff.BuffVars.Get("positions", new Vector2[BladeCount]);
         ApiEventManager.OnLaunchMissile.AddListener(this, _talon.GetSpell("TalonShadowAssaultMisOne"), OnLaunchMissile);
     }
 
@@ -75,7 +75,7 @@ internal class TalonShadowAssaultMisBuff : IBuffGameScript
             RemoveParticle(_teamBased[i]);
         }
         
-        ownerSpell.CastInfo.Variables.Set("hitOutgoing", new HashSet<AttackableUnit>());
+        ownerSpell.CastInfo.InstanceVars.Set("hitOutgoing", new HashSet<AttackableUnit>());
         for (var i = 0; i < BladeCount; i++)
         {
             SpellCast(_talon, 4, SpellSlotType.ExtraSlots, true, _talon, _positions[i], inheritVariablesFrom: ownerSpell.CastInfo);

@@ -48,9 +48,9 @@ public class ItemID_3205 : IItemScript {
 
     private void OnTakeDamage(DamageData data) {
         if (!IsValidTarget(_owner, data.Attacker, SpellDataFlags.AffectNeutral)) return;
-        var bufVariables = new BuffVariables();
+        var bufVariables = new VariableTable();
         bufVariables.Set("damageAmount", data.Attacker.Stats.HealthPoints.Total * 0.05f);
-        AddBuff("ItemMonsterBurn", 3f, 1, _owner.AutoAttackSpell, data.Attacker, _owner, buffVariables: bufVariables);
+        AddBuff("ItemMonsterBurn", 3f, 1, _owner.AutoAttackSpell, data.Attacker, _owner, variableTable: bufVariables);
         if (!_enabled) {
             _owner.Stats.HealthRegeneration.FlatBonus += BonusHealthRegen;
             _owner.Stats.ManaRegeneration.FlatBonus   += BonusManaRegen;

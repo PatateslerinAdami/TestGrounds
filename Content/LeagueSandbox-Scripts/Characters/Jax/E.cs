@@ -67,7 +67,7 @@ public class JaxCounterStrikeAttack : ISpellScript {
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        var attacksDodged = spell.CastInfo.Variables.GetFloat("attacksDodged");
+        var attacksDodged = spell.CastInfo.InstanceVars.GetFloat("attacksDodged");
         PlayAnimation(_jax, "Spell3b", 0.5f);
         AddParticleTarget(_jax, _jax, "Counterstrike_cas", _jax, 1.5f);
         // SelfAOE radius + flags from SpellData (CastRadius=300, was hardcoded 375).

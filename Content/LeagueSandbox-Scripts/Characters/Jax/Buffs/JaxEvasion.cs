@@ -96,7 +96,7 @@ public class JaxEvasion : IBuffGameScript {
         RemoveParticle(_p1);
         RemoveParticle(_p2);
         // Key MUST match E.cs's GetFloat("attacksDodged") — was "attacksDodge" (typo) so the recast read 0.
-        spell.CastInfo.Variables.Set("attacksDodged", _attacksDodged);
+        spell.CastInfo.InstanceVars.Set("attacksDodged", _attacksDodged);
         SpellCast(_jax, 3, SpellSlotType.ExtraSlots, true, _jax, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
         spell.SetCooldown(spell.CastInfo.Cooldown, false);
     }

@@ -27,7 +27,7 @@ internal class Shatter : IBuffGameScript {
         //_shatterParticle1              = AddParticleTarget(owner, unit, "ShatterReady_buf", unit, -1);
         _shatterParticle1 = AddParticleTarget(_taric, unit, "Shatter_tar", unit, buff.Duration);
         _shatterParticle2 = AddParticleTarget(_taric, unit, "BloodSlash", unit, buff.Duration);
-        StatsModifier.Armor.FlatBonus = -buff.Variables.GetFloat("armorReduction");
+        StatsModifier.Armor.FlatBonus = -buff.BuffVars.GetFloat("armorReduction");
         unit.AddStatModifier(StatsModifier);
     }
 

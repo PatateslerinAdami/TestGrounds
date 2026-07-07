@@ -22,7 +22,7 @@ internal class RylaiInternalSlow : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        var slowPercent = buff.Variables.GetFloat("slowPercent", 0.15f);
+        var slowPercent = buff.BuffVars.GetFloat("slowPercent", 0.15f);
         if (slowPercent < 0.0f)
         {
             slowPercent = -slowPercent;

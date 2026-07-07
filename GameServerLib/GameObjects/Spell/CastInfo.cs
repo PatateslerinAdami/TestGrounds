@@ -72,7 +72,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// references. Clone() intentionally shares the reference (Riot shares one Lua table).
         /// Server-side only — Riot's LuaVarsLookup never appears on the wire.
         /// </summary>
-        public BuffVariables Variables { get; set; } = new BuffVariables();
+        public VariableTable InstanceVars { get; set; } = new VariableTable();
 
         /// <summary>
         /// Resolves the wire SpellChainOwnerNetID for a caster: pets report their owning

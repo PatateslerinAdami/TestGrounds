@@ -135,8 +135,8 @@ namespace Buffs
         {
             if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK && damageData.Target != null && !damageData.Target.IsDead)
             {
-                var sourceItemId = _buff.Variables.GetInt("sourceItemId", 3100);
-                var bonusDamage = _buff.Variables.GetFloat("damageAmount", 0.0f);
+                var sourceItemId = _buff.BuffVars.GetInt("sourceItemId", 3100);
+                var bonusDamage = _buff.BuffVars.GetFloat("damageAmount", 0.0f);
 
                 if (bonusDamage <= 0.0f)
                 {

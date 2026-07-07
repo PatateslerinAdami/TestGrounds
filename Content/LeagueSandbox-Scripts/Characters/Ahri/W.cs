@@ -60,7 +60,7 @@ public class AhriFoxFire : ISpellScript {
     public void OnSpellPostCast(Spell spell) {
         AddParticleTarget(_ahri, _ahri, "Ahri_FoxFire_cas", _ahri);
         var foxfireBuff = AddBuff("AhriFoxFire", 5f, 1, spell, _ahri, _ahri);
-        foxfireBuff.Variables.Set("orbsConsumed", 0);
+        foxfireBuff.BuffVars.Set("orbsConsumed", 0);
         
         var facing = new Vector2(_ahri.Direction.X, _ahri.Direction.Z);
         if (facing.LengthSquared() <= float.Epsilon) facing = new Vector2(1.0f, 0.0f);
@@ -112,8 +112,8 @@ public class AhriFoxFireMissile : ISpellScript {
         // LuaOnMissileUpdateDistanceInterval = 75u) and only starts looking for a target once
         // Ready >= 3 — so each orb orbits Ahri for ~3 intervals (~225u of arc) before it can
         // launch. Each orb is its own cast, so the counter lives on the orb's own CastInfo.
-        var ready = missile.CastInfo.Variables.GetInt("Ready") + 1;
-        missile.CastInfo.Variables.Set("Ready", ready);
+        var ready = missile.CastInfo.InstanceVars.GetInt("Ready") + 1;
+        missile.CastInfo.InstanceVars.Set("Ready", ready);
         if (ready < 3) return;
 
         // Literal S1 two-phase acquisition (both BBForNClosestVisibleUnitsInTargetArea, Range 650
@@ -133,8 +133,8 @@ public class AhriFoxFireMissile : ISpellScript {
         var foxFireBuff = _ahri.GetBuffWithName("AhriFoxFire");
         if (foxFireBuff != null)
         {
-            var consumed = foxFireBuff.Variables.GetInt("orbsConsumed") + 1;
-            foxFireBuff.Variables.Set("orbsConsumed", consumed);
+            var consumed = foxFireBuff.BuffVars.GetInt("orbsConsumed") + 1;
+            foxFireBuff.BuffVars.Set("orbsConsumed", consumed);
             if (consumed >= 3) {
                 if (foxFireBuff != null) _ahri.RemoveBuff(foxFireBuff);
             }

@@ -70,12 +70,12 @@ public class IcebornGauntletProc : IBuffGameScript
         }
 
         var target = damageData.Target;
-        var dealDamage = _buff.Variables.GetBool("dealDamage", true);
-        var damageAmount = _buff.Variables.GetFloat("damageAmount", 0.0f);
-        var damageMultiplier = _buff.Variables.GetFloat("damageMultiplier", 1.25f);
-        var zoneDuration = _buff.Variables.GetFloat("zoneDuration", 2.0f);
-        var slowPercent = Math.Abs(_buff.Variables.GetFloat("slowPercent", 0.30f));
-        var itemCooldown = _buff.Variables.GetFloat("itemCooldown", 1.5f);
+        var dealDamage = _buff.BuffVars.GetBool("dealDamage", true);
+        var damageAmount = _buff.BuffVars.GetFloat("damageAmount", 0.0f);
+        var damageMultiplier = _buff.BuffVars.GetFloat("damageMultiplier", 1.25f);
+        var zoneDuration = _buff.BuffVars.GetFloat("zoneDuration", 2.0f);
+        var slowPercent = Math.Abs(_buff.BuffVars.GetFloat("slowPercent", 0.30f));
+        var itemCooldown = _buff.BuffVars.GetFloat("itemCooldown", 1.5f);
         var zoneRadius = IsMeleeOwner() ? MeleeZoneRadius : RangedZoneRadius;
 
         var visibleBuff = _owner.GetBuffWithName("ItemFrozenFist");
@@ -106,7 +106,7 @@ public class IcebornGauntletProc : IBuffGameScript
         itemSpell?.SetCooldown(itemCooldown, true);
         AddBuff("SheenDelay", itemCooldown, 1, _buff.OriginSpell, _owner, _owner);
 
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("centerX", target.Position.X);
         variables.Set("centerY", target.Position.Y);
         variables.Set("zoneDuration", zoneDuration);
@@ -121,7 +121,7 @@ public class IcebornGauntletProc : IBuffGameScript
             _buff.OriginSpell,
             _owner,
             _owner,
-            buffVariables: variables
+            variableTable: variables
         );
     }
 

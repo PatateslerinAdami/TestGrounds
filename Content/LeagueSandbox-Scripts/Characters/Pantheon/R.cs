@@ -154,9 +154,9 @@ public class PantheonRFall : ISpellScript
             unit.TakeDamage(_pantheon, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                 false);
 
-            var variables = new BuffVariables();
+            var variables = new VariableTable();
             variables.Set("slowPercent", 0.3f);
-            AddBuff("Slow", 1f, 1, spell, unit, _pantheon, buffVariables: variables);
+            AddBuff("Slow", 1f, 1, spell, unit, _pantheon, variableTable: variables);
         }
     }
 }

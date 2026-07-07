@@ -70,9 +70,9 @@ public class NamiRMissile : ISpellScript {
                               DamageResultType.RESULT_NORMAL);
             
             //slow
-            var variables      = new BuffVariables();
+            var variables      = new VariableTable();
             variables.Set("slowPercent", 0.5f + 0.1f * (_nami.GetSpell("NamiR").CastInfo.SpellLevel - 1));
-            AddBuff("Slow", slowDuration, 1, spell, target, _nami, buffVariables:  variables);
+            AddBuff("Slow", slowDuration, 1, spell, target, _nami, variableTable:  variables);
             
             AddBuff("NamiRVision", 0.5f, 1, spell, target, _nami);
         }else if (IsValidTarget(_nami, target, SpellDataFlags.AffectFriends | SpellDataFlags.AffectHeroes)) {

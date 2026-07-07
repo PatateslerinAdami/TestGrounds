@@ -28,12 +28,12 @@ public class ItemID_3715 : IItemScript {
     
     private void OnHit(DamageData data) {
         if (!IsValidTarget(_owner, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral)) return;
-        var bufVariables = new BuffVariables();
+        var bufVariables = new VariableTable();
         bufVariables.Set("damageAmount", 45f);
         bufVariables.Set("healthAmount", 10f);
         bufVariables.Set("manaAmount",   5f);
-        AddBuff("ItemMonsterBurn",  2f, 1, _owner.AutoAttackSpell, data.Target, _owner, buffVariables: bufVariables);
-        AddBuff("ItemMonsterRegen", 2f, 1, _owner.AutoAttackSpell, _owner,      _owner, buffVariables: bufVariables);
+        AddBuff("ItemMonsterBurn",  2f, 1, _owner.AutoAttackSpell, data.Target, _owner, variableTable: bufVariables);
+        AddBuff("ItemMonsterRegen", 2f, 1, _owner.AutoAttackSpell, _owner,      _owner, variableTable: bufVariables);
     }
 
     public void OnDeactivate(ObjAIBase owner) {

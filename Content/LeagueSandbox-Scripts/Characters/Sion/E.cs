@@ -54,7 +54,7 @@ namespace Spells
     {
         private ObjAIBase _sion;
         private Spell _spell;
-        private BuffVariables _buffVariables = new BuffVariables();
+        private VariableTable _variableTable = new VariableTable();
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             MissileParameters = new MissileParameters
@@ -77,8 +77,8 @@ namespace Spells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            _buffVariables.Set("end", end);
-            _buffVariables.Set("start", start);
+            _variableTable.Set("end", end);
+            _variableTable.Set("start", start);
             _spell = spell;
         }
 
@@ -93,7 +93,7 @@ namespace Spells
                 if (pushDist < 0) pushDist = 0;
                 AddParticleTarget(_sion, target, "Sion_Base_E_Minion.troy", _sion, size: 2f, flags: FXFlags.SimulateWhileOffScreen);
                 AddBuff("SionEArmorShred", 2.5f, 1, _spell, target, _sion);
-                AddBuff("SionEMinion", 1f, 1, _spell, target, _sion, buffVariables: _buffVariables);
+                AddBuff("SionEMinion", 1f, 1, _spell, target, _sion, variableTable: _variableTable);
             }
             else
             {

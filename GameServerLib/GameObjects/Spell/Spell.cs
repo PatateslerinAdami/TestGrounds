@@ -41,6 +41,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// General information about this spell when it is cast. Refer to CastInfo class.
         /// </summary>
         public CastInfo CastInfo { get; private set; } = new CastInfo();
+        /// <summary>
+        /// Persistent per-spell-SLOT variable table, mirroring Riot's BB "SpellVars" table (the third
+        /// table the spell-script env exposes alongside InstanceVars/CharVars — herowars
+        /// spellscripts.cpp). Lives with the Spell object, so it is SHARED across every cast of THIS
+        /// spell but private to it — distinct in SCOPE from per-cast vars (<see cref="CastInfo"/>.
+        /// InstanceVars = Riot InstanceVars) and per-champion vars (<see cref="ObjAIBase.CharVars"/>).
+        /// Reuses the same bag type (<see cref="VariableTable"/>); the scope is expressed by where it
+        /// lives. Use for a spell tracking its own cross-cast state (last-cast data, recast counters).
+        /// Server-side only — never on the wire.
+        /// </summary>
+        public VariableTable SpellVars { get; } = new VariableTable();
         public int CurrentAmmo { get; private set; }
         public float CurrentAmmoCooldown { get; private set; }
         /// <summary>
@@ -447,7 +458,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Fresh per-cast variable bag (Riot: new cast = new LuaVars table). In-flight
             // missiles of the PREVIOUS cast keep the old bag — their cloned CastInfo still
             // references it — so overlapping casts never share per-cast state.
-            CastInfo.Variables = new BuffVariables();
+            CastInfo.InstanceVars = new VariableTable();
 
             CastInfo.AttackSpeedModifier = stats.AttackSpeedMultiplier.Total;
 

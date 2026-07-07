@@ -395,21 +395,63 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
-        /// Gets a point that is in the direction the specified unit is facing, given it is a specified distance away from the unit.
+        /// Faithful port of S1 <c>BBGetPointByUnitFacingOffset</c> (LuaBuildingBlockHelper.cpp): take
+        /// the unit's facing direction, rotate it <paramref name="offsetAngle"/> degrees (clockwise)
+        /// around the vertical axis, normalize, and step <paramref name="distance"/> units from the
+        /// unit's position along it. Riot pairs this with a preceding BBFaceDirection
+        /// (see <see cref="FaceDirection"/>) so the facing already points where the point is wanted.
         /// </summary>
-        /// <param name="obj">Unit to base the point off of.</param>
-        /// <param name="offsetAngle">Offset angle from the unit's facing angle (in degrees, clockwise). Must be > 0 to have an effect.</param>
-        /// <returns>Vector2 point.</returns>
-        public static Vector2 GetPointFromUnit(GameObject obj, float distance, float offsetAngle = 0)
+        /// <param name="unit">Unit to base the point off of (uses its current facing).</param>
+        /// <param name="distance">Distance from the unit along the (rotated) facing direction.</param>
+        /// <param name="offsetAngle">Offset from the facing angle, in degrees clockwise (0 = straight ahead).</param>
+        /// <returns>The resulting world point.</returns>
+        public static Vector2 GetPointByUnitFacingOffset(GameObject unit, float distance, float offsetAngle = 0f)
         {
-            Vector2 pos = obj.Position;
-            Vector2 dir = new Vector2(obj.Direction.X, obj.Direction.Z);
-            if (offsetAngle != 0)
+            Vector2 dir = new Vector2(unit.Direction.X, unit.Direction.Z);
+            if (offsetAngle != 0f)
             {
                 dir = GameServerCore.Extensions.Rotate(dir, offsetAngle);
             }
 
-            return pos + (dir * distance);
+            // C++ normalizes the facing before scaling; Direction is normally unit-length already, so
+            // this is a no-op guard unless the unit has never faced anything (Direction == Zero).
+            if (dir != Vector2.Zero)
+            {
+                dir = Vector2.Normalize(dir);
+            }
+
+            return unit.Position + dir * distance;
+        }
+
+        /// <summary>
+        /// Legacy alias for <see cref="GetPointByUnitFacingOffset"/> (identical behavior). Retained
+        /// for the existing script call sites that use this name.
+        /// </summary>
+        public static Vector2 GetPointFromUnit(GameObject obj, float distance, float offsetAngle = 0)
+        {
+            return GetPointByUnitFacingOffset(obj, distance, offsetAngle);
+        }
+
+        /// <summary>
+        /// Writes a value into the unit's persistent CharVars table (see
+        /// <see cref="ObjAIBase.CharVars"/>). Script-facing analog of S1's <c>BBSetVarInTable</c>
+        /// with <c>DestVarTable = "CharVars"</c>. Survives across casts/buffs; use for a champion's
+        /// own state flags (e.g. "passive empowered"), not for per-cast or per-buff data.
+        /// </summary>
+        public static void SetCharVar(ObjAIBase unit, string name, object value)
+        {
+            unit.CharVars.Set(name, value);
+        }
+
+        /// <summary>
+        /// Reads a typed value from the unit's persistent CharVars table, or
+        /// <paramref name="defaultValue"/> if unset. Script-facing analog of reading a var with
+        /// <c>SrcVarTable = "CharVars"</c>. Riot's flags are numeric (0/1) — read those as
+        /// <c>GetCharVar&lt;int&gt;</c> or via the bag's own <c>GetBool</c>/<c>GetInt</c> helpers.
+        /// </summary>
+        public static T GetCharVar<T>(ObjAIBase unit, string name, T defaultValue = default)
+        {
+            return unit.CharVars.Get(name, defaultValue);
         }
 
         /// <summary>
@@ -504,7 +546,7 @@ namespace LeagueSandbox.GameServer.API
             ObjAIBase from,
             bool infiniteduration = false,
             IEventSource parent = null,
-            BuffVariables buffVariables = null
+            VariableTable variableTable = null
         )
         {
             Buff buff;
@@ -512,7 +554,7 @@ namespace LeagueSandbox.GameServer.API
             try
             {
                 buff = new Buff(_game, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent,
-                    buffVariables);
+                    variableTable);
             }
             catch (ArgumentException exception)
             {
@@ -610,14 +652,14 @@ namespace LeagueSandbox.GameServer.API
             ObjAIBase from,
             bool infiniteDuration = false,
             IEventSource parent = null,
-            BuffVariables buffVariables = null
+            VariableTable variableTable = null
         )
         {
             if (onto.HasBuff(buffName))
             {
                 return null;
             }
-            return AddBuff(buffName, duration, stacks, originSpell, onto, from, infiniteDuration, parent, buffVariables);
+            return AddBuff(buffName, duration, stacks, originSpell, onto, from, infiniteDuration, parent, variableTable);
         }
 
         /// <summary>
@@ -1936,12 +1978,12 @@ namespace LeagueSandbox.GameServer.API
             string buffName, float buffDuration, byte buffNumberOfStacks = 1,
             ObjAIBase buffAttacker = null, Spell originSpell = null,
             string buffNameFilter = null, bool inclusiveBuffFilter = true,
-            BuffVariables buffVariables = null)
+            VariableTable variableTable = null)
         {
             var units = CollectUnitsInTargetArea(attacker, center, range,
                 flags | SpellDataFlags.IgnoreVisibilityCheck, buffNameFilter, inclusiveBuffFilter);
             AddBuffToEach(units, buffName, buffDuration, buffNumberOfStacks,
-                buffAttacker ?? attacker as ObjAIBase, originSpell, buffVariables);
+                buffAttacker ?? attacker as ObjAIBase, originSpell, variableTable);
             return units;
         }
 
@@ -1952,22 +1994,22 @@ namespace LeagueSandbox.GameServer.API
             string buffName, float buffDuration, byte buffNumberOfStacks = 1,
             ObjAIBase buffAttacker = null, Spell originSpell = null,
             string buffNameFilter = null, bool inclusiveBuffFilter = true,
-            BuffVariables buffVariables = null)
+            VariableTable variableTable = null)
         {
             var units = CollectUnitsInTargetArea(attacker, center, range, flags, buffNameFilter, inclusiveBuffFilter);
             AddBuffToEach(units, buffName, buffDuration, buffNumberOfStacks,
-                buffAttacker ?? attacker as ObjAIBase, originSpell, buffVariables);
+                buffAttacker ?? attacker as ObjAIBase, originSpell, variableTable);
             return units;
         }
 
         private static void AddBuffToEach(
             List<AttackableUnit> units, string buffName, float buffDuration, byte buffNumberOfStacks,
-            ObjAIBase buffAttacker, Spell originSpell, BuffVariables buffVariables)
+            ObjAIBase buffAttacker, Spell originSpell, VariableTable variableTable)
         {
             foreach (var unit in units)
             {
                 AddBuff(buffName, buffDuration, buffNumberOfStacks, originSpell, unit, buffAttacker,
-                    buffVariables: buffVariables);
+                    variableTable: variableTable);
             }
         }
 
@@ -3664,11 +3706,11 @@ namespace LeagueSandbox.GameServer.API
             }
 
             // Sub-cast variable inheritance (Riot: one shared LuaVars table per cast chain):
-            // the sub-cast's CastInfo SHARES the parent's Variables bag by reference, so every
+            // the sub-cast's CastInfo SHARES the parent's InstanceVars bag by reference, so every
             // missile/effect spawned by either cast reads and writes the same per-cast state.
             if (inheritVariablesFrom != null)
             {
-                castInfo.Variables = inheritVariablesFrom.Variables;
+                castInfo.InstanceVars = inheritVariablesFrom.InstanceVars;
             }
 
             spell.Cast(castInfo, !fireWithoutCasting, isContinuation);

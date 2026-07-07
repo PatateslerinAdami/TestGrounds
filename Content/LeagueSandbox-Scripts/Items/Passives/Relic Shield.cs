@@ -30,9 +30,9 @@ public class ItemID_3302 : IItemScript
     {
         _owner = owner;
 
-        BuffVariables payload = new BuffVariables();
+        VariableTable payload = new VariableTable();
         payload.Set("itemid", 3302);
-        AddBuff("TalentReaper", RECHARGE_PERIOD, MAX_STACKS, _owner.AutoAttackSpell, _owner, _owner, true, buffVariables: payload);
+        AddBuff("TalentReaper", RECHARGE_PERIOD, MAX_STACKS, _owner.AutoAttackSpell, _owner, _owner, true, variableTable: payload);
     }
 
 

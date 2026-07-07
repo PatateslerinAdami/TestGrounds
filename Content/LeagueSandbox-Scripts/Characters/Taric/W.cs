@@ -52,9 +52,9 @@ public class Shatter : ISpellScript {
         // SelfAOE radius + flags from SpellData (CastRadius=400, was hardcoded 375).
         var enemies = GetUnitsHitBySpell(_spell);
         foreach (var enemy in  enemies) {
-            var variables = new BuffVariables();
+            var variables = new VariableTable();
             variables.Set("armorReduction", armorReduction);
-            AddBuff("Shatter", 4f, 1, spell, enemy, _taric, buffVariables: variables);
+            AddBuff("Shatter", 4f, 1, spell, enemy, _taric, variableTable: variables);
             enemy.TakeDamage(_taric, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                              DamageResultType.RESULT_NORMAL);
         }

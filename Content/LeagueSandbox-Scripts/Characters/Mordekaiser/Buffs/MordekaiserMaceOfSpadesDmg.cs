@@ -32,7 +32,7 @@ internal class MordekaiserMaceOfSpadesDmg : IBuffGameScript {
         _mordekaiser    = ownerSpell.CastInfo.Owner;
         _spell          = ownerSpell;
         _unit           = unit;
-        _isSingleTarget = buff.Variables.GetBool("isSingleTarget");
+        _isSingleTarget = buff.BuffVars.GetBool("isSingleTarget");
         var ap  = _mordekaiser.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
         var ad  = _mordekaiser.Stats.AttackDamage.FlatBonus * ownerSpell.SpellData.Coefficient2;
         var dmg = 80f + 30f * (_spell.CastInfo.SpellLevel -1) + ad + ap;

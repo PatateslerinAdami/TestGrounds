@@ -44,9 +44,9 @@ public class IcebornGauntletZone : IBuffGameScript
         }
 
         _owner = ai;
-        _center = new Vector2(buff.Variables.GetFloat("centerX", 0.0f), buff.Variables.GetFloat("centerY", 0.0f));
-        _radius = buff.Variables.GetFloat("radius", 210.0f);
-        _slowPercent = buff.Variables.GetFloat("slowPercent", 0.30f);
+        _center = new Vector2(buff.BuffVars.GetFloat("centerX", 0.0f), buff.BuffVars.GetFloat("centerY", 0.0f));
+        _radius = buff.BuffVars.GetFloat("radius", 210.0f);
+        _slowPercent = buff.BuffVars.GetFloat("slowPercent", 0.30f);
         _durationSeconds = buff.Duration;
         _timerSeconds = 0.0f;
 
@@ -100,9 +100,9 @@ public class IcebornGauntletZone : IBuffGameScript
 
             if (!enemy.HasBuff("IcebornGauntletSlow"))
             {
-                var variables = new BuffVariables();
+                var variables = new VariableTable();
                 variables.Set("slowPercent", _slowPercent);
-                AddBuff("IcebornGauntletSlow", remainingDuration, 1, null, enemy, _owner, buffVariables: variables);
+                AddBuff("IcebornGauntletSlow", remainingDuration, 1, null, enemy, _owner, variableTable: variables);
             }
         }
     }

@@ -48,9 +48,9 @@ internal class DianaVortexStun : IBuffGameScript
     private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters)
     {
         if (parameters.MovementName != "dianaVortexStun") return;
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("slowPercent", _spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] / 100);
-        AddBuff("Slow", 2f, 1, _spell, unit, _diana, buffVariables: variables);
+        AddBuff("Slow", 2f, 1, _spell, unit, _diana, variableTable: variables);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -44,7 +44,7 @@ public class Volley : ISpellScript {
         // buff). A unit takes Volley damage once per cast; arrows reaching an already-hit unit pass
         // through it (see VolleyAttack.OnSpellHit). inheritVariablesFrom shares this exact set with
         // every arrow's CastInfo, and keeps overlapping casts (CDR) isolated for free.
-        spell.CastInfo.Variables.Set("volleyHits", new HashSet<AttackableUnit>());
+        spell.CastInfo.InstanceVars.Set("volleyHits", new HashSet<AttackableUnit>());
 
         for (var i = 0; i < 8; i++) {
             var angle = -21f + 7f * i;
@@ -75,11 +75,11 @@ public class VolleyAttack : ISpellScript {
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
-        // One Volley hit per unit per cast, tracked in the cast's shared Variables set (created by
+        // One Volley hit per unit per cast, tracked in the cast's shared InstanceVars set (created by
         // Volley, inherited by every arrow). If another arrow of THIS cast already hit this unit,
         // deal no damage and PASS THROUGH it — don't consume the arrow, so it can still reach a unit
         // behind. Per-missile re-hits are already prevented by the engine's ObjectsHit dedup.
-        var hits = missile.CastInfo.Variables.Get<HashSet<AttackableUnit>>("volleyHits");
+        var hits = missile.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("volleyHits");
         if (hits == null || !hits.Add(target)) {
             return;
         }

@@ -50,8 +50,8 @@ namespace Buffs
             unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, false);
 
             _spell = ownerSpell;
-            float knockupTime = buff.Variables.GetFloat("KnockupTime", 0.5f);
-            _stunTail = buff.Variables.GetFloat("StunTail", 0.75f);
+            float knockupTime = buff.BuffVars.GetFloat("KnockupTime", 0.5f);
+            _stunTail = buff.BuffVars.GetFloat("StunTail", 0.75f);
 
             ApiEventManager.OnMoveEnd.AddListener(this, unit, OnMoveEnd);
 

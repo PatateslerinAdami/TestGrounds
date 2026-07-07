@@ -37,7 +37,7 @@ namespace Buffs
             _buff = buff;
             _bubble = AddUnitPerceptionBubble(_unit, _unit.Stats.Size.Total, buff.Duration, _karma.Team, true, unit);
             
-            _isMantra = buff.Variables.GetBool("isMantra");
+            _isMantra = buff.BuffVars.GetBool("isMantra");
             AddBuff("KarmaSpiritBindSlow", buff.Duration, 1, ownerSpell, unit, _karma);
             _tetherParticle = AddParticleTarget(_karma, _karma, _isMantra ? "Karma_Base_W_beam_R" : "Karma_Base_W_beam", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC", targetBone: "spine");
             if (!_isMantra) return;
@@ -73,7 +73,7 @@ namespace Buffs
             _bubble.SetToRemove();
             RemoveBuff(unit, "KarmaSpiritBindSlow");
             if (_isTetherBroken) return;
-            var rootDuration = buff.Variables.GetFloat("rootDuration");
+            var rootDuration = buff.BuffVars.GetFloat("rootDuration");
             AddBuff("KarmaSpiritBindRoot", rootDuration, 1, ownerSpell, unit, _karma);
             if (!_isMantra) return;
             var healAmount = (_karma.Stats.HealthPoints.Total - _karma.Stats.CurrentHealth) * 0.25f;

@@ -366,9 +366,9 @@ public class ZedPBAOEDummy : ISpellScript {
     }
 
     private void ApplySlow(AttackableUnit target, float slowAmount) {
-        var variables = new BuffVariables();
+        var variables = new VariableTable();
         variables.Set("slowPercent", slowAmount);
-        AddBuff("Slow", SlowDuration, 1, _spell, target, _zed, buffVariables: variables);
+        AddBuff("Slow", SlowDuration, 1, _spell, target, _zed, variableTable: variables);
     }
 
     private void LowerWCooldownPerHit(int hitCount) {

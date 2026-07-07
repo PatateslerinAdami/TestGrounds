@@ -30,7 +30,7 @@ internal class ItemMonsterBurn : IBuffGameScript {
         _owner = buff.SourceUnit;
         _unit  = unit;
         _buff = buff;
-        _damage    = buff.Variables.GetFloat("damageAmount");
+        _damage    = buff.BuffVars.GetFloat("damageAmount");
     }
 
     public void OnUpdate(float diff) {
