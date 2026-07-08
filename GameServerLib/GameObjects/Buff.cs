@@ -46,7 +46,13 @@ namespace LeagueSandbox.GameServer.GameObjects
             bool infiniteDuration = false,
             IEventSource parent = null,
             VariableTable variableTable = null,
-            bool skipTenacity = false
+            bool skipTenacity = false,
+            // BB BBSpellBuffAdd call-site overrides (Riot passes these per-add). Null → fall back to
+            // the buff script's BuffMetaData default, so existing script-driven adds are unchanged.
+            BuffAddType? buffAddType = null,
+            BuffType? buffType = null,
+            int? maxStacks = null,
+            bool? isHidden = null
         )
         {
             if (duration < 0)
@@ -62,16 +68,17 @@ namespace LeagueSandbox.GameServer.GameObjects
             LoadScript();
             ScriptNameHash = HashString(Name);
 
-            BuffAddType = BuffScript.BuffMetaData.BuffAddType;
+            BuffAddType = buffAddType ?? BuffScript.BuffMetaData.BuffAddType;
+            var resolvedMaxStacks = maxStacks ?? BuffScript.BuffMetaData.MaxStacks;
             var isStackableType = BuffAddType == BuffAddType.STACKS_AND_RENEWS
                 || BuffAddType == BuffAddType.STACKS_AND_CONTINUE
                 || BuffAddType == BuffAddType.STACKS_AND_OVERLAPS;
-            if (isStackableType && BuffScript.BuffMetaData.MaxStacks < 2)
+            if (isStackableType && resolvedMaxStacks < 2)
             {
                 throw new ArgumentException("Error: Tried to create Stackable Buff, but MaxStacks was less than 2.");
             }
 
-            BuffType = BuffScript.BuffMetaData.BuffType;
+            BuffType = buffType ?? BuffScript.BuffMetaData.BuffType;
             // "Infinite" buffs are just buffs with a permanent-on-the-wire duration; the client needs
             // span >= 20000s to drop the decaying timer ring (see PERMANENT_DURATION). There is no
             // separate server-side never-expire flag anymore — these are removed explicitly by scripts.
@@ -93,14 +100,14 @@ namespace LeagueSandbox.GameServer.GameObjects
             }
 
             Duration = effectiveDuration;
-            Hidden = BuffScript.BuffMetaData.IsHidden;
-            if (BuffScript.BuffMetaData.MaxStacks > 254 && BuffType != BuffType.COUNTER)
+            Hidden = isHidden ?? BuffScript.BuffMetaData.IsHidden;
+            if (resolvedMaxStacks > 254 && BuffType != BuffType.COUNTER)
             {
                 MaxStacks = 254;
             }
             else
             {
-                MaxStacks = Math.Min(BuffScript.BuffMetaData.MaxStacks, int.MaxValue);
+                MaxStacks = Math.Min(resolvedMaxStacks, int.MaxValue);
             }
             OriginSpell = originSpell;
             if (onto.HasBuff(Name) && BuffAddType == BuffAddType.STACKS_AND_OVERLAPS)

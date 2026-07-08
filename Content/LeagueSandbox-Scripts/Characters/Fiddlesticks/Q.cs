@@ -39,6 +39,7 @@ namespace Spells
                 slowPercent = 0.5f
             };*/
             AddBuff("Flee", duration, 1, spell, _target, _owner);
+            AddBuff("FleeSlow", duration, 1, spell, _target, _owner);
             //AddBuff(fear, "Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
 
         }

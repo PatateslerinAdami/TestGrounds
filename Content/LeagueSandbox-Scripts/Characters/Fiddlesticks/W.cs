@@ -19,16 +19,13 @@ namespace Spells
     // DrainChannel channels for 5s, dealing magic damage on start and every 0.5s, healing Fiddle for
     // a % of the damage, and cancels if the target dies / leaves 650 range / the owner dies.
     //
-    // DATA SOURCES (both are 4.20):
-    //   • Per-tick damage  → DrainChannel.json (the channel owns its damage, as in S1): Effect1
-    //     (50/75/100/130/160) as damage-PER-SECOND + Coefficient (0.5) AP-PER-SECOND. Per 0.5s tick
-    //     = value × 0.5. ⚠ ASSUMPTION: Effect1 is per-second (matches S1's per-second 60/90/… shape
-    //     and keeps channel totals sane). Drain.json also carries an S1-identical set (Effect1
-    //     60/90/120/150/180, Coef 0.45) — if a replay shows the launcher values are canonical, swap
-    //     `_spell` → `_parentSpell` below. Pin the exact per-second-vs-per-tick + tick rate by replay.
-    //   • Heal %           → Drain.json (launcher) Effect3 (60/65/70/75/80 → ÷100 = 0.60‥0.80).
-    //     DrainChannel.json Effect3 is all-zero, so the drain % lives on the W slot, as in S1.
-    //   • Leash 650        → DrainChannel.json CastRange (== S1's 650 distance gate).
+    // DATA SOURCES — all from the W-slot Drain.json (the 4.20-authoritative source). DrainChannel.json
+    // is S1-STALE (CastRange 650 = old tether, Effect1 50/75/… ≠ 4.20) — do NOT read from it.
+    //   • Damage/sec → Drain.json Effect1 (60/90/120/150/180) + Coefficient (0.45) AP. Per tick =
+    //     value × TICK_SECONDS (0.25s in 4.20). Per-second confirmed by patch 4.15 ("refresh rate
+    //     0.5s → 0.25s", no damage change → only holds if the value is per-second: total DPS constant).
+    //   • Heal %     → Drain.json Effect3 (60/65/70/75/80 → ÷100 = 0.60‥0.80).
+    //   • Leash 800  → patch 4.15 ("tether 750 → 800"); S1 lua / DrainChannel.json say 650 (S1-era).
     //
     // OMITTED vs S1 (documented, not silently dropped):
     //   • DrainCheck (empty marker buff) — S1 uses it purely to test target-buffability before
@@ -39,9 +36,21 @@ namespace Spells
     {
         public SpellScriptMetadata ScriptMetadata => new()
         {
+            // 4.20 Drain stub: CastingBreaksStealth=true, DoesntBreakShields=false (shield blocks the
+            // tether — handled at DrainChannel start via BreakSpellShields), IsDamagingSpell=false
+            // (damage lives in DrainChannel). NOTE: the stub also has DoesntTriggerSpellCasts=true,
+            // but our engine ties the OnSpellCast SCRIPT HOOK to TriggersSpellCasts (Spell.cs:208) —
+            // setting it false would stop OnSpellCast firing and break the launch. Engine conflation:
+            // "fire OnSpellCast hook" vs "proc on-cast reactions" aren't separable, so we keep it true.
             TriggersSpellCasts = true,
+            CastingBreaksStealth = true,
             AutoFaceDirection = true
         };
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            
+        }
 
         public void OnSpellCast(Spell spell)
         {
@@ -50,7 +59,7 @@ namespace Spells
             if (target != null)
             {
                 // S1 Drain.TargetExecute → force-cast DrainChannel (ExtraSlot 0) on the target.
-                SpellCast(spell.CastInfo.Owner, 0, SpellSlotType.ExtraSlots, false, target, target.Position);
+                SpellCast(spell.CastInfo.Owner, 0, SpellSlotType.ExtraSlots, false, target, target.Position,  true, spell.CastInfo.SpellLevel);
             }
         }
     }
@@ -63,9 +72,18 @@ namespace Spells
         private Spell _parentSpell;
         private Particle _tetherParticle;
 
-        private const float TICK_INTERVAL_MS = 500f;    // S1 TimeBetweenExecutions = 0.5
-        private const float TICK_SECONDS     = 0.5f;    // per-second value → per-tick multiplier
-        private const float LEASH_RANGE_SQR  = 650f * 650f;
+        // Patch 4.15: refresh rate increased to 0.25s (from the S1-era 0.5s in DrainChannel.lua).
+        // We target 4.20, so 0.25s. Per-tick damage = per-second × TICK_SECONDS keeps total DPS
+        // constant across this refresh-rate change (exactly what the 4.15 note implies — which also
+        // corroborates that Effect1/Coefficient are per-SECOND values).
+        private const float TICK_INTERVAL_MS = 250f;    // 4.15+ TimeBetweenExecutions = 0.25
+        private const float TICK_SECONDS     = 0.25f;   // per-second value → per-tick multiplier
+        // Patch 4.15: tether range increased to 800 (from 750). We target 4.20 → 800.
+        // ⚠ NOTE: S1 DrainChannel.lua's distance gate AND DrainChannel.json CastRange are both 650 —
+        // the S1-era value. That the repo JSON still carries 650 means its Drain data is (at least
+        // partly) S1-stale, NOT 4.20-authoritative → the damage values read from it are also suspect
+        // and should be cross-checked against 4.20 patch notes / a true 4.20 data source.
+        private const float LEASH_RANGE_SQR  = 800f * 800f;
 
         public SpellScriptMetadata ScriptMetadata => new()
         {
@@ -91,8 +109,20 @@ namespace Spells
                 return;
             }
 
-            // S1 ChannelingStart: target debuff marker + owner heal marker + tether particle.
-            AddBuff("Drain", 5.0f, 1, _parentSpell ?? spell, _target, _owner);
+            // 4.20 (Drain stub DoesntBreakShields=false): a spell shield BLOCKS applying the tether —
+            // consume it and abort before anything is applied. The ongoing ticks below use direct
+            // TakeDamage (DrainChannel DoesntBreakShields=true), so an already-applied tether keeps
+            // damaging through a shield gained later. BreakSpellShields returns false = shield ate it.
+            if (!BreakSpellShields(_target, _parentSpell ?? spell))
+            {
+                spell.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.LostTarget);
+                return;
+            }
+
+            // ChannelingStart: target debuff marker + owner heal marker + tether particle.
+            // Replay-verified 4.20 (096729f… ARAM): the target buff is "DrainChannel" (DAMAGE), NOT
+            // "Drain" as in the S1 lua (S1→4.20 buff rename). Fearmonger_marker (HEAL) unchanged.
+            AddBuff("DrainChannel", 5.0f, 1, _parentSpell ?? spell, _target, _owner);
             AddBuff("Fearmonger_marker", 5.0f, 1, _parentSpell ?? spell, _owner, _owner);
             _tetherParticle = AddParticleTarget(_owner, _owner, "Drain", _target, 5.0f, bone: "spine", targetBone: "spine");
 
@@ -126,19 +156,22 @@ namespace Spells
 
         private void DealTick()
         {
-            var level = (_parentSpell ?? _spell).CastInfo.SpellLevel;
+            // All values come from the W-slot SpellData (Drain.json) — the 4.20-authoritative source.
+            // (DrainChannel.json is S1-stale: CastRange 650 = old tether, Effect1 50/75/… ≠ 4.20.)
+            var data = _parentSpell ?? _spell;
+            var level = data.CastInfo.SpellLevel;
             if (level <= 0)
             {
                 return;
             }
 
-            // Damage from the channel spell's own SpellData (DrainChannel.json), per-second → per-tick.
+            // Damage-per-second → per-tick. Drain.json Effect1 (60/90/120/150/180) + Coefficient 0.45.
             var ap = _owner.Stats.AbilityPower.Total;
-            var perSecond = _spell.SpellData.EffectLevelAmount[1][level] + ap * _spell.SpellData.Coefficient;
+            var perSecond = data.SpellData.EffectLevelAmount[1][level] + ap * data.SpellData.Coefficient;
             var perTick = perSecond * TICK_SECONDS;
 
-            // Heal % from the W-slot SpellData (Drain.json Effect3 = 60‥80 → ÷100).
-            var healPercent = (_parentSpell ?? _spell).SpellData.EffectLevelAmount[3][level] / 100f;
+            // Heal % from Drain.json Effect3 (60/65/70/75/80 → ÷100 = 0.60‥0.80).
+            var healPercent = data.SpellData.EffectLevelAmount[3][level] / 100f;
 
             // S1 SourceDamageType = DAMAGESOURCE_SPELLPERSIST → our DAMAGE_SOURCE_PERIODIC.
             _target.TakeDamage(_owner, perTick, DamageType.DAMAGE_TYPE_MAGICAL,
@@ -158,10 +191,10 @@ namespace Spells
 
         private void Cleanup()
         {
-            // S1 ChannelingSuccess/CancelStop: remove Drain (target) + Fearmonger_marker (owner) + particle.
+            // ChannelingSuccess/CancelStop: remove DrainChannel (target) + Fearmonger_marker (owner) + particle.
             if (_target != null)
             {
-                RemoveBuff(_target, "Drain");
+                RemoveBuff(_target, "DrainChannel");
             }
             if (_owner != null)
             {

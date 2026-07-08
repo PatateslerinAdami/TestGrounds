@@ -47,8 +47,7 @@ namespace Spells
             }
             TeleportTo(owner, teleportPos.X, teleportPos.Y);
 
-            AddParticle(owner, owner, "crowstorm_green_cas.troy", default, 5f, teamOnly: owner.Team);
-            AddParticle(owner, owner, "crowstorm_red_cas.troy", default, 5f, teamOnly: CustomConvert.GetEnemyTeam(owner.Team));
+            AddParticle(owner, owner, "crowstorm_green_cas.troy", default, 5f, size: 1f, enemyParticle: "crowstorm_red_cas.troy", flags: FXFlags.SimulateWhileOffScreen);
             AddBuff("Crowstorm", 5f, 1, spell, owner, owner);
 
             // Crowstorm damage as an owner-anchored AreaTriggerSphere (replaces SpellSector): while an enemy

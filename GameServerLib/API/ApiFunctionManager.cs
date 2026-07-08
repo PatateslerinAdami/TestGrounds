@@ -614,7 +614,17 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="onto">Target of the buff.</param>
         /// <param name="from">Owner of the buff.</param>
         /// <param name="infiniteduration">Whether or not the buff should last forever.</param>
+        /// <param name="buffAddType">BB BuffAddType override (RENEW/REPLACE/STACKS_*). Null → the buff
+        /// script's BuffMetaData default. Mirrors BBSpellBuffAdd's per-call BuffAddType.</param>
+        /// <param name="buffType">BB BuffType override (INTERNAL/DAMAGE/STUN/…). Null → script default.</param>
+        /// <param name="maxStacks">BB MaxStack override. Null → script default.</param>
+        /// <param name="canMitigateDuration">BB CanMitigateDuration: when false, tenacity does NOT
+        /// shorten the duration even for a tenacity-reducible BuffType (per-buff opt-out). Default true.</param>
+        /// <param name="isHidden">BB IsHiddenOnClient override. Null → script default.</param>
         /// <returns>New buff instance.</returns>
+        // NOTE (BB parity gaps, intentional): BBSpellBuffAdd's `StacksExclusive` has no engine concept
+        // (moot for the MaxStack=1 majority) and `TickRate` is not a buff-level knob here — periodic
+        // buff effects use ExecutePeriodically (BBExecutePeriodically), see that helper.
         public static Buff AddBuff(
             string buffName,
             float duration,
@@ -624,7 +634,12 @@ namespace LeagueSandbox.GameServer.API
             ObjAIBase from,
             bool infiniteduration = false,
             IEventSource parent = null,
-            VariableTable variableTable = null
+            VariableTable variableTable = null,
+            BuffAddType? buffAddType = null,
+            BuffType? buffType = null,
+            int? maxStacks = null,
+            bool canMitigateDuration = true,
+            bool? isHidden = null
         )
         {
             Buff buff;
@@ -632,7 +647,8 @@ namespace LeagueSandbox.GameServer.API
             try
             {
                 buff = new Buff(_game, buffName, duration, stacks, originspell, onto, from, infiniteduration, parent,
-                    variableTable);
+                    variableTable, skipTenacity: !canMitigateDuration,
+                    buffAddType: buffAddType, buffType: buffType, maxStacks: maxStacks, isHidden: isHidden);
             }
             catch (ArgumentException exception)
             {

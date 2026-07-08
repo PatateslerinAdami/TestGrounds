@@ -14,7 +14,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class Dread : IBuffGameScript { 
+public class ParanoiaMissChance : IBuffGameScript { 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,

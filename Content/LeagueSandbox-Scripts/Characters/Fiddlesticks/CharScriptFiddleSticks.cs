@@ -40,13 +40,13 @@ public class CharScriptFiddleSticks : ICharScript
         {
             if (_affectedUnits.Add(unit))
             {
-                AddBuff("Dread", 1500f, 1, _spell, unit, _owner, infiniteduration: true);
+                AddBuff("ParanoiaMissChance", 1500f, 1, _spell, unit, _owner, infiniteduration: true);
             }
         }
         
         foreach (var unit in _affectedUnits.Except(unitsInRange).ToList())
         {
-            RemoveBuff(unit, "Dread");
+            RemoveBuff(unit, "ParanoiaMissChance");
             _affectedUnits.Remove(unit);
         }
     }
