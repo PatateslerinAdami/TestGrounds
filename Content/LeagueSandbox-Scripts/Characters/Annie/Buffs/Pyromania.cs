@@ -29,7 +29,7 @@ public class Pyromania  : IBuffGameScript {
         ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdateStats);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
     }
 
     private void OnUpdateStats(AttackableUnit unit, float diff) {

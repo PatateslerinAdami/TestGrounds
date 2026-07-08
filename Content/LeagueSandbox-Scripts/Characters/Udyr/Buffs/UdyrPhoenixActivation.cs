@@ -32,7 +32,7 @@ public class UdyrPhoenixActivation : IBuffGameScript {
         AddParticleTarget(_udyr, _udyr, "PhoenixStance",      _udyr, buff.Duration);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, true, 1,5);
         if (ticks != 1) return;

@@ -48,7 +48,7 @@ internal class MordekaiserIronMan : IBuffGameScript {
         data.PostMitigationDamage = Math.Max(0.0f, data.PostMitigationDamage - absorbed);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _delayTimer -= diff;
         if (!(_delayTimer <= 0f)) return;
         _decayTimer -= diff;

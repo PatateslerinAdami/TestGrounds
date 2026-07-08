@@ -16,9 +16,7 @@ namespace Buffs
     internal class Trample_Buff : IBuffGameScript {
         private       ObjAIBase _alistar;
         private       Buff      _buff;
-        private const float     IntervalMs = 500.0f;
-        private const int       MaxSteps   = 6;
-        private       int       _stepsApplied;
+        private const float     IntervalMs = 1000.0f;
         private       Particle  _p1, _p2, _p3, _p4, _p5, _p6;
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
@@ -45,30 +43,37 @@ namespace Buffs
             _p6 = AddParticleTarget(_alistar, _alistar, "alistar_nose_puffs", _alistar, buff.Duration, bone: "BUFFBONE_CSTM_NOSE1");
         }
 
-        public void OnUpdate(float diff) {
-            // Riot BBExecutePeriodically: 500ms cadence, drift-free, anchor stored in this buff's
-            // BuffVars (= Riot TrackTimeVarTable). ExecuteImmediately mirrors the old _tickTime=500
-            // init that fired on the first update. Capped at MaxSteps ticks over the buff's life.
-            if (_stepsApplied >= MaxSteps) return;
+        public void OnUpdate(Buff buff, float diff) {
+            // Riot BBExecutePeriodically (S1 AlistarTrample): TimeBetweenExecutions=1 -> 1s cadence,
+            // drift-free, anchor stored in this buff instance's BuffVars (= Riot TrackTimeVarTable).
+            // ExecuteImmediately=true fires on the first update. No step cap: the buff duration gates
+            // it (OnUpdate stops once the buff ends). Range query includes AffectTurrets so enemy
+            // structures are hit; the double-damage test (AffectEnemies|AffectMinions) matches only
+            // enemy minions, per S1's PercentOfAttack=2 minion branch. Damage base uses the current
+            // patch's 6+level curve (the S1 10..23 rank table was changed in a later patch).
             ExecutePeriodically(_buff.BuffVars, "trampleTick", IntervalMs, executeImmediately: true, () => {
-                if (_stepsApplied >= MaxSteps) return;
                 var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
                 var enemiesInRange = GetUnitsInRange(_alistar, _alistar.Position, 300f, true,
                                                      SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                                     SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectBuildings);
+                                                     SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral |
+                                                     SpellDataFlags.AffectBuildings | SpellDataFlags.AffectTurrets);
                 foreach (var enemy in enemiesInRange) {
                     enemy.TakeDamage(_alistar, IsValidTarget(_alistar, enemy, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions) ? dmg * 2f : dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                                      DamageResultType.RESULT_NORMAL);
                 }
-                _stepsApplied++;
             });
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            // Remove all six particles created in OnActivate (previously _p4..6 leaked until their
+            // buff.Duration lifetime expired on an early deactivate).
             RemoveParticle(_p1);
             RemoveParticle(_p2);
             RemoveParticle(_p3);
+            RemoveParticle(_p4);
+            RemoveParticle(_p5);
+            RemoveParticle(_p6);
             _alistar.SetAnimStates(new Dictionary<string, string> {
                 { "Idle1", "" },
                 { "run", "" }

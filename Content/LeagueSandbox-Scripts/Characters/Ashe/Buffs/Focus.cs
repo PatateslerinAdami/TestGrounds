@@ -66,7 +66,7 @@ public class Focus : IBuffGameScript {
         _tickTimer   = TickMs;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         UpdateDisplay();
 
         if (_combatTimer > 0f) {

@@ -17,7 +17,7 @@ internal class AatroxQKnockup : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.KNOCKUP,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
     };
 
     public StatsModifier StatsModifier { get; } = new();

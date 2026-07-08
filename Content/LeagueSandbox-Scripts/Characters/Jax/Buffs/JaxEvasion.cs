@@ -64,7 +64,7 @@ public class JaxEvasion : IBuffGameScript {
         AddParticleTarget(_jax, _jax, "CounterStrike_dodged", _jax);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_step >= MaxSteps) return;
 
         var ticks = _periodicTicker.ConsumeTicks(diff, MaxTicks, maxTicksPerUpdate: 1);

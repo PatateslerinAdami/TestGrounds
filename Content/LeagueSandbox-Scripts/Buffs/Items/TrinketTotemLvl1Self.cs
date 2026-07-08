@@ -30,7 +30,7 @@ internal class TrinketTotemLvl1Self : IBuffGameScript {
         _buff = buff;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_enableStealthTimer) {
             var ticks = _periodicTicker.ConsumeTicks(diff, 2000f, false, maxTotalTicks: 1);
             if (ticks == 1) {

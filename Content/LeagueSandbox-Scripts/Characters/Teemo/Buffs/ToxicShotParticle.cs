@@ -44,7 +44,7 @@ public class ToxicShotParticle : IBuffGameScript
         ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false);
         if (ticks != 1) return;

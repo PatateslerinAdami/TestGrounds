@@ -17,7 +17,7 @@ namespace GameServerCore.Scripting.CSharp
         void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
         }
-        void OnUpdate(float diff)
+        void OnUpdate(Buff buff, float diff)
         {
         }
     }

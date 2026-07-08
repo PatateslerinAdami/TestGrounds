@@ -24,7 +24,7 @@ internal class SionPassiveDelay : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _sion = ownerSpell.CastInfo.Owner;
+        _sion = buff.SourceUnit;
         PlayAnimation(unit, "SionReanimate");
         HideHealthBar(unit, hide: true);
         unit.SetStatus(StatusFlags.Targetable, false);

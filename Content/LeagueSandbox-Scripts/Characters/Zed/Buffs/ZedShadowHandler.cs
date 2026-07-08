@@ -95,7 +95,7 @@ internal class ZedShadowHandler : IBuffGameScript {
     
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_wShadow != null) {
             if (_wShadow.IsDead || _wShadow.IsToRemove()) {
                 _currentWIndicator?.SetToRemove();

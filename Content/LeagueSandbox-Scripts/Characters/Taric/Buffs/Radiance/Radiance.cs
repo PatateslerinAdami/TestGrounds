@@ -47,7 +47,7 @@ internal class Radiance : IBuffGameScript {
         RefreshAura();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_taric.IsDead) {
             _buff.DeactivateBuff();
             return;

@@ -38,7 +38,7 @@ public class UdyrTigerPunchBleed : IBuffGameScript {
         ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_remainingProcs <= 0) return;
 
         _damageTimer -= diff;

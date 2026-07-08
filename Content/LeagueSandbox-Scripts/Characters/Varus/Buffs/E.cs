@@ -134,7 +134,7 @@ namespace Buffs
             _visualMissiles.Clear();
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (!_zoneActive) return;
 

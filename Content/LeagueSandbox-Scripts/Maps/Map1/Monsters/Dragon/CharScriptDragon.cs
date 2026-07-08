@@ -187,7 +187,7 @@ namespace Buffs
         {
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (thisBuff == null || thisBuff.SourceUnit == null || _unit == null)
                 return;

@@ -29,7 +29,7 @@ internal class SionPassive : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _sion = ownerSpell.CastInfo.Owner;
+        _sion = buff.SourceUnit;
         _unit = unit;
         _ownerSpell = ownerSpell;
         ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);

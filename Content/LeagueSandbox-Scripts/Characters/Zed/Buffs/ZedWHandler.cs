@@ -62,7 +62,7 @@ internal class ZedWHandler : IBuffGameScript {
         if (!_currentShadowSwapped) SetSpellShadowDash();
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_shurikenQueued) {
             _shurikenCastTimer += diff;
             TryCastQueuedShuriken();

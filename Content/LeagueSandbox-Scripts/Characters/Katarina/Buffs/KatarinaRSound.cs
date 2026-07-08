@@ -36,7 +36,7 @@ class KatarinaRSound : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _katarina = ownerSpell.CastInfo.Owner;
+        _katarina = buff.SourceUnit;
         _ownerSpell = ownerSpell;
 
         // Particle only the animation lives in KatarinaR.OnSpellCast (cast-start), buff is added

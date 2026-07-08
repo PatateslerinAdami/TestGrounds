@@ -106,7 +106,7 @@ internal class ZedUltDash : IBuffGameScript {
         ApiEventManager.OnResurrect.AddListener(this, _zed, OnOwnerResurrect);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _timer += diff;
         SetAllCastSlotsSealed(true);
         if (_dashStarted && !_dashResolved && !_forcedDashToTrackedPosition && _target is { IsDead: false }) {

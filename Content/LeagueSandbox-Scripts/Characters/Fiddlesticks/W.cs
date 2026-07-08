@@ -70,8 +70,9 @@ namespace Spells
             _targetParticle = AddParticleTarget(_owner, _owner, "Fearmonger_cas.troy", _target, 5.0f);
         }
 
-        public void OnUpdate(float diff)
+        public void OnSpellChannelUpdate(Spell spell, float diff)
         {
+            
             if (_spell == null || _owner.ChannelSpell != _spell) return;
 
             if (_target == null || _target.IsDead || _owner.IsDead)
@@ -86,6 +87,7 @@ namespace Spells
                 return;
             }
 
+            
             _tickTimer -= diff;
 
             if (_tickTimer <= 0)

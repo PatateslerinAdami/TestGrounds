@@ -41,7 +41,7 @@ public class AatroxPassive : IBuffGameScript {
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) { }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_aatrox.HasBuff("AatroxPassiveDeath")) return;
         _delayTimer -= diff;
         if (!(_delayTimer <= 0f)) return;

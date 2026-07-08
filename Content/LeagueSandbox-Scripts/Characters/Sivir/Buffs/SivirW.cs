@@ -28,7 +28,7 @@ internal class SivirW : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _sivir = ownerSpell.CastInfo.Owner;
+        _sivir = buff.SourceUnit;
         _spell = ownerSpell;
         _buff = buff;
         _hitCount = 0;

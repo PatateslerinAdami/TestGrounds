@@ -40,7 +40,7 @@ internal class AkaliWBuff : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _tickTime += diff;
         while (_tickTime >= DecayIntervalMs && _decayStepsApplied < MaxDecaySteps) {
             _tickTime -= DecayIntervalMs;

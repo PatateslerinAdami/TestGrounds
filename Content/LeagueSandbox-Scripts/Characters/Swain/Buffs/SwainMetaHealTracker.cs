@@ -54,7 +54,7 @@ public class SwainMetaHealTracker : IBuffGameScript
         LoggerProvider.GetLogger().Info("Removed Buff");
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (!_disableRequest) return;
         var ticks = _periodicTicker.ConsumeTicks(diff, _timeout, false, 1, 1);

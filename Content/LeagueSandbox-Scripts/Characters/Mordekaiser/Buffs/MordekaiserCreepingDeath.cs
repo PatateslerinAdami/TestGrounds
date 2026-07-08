@@ -73,7 +73,7 @@ public class MordekaiserCreepingDeath : IBuffGameScript
         RemoveParticle(_buffParticle2);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, true, 1, 6);
         if (ticks <= 0) return;

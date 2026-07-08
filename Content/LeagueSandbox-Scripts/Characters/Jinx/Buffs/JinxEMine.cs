@@ -32,7 +32,7 @@ internal class JinxEMine : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _jinx = ownerSpell.CastInfo.Owner;
+        _jinx = buff.SourceUnit;
         _unit = unit;
         _buff = buff;
         _spell = ownerSpell;
@@ -53,7 +53,7 @@ internal class JinxEMine : IBuffGameScript
         PauseAnimation(unit, true);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (!_isArmed)
         {

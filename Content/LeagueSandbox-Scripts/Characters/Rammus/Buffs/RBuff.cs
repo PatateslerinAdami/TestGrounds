@@ -38,7 +38,7 @@ namespace Buffs
         {
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (time >= 1000f)
             {

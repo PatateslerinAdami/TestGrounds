@@ -37,7 +37,7 @@ namespace Buffs
             buffParticle = AddParticleTarget(Unit, null, "Odin_Shrine_Time", Unit, buff.Duration);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             timer += diff;
             if (Unit != null && timer >= 100)

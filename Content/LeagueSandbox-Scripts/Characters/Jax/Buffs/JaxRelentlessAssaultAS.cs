@@ -40,7 +40,7 @@ public class JaxRelentlessAssaultAS  : IBuffGameScript {
         ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdateStats);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         
     }
 

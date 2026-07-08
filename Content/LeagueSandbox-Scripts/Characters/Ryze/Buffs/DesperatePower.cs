@@ -22,7 +22,7 @@ internal class DesperatePower : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
 
-    public void OnUpdate(float diff) { }
+    public void OnUpdate(Buff buff, float diff) { }
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _ryze = ownerSpell.CastInfo.Owner;

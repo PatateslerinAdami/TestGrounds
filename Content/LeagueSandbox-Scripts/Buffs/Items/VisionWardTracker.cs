@@ -16,7 +16,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class VisionWardTracker : IBuffGameScript {
-    private ObjAIBase _owner;
+
     private Minion    _ward;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,
@@ -28,7 +28,6 @@ internal class VisionWardTracker : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner = ownerSpell.CastInfo.Owner;
     }
 
     public int GetWardCount() {

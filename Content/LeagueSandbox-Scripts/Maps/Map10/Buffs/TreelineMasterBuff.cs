@@ -65,7 +65,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { _unit = unit; }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
-        public void OnUpdate(float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
+        public void OnUpdate(Buff buff, float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
     }
 
     // ---- T1: 1 altar — mana regen + 3 gold/kill. Left/Right = which altar (effect identical). ----
@@ -89,7 +89,7 @@ namespace Buffs
         {
             ApiEventManager.OnKill.RemoveListener(this);
         }
-        public void OnUpdate(float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
+        public void OnUpdate(Buff buff, float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
     }
 
     internal class TreelineMasterBuffT1Right : IBuffGameScript
@@ -112,7 +112,7 @@ namespace Buffs
         {
             ApiEventManager.OnKill.RemoveListener(this);
         }
-        public void OnUpdate(float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
+        public void OnUpdate(Buff buff, float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
     }
 
     // ---- T2: 2 altars — mana regen + 3 gold/kill + 10% AD + 10% AP ----
@@ -140,6 +140,6 @@ namespace Buffs
             unit.RemoveStatModifier(StatsModifier);
             ApiEventManager.OnKill.RemoveListener(this);
         }
-        public void OnUpdate(float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
+        public void OnUpdate(Buff buff, float diff) { TreelineMasterBuffShared.TickManaRegen(_unit, diff); }
     }
 }

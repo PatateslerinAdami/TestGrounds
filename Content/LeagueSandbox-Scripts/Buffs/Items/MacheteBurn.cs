@@ -33,7 +33,7 @@ internal class ItemMonsterBurn : IBuffGameScript {
         _damage    = buff.BuffVars.GetFloat("damageAmount");
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         var ticks = _periodicTicker.ConsumeTicks(diff, IntervalMs, fireImmediately: true, maxTicksPerUpdate: 1);
         if (ticks != 1) return;
         _unit.TakeDamage(_owner, _damage/_buff.Duration, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PERIODIC,

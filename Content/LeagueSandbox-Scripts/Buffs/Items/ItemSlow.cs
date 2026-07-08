@@ -45,7 +45,7 @@ internal class ItemSlow : IBuffGameScript
         KillParticle();
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (_unit != null && _unit.IsDead)
         {

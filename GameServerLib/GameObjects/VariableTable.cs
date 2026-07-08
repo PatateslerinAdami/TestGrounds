@@ -29,6 +29,14 @@ namespace LeagueSandbox.GameServer.GameObjects
             _values[key] = value;
         }
 
+        // Removes a key from the table. Faithful analog of Lua's `table[key] = nil`
+        // (used by BBExecutePeriodicallyReset to clear a schedule anchor). Returns
+        // true if the key was present.
+        public bool Remove(string key)
+        {
+            return _values.Remove(key);
+        }
+
         public bool TryGet<T>(string key, out T value)
         {
             if (_values.TryGetValue(key, out var raw))

@@ -38,7 +38,7 @@ internal class TalonDamageAmp : IBuffGameScript {
         ApiEventManager.OnPreDealDamage.AddListener(this, _talon, OnPreDealDamage); 
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_unit.IsDead) {
             _buff.DeactivateBuff();
         }

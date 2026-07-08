@@ -33,7 +33,7 @@ internal class MordekaiserCOTGRevive : IBuffGameScript {
         _ownerSpell = ownerSpell;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         // S1 MordekaiserCOTGRevive.BuffOnUpdateActionsBuildingBlocks: poll until the holder is DEAD
         // and no longer a ZOMBIE — i.e. wait out any Sion-passive / Yorick-R revive phase — then
         // spawn Morde's ghost clone of them and deactivate. The buff persists through death

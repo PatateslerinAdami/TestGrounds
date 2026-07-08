@@ -50,7 +50,7 @@ namespace Buffs
             }
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             var boxMinion = _thisBuff.TargetUnit as Minion;
             if (boxMinion == null || boxMinion.IsDead)

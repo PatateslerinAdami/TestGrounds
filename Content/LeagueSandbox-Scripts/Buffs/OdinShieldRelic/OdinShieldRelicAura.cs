@@ -54,7 +54,7 @@ namespace Buffs
             SetStatus(unit, StatusFlags.NoRender, true);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (setToKill)
             {

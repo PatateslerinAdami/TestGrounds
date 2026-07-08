@@ -37,7 +37,7 @@ internal class MoltenShield : IBuffGameScript {
         ApiEventManager.OnBeingHit.RemoveListener(this);
     }
 
-    public void OnUpdate(float diff) { }
+    public void OnUpdate(Buff buff, float diff) { }
 
     private void OnBeingHit(DamageData data) {
         if (!IsValidTarget(_annie, data.Attacker,

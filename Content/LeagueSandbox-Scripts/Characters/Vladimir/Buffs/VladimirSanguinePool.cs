@@ -35,7 +35,7 @@ namespace Buffs
             _vladimir.AddStatModifier(StatsModifier);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             var tick = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, (int)MaxTickAmount);
             if (tick != 1) return;

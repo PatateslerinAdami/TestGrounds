@@ -28,7 +28,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; }
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _alistar = ownerSpell.CastInfo.Owner;
+            _alistar = buff.SourceUnit;
             _spell = ownerSpell;
             // castOrigin is only used for the knockback DIRECTION (away-from anchor); after the charge
             // Alistar stands on the target, so his live position would be degenerate. The DISTANCE is a

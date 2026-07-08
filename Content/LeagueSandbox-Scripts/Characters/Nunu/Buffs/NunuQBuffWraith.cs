@@ -59,7 +59,7 @@ namespace Buffs
             _periodicTicker.Reset();
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (!_applied) return;
             if (_periodicTicker.ConsumeTicks(diff, 3000f, false, 1, 1) != 1) return;

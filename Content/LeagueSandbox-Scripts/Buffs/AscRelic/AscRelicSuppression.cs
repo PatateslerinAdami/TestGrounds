@@ -39,7 +39,7 @@ namespace Buffs
             unit.Stats.CurrentMana = unit.Stats.ManaPoints.Total;
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             timer -= diff;
             if(timer <= 0)

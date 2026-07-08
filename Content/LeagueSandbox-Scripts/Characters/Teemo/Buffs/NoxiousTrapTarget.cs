@@ -41,7 +41,7 @@ public class BantamTrap : IBuffGameScript {
         ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_unit.IsDead) {
             _buff.DeactivateBuff();
             return;

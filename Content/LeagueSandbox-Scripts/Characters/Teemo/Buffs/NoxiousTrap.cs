@@ -41,7 +41,7 @@ public class NoxiousTrap : IBuffGameScript {
         _teemo = ownerSpell.CastInfo.Owner;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         var ticks = _resourcePeriodicTicker.ConsumeTicks(diff, 1000f, false, 1, (int) _unit.Stats.ManaPoints.Total);
         if (ticks == 1) { _unit.Stats.CurrentMana = _unit.Stats.ManaPoints.Total - _buff.TimeElapsed; }
 

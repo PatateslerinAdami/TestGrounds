@@ -29,7 +29,7 @@ internal class JudicatorRighteousFury : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _kayle = ownerSpell.CastInfo.Owner;
+        _kayle = buff.SourceUnit;
         _spell = ownerSpell;
         //_kayle.SetAutoAttackSpells(true, AttackSpell1, AttackSpell2);
         _kayle.SetAutoAttackSpell(AttackSpell1, true);

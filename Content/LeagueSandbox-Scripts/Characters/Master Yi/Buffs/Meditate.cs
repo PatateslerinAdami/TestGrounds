@@ -31,7 +31,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; }
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _masterYi = ownerSpell.CastInfo.Owner;
+            _masterYi = buff.SourceUnit;
             _spell = ownerSpell;
             _p1 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Buf.troy", _masterYi, buff.Duration); 
             _p2 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Cas.troy", _masterYi); 
@@ -49,7 +49,7 @@ namespace Buffs
             AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Dmg.troy", _masterYi); 
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             
             var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, 4);

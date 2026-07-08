@@ -26,7 +26,7 @@ public class Pyromania_particle  : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
     }
     
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {

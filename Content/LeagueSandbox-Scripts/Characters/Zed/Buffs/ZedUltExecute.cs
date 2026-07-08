@@ -41,7 +41,7 @@ internal class ZedUltExecute : IBuffGameScript {
         ApiEventManager.OnDeath.AddListener(this, unit, OnDeath, true);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_unit.Stats.GetPostMitigationDamage(_damage, DamageType.DAMAGE_TYPE_PHYSICAL, _zed) >
             _unit.Stats.CurrentHealth && _killIndicator == null) {
             _killIndicator = AddParticleTarget(_zed, _unit, "Zed_Base_R_buf_tell", _unit, _buff.Duration - _buff.TimeElapsed);

@@ -36,7 +36,7 @@ internal class TalonBleedBuff : IBuffGameScript {
         _unitBubble = AddUnitPerceptionBubble(_unit, 400, 6f, _talon.Team);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_unit.IsDead) { _buff.DeactivateBuff(); }
 
         var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, 6);

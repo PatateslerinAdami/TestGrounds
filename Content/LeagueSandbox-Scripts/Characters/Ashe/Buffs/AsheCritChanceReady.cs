@@ -32,7 +32,7 @@ public class AsheCritChanceReady : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ashe = ownerSpell.CastInfo.Owner;
+        _ashe = buff.SourceUnit;
         _buff = buff;
         // Capture crit chance BEFORE topping it up — this is the value Focus resets to.
         _baseCrit = _ashe.Stats.CriticalChance.Total;

@@ -24,7 +24,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _nami   = ownerSpell.CastInfo.Owner;
+            _nami   = buff.SourceUnit;
             ForceMove(unit, GetRandomPointInArea(unit.Position, 10f, 10f), 28f, gravity: 16.5f);
             _rSplash = AddParticleTarget(_nami, unit, "Nami_Base_R_splash", unit, buff.Duration,default, bone: "C_BUFFBONE_GLB_CENTER_LOC");
             _rTar = AddParticleTarget(_nami, unit, "Nami_Base_R_tar", unit, buff.Duration,default, bone: "C_BUFFBONE_GLB_CENTER_LOC");

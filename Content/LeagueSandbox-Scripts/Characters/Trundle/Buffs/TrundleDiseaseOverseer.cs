@@ -41,7 +41,7 @@ public class TrundleDiseaseOverseer : IBuffGameScript {
         RegisterNearbyDeathListeners();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_trundle == null || _trundle.IsDead) return;
         RegisterNearbyDeathListeners();
     }

@@ -36,21 +36,20 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _buff = buff;
-            var owner = ownerSpell.CastInfo.Owner;
 
             // 1. Afișăm particula aurie pe caracter
-            AddParticleTarget(owner, unit, "Global_SS_Barrier", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
+            AddParticleTarget(unit, unit, "Global_SS_Barrier", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
 
             // 2. Calculăm valoarea matematică a barierei
             float shieldAmount = 95f + (20f * unit.Stats.Level);
 
             // 3. Creăm scutul în memorie și îl atașăm de campion
-            _barrierShield = new Shield((ObjAIBase)owner, unit, true, true, shieldAmount);
+            _barrierShield = new Shield((ObjAIBase)unit, unit, true, true, shieldAmount);
             unit.AddShield(_barrierShield);
         }
 
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (_barrierShield != null && _barrierShield.IsConsumed())
             {

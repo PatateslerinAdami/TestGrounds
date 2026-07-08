@@ -88,7 +88,7 @@ namespace Buffs
             unit.SetStatus(StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast, true);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
         }
     }

@@ -25,7 +25,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            var owner = ownerSpell.CastInfo.Owner;
+            var owner = buff.SourceUnit;
             debuff = AddParticleTarget(owner, unit, "obj_DeathfireGrasp_debuff", unit);
             ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage, false);
         }

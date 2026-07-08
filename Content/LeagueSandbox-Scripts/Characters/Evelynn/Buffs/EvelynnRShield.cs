@@ -37,7 +37,7 @@ public class EvelynnRShield : IBuffGameScript {
         _particle1 = AddParticleTarget(_evelynn,_evelynn, "Evelynn_R_shield",_evelynn,buff.Duration, size: _evelynn.Stats.Size.Total);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (!_agonyShield.IsConsumed()) return;
         _buff.DeactivateBuff();
     }

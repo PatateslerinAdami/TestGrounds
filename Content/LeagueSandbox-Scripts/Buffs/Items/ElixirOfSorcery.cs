@@ -32,7 +32,7 @@ internal class ElixirOfSorcery : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner                          = ownerSpell.CastInfo.Owner;
+        _owner                          = buff.SourceUnit;
         StatsModifier.AbilityPower.FlatBonus     = 40f;
         StatsModifier.ManaRegeneration.FlatBonus = 15f;
         unit.AddStatModifier(StatsModifier);
@@ -72,7 +72,7 @@ internal class ElixirOfSorcery : IBuffGameScript {
         }
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_championCooldownsMs.Count == 0) return;
 
         var trackedChampions = new List<uint>(_championCooldownsMs.Keys);

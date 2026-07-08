@@ -31,7 +31,7 @@ internal class JinxEFireBurn : IBuffGameScript {
         };
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         var ticks = _periodicTicker.ConsumeTicks(diff, 500f, true, 1, 3);
         if (ticks != 1) return;
         var ap  = _jinx.Stats.AbilityPower.Total;

@@ -31,7 +31,7 @@ public class JaxRelentlessAttack  : IBuffGameScript {
         _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (!_pendingAutoAttackOverride) return;
         TryApplyAutoAttackOverride();
     }

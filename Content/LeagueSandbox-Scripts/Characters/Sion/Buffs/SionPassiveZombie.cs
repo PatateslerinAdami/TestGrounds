@@ -24,7 +24,7 @@ internal class SionPassiveZombie: IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _sion = ownerSpell.CastInfo.Owner;
+        _sion = buff.SourceUnit;
         unit.Stats.CurrentHealth = unit.Stats.HealthPoints.Total;
         
     }

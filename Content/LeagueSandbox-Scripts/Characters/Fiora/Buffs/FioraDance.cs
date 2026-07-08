@@ -51,7 +51,7 @@ namespace Buffs
             SealSpells(false);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             time += diff;
             owner.SetTargetUnit(null, true);

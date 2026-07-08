@@ -33,7 +33,7 @@ internal class ItemMonsterRegen : IBuffGameScript {
         _mana = buff.BuffVars.GetFloat("manaAmount");
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         var ticks = _periodicTicker.ConsumeTicks(diff, IntervalMs, fireImmediately: true, maxTicksPerUpdate: 1);
         if (ticks != 1) return;
         _unit.TakeHeal(_owner, _health, HealType.SelfHeal);

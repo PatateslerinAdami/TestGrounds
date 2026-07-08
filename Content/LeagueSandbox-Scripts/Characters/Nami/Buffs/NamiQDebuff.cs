@@ -24,7 +24,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _nami = ownerSpell.CastInfo.Owner;
+            _nami = buff.SourceUnit;
             
             ForceMove(unit, GetRandomPointInArea(unit.Position, 6f, 6f), 6f, gravity: 5f);
             _p1 = AddParticleTarget(_nami, unit, "Nami_Base_Q_debuff", unit, buff.Duration,size: (unit.CharData.GameplayCollisionRadius * 0.01f) + 0.3f, bone: "C_BUFFBONE_GLB_CENTER_LOC");

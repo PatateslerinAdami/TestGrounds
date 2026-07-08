@@ -27,7 +27,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _nunu = ownerSpell.CastInfo.Owner;
+            _nunu = buff.SourceUnit;
             _spell = ownerSpell;
             // Wiki: basic attacks AND abilities deal bonus magic damage. OnDealDamage covers both
             // (DAMAGE_SOURCE_ATTACK + DAMAGE_SOURCE_SPELL); OnHitUnit alone would miss ability damage.

@@ -54,7 +54,7 @@ internal class MordekaiserMaceOfSpades : IBuffGameScript {
         _buff.DeactivateBuff();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         SealSpellSlot(_mordekaiser, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
     }
 

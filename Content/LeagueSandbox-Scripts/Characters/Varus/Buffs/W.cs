@@ -47,7 +47,7 @@ namespace Buffs
             ApiEventManager.OnBeingSpellHit.RemoveListener(this, unit);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (_buffRef != null)
             {

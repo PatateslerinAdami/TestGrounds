@@ -19,7 +19,7 @@ internal class ShatterAura : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
 
-    public void OnUpdate(float diff) { }
+    public void OnUpdate(Buff buff, float diff) { }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {  }
 }

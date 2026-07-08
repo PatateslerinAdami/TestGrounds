@@ -55,7 +55,7 @@ public class AatroxPassiveDeath : IBuffGameScript {
         PlayAnimation(_aatrox,"Passive_Death", 3f);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_stepCount >= MaxSteps) return;
         _tickTimer += diff;
         if (_tickTimer < TickTime) return;

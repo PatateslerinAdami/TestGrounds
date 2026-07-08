@@ -28,7 +28,7 @@ public class SheenDelay : IBuffGameScript
     {
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
     }
 }

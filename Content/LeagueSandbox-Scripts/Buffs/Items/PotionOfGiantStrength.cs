@@ -22,14 +22,13 @@ internal class PotionOfGiantStrength : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        var owner = ownerSpell.CastInfo.Owner;
         StatsModifier.AttackDamage.FlatBonus = 15f;
-        var health = 120.0F + 115.0F / 17.0F * (owner.Stats.Level - 1.0F);
+        var health = 120.0F + 115.0F / 17.0F * (unit.Stats.Level - 1.0F);
         StatsModifier.HealthPoints.FlatBonus       = health;
         StatsModifier.HealthRegeneration.FlatBonus = health / 180f * 0.5f;
         unit.AddStatModifier(StatsModifier);
         unit.Stats.CurrentHealth += health;
-        _potion = AddParticleTarget(owner, unit, "PotionofGiantStrength_itm", unit, buff.Duration,
+        _potion = AddParticleTarget(unit, unit, "PotionofGiantStrength_itm", unit, buff.Duration,
                                     bone: "C_BUFFBONE_GLB_CENTER_LOC");
     }
 

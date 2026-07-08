@@ -94,7 +94,7 @@ namespace Buffs
             owner.SetStatus(StatusFlags.Ghosted, false);
             ownerSpell.SetCooldown(ownerSpell.GetCooldown(), true);
         }
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             second += diff;
             if (second >= 1000f)

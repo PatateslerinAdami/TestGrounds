@@ -52,7 +52,7 @@ internal class MordekaiserCOTGDot : IBuffGameScript {
         _buff.DeactivateBuff();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _timer -= diff;
         if (!(_timer <= 0)) return;
         _data = _unit.TakeDamage(_mordekaiser, _damage/2/10f, DamageType.DAMAGE_TYPE_MAGICAL,

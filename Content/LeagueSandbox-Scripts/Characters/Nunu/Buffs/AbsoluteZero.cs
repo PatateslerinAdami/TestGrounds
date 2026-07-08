@@ -37,7 +37,7 @@ namespace Buffs
         // S1 BuffOnUpdateActions: every 0.25s re-apply the slow to enemies in range (refresh + catch units
         // that walk in during the channel). NO damage here — the damage is the spell's channel-stop burst
         // (R.cs OnSpellPostChannel/OnSpellChannelCancel -> Detonate), exactly like S1's ChannelingStop blocks.
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             var ticks = _periodicTicker.ConsumeTicks(diff, 250f, false, 1, 10);
             if (ticks <= 0) return;

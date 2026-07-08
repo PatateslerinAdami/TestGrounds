@@ -28,7 +28,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _masterYi = ownerSpell.CastInfo.Owner;
+            _masterYi = buff.SourceUnit;
             var bonusAd = _masterYi.Stats.AttackDamage.Total * ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100;
             StatsModifier.AttackDamage.FlatBonus += bonusAd;
             // Actually apply the bonus AD to the unit (was never applied before).

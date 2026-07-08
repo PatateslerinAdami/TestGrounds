@@ -53,7 +53,7 @@ namespace Buffs
                 false);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (setToKill)
             {

@@ -16,7 +16,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class SharedWardBuff : IBuffGameScript {
-    private          ObjAIBase    _owner;
     private readonly List<Minion> _wards = [];
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.AURA,
@@ -28,7 +27,6 @@ internal class SharedWardBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner = ownerSpell.CastInfo.Owner;
     }
 
     public int GetWardCount() {

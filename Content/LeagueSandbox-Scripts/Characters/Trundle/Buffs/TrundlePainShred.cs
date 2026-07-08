@@ -72,7 +72,7 @@ public class TrundlePainShred : IBuffGameScript {
         SpellCast(_trundle, 1, SpellSlotType.ExtraSlots, true, _trundle, _unit.Position);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_ticksApplied >= DrainTickCount) return;
         if (_unit.IsDead || _trundle.IsDead) return;
 

@@ -29,7 +29,7 @@ public class AkaliShadowDance : IBuffGameScript {
         UpdateDisplay();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         UpdateDisplay();
     }
 

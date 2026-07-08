@@ -56,7 +56,7 @@ namespace Buffs
             ApiEventManager.OnDeath.RemoveListener(this);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             damageTimer -= diff;
             if(thisBuff != null && thisBuff.SourceUnit != null && Unit != null && damageTimer <= 0)

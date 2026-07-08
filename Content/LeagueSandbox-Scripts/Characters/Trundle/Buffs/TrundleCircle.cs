@@ -75,7 +75,7 @@ public class TrundleCircle : IBuffGameScript {
         _p2 = AddParticleTarget(_trundle, unit, "Trundle_Base_E_PlagueBlock", unit, buff.Duration);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _timerSeconds += diff * 0.001f;
 
         var enemiesInRange = GetUnitsInRange(

@@ -50,7 +50,7 @@ public class KarmaSolKimShield : IBuffGameScript {
         _unit.AddStatModifier(StatsModifier);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_solKimShield.IsConsumed()) {
             RemoveParticle(_particle1);
             RemoveParticle(_particle2); 

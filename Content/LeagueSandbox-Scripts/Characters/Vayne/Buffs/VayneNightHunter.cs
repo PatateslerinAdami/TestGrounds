@@ -32,7 +32,7 @@ internal class VayneNightHunter : IBuffGameScript {
         _unit = null;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_unit == null) {
             return;
         }

@@ -46,7 +46,7 @@ public class UdyrTurtleActivation : IBuffGameScript {
         _particle4 = AddParticleTarget(_udyr,_udyr,"UdyrTurtleStance",_udyr);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (!_turtleShield.IsConsumed()) return;
         RemoveParticle(_particle1);
         RemoveParticle(_particle2); 

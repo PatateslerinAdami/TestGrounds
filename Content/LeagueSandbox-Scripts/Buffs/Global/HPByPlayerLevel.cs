@@ -38,7 +38,7 @@ namespace Buffs
             }
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             // Executed every 10 seconds.
             if (owner != null)

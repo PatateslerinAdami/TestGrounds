@@ -23,7 +23,7 @@ internal class EvelynnPassive : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn = ownerSpell.CastInfo.Owner;
+        _evelynn = buff.SourceUnit;
         _spell   = ownerSpell;
         if (_evelynn.HasBuff("EvelynnStealthMarker")) {
             RemoveBuff(_evelynn, "EvelynnStealthMarker");

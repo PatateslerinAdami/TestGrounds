@@ -51,7 +51,7 @@ namespace Buffs
         {
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
 
         }

@@ -52,7 +52,7 @@ public class KarmaSolKimShieldLocket : IBuffGameScript {
         unit.AddStatModifier(StatsModifier);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_solKimShieldLocket.IsConsumed()) {
             RemoveParticle(_particle1);
             RemoveParticle(_particle2); 

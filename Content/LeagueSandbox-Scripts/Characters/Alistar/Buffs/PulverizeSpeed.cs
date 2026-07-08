@@ -28,7 +28,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; }
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _alistar = ownerSpell.CastInfo.Owner;
+            _alistar = buff.SourceUnit;
             _spell = ownerSpell;
             var bouncePos = GetRandomPointInAreaUnit(unit, 10, 10f);
             ApiEventManager.OnMoveEnd.AddListener(this, unit, OnMoveEnd);

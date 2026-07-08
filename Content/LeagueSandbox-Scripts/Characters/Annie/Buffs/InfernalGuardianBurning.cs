@@ -63,7 +63,7 @@ internal class InfernalGuardianBurning : IBuffGameScript {
         }
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         _timer += diff;
         if (!(_timer >= MaxTime)) return;
         if (_pet == null) return;

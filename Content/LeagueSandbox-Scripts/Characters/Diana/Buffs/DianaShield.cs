@@ -46,7 +46,7 @@ public class DianaShield : IBuffGameScript {
         _shieldParticle = AddParticleTarget(_diana, _diana, "Diana_Base_W_Shield.troy", _diana, buff.Duration);
     }
     
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (!_orbShield.IsConsumed()) return;
         RemoveParticle(_shieldParticle);
         _buff.DeactivateBuff();

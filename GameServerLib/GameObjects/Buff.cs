@@ -357,7 +357,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             try
             {
                 using var _scope = Profiler.Scope($"buff:{Name}.OnUpdate", "scripts");
-                BuffScript.OnUpdate(diff);
+                BuffScript.OnUpdate(this, diff);
             }
             catch (Exception e)
             {

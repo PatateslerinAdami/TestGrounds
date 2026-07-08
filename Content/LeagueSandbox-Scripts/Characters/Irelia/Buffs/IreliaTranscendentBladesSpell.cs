@@ -28,7 +28,7 @@ internal class IreliaTranscendentBladesSpell : IBuffGameScript {
         _irelia = ownerSpell.CastInfo.Owner;
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_buff.StackCount > 0) return;
         _irelia.GetBuffWithName("IreliaTranscendentBlades").DeactivateBuff();
         _buff.DeactivateBuff();

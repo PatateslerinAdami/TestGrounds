@@ -37,7 +37,7 @@ internal class SwainShadowGraspRoot : IBuffGameScript
         ApiEventManager.OnDeath.AddListener(this, unit, OnDie);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (!_requestDeactivate) return;
         var ticks = _periodicTimer.ConsumeTicks(diff, 700f, false, 1);

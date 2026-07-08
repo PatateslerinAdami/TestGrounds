@@ -99,7 +99,7 @@ namespace Buffs
             }
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             for (int i = 0; i < 5; i++)
             {

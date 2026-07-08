@@ -65,7 +65,7 @@ public class EvelynnStealthMarker : IBuffGameScript {
         ApplyStealthFade(InitialStealthFadeSeconds);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_evelynn == null || _evelynn.IsDead) {
             return;
         }

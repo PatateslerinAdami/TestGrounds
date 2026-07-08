@@ -29,7 +29,7 @@ public class IreliaHitenStyle : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _irelia   = ownerSpell.CastInfo.Owner;
+        _irelia   = buff.SourceUnit;
         _mainSpell = ownerSpell;
         _passive = AddParticle(unit, unit, "irelia_hitenStlye_passive", unit.Position, bone: "BUFFBONE_GLB_WEAPON_1");
         _passiveGlow = AddParticle(unit,                          unit, "irelia_hitenStlye_passive_glow", unit.Position,

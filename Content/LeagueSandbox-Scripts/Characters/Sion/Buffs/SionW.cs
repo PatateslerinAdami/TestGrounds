@@ -37,7 +37,7 @@ namespace Buffs
             SealSpellSlot(_sion, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             // Soul Furnace can't be recast for the first 2s (wiki; replay min recast gap = 2.18s,
             // clean cluster from ~2.0s). Was 3000 here, which silently ate every 2-3s recast.

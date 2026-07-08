@@ -21,10 +21,9 @@ internal class FlaskOfCrystalWater : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        var caster = ownerSpell.CastInfo.Owner;
         StatsModifier.ManaRegeneration.FlatBonus = 3.33f;
         unit.AddStatModifier(StatsModifier);
-        _potion = AddParticleTarget(caster, unit, "GLOBAL_Item_ManaPotion", unit, buff.Duration,
+        _potion = AddParticleTarget(unit, unit, "GLOBAL_Item_ManaPotion", unit, buff.Duration,
                                     bone: "Buffbone_Glb_Ground_Loc");
     }
 

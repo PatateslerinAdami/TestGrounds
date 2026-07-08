@@ -29,7 +29,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _masterYi = ownerSpell.CastInfo.Owner;
+            _masterYi = buff.SourceUnit;
             _masterYi.SetAutoAttackSpell("MasterYiDoubleStrike", false);
             ApiEventManager.OnHitUnit.AddListener(this, _masterYi, OnHit);
         }

@@ -67,7 +67,7 @@ namespace Buffs
             }
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             soundTimer -= diff;
             if (soundTimer <= 0 && !hasNotifiedSound)

@@ -12,7 +12,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class runeprison : IBuffGameScript {
-    private ObjAIBase        _ryze;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SNARE,
         BuffAddType = BuffAddType.REPLACE_EXISTING
@@ -21,7 +20,6 @@ internal class runeprison : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ryze = ownerSpell.CastInfo.Owner;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

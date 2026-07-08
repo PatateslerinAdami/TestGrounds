@@ -39,7 +39,7 @@ internal class ZedShadowJoke : IBuffGameScript {
         PlayAnimation(_minion, _randomNumber == 1 ? "Joke_SH_win" : "Joke_SH_loss", 3f);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         //Shit fix we need PacketOverrides for Emotions
         _timer += diff;
         if (_timer >= MaxTime && _stepCount < MaxStepCount) {

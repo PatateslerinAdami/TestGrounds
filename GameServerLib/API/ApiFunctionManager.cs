@@ -473,19 +473,36 @@ namespace LeagueSandbox.GameServer.API
         /// never <c>= now</c>.</item>
         /// <item>One fire per call (Riot uses <c>if</c>, not <c>while</c>): on a lag spike it catches
         /// up at most one tick per update, never bursts all missed ticks at once.</item>
-        /// <item><paramref name="intervalMs"/> == 0 → fires every call (<c>track + 0 &lt;= now</c> is
+        /// <item>Effective interval == 0 → fires every call (<c>track + 0 &lt;= now</c> is
         /// always true).</item>
+        /// <item>Interval resolution mirrors the Lua: <paramref name="intervalMs"/> is the base
+        /// (Riot <c>GetParam("TimeBetweenExecutions")</c>); if <paramref name="tickTimeVar"/> is set
+        /// and its key holds a value in <paramref name="tickTimeTable"/>, that value OVERRIDES the base
+        /// (Riot TickTimeVar). The override is re-read every call, so the cadence can change at runtime.</item>
         /// </list>
         /// </summary>
         /// <param name="trackTable">Instance VariableTable holding the schedule anchor (Riot TrackTimeVarTable).</param>
         /// <param name="trackVar">Key under which the anchor timestamp is stored (Riot TrackTimeVar).</param>
-        /// <param name="intervalMs">Cadence in milliseconds (Riot TimeBetweenExecutions; GameTime is ms).</param>
+        /// <param name="intervalMs">Base cadence in ms (Riot GetParam TimeBetweenExecutions; GameTime is ms).</param>
         /// <param name="executeImmediately">Fire once on the first call (Riot ExecuteImmediately).</param>
         /// <param name="action">The effect to run per tick (Riot SubBlocks).</param>
+        /// <param name="tickTimeTable">Optional table holding a runtime interval override (Riot TickTimeVarTable).</param>
+        /// <param name="tickTimeVar">Optional key of the runtime interval override (Riot TickTimeVar); null = no override.</param>
         public static void ExecutePeriodically(
-            VariableTable trackTable, string trackVar, float intervalMs, bool executeImmediately, Action action)
+            VariableTable trackTable, string trackVar, float intervalMs, bool executeImmediately, Action action,
+            VariableTable tickTimeTable = null, string tickTimeVar = null)
         {
             float now = ApiMapFunctionManager.GameTime();
+
+            // Riot: interval = GetParam("TimeBetweenExecutions"), then TickTimeVar overrides it when set.
+            // Read every call so a script can retune the cadence on the fly; falls back to the base otherwise.
+            float interval = intervalMs;
+            if (tickTimeVar != null && tickTimeTable != null
+                && tickTimeTable.TryGet<float>(tickTimeVar, out var tickOverride))
+            {
+                interval = tickOverride;
+            }
+
             if (!trackTable.TryGet<float>(trackVar, out var track))
             {
                 track = now;
@@ -495,11 +512,24 @@ namespace LeagueSandbox.GameServer.API
                     action();
                 }
             }
-            if (track + intervalMs <= now)
+            if (track + interval <= now)
             {
-                trackTable.Set(trackVar, track + intervalMs);
+                trackTable.Set(trackVar, track + interval);
                 action();
             }
+        }
+
+        /// <summary>
+        /// 1:1 port of Riot's BB <c>BBExecutePeriodicallyReset</c> (BuildingBlocksBase.lua:1978): clears
+        /// the schedule anchor (Lua <c>track[TrackTimeVar] = nil</c>). After a reset the next
+        /// <see cref="ExecutePeriodically"/> call re-anchors to <c>now</c> and, if ExecuteImmediately is
+        /// set there, fires once again. Pass the SAME table + key used for the paired ExecutePeriodically.
+        /// </summary>
+        /// <param name="trackTable">The table the paired ExecutePeriodically anchors into (Riot TrackTimeVarTable).</param>
+        /// <param name="trackVar">The anchor key to clear (Riot TrackTimeVar).</param>
+        public static void ExecutePeriodicallyReset(VariableTable trackTable, string trackVar)
+        {
+            trackTable.Remove(trackVar);
         }
 
         /// <summary>

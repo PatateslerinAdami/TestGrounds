@@ -45,7 +45,7 @@ internal class TrundleTrollSmash : IBuffGameScript {
         ApiEventManager.OnHitUnit.AddListener(this, _trundle, OnHit);
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         SealSpellSlot(_trundle, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
     }
 

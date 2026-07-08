@@ -35,7 +35,7 @@ namespace Buffs
             unit.AddStatModifier(StatsModifier);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (_unit == null || _buff == null || _buff.Duration <= 0f)
             {

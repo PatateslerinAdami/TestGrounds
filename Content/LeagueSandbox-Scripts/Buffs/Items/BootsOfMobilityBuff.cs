@@ -13,7 +13,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class BootsOfMobilityBuff : IBuffGameScript {
-    private ObjAIBase _owner;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
@@ -24,7 +23,6 @@ internal class BootsOfMobilityBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner = ownerSpell.CastInfo.Owner;
         StatsModifier.MoveSpeed.FlatBonus = 105f;
         unit.AddStatModifier(StatsModifier);
     }

@@ -47,7 +47,7 @@ internal class ElixirOfRuin : IBuffGameScript {
         RefreshSiegeCommanderAura();
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_owner == null || _owner.IsDead || _buff == null) {
             ClearSiegeCommanderAura();
             return;

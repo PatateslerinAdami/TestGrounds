@@ -61,7 +61,7 @@ public class IcebornGauntletZone : IBuffGameScript
         );
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (_owner != null && _owner.IsDead)
         {

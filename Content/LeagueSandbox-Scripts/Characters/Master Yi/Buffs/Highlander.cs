@@ -31,7 +31,7 @@ internal class Highlander : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _masterYi   = ownerSpell.CastInfo.Owner;
+        _masterYi   = buff.SourceUnit;
         _buff       = buff;
         _spell = ownerSpell;
         //this is for fun

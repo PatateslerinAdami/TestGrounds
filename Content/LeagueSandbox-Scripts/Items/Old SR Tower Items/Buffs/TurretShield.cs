@@ -36,7 +36,7 @@ internal class TurretShield : IBuffGameScript {
         _vanguardAllyShield = AddShield(_turret, _unit, 30f);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (_vanguardAllyShield.IsConsumed())
         {

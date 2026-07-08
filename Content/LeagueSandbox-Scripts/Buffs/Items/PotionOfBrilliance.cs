@@ -2,6 +2,7 @@
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
@@ -22,11 +23,10 @@ internal class PotionOfBrilliance : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        var owner = ownerSpell.CastInfo.Owner;
-        StatsModifier.AbilityPower.FlatBonus      = 25f + 15f / 17f * (owner.Stats.Level - 1);
+        StatsModifier.AbilityPower.FlatBonus      = 25f + 15f / 17f * (unit.Stats.Level - 1);
         StatsModifier.CooldownReduction.FlatBonus = 0.10f;
         unit.AddStatModifier(StatsModifier);
-        _potion = AddParticleTarget(owner, unit, "PotionofBrilliance_itm", unit, buff.Duration,
+        _potion = AddParticleTarget(unit, unit, "PotionofBrilliance_itm", unit, buff.Duration,
                                     bone: "C_BUFFBONE_GLB_CENTER_LOC");
     }
 

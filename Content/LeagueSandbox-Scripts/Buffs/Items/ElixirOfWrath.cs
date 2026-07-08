@@ -17,8 +17,8 @@ namespace Buffs;
 internal class ElixirOfWrath : IBuffGameScript {
     private Particle  _potion;
     private ObjAIBase _owner;
-    private Buff      _buff;
-
+    private Buff _buff;
+    private Spell _spell;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
             PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
@@ -28,14 +28,15 @@ internal class ElixirOfWrath : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner = ownerSpell.CastInfo.Owner;
-        _buff  = buff;
-        ApiEventManager.OnDealDamage.AddListener(_owner, unit, TargetExecute);
+        _owner = buff.SourceUnit;
+        _buff = buff;
+        _spell = ownerSpell;
+        ApiEventManager.OnDealDamage.AddListener(unit, unit, TargetExecute);
         StatsModifier.AttackDamage.FlatBonus = 25f;
         unit.AddStatModifier(StatsModifier);
-        _potion = AddParticleTarget(_owner, unit, "Global_Item_ElixirOfWrath_Buf", unit, buff.Duration,
+        _potion = AddParticleTarget(unit, unit, "Global_Item_ElixirOfWrath_Buf", unit, buff.Duration,
                                     bone: "C_BUFFBONE_GLB_CENTER_LOC");
-        ApiEventManager.OnDealDamage.AddListener(this, _owner, TargetExecute);
+        ApiEventManager.OnDealDamage.AddListener(this, unit, TargetExecute);
         ApiEventManager.OnKill.AddListener(this, unit, OnKill);
     }
 
@@ -46,10 +47,11 @@ internal class ElixirOfWrath : IBuffGameScript {
 
     private void TargetExecute(DamageData data) {
         if (data.DamageType != DamageType.DAMAGE_TYPE_PHYSICAL) return;
-        data.Attacker.TakeHeal(_owner, data.PostMitigationDamage * 0.10f, HealType.PhysicalVamp); ;
+        data.Attacker.TakeHeal(data.Attacker, data.PostMitigationDamage * 0.10f, HealType.PhysicalVamp); ;
     }
 
     private void OnKill(DeathData data) {
-        //TODO: _buff.ExtendDuration(30f);
+        var duration = (_buff.Duration - _buff.TimeElapsed) + 4f;
+        AddBuff("ElixirOfWrath", duration, 1, _spell, _owner, _owner);
     }
 }

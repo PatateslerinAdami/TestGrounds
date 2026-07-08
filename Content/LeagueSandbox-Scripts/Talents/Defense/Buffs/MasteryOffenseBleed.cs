@@ -33,7 +33,7 @@ namespace Buffs
             _unit = unit;
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, false, 1, 2);
             if (ticks != 1) return;

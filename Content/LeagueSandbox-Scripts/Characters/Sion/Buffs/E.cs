@@ -36,7 +36,7 @@ namespace Buffs
             p = AddParticle(ownerSpell.CastInfo.Owner, unit, "sion_base_e_minion", default, lifetime: 5f, size: 2f);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             if (_unit == null || _ownerSpell == null) return;
 

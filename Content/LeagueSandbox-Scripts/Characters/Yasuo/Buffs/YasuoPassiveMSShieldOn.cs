@@ -34,7 +34,7 @@ namespace Buffs
             unit.AddShield(_yasuoShield);
         }
 
-        public void OnUpdate(float diff) 
+        public void OnUpdate(Buff buff, float diff) 
         {
             if (_yasuoShield != null && _yasuoShield.IsConsumed()) 
             {

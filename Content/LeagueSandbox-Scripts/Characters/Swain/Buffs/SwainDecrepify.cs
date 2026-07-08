@@ -52,7 +52,7 @@ public class SwainDecrepify : IBuffGameScript
         AddBuff("SwainBeamExpirationTimer", 0.25f, 1, ownerSpell, _unit, _unit as ObjAIBase);
     }
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         var ticks = _periodicTicker.ConsumeTicks(diff, 1000f, true, 1);
         if (ticks != 1) return;

@@ -38,7 +38,7 @@ namespace Buffs
             RemoveBuff(_karma,"KarmaMantra");
         }
 
-        public void OnUpdate(float diff) {
+        public void OnUpdate(Buff buff, float diff) {
             SealSpellSlot(_karma, SpellSlotType.SpellSlots, 3, SpellbookType.SPELLBOOK_CHAMPION, true);
         }
 

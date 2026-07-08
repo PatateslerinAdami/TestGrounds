@@ -44,7 +44,7 @@ public class TalentReaper : IBuffGameScript
     {
         _itemID = buff.BuffVars.GetInt("itemid");
 
-        _owner = ownerspell.CastInfo.Owner;
+        _owner = buff.SourceUnit;
         _buff = buff;
         _rechargePeriodMs = _buff.Duration * 1000f;
         _rechargePeriodSeconds = _buff.Duration;
@@ -62,7 +62,7 @@ public class TalentReaper : IBuffGameScript
     }
 
 
-    public void OnUpdate(float diff)
+    public void OnUpdate(Buff buff, float diff)
     {
         if (_buff == null) return;
 

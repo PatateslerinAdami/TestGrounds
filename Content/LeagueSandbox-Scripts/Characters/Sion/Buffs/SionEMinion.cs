@@ -98,7 +98,7 @@ namespace Buffs
             RemoveBuff(_buff);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
             var targetsInRange = ForEachUnitInTargetArea(_sion, _unit.Position, 130f,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |

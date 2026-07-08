@@ -12,6 +12,11 @@ namespace Buffs
 {
     internal class SummonerDot : IBuffGameScript
     {
+        private Particle _ignite;
+        private ObjAIBase _owner;
+        private AttackableUnit _target;
+        private float _damage;
+        private Buff _buff;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.DAMAGE,
@@ -19,43 +24,28 @@ namespace Buffs
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-
-        Particle ignite;
-        ObjAIBase Owner;
-        AttackableUnit Target;
-
-        float timeSinceLastTick = 1000.0f;
-        float damage;
+        
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Owner = ownerSpell.CastInfo.Owner;
-            Target = unit;
-            damage = 10 + Owner.Stats.Level * 4;
-            ignite = AddParticleTarget(Owner, unit, "Global_SS_Ignite", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
+            _owner = buff.SourceUnit;
+            _target = unit;
+            _buff = buff;
+            _damage = 10 + _owner.Stats.Level * 4;
+            _ignite = AddParticleTarget(_owner, unit, "Global_SS_Ignite", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Owner = null;
-            Target = null;
-            ignite.SetToRemove();
+            RemoveParticle(_ignite);
         }
 
-        public void OnUpdate(float diff)
+        public void OnUpdate(Buff buff, float diff)
         {
-            if (Target == null || Owner == null)
+            ExecutePeriodically(_buff.BuffVars, "igniteTick", 1000f, false, () =>
             {
-                return;
-            }
-
-            timeSinceLastTick += diff;
-
-            if (timeSinceLastTick >= 1000.0f)
-            {
-                Target.TakeDamage(Owner, damage, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_SPELL, false);
-                timeSinceLastTick = 0;
-            }
+                _target.TakeDamage(_owner, _damage, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_SPELL, false);
+            });
         }
     }
 }

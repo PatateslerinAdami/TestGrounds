@@ -45,7 +45,7 @@ namespace Buffs
             _karma.TakeHeal(_karma, healAmount, HealType.SelfHeal);
         }
 
-        public void OnUpdate(float diff) {
+        public void OnUpdate(Buff buff, float diff) {
             if (Vector2.Distance(_karma.Position, _unit.Position) >= 825f || _unit.IsDead) {
                 _isTetherBroken = true;
                 _buff.DeactivateBuff();

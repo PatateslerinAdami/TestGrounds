@@ -38,7 +38,7 @@ internal class JinxPassiveKill  : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
     }
 
-    public void OnUpdate(float diff) {
+    public void OnUpdate(Buff buff, float diff) {
         if (_buff.Duration <= 0.0f) return;
 
         var remainingMultiplier = 1.0f - (_buff.TimeElapsed / _buff.Duration);
