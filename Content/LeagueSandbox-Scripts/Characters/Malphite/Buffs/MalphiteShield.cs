@@ -26,7 +26,7 @@ internal class MalphiteShield : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite      = ownerSpell.CastInfo.Owner;
+        _malphite      = buff.SourceUnit;
         SetBuffToolTipVar(buff, 0, _malphite.Stats.HealthPoints.Total * 0.1f);
         SetBuffToolTipVar(buff, 1, 10f);
     }

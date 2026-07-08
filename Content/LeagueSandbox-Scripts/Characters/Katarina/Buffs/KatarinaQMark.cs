@@ -32,7 +32,7 @@ internal class KatarinaQMark : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _katarina = ownerSpell.CastInfo.Owner;
+        _katarina = buff.SourceUnit;
         _unit = unit;
         _buff = buff;
         _spell = ownerSpell;

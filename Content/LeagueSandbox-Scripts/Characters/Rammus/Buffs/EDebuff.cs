@@ -25,7 +25,7 @@ namespace Buffs
             {
                 // The AI-driven CrowdControlComponent walks the taunted unit to the taunter (and the
                 // engine attacks it); it reads the taunter from CrowdControlSource.
-                oa.CrowdControlSource = ownerSpell.CastInfo.Owner;
+                oa.CrowdControlSource = buff.SourceUnit;
             }
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

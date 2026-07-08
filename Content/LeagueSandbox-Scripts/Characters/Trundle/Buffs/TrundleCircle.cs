@@ -37,7 +37,7 @@ public class TrundleCircle : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _trundle      = ownerSpell.CastInfo.Owner;
+        _trundle      = buff.SourceUnit;
         _pillar       = unit;
         _spell        = ownerSpell;
         _timerSeconds = 0.0f;

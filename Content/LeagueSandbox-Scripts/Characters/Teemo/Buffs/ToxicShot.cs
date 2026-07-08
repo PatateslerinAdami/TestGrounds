@@ -29,7 +29,7 @@ public class ToxicShot : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
         _spell = ownerSpell;
         SealSpellSlot(_teemo, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerSpell.SetSpellToggle(true);

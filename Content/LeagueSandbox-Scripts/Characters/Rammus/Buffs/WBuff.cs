@@ -30,7 +30,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            owner = ownerSpell.CastInfo.Owner;
+            owner = buff.SourceUnit;
             sp = ownerSpell;
             p = AddParticleTarget(owner, owner, "defensiveballcurl_buf", owner); p.isInfinite = true;
             owner.ChangeModelTo("RammusDBC");

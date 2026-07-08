@@ -26,7 +26,7 @@ public class CamouflageStealth : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
         SetStatus(_teemo, StatusFlags.Stealthed, true);
         SetStatus(_teemo, StatusFlags.Ghosted,   true);
         switch (_teemo.Team) {

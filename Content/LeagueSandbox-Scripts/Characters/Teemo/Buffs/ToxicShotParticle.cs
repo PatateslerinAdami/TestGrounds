@@ -35,7 +35,7 @@ public class ToxicShotParticle : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
         _unit = unit;
         _buff = buff;
         _toxicShotTargetParticle = AddParticleTarget(_teemo, unit, "Toxicshot_tar", unit, 4f,

@@ -38,7 +38,7 @@ namespace Buffs
         {
             buf = buff;
             sp = ownerSpell;
-            owner = ownerSpell.CastInfo.Owner;
+            owner = buff.SourceUnit;
             owner.ChangeModelTo("RammusPB");
             StatsModifier.MoveSpeed.PercentBonus = 0.03f;
             owner.SetStatus(StatusFlags.Ghosted, true);

@@ -34,7 +34,7 @@ public class AatroxPassiveDeath : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _spell  = ownerspell;
         _blood  = _aatrox.GetPAR() / 6f;
         _heal   = _aatrox.GetMaxPAR() * 0.35f / 6f + _blood;

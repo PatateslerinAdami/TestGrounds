@@ -15,7 +15,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 public class AatroxPassiveActivate : IBuffGameScript {
-    private ObjAIBase _aatrox;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
             PersistsThroughDeath = true,
@@ -27,11 +26,10 @@ public class AatroxPassiveActivate : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-        SetPARState(_aatrox, 0);
-        AddBuff("AatroxPassiveReady", 25000f, 1, spell, _aatrox, _aatrox);
+        SetPARState(buff.SourceUnit, 0);
+        AddBuff("AatroxPassiveReady", 25000f, 1, spell, buff.SourceUnit, buff.SourceUnit);
     }
 }

@@ -35,7 +35,7 @@ public class SwainTorment : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _unit = unit;
-        _owner = ownerSpell.CastInfo.Owner;
+        _owner = buff.SourceUnit;
         _buff = buff;
         _spell = ownerSpell;
         _p = AddParticleTarget(_owner, unit, "swain_torment_dot", unit, buff.Duration);

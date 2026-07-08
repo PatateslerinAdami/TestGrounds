@@ -46,7 +46,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            var owner = ownerSpell.CastInfo.Owner;
+            var owner = buff.SourceUnit;
             SetSpell(owner, "RivenTriCleave", SpellSlotType.SpellSlots, 0);
             if (owner.HasBuff("RivenTriCleaveBuffered"))
             {

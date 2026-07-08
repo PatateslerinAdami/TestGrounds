@@ -32,7 +32,7 @@ public class AatroxPassive : IBuffGameScript {
     public StatsModifier StatsModifier2 { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         SpendPAR(_aatrox, GetPAR(_aatrox));
         UpdateAttackSpeedStat();
         ApiEventManager.OnTakeDamage.AddListener(this, _aatrox, EngagingInCombat);

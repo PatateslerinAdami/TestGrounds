@@ -31,7 +31,7 @@ internal class TalonShadowAssaultBuff : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _unit  = unit;
         
         ApiEventManager.OnSpellCast.AddListener(this, _talon.GetSpell("TalonRake"),            OnBreakCast);

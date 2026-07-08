@@ -44,7 +44,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = ownerSpell.CastInfo.Owner;
+            _owner = buff.SourceUnit;
             _spell = ownerSpell;
             _targetPos = new Vector2(buff.BuffVars.GetFloat("TargetX"), buff.BuffVars.GetFloat("TargetY"));
 

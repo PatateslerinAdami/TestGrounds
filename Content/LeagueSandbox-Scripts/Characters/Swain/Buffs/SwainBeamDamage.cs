@@ -31,7 +31,7 @@ public class SwainBeamDamage : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _unit    = unit;
-        _owner = ownerSpell.CastInfo.Owner;
+        _owner = buff.SourceUnit;
         var movementSlowAmount = buff.BuffVars.GetFloat("slowPercent");
         StatsModifier.MoveSpeed.PercentBonus   -= movementSlowAmount;
         _unit.AddStatModifier(StatsModifier);

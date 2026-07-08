@@ -11,7 +11,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class SpellFlux : IBuffGameScript {
-    private ObjAIBase _ryze;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
@@ -24,7 +23,6 @@ internal class SpellFlux : IBuffGameScript {
     public void OnUpdate(Buff buff, float diff) { }
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ryze = ownerSpell.CastInfo.Owner;
         StatsModifier.MagicResist.FlatBonus =- (12f + 0.03f * (ownerSpell.CastInfo.SpellLevel - 1));
         unit.AddStatModifier(StatsModifier);
     }

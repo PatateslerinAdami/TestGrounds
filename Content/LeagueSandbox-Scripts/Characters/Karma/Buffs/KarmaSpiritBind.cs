@@ -32,7 +32,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _karma                               =  ownerSpell.CastInfo.Owner;
+            _karma                               =  buff.SourceUnit;
             _unit = unit;
             _buff = buff;
             _bubble = AddUnitPerceptionBubble(_unit, _unit.Stats.Size.Total, buff.Duration, _karma.Team, true, unit);

@@ -25,7 +25,7 @@ internal class VayneSilveredDebuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
         var spellLevel    = Math.Clamp((int)ownerSpell.CastInfo.SpellLevel, 1, 5);
         var percentDamage = 0.04f + 0.01f * (spellLevel - 1);
         var flatDamage    = 20f + 10f * (spellLevel - 1);

@@ -24,7 +24,7 @@ internal class AatroxEConeMissile : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _aatrox = ownerSpell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _unit  = unit;
 
         _slow = SpellEffectCreate("Aatrox_Base_E_Slow.troy", _aatrox, unit, unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _aatrox);

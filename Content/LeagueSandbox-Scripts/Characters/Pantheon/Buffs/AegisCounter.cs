@@ -32,7 +32,7 @@ public class Pantheon_Aegis_Counter : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _pantheon = ownerSpell.CastInfo.Owner;
+        _pantheon = buff.SourceUnit;
         _buff = buff;
         _spell = ownerSpell;
         LogInfo("buff count: " + buff.StackCount);

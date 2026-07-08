@@ -27,7 +27,7 @@ internal class AatroxR : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _aatrox = ownerSpell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _flashEffect = _aatrox.SkinID switch {
             0 => "Aatrox_Base_RModel",
             1 => "Aatrox_Skin01_RModel",

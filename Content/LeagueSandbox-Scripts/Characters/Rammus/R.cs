@@ -7,12 +7,13 @@ namespace Spells
 {
     public class Tremors2 : ISpellScript
     {
+        private Spell _spell;
+        private ObjAIBase _owner;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
         };
-        Spell _spell;
-        ObjAIBase _owner;
+        
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {

@@ -26,7 +26,7 @@ internal class Gemcraft: IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric = ownerSpell.CastInfo.Owner;
+        _taric = buff.SourceUnit;
         _buff = buff;
         ApiEventManager.OnHitUnit.AddListener(this, _taric, OnHit);
         ApiEventManager.OnUpdateStats.AddListener(this, _taric, OnUpdateStats);

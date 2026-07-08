@@ -38,7 +38,7 @@ public class NoxiousTrap : IBuffGameScript {
         _spell = ownerSpell;
         _buff  = buff;
         _unit  = unit;
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
     }
 
     public void OnUpdate(Buff buff, float diff) {

@@ -27,7 +27,7 @@ public class TrundleQDebuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _trundle                             = ownerSpell.CastInfo.Owner;
+        _trundle                             = buff.SourceUnit;
         _spell                               = ownerSpell;
         StatsModifier.AttackDamage.FlatBonus -= (20f + 5f * (ownerSpell.CastInfo.SpellLevel - 1)) * 0.5f;
         unit.AddStatModifier(StatsModifier);

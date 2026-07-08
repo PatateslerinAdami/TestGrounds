@@ -21,7 +21,7 @@ internal class VayneInquisition : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
         _vayne.SetAnimStates(new Dictionary<string, string> {
             { "Idle1", "Idle_Ult" },
             { "Idle2", "Idle_Ult" },

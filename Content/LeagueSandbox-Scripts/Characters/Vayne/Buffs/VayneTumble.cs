@@ -39,7 +39,7 @@ internal class VayneTumbleBonus : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
         SealSpellSlot(_vayne, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);

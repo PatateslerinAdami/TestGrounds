@@ -22,6 +22,6 @@ public class CharScriptAlistar : ICharScript {
     }
 
     private void OnSpellPostCast(Spell spell) {
-        AddBuff("Trample_Buff", 3f, 1, spell, _alistar, _alistar);
+        AddBuff("TrampleBuff", 3f, 1, spell, _alistar, _alistar);
     }
 }

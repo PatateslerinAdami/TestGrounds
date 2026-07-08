@@ -27,7 +27,7 @@ public class UdyrPhoenixActivation : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _udyr  = ownerSpell.CastInfo.Owner;
+        _udyr  = buff.SourceUnit;
         _spell = ownerSpell;
         AddParticleTarget(_udyr, _udyr, "PhoenixStance",      _udyr, buff.Duration);
     }

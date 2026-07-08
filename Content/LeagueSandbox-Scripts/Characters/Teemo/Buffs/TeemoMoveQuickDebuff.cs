@@ -21,7 +21,7 @@ public class TeemoMoveQuickDebuff : IBuffGameScript {
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { _teemo = ownerSpell.CastInfo.Owner; }
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { _teemo = buff.SourceUnit; }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         AddBuff("TeemoMoveQuickSpeed", 10000000000f, 1, ownerSpell, _teemo, _teemo, infiniteduration: true);

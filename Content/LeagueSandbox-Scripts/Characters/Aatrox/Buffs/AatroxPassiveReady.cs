@@ -29,7 +29,7 @@ public class AatroxPassiveReady : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _spell  = ownerspell;
         _buff   = buff;
         SetPARState(_aatrox, 0);

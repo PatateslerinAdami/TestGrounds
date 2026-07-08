@@ -30,7 +30,7 @@ internal class TalonShadowAssaultAnimBuff : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _unit  = unit;
         PlayAnimation(_talon, "Spell4");
         SetSpell(_talon, "TalonShadowAssaultToggle", SpellSlotType.SpellSlots, 3);

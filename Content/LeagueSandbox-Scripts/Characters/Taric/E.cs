@@ -23,7 +23,7 @@ public class Dazzle : ISpellScript {
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
-        _taric = spell.CastInfo.Owner;
+        _taric = owner;
         ApiEventManager.OnSpellHit.AddListener(this, spell, ApplyEffects);
     }
 

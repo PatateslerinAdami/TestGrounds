@@ -25,7 +25,7 @@ public class UdyrMonkeyAgilityBuff  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _udyr                                  = ownerSpell.CastInfo.Owner;
+        _udyr                                  = buff.SourceUnit;
         StatsModifier.AttackSpeed.PercentBonus = 0.1f;
         StatsModifier.MoveSpeed.FlatBonus      = 5f;
         _udyr.AddStatModifier(StatsModifier);

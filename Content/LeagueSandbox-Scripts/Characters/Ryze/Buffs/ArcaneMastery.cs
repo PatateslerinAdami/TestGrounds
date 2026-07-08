@@ -22,7 +22,7 @@ internal class arcanemastery : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ryze = ownerSpell.CastInfo.Owner;
+        _ryze = buff.SourceUnit;
         for (short i = 0; i < 4; i++) {
             ApiEventManager.OnSpellCast.AddListener(this, _ryze.Spells[i], OnSpellCast);
         }

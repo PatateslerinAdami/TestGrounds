@@ -24,7 +24,7 @@ internal class VayneSilverDebuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
         switch (buff.StackCount) {
             case 1:  _p  = AddParticleTarget(_vayne, unit, "vayne_W_ring1", unit, buff.Duration); break;
             case 2:  _p1 = AddParticleTarget(_vayne, unit, "vayne_W_ring2", unit, buff.Duration); break;

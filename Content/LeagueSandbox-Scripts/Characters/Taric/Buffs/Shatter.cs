@@ -23,7 +23,7 @@ internal class Shatter : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric = ownerSpell.CastInfo.Owner;
+        _taric = buff.SourceUnit;
         //_shatterParticle1              = AddParticleTarget(owner, unit, "ShatterReady_buf", unit, -1);
         _shatterParticle1 = AddParticleTarget(_taric, unit, "Shatter_tar", unit, buff.Duration);
         _shatterParticle2 = AddParticleTarget(_taric, unit, "BloodSlash", unit, buff.Duration);

@@ -33,7 +33,7 @@ public class AatroxWONHPowerBuff  : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
         _buff                                      = buff;
-        _aatrox                                       = ownerspell.CastInfo.Owner;
+        _aatrox                                       = buff.SourceUnit;
         _spell = ownerspell;
         _aatrox.SetAutoAttackSpell(_aatrox.HasBuff("AatroxR") ? AutoAttack6 : AutoAttack3, false);
     }

@@ -27,7 +27,7 @@ internal class TalonBleedBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _talon      = ownerSpell.CastInfo.Owner;
+        _talon      = buff.SourceUnit;
         _spell      = ownerSpell;
         _unit       = unit;
         _buff       = buff;

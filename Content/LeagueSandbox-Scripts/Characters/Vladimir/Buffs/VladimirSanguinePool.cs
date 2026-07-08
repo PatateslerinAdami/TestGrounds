@@ -28,7 +28,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _vladimir = ownerSpell.CastInfo.Owner;
+            _vladimir = buff.SourceUnit;
             unit.SetStatus(StatusFlags.Targetable, false);
             HideHealthBar(unit, -1, true);
             StatsModifier.MoveSpeed.PercentBonus += MaxMovespeedAmount;

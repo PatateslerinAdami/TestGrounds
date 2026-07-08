@@ -22,7 +22,7 @@ internal class ShatterSelfBonus : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric = ownerSpell.CastInfo.Owner;
+        _taric = buff.SourceUnit;
         _shatterParticle = AddParticleTarget(_taric, unit, "ShatterReady_buf", unit, buff.Duration);
         StatsModifier.Armor.FlatBonus = 10f + 5f * (ownerSpell.CastInfo.SpellLevel - 1);
         unit.AddStatModifier(StatsModifier);

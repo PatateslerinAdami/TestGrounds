@@ -40,7 +40,7 @@ public class SwainMetaHealTracker : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _swain = ownerSpell.CastInfo.Owner;
+        _swain = buff.SourceUnit;
         _buff = buff;
         _metamorphismSpell = ownerSpell;
         ApiEventManager.OnSpellHit.AddListener(this, _swain.GetSpell("SwainMetaNuke"), OnSpellHitNuke);

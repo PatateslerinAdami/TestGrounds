@@ -23,7 +23,7 @@ internal class TaricGemcraftBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric = ownerSpell.CastInfo.Owner;
+        _taric = buff.SourceUnit;
         for (short i = 0; i < 4; i++) {
             ApiEventManager.OnSpellCast.AddListener(this, _taric.Spells[i], OnSpellCast);
         }

@@ -24,7 +24,7 @@ public class MoveQuick : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
         var spellLevel = ownerSpell.CastInfo.SpellLevel;
         if (spellLevel is < 1 or > 5) return;
         StatsModifier.MoveSpeed.PercentBonus += spellLevel switch {

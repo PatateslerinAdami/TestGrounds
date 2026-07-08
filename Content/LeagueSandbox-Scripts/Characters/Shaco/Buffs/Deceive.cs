@@ -24,7 +24,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = ownerSpell.CastInfo.Owner;
+            _owner = buff.SourceUnit;
             _owner.EnterStealth();
             SealSpellSlot(_owner, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
         }

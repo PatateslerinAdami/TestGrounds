@@ -28,7 +28,7 @@ public class UdyrPassiveBuff : IBuffGameScript {
     private const float StanceSwapCooldown = 1.5f;
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-         _udyr = ownerSpell.CastInfo.Owner;
+         _udyr = buff.SourceUnit;
 
         for (short i = 0; i < StanceSpellCount; i++) {
             var stanceSpell = _udyr.Spells[i];

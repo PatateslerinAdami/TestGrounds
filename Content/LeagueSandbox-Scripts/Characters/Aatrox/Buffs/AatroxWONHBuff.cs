@@ -29,7 +29,7 @@ public class AatroxWONHBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _spell  = ownerspell;
         RemoveBuff(_aatrox, "AatroxWPower");
         ApiEventManager.OnHitUnit.AddListener(this, _aatrox, OnHit);

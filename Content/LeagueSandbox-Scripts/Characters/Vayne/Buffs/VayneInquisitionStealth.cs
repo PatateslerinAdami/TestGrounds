@@ -31,7 +31,7 @@ internal class VayneInquisitionStealth : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
         _unit  = unit;
         SetStatus(_vayne, StatusFlags.RevealSpecificUnit, false);
         SetStatus(_vayne, StatusFlags.Stealthed, true);

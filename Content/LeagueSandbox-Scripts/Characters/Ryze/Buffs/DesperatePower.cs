@@ -25,7 +25,7 @@ internal class DesperatePower : IBuffGameScript {
     public void OnUpdate(Buff buff, float diff) { }
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ryze = ownerSpell.CastInfo.Owner;
+        _ryze = buff.SourceUnit;
         _ryze.SetAutoAttackSpell("ryzedesperatepowerattack", false);
         StatsModifier.SpellVamp.FlatBonus = 0.15f + 0.05f * (ownerSpell.CastInfo.SpellLevel - 1);
         StatsModifier.MoveSpeed.FlatBonus = 80f;

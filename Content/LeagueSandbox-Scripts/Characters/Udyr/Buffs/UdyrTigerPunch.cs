@@ -24,7 +24,7 @@ public class UdyrTigerPunch : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell spell) {
-        _udyr = spell.CastInfo.Owner;
+        _udyr = buff.SourceUnit;
         StatsModifier.AttackSpeed.PercentBonus = spell.CastInfo.SpellLevel switch {
             1 => 0.30f,
             2 => 0.40f,

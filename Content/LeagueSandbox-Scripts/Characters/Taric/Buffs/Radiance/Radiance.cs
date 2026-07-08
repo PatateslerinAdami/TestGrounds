@@ -34,7 +34,7 @@ internal class Radiance : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric = ownerSpell.CastInfo.Owner;
+        _taric = buff.SourceUnit;
         _buff = buff;
 
         var selfBonus = 30f + 20f * (ownerSpell.CastInfo.SpellLevel - 1);

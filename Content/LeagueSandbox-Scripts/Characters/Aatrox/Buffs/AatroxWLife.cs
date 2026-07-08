@@ -29,7 +29,7 @@ public class AatroxWLife : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _spell  = ownerspell;
         RemoveBuff(_aatrox, "AatroxWPower");
         _weaponGlow = AddParticleTarget(_aatrox, _aatrox, _aatrox.HasBuff("AatroxR") ? "Aatrox_Base_W_WeaponLifeR" : "Aatrox_Base_W_WeaponLife", _aatrox, -1f, bone: "weapon");

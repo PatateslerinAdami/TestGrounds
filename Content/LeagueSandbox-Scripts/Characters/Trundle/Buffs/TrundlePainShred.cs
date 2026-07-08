@@ -45,7 +45,7 @@ public class TrundlePainShred : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _unit    = unit;
         _spell   = ownerSpell;
-        _trundle = ownerSpell.CastInfo.Owner;
+        _trundle = buff.SourceUnit;
         ApiEventManager.OnSpellHit.AddListener(this, _trundle.GetSpell("TrundlePainHeal"), OnSpellHitHealMissile);
         if (!buff.BuffVars.TryGet<float>("halfArmorSteal", out _halfArmorSteal))
             _halfArmorSteal = unit.Stats.Armor.Total * 0.2f;

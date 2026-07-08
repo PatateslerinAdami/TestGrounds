@@ -29,7 +29,7 @@ internal class Pantheon_GrandSkyfall : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _pantheon = ownerSpell.CastInfo.Owner;
+        _pantheon = buff.SourceUnit;
         _tickTimer = 150f;
         _isActive = true;
     }

@@ -31,7 +31,7 @@ public class BantamTrap : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _unit  = unit;
-        _teemo = ownerSpell.CastInfo.Owner;
+        _teemo = buff.SourceUnit;
         _buff  = buff;
         if (!_unit.IsDead) {
             _globalPoison = AddParticleTarget(_teemo, unit, "Global_Poison", unit, 4f, bone: "head");

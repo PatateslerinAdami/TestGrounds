@@ -24,7 +24,7 @@ internal class VayneSilverBolts: IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _vayne = ownerSpell.CastInfo.Owner;
+        _vayne = buff.SourceUnit;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

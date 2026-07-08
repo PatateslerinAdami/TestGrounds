@@ -34,7 +34,7 @@ public class UdyrTurtleActivation : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell spell) {
         _buff = buff;
-        _udyr = spell.CastInfo.Owner;
+        _udyr = buff.SourceUnit;
         var ap    = _udyr.Stats.AbilityPower.Total * 0.45f;
         _shieldHealth  = 60f + 30 * (_udyr.GetSpell("UdyrTurtleStance").CastInfo.SpellLevel - 1) + ap;
         _turtleShield = new Shield(_udyr, _udyr, true, true, _shieldHealth, buff);

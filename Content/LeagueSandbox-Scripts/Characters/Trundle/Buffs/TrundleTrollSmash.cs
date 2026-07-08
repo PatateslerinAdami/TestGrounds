@@ -29,7 +29,7 @@ internal class TrundleTrollSmash : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _trundle  = ownerSpell.CastInfo.Owner;
+        _trundle  = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
         ownerSpell.SetCooldown(0f, true);

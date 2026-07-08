@@ -20,7 +20,7 @@ internal class ShatterAuraSelf : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _taric                        =  ownerSpell.CastInfo.Owner;
+        _taric                        =  buff.SourceUnit;
         StatsModifier.Armor.FlatBonus -= _taric.Stats.Armor.FlatBonus * 0.12f;
         unit.AddStatModifier(StatsModifier);
     }

@@ -36,7 +36,7 @@ public class SwainDecrepify : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _spell = ownerSpell;
-        _swain = ownerSpell.CastInfo.Owner;
+        _swain = buff.SourceUnit;
         _unit = unit;
     }
 

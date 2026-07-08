@@ -31,7 +31,7 @@ internal class TalonDamageAmp : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _unit  = unit;
         _spell = ownerSpell;
         _p1    = AddParticleTarget(_talon, _unit, "talon_E_tar_dmg", _unit, buff.Duration);
