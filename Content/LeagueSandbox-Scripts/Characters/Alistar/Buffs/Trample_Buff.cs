@@ -15,9 +15,9 @@ namespace Buffs
 {
     internal class Trample_Buff : IBuffGameScript {
         private       ObjAIBase _alistar;
+        private       Buff      _buff;
         private const float     IntervalMs = 500.0f;
         private const int       MaxSteps   = 6;
-        private       float     _tickTime  = 500.0f;
         private       int       _stepsApplied;
         private       Particle  _p1, _p2, _p3, _p4, _p5, _p6;
 
@@ -31,6 +31,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
             _alistar = ownerSpell.CastInfo.Owner;
+            _buff = buff;
             SetStatus(_alistar, StatusFlags.Ghosted, true);
             _alistar.SetAnimStates(new Dictionary<string, string> {
                 { "Idle1", "Idle5" },
@@ -45,19 +46,22 @@ namespace Buffs
         }
 
         public void OnUpdate(float diff) {
-            _tickTime += diff;
-            if (!(_tickTime > IntervalMs) || _stepsApplied >= MaxSteps) return;
-            var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
-            var enemiesInRange = GetUnitsInRange(_alistar, _alistar.Position, 300f, true,
-                                                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                                 SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectBuildings);
-            foreach (var enemy in enemiesInRange) {
-                enemy.TakeDamage(_alistar, IsValidTarget(_alistar, enemy, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions) ? dmg * 2f : dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                                 DamageResultType.RESULT_NORMAL);
-            }
-
-            _tickTime = 0f;
-            _stepsApplied++;
+            // Riot BBExecutePeriodically: 500ms cadence, drift-free, anchor stored in this buff's
+            // BuffVars (= Riot TrackTimeVarTable). ExecuteImmediately mirrors the old _tickTime=500
+            // init that fired on the first update. Capped at MaxSteps ticks over the buff's life.
+            if (_stepsApplied >= MaxSteps) return;
+            ExecutePeriodically(_buff.BuffVars, "trampleTick", IntervalMs, executeImmediately: true, () => {
+                if (_stepsApplied >= MaxSteps) return;
+                var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
+                var enemiesInRange = GetUnitsInRange(_alistar, _alistar.Position, 300f, true,
+                                                     SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                                                     SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectBuildings);
+                foreach (var enemy in enemiesInRange) {
+                    enemy.TakeDamage(_alistar, IsValidTarget(_alistar, enemy, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions) ? dmg * 2f : dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                                     DamageResultType.RESULT_NORMAL);
+                }
+                _stepsApplied++;
+            });
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

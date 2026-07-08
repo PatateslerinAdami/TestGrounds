@@ -455,6 +455,54 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// 1:1 port of Riot's BB <c>BBExecutePeriodically</c> (BuildingBlocksBase.lua:1946). Fires
+        /// <paramref name="action"/> on a fixed cadence, driven by the every-tick script update
+        /// (IBuffGameScript.OnUpdate / AreaTrigger onUpdate). Call it once per update. The schedule
+        /// anchor is stored in <paramref name="trackTable"/> under <paramref name="trackVar"/> — pass
+        /// the instance's own VariableTable (Riot TrackTimeVarTable): a buff's <c>BuffVars</c>, a
+        /// cast's <c>InstanceVars</c>, etc.
+        ///
+        /// Faithful semantics (verified against the decompiled Lua):
+        /// <list type="bullet">
+        /// <item>Absolute game clock (<see cref="ApiMapFunctionManager.GameTime"/>, ms), NOT a delta
+        /// accumulator.</item>
+        /// <item>First call anchors the schedule to <c>now</c>; fires immediately only if
+        /// <paramref name="executeImmediately"/> is true, else the first tick is one full interval
+        /// later.</item>
+        /// <item>Advances the anchor by <c>+= intervalMs</c> (carries the overshoot — zero drift),
+        /// never <c>= now</c>.</item>
+        /// <item>One fire per call (Riot uses <c>if</c>, not <c>while</c>): on a lag spike it catches
+        /// up at most one tick per update, never bursts all missed ticks at once.</item>
+        /// <item><paramref name="intervalMs"/> == 0 → fires every call (<c>track + 0 &lt;= now</c> is
+        /// always true).</item>
+        /// </list>
+        /// </summary>
+        /// <param name="trackTable">Instance VariableTable holding the schedule anchor (Riot TrackTimeVarTable).</param>
+        /// <param name="trackVar">Key under which the anchor timestamp is stored (Riot TrackTimeVar).</param>
+        /// <param name="intervalMs">Cadence in milliseconds (Riot TimeBetweenExecutions; GameTime is ms).</param>
+        /// <param name="executeImmediately">Fire once on the first call (Riot ExecuteImmediately).</param>
+        /// <param name="action">The effect to run per tick (Riot SubBlocks).</param>
+        public static void ExecutePeriodically(
+            VariableTable trackTable, string trackVar, float intervalMs, bool executeImmediately, Action action)
+        {
+            float now = ApiMapFunctionManager.GameTime();
+            if (!trackTable.TryGet<float>(trackVar, out var track))
+            {
+                track = now;
+                trackTable.Set(trackVar, track);
+                if (executeImmediately)
+                {
+                    action();
+                }
+            }
+            if (track + intervalMs <= now)
+            {
+                trackTable.Set(trackVar, track + intervalMs);
+                action();
+            }
+        }
+
+        /// <summary>
         /// Returns a random point inside the ring centered on <paramref name="center"/> bounded by
         /// <paramref name="innerRadius"/> and <paramref name="radius"/>. Mirrors Riot's
         /// GetRandomAreaPoint (LuaBuildingBlockHelper.cpp): the radius is drawn LINEARLY in
