@@ -29,7 +29,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _sion = ownerSpell.CastInfo.Owner;
+            _sion = buff.SourceUnit;
             ApiEventManager.OnKillUnit.AddListener(this, _sion, OnUnitKill);
             ApiEventManager.OnUpdateStats.AddListener(this, _sion, OnUpdateStats);
         }

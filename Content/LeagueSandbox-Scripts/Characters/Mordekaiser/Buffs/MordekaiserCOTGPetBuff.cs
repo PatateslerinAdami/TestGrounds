@@ -23,7 +23,7 @@ internal class MordekaiserCOTGPetBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _mordekaiser = ownerSpell.CastInfo.Owner;
+        _mordekaiser = buff.SourceUnit;
         _buff = buff;
         ApiEventManager.OnDeath.AddListener(this, unit, OnGhostDeath, true);
         //Stats applied here might not be notified to the clients, even though all necessary packets are sent, i was unsuccessful on pinpointing the cause (cabeca143).

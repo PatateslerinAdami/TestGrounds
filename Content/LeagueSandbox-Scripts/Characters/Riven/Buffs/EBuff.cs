@@ -24,11 +24,11 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            var owner = ownerSpell.CastInfo.Owner as Champion;
+            var owner = buff.SourceUnit as Champion;
             pbuff = AddParticleTarget(owner, owner, "Riven_Base_E_Shield.troy", owner, buff.Duration);
             pbuff1 = AddParticleTarget(owner, owner, "Riven_Base_E_Mis.troy", owner, buff.Duration);
             pbuff2 = AddParticleTarget(owner, owner, "Riven_Base_E_Interupt.troy", owner, buff.Duration);
-            _feintShield = AddShield(ownerSpell.CastInfo.Owner, unit, 200f, true, true);
+            _feintShield = AddShield(owner, unit, 200f, true, true);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -24,14 +24,14 @@ internal class SeismicShardBuff : IBuffGameScript {
     public StatsModifier StatsModifier2 { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite = ownerSpell.CastInfo.Owner;
+        _malphite = buff.SourceUnit;
         _unit     = unit;
         
         var slowPercentage = 0.14f + 0.03f * (ownerSpell.CastInfo.SpellLevel - 1);
         var stolenMovespeed      = _malphite.Stats.MoveSpeed.Total * slowPercentage;
         
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration);
-        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+        _slow  = AddParticleTarget(_malphite, null, "Global_Slow", unit, buff.Duration);
+        ApplyAssistMarker(unit, _malphite, 10.0f);
         
         StatsModifier.MoveSpeed.PercentBonus -= slowPercentage;
         unit.AddStatModifier(StatsModifier);

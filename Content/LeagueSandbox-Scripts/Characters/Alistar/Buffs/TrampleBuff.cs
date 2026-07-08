@@ -28,7 +28,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _alistar = ownerSpell.CastInfo.Owner;
+            _alistar = buff.SourceUnit;
             _buff = buff;
             SetStatus(_alistar, StatusFlags.Ghosted, true);
             _alistar.SetAnimStates(new Dictionary<string, string> {

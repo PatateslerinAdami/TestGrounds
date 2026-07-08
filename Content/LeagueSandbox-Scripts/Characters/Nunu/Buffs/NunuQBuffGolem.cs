@@ -24,7 +24,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _nunu = ownerSpell.CastInfo.Owner;
+            _nunu = buff.SourceUnit;
             var pct = ownerSpell.SpellData.EffectLevelAmount[5][ownerSpell.CastInfo.SpellLevel];
             var bonusHealth = _nunu.Stats.HealthPoints.Total * pct;
             StatsModifier.Size.PercentBaseBonus = pct;

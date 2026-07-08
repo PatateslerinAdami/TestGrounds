@@ -42,7 +42,7 @@ internal class TalonShadowAssaultMisBuff : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _buff = buff;
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _unit = unit;
         _positions = buff.BuffVars.Get("positions", new Vector2[BladeCount]);
         ApiEventManager.OnLaunchMissile.AddListener(this, _talon.GetSpell("TalonShadowAssaultMisOne"), OnLaunchMissile);

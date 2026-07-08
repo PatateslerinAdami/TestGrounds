@@ -25,7 +25,7 @@ public class Pyromania  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _annie = ownerspell.CastInfo.Owner;
+        _annie = buff.SourceUnit;
         ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdateStats);
     }
     

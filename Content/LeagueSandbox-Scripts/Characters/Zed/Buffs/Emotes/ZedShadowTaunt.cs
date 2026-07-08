@@ -22,7 +22,7 @@ internal class ZedShadowTaunt : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _zed = ownerSpell.CastInfo.Owner;
+        _zed = buff.SourceUnit;
         var pos       = GetPointFromUnit(_zed, 10f,  20f);
         var facingPos = GetPointFromUnit(_zed, 100f, 20f);
         _minion = AddMinion(_zed, "ZedShadow", "ZedShadow", pos, _zed.Team, _zed.SkinID, true, false);

@@ -20,7 +20,7 @@ internal class JinxEMineVision : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx = ownerSpell.CastInfo.Owner;
+        _jinx = buff.SourceUnit;
         AddUnitPerceptionBubble(unit, 200f, 1.5f, _jinx.Team, true);
     }
 

@@ -27,7 +27,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _sion = ownerSpell.CastInfo.Owner;
+            _sion = buff.SourceUnit;
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -29,7 +29,7 @@ public class JaxRelentlessAssault  : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
         _buff                               = buff;
-        _jax                                = ownerspell.CastInfo.Owner;
+        _jax                                = buff.SourceUnit;
         var armorPerBonusAd = _jax.Stats.AttackDamage.FlatBonus * 0.3f;
         var magicResistPerBonusAp = _jax.Stats.AbilityPower.Total * 0.2f;
         StatsModifier.Armor.FlatBonus       = 25f + 10f * (ownerspell.CastInfo.SpellLevel - 1) + armorPerBonusAd;

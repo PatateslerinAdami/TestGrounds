@@ -25,7 +25,7 @@ internal class MalphiteShieldRemoval : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite      = ownerSpell.CastInfo.Owner;
+        _malphite      = buff.SourceUnit;
         _graniteShieldParticle = AddParticleTarget(_malphite, _malphite, "Malphite_Base_Obduracy_off", _malphite, default, default, "root", "root");
     }
 

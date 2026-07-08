@@ -25,7 +25,7 @@ namespace Buffs
         {
             StatsModifier.MoveSpeed.PercentBonus += (0.10f + 0.05f * ownerSpell.CastInfo.SpellLevel);
             unit.AddStatModifier(StatsModifier);
-            p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_haste.troy", unit, buff.Duration);
+            p = AddParticleTarget(buff.SourceUnit, unit, "global_haste.troy", unit, buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -20,7 +20,7 @@ internal class DarkBindingMissile : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _morgana       = ownerSpell.CastInfo.Owner;
+        _morgana       = buff.SourceUnit;
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

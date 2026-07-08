@@ -23,7 +23,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _alistar = ownerSpell.CastInfo.Owner;
+            _alistar = buff.SourceUnit;
             var ap         = _alistar.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
             var healAmount = ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel] + ap;
             AddParticleTarget(_alistar, unit, "Meditate_eff", unit, buff.Duration);

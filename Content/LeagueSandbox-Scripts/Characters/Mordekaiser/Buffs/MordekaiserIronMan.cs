@@ -26,7 +26,7 @@ internal class MordekaiserIronMan : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _mordekaiser = ownerSpell.CastInfo.Owner;
+        _mordekaiser = buff.SourceUnit;
         _mordekaiser.SpendPAR(100.0f);
         ApiEventManager.OnPreTakeDamage.AddListener(this, _mordekaiser, OnPreTakeDamage);
         ApiEventManager.OnDealDamage.AddListener(this, _mordekaiser, OnDealDamage);

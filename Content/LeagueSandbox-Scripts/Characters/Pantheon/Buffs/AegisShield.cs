@@ -29,7 +29,7 @@ public class Pantheon_AegisShield : IBuffGameScript
     {
         if (!unit.HasBuff("Pantheon_AegisShieldVisual"))
         {
-            AddBuff("Pantheon_AegisShieldVisual", 100000f, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner, true);
+            AddBuff("Pantheon_AegisShieldVisual", 100000f, 1, ownerSpell, unit, buff.SourceUnit, true);
         }
     }
 

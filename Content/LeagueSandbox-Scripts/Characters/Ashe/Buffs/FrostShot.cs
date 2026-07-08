@@ -25,13 +25,13 @@ public class FrostShot : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ashe  = ownerSpell.CastInfo.Owner;
+        _ashe  = buff.SourceUnit;
         _spell = ownerSpell;
         _ashe.SetAutoAttackSpell("FrostArrow",      true);
-        ApiEventManager.OnHitUnit.AddListener(this, ownerSpell.CastInfo.Owner, OnHit);
+        ApiEventManager.OnHitUnit.AddListener(this, _ashe, OnHit);
     }
 
-    public void OnHit(DamageData data) {
+    private void OnHit(DamageData data) {
         _ashe.Stats.CurrentMana -= 8f;
         if (!IsValidTarget(_ashe, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         

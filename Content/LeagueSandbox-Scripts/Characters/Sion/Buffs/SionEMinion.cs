@@ -38,7 +38,7 @@ namespace Buffs
         {
             _spell = ownerSpell;
             _unit = unit;
-            _sion = ownerSpell.CastInfo.Owner;
+            _sion = buff.SourceUnit;
             _buff = buff;
             _mainSpell = _sion.Spells[2];
             _hitUnits.Add(unit);

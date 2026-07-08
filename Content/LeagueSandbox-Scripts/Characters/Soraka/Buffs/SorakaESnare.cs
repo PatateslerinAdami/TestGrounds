@@ -23,8 +23,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            AddBuff("Root", float.MaxValue, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner);
-            root = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "soraka_base_e_snare_tar", unit, lifetime: buff.Duration);
+            root = AddParticleTarget(buff.SourceUnit, unit, "soraka_base_e_snare_tar", unit, lifetime: buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

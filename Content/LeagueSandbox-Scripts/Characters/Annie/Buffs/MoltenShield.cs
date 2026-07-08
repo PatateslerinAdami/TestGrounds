@@ -22,7 +22,7 @@ internal class MoltenShield : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _annie = ownerSpell.CastInfo.Owner;
+        _annie = buff.SourceUnit;
         _spell = ownerSpell;
         var bonus = 20f + 10f * (ownerSpell.CastInfo.SpellLevel - 1);
 

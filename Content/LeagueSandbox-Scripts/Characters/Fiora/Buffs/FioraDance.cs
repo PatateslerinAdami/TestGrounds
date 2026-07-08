@@ -36,7 +36,7 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             thisBuff = buff;
-            owner = ownerSpell.CastInfo.Owner;
+            owner = buff.SourceUnit;
             initialTarget = ownerSpell.CastInfo.Targets[0].Unit;
 
             SetCastingStatuses(true);

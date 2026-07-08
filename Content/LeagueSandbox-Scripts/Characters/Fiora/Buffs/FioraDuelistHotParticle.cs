@@ -18,9 +18,9 @@ namespace Buffs
 {
     internal class FioraDuelistHotParticle : IBuffGameScript
     {
-        Buff Duelist;
-        Particle Heal;
-        ObjAIBase Fiora;
+        private Buff _buff;
+        private Particle _heal;
+        private ObjAIBase _fiora;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             PersistsThroughDeath = true,
@@ -31,20 +31,20 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Duelist = buff;
-            RemoveParticle(Heal);
-            Fiora = ownerSpell.CastInfo.Owner as Champion;
-            ApiEventManager.OnHitUnit.AddListener(this, Fiora, OnHitUnit, false);
-            Heal = AddParticleTarget(Fiora, Fiora, "fiora_heal_buf", Fiora, 25000f, 1);
-            switch (Duelist.StackCount) { case 2: AddParticleTarget(Fiora, Fiora, "fiora_heal2_buf", Fiora); return; }
+            _buff = buff;
+            RemoveParticle(_heal);
+            _fiora = buff.SourceUnit;
+            ApiEventManager.OnHitUnit.AddListener(this, _fiora, OnHitUnit, false);
+            _heal = AddParticleTarget(_fiora, _fiora, "fiora_heal_buf", _fiora, 25000f, 1);
+            switch (_buff.StackCount) { case 2: AddParticleTarget(_fiora, _fiora, "fiora_heal2_buf", _fiora); return; }
         }
-        public void OnHitUnit(DamageData damageData)
+        private void OnHitUnit(DamageData damageData)
         {
-            Fiora.Stats.CurrentHealth += 7 + Fiora.Stats.Level;
+            _fiora.Stats.CurrentHealth += 7 + _fiora.Stats.Level;
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            RemoveParticle(Heal);
+            RemoveParticle(_heal);
         }
     }
 }

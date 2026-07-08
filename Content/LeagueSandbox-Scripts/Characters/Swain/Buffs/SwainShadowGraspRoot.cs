@@ -32,8 +32,8 @@ internal class SwainShadowGraspRoot : IBuffGameScript
     {
         _unit = unit;
         _buff = buff;
-        _root = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "SwainShadowGraspRootTemp", unit, buff.Duration);
-        _root2 = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "swain_shadowGrasp_magic", unit, buff.Duration);
+        _root = AddParticleTarget(buff.SourceUnit, null, "SwainShadowGraspRootTemp", unit, buff.Duration);
+        _root2 = AddParticleTarget(buff.SourceUnit, null, "swain_shadowGrasp_magic", unit, buff.Duration);
         ApiEventManager.OnDeath.AddListener(this, unit, OnDie);
     }
 

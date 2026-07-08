@@ -28,7 +28,7 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _irelia = ownerSpell.CastInfo.Owner;
+        _irelia = buff.SourceUnit;
         _mainSpell = ownerSpell;
         unit.SetAnimStates(new Dictionary<string, string> {
             { "attack1", "Attack1c" },
@@ -38,7 +38,7 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
             { "idle1",   "Idle1c"   }
         });
 
-        ApiEventManager.OnHitUnit.AddListener(this, ownerSpell.CastInfo.Owner, OnHit);
+        ApiEventManager.OnHitUnit.AddListener(this, _irelia, OnHit);
         _activate = AddParticleTarget(_irelia, _irelia, "irelia_hitenStyle_activate", _irelia,
                                       bone: "BUFFBONE_GLB_WEAPON_1");
         _activeGlow = AddParticleTarget(_irelia, _irelia, "irelia_hitenStyle_active_glow", _irelia,
@@ -56,7 +56,7 @@ internal class IreliaHitenStyleCharged : IBuffGameScript {
             { "run",     "" },
             { "idle1",   "" }
         });
-        AddBuff("IreliaHitenStyle", 999999f, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner, true);
+        AddBuff("IreliaHitenStyle", 999999f, 1, ownerSpell, unit, buff.SourceUnit, true);
     }
 
     private void OnHit(DamageData data) {

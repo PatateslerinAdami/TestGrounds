@@ -29,7 +29,7 @@ public class EvelynnRShield : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _evelynn = ownerspell.CastInfo.Owner;
+        _evelynn = buff.SourceUnit;
         _buff = buff;
         _shieldHealth = buff.BuffVars.GetFloat("shieldAmount");
         _agonyShield  = new Shield(_evelynn, _evelynn, true, true, _shieldHealth, buff);

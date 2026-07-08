@@ -30,7 +30,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _nunu = ownerSpell.CastInfo.Owner;
+            _nunu = buff.SourceUnit;
             _spell = ownerSpell;
         }
 

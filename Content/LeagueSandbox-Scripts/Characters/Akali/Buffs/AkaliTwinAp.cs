@@ -40,7 +40,7 @@ public class AkaliTwinAp : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _akali = ownerSpell.CastInfo.Owner;
+        _akali = buff.SourceUnit;
         _p1 = AddParticleTarget(_akali, _akali, "akali_twinDisciplines_AP_buf", _akali, buff.Duration, bone: "R_BUFFBONE_GLB_HAND_LOC");
     }
 

@@ -22,19 +22,19 @@ internal class EvelynnWPassive : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn = ownerSpell.CastInfo.Owner;
+        _evelynn = buff.SourceUnit;
         StatsModifier.MoveSpeed.FlatBonus += 4 + 4 *(_evelynn.Spells[1].CastInfo.SpellLevel -1);
 
         unit.AddStatModifier(StatsModifier);
         _haste = _evelynn.SkinID switch {
             _ => buff.StackCount switch {
-                2 => AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_passive_02",
+                2 => AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_passive_02",
                                        unit,                      buff.Duration),
-                3 => AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_passive_03",
+                3 => AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_passive_03",
                                        unit,                      buff.Duration),
-                4 => AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_passive_04",
+                4 => AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_passive_04",
                                        unit,                      buff.Duration),
-                _ => AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_passive_01",
+                _ => AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_passive_01",
                                        unit,                      buff.Duration)
             }
         };

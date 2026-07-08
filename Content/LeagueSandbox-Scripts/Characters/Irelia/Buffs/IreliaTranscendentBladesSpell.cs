@@ -25,7 +25,7 @@ internal class IreliaTranscendentBladesSpell : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff = buff;
-        _irelia = ownerSpell.CastInfo.Owner;
+        _irelia = buff.SourceUnit;
     }
 
     public void OnUpdate(Buff buff, float diff) {

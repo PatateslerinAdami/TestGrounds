@@ -23,7 +23,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            AddBuff("Silence", float.MaxValue, 1, ownerSpell, unit, ownerSpell.CastInfo.Owner);
+            AddBuff("Silence", float.MaxValue, 1, ownerSpell, unit, buff.SourceUnit);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -24,7 +24,7 @@ internal class ZedWPassiveBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _zed = ownerSpell.CastInfo.Owner;
+        _zed = buff.SourceUnit;
         var bonusAd = 5 + 5 * (ownerSpell.CastInfo.SpellLevel - 1);
         SetBuffToolTipVar(buff, 0, bonusAd);
         StatsModifier.AttackDamage.PercentBonus = 0.05f * ownerSpell.CastInfo.SpellLevel;

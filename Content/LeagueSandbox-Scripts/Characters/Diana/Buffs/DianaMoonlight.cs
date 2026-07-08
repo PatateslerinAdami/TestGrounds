@@ -24,7 +24,7 @@ public class DianaMoonlight : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _diana = ownerSpell.CastInfo.Owner;
+        _diana = buff.SourceUnit;
         _moonlightParticle = AddParticleTarget(_diana, unit, "Diana_Base_Q_Moonlight.troy", unit, buff.Duration);
         _bubbleRegion = AddUnitPerceptionBubble(unit, 480f, buff.Duration, _diana.Team, revealSpecificUnitOnly: unit);
     }

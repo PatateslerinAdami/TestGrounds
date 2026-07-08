@@ -26,7 +26,7 @@ namespace Buffs
             thisBuff = buff;
             if (!_isSubscribed)
             {
-                ApiEventManager.OnHitUnit.AddListener(this, ownerSpell.CastInfo.Owner, OnHitUnit, false);
+                ApiEventManager.OnHitUnit.AddListener(this, buff.SourceUnit, OnHitUnit, false);
                 _isSubscribed = true;
             }
             var stackcount = thisBuff.StackCount;

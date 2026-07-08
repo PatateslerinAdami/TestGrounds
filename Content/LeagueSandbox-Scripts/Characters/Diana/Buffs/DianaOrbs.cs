@@ -25,7 +25,7 @@ public class DianaOrbs  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _diana = ownerspell.CastInfo.Owner;
+        _diana = buff.SourceUnit;
         ownerspell.SetCooldown(0f, true);
         SealSpellSlot(_diana, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
     }

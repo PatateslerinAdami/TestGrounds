@@ -34,7 +34,7 @@ internal class JinxQ : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx  = ownerSpell.CastInfo.Owner;
+        _jinx  = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
         // Switch the Q HUD icon to Fishbones (IconIndex 0 = InventoryIcon / Jinx_Q1.dds;

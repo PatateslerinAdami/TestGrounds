@@ -28,7 +28,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _ezreal = ownerSpell.CastInfo.Owner;
+            _ezreal = buff.SourceUnit;
 
             unit.RemoveStatModifier(StatsModifier2);
             StatsModifier2.AttackSpeed.PercentBonus = 0.1f * buff.StackCount;

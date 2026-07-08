@@ -23,15 +23,15 @@ internal class EvelynnW : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn                          =  ownerSpell.CastInfo.Owner;
+        _evelynn                          =  buff.SourceUnit;
         _evelynn.SetStatus(StatusFlags.Ghosted, true);
         StatsModifier.MoveSpeed.PercentBonus += 0.3f + 0.1f *(_evelynn.Spells[1].CastInfo.SpellLevel -1);
 
         unit.AddStatModifier(StatsModifier);
         switch (_evelynn.SkinID) {
             default: _haste = 
-                AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_active_buf", unit, buff.Duration); 
-                AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Evelynn_W_cas", unit, buff.Duration); 
+                AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_active_buf", unit, buff.Duration); 
+                AddParticleTarget(_evelynn, _evelynn, "Evelynn_W_cas", unit, buff.Duration); 
                 break;
         }
         

@@ -26,7 +26,7 @@ internal class JudicatorHolyFervor : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _kayle = ownerSpell.CastInfo.Owner;
+        _kayle = buff.SourceUnit;
         _spell = ownerSpell;
         ApiEventManager.OnHitUnit.AddListener(this, _kayle, OnHit);
     }

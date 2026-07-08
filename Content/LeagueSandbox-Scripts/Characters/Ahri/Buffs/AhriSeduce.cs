@@ -24,7 +24,7 @@ internal class AhriSeduce : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ahri = ownerSpell.CastInfo.Owner;
+        _ahri = buff.SourceUnit;
         _unit = unit;
 
         // Charmed is DERIVED from BuffType.CHARM (AttackableUnit.RecomputeBuffEffects) — overlap-safe.

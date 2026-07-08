@@ -34,7 +34,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _sion = ownerSpell.CastInfo.Owner;
+            _sion = buff.SourceUnit;
             _buff = buff;
             // Wire (fxdump audit): W_Shield sits on C_Buffbone_Glb_Center_Loc (0x0ac0f283), scale 0.5;
             // Sion_Base_W_Sound.troy is the shield LOOP sound — spawned at CAST, FX_Killed when the

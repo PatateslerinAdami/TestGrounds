@@ -27,7 +27,7 @@ internal class JinxPassiveKill  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx = ownerSpell.CastInfo.Owner;
+        _jinx = buff.SourceUnit;
         _unit = unit;
         _buff = buff;
         StatsModifier.MoveSpeed.PercentBonus   = BaseMoveSpeedBonus;

@@ -27,7 +27,7 @@ public class JaxRelentlessAttack  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _jax = ownerspell.CastInfo.Owner;
+        _jax = buff.SourceUnit;
         _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
     }
 

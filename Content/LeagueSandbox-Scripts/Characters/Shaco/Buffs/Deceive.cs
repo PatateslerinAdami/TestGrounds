@@ -32,7 +32,7 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _owner.ExitStealth();
-            SealSpellSlot(ownerSpell.CastInfo.Owner, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);
+            SealSpellSlot(_owner, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);
         }
     }
 }

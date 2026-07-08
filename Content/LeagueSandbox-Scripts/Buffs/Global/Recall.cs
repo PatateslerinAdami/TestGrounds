@@ -36,7 +36,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            ApiEventManager.OnTakeDamage.RemoveListener(this, ownerSpell.CastInfo.Owner);
+            ApiEventManager.OnTakeDamage.RemoveListener(this, buff.SourceUnit);
         }
 
         private void OnTakeDamage(DamageData damageData)

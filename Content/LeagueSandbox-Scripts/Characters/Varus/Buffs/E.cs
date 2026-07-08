@@ -197,7 +197,7 @@ namespace Buffs
             StatsModifier.MoveSpeed.PercentBonus = -slowAmounts[level];
             unit.AddStatModifier(StatsModifier);
 
-            _gwParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_mortal_strike.troy", unit, 0.5f);
+            _gwParticle = AddParticleTarget(buff.SourceUnit, unit, "global_mortal_strike.troy", unit, 0.5f);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

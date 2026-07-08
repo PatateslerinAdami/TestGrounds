@@ -25,7 +25,7 @@ public class AhriFoxFire  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _ahri = ownerspell.CastInfo.Owner;
+        _ahri = buff.SourceUnit;
         ownerspell.SetCooldown(0f, true);
         SealSpellSlot(_ahri, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
     }

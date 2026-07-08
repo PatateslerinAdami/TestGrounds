@@ -31,7 +31,7 @@ internal class SivirE : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _sivir = ownerSpell.CastInfo.Owner;
+        _sivir = buff.SourceUnit;
         _ownerSpell = ownerSpell;
         _buff = buff;
         // Shield FX (Sivir_Base_E_shield.troy) is client-automatic: SivirE.luaobj sets it as

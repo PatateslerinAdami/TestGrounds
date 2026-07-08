@@ -21,7 +21,7 @@ internal class DarkBinding : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _morgana = ownerSpell.CastInfo.Owner;
+        _morgana = buff.SourceUnit;
         _snareParticle = AddParticleTarget(_morgana, unit, "Morgana_Base_Q_Tar", unit, buff.Duration);
         // Rooted derived from BuffType.SNARE.
     }

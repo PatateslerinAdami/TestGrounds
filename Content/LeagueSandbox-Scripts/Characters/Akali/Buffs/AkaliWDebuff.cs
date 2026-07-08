@@ -27,7 +27,7 @@ internal class AkaliWDebuff : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _unit    = unit;
-        _akali = ownerSpell.CastInfo.Owner;
+        _akali = buff.SourceUnit;
         var movementSlowAmount = buff.BuffVars.GetFloat("slowPercent");
         var attackSpeedSlowAmount = buff.BuffVars.GetFloat("attackSpeedSlowAmount");
         StatsModifier.MoveSpeed.PercentBonus   -= movementSlowAmount;

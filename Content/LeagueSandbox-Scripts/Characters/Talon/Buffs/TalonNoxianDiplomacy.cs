@@ -27,7 +27,7 @@ internal class TalonNoxianDiplomacyBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
         _p1    = AddParticleTarget(_talon, _talon, "talon_Q_on_hit_ready_01", _talon, buff.Duration, bone:"L_Hand");

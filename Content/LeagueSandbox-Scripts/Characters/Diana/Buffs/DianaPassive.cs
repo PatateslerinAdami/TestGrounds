@@ -30,7 +30,7 @@ public class DianaPassive : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _diana = ownerSpell.CastInfo.Owner;
+        _diana = buff.SourceUnit;
         _buff = buff;
         ApiEventManager.OnHitUnit.AddListener(this, _diana, OnHit);
         _diana.SetAutoAttackSpell("DianaBasicAttack3", false);

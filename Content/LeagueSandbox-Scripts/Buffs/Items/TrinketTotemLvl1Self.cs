@@ -47,7 +47,7 @@ internal class TrinketTotemLvl1Self : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Global_Trinket_Yellow_Death", unit);
+        AddParticleTarget(buff.SourceUnit, unit, "Global_Trinket_Yellow_Death", unit);
         _unit.TakeDamage(_unit, 5000f, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_RAW, DamageResultType.RESULT_NORMAL);
     }
 }

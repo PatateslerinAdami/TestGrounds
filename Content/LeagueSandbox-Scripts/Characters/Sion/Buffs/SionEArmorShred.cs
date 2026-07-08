@@ -22,7 +22,7 @@ internal class SionEArmorShred : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _sion = ownerSpell.CastInfo.Owner;
+        _sion = buff.SourceUnit;
         _p1 = AddParticleTarget(_sion, unit, "Global_Debuff_ArmorPen.troy", unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen);
         StatsModifier.Armor.PercentBonus -= 0.2f;
         unit.AddStatModifier(StatsModifier);

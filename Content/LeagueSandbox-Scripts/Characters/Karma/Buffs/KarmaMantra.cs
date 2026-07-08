@@ -25,7 +25,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _karma                               =  ownerSpell.CastInfo.Owner;
+            _karma                               =  buff.SourceUnit;
             ownerSpell.SetCooldown(0f, true);
             _p1 = AddParticleTarget(_karma, _karma, "Karma_Base_R_activate", _karma, buff.Duration);
             _p2 = AddParticleTarget(_karma, _karma, "Karma_Base_R_activate_overhead", _karma, buff.Duration);

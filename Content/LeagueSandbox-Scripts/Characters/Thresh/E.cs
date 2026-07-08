@@ -149,7 +149,7 @@ namespace Buffs
             StatsModifier.MoveSpeed.PercentBonus = slowAmount;
             unit.AddStatModifier(StatsModifier);
 
-            p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Global_Slow.troy", unit, buff.Duration);
+            p = AddParticleTarget(buff.SourceUnit, unit, "Global_Slow.troy", unit, buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -59,7 +59,7 @@ internal class ZedUltDash : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _zed                        = ownerSpell.CastInfo.Owner;
+        _zed                        = buff.SourceUnit;
         _target                     = unit;
         _spell                      = ownerSpell;
         _buff                       = buff;

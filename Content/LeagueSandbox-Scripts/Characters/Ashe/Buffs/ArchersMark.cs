@@ -25,7 +25,7 @@ public class ArchersMark : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _ashe = ownerSpell.CastInfo.Owner;
+        _ashe = buff.SourceUnit;
         _spell = ownerSpell;
         
     }

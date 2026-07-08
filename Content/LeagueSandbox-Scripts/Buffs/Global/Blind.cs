@@ -25,7 +25,7 @@ internal class Blind : IBuffGameScript {
         // Auto-removed on deactivate by Buff.DeactivateBuff. Mirrors Riot's IncFlatMissChanceMod(1.0).
         StatsModifier.MissChance.FlatBonus = 1.0f;
         unit.AddStatModifier(StatsModifier);
-        _blind = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Blind ", unit, buff.Duration, bone: "head");
+        _blind = AddParticleTarget(buff.SourceUnit, unit, "LOC_Blind ", unit, buff.Duration, bone: "head");
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { RemoveParticle(_blind); }

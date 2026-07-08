@@ -29,7 +29,7 @@ namespace Buffs
         
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _katarina = ownerSpell.CastInfo.Owner;
+            _katarina = buff.SourceUnit;
             ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage);
             _p = _katarina.SkinID switch {
                 9 => AddParticleTarget(unit, unit, "katarina_Skin09_E_buf", unit, 1.5f, flags: 0),

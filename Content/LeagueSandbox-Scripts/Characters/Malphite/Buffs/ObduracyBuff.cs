@@ -24,7 +24,7 @@ internal class ObduracyBuff : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite = ownerSpell.CastInfo.Owner;
+        _malphite = buff.SourceUnit;
         var spellLevel = ownerSpell.CastInfo.SpellLevel;
         
         if (spellLevel is < 1 or > 5) return;

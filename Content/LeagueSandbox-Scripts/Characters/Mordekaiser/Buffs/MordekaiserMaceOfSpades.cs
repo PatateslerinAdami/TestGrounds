@@ -28,7 +28,7 @@ internal class MordekaiserMaceOfSpades : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _mordekaiser                  = ownerSpell.CastInfo.Owner;
+        _mordekaiser                  = buff.SourceUnit;
         _spell = ownerSpell;
         _buff = buff;
         

@@ -29,7 +29,7 @@ internal class BlackShield : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _morgana = ownerSpell.CastInfo.Owner;
+        _morgana = buff.SourceUnit;
         _buff = buff;
         _blackShieldParticle = AddParticleTarget(_morgana, unit, "Morgana_Base_E_Tar", unit, buff.Duration,
             bone: "C_BUFFBONE_GLB_CENTER_LOC");

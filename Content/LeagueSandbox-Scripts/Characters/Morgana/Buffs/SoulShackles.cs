@@ -21,7 +21,7 @@ internal class SoulShackles : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _morgana       = ownerSpell.CastInfo.Owner;
+        _morgana       = buff.SourceUnit;
         StatsModifier.MoveSpeed.PercentBonus = -0.2f * ownerSpell.CastInfo.SpellLevel;
         unit.AddStatModifier(StatsModifier);
         _bubble = AddUnitPerceptionBubble(unit, unit.Stats.Size.Total, buff.Duration, _morgana.Team, true, unit);

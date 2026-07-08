@@ -31,7 +31,7 @@ internal class NamiPassive : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _nami                             = ownerSpell.CastInfo.Owner;
+        _nami                             = buff.SourceUnit;
         _baseValue                        = 40 + _nami.Stats.AbilityPower.Total * 0.1f;
         _unit                 = unit;
         StatsModifier.MoveSpeed.FlatBonus = _baseValue;

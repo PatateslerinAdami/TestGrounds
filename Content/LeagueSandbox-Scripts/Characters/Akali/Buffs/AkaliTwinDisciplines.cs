@@ -39,7 +39,7 @@ public class AkaliTwinDisciplines : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _akali = ownerSpell.CastInfo.Owner;
+        _akali = buff.SourceUnit;
         ApiEventManager.OnHitUnit.AddListener(this, _akali, OnHit);
         
     }

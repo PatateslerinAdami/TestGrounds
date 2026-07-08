@@ -33,7 +33,7 @@ namespace Buffs
             _buffRef = buff;
             _currentStacks = buff.StackCount;
 
-            UpdateParticle(unit, ownerSpell.CastInfo.Owner);
+            UpdateParticle(unit, buff.SourceUnit);
             if (!_isSubscribed)
             {
                 ApiEventManager.OnBeingSpellHit.AddListener(this, unit, OnBeingSpellHit, false);

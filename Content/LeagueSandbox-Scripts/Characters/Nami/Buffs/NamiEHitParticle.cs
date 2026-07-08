@@ -26,7 +26,7 @@ namespace Buffs {
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _nami        = ownerSpell.CastInfo.Owner;
+            _nami        = buff.SourceUnit;
             _hitParticle = AddParticleTarget(_nami, unit, "Nami_E_tar", unit);
         }
 

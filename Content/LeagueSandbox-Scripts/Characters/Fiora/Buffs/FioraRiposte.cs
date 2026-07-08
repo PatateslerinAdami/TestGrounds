@@ -34,7 +34,7 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _buff = buff;
-            _fiora = ownerSpell.CastInfo.Owner;
+            _fiora = buff.SourceUnit;
             ApiEventManager.OnPreTakeDamage.AddListener(this, _fiora, OnPreTakeDamage);
         }
 

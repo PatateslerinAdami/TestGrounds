@@ -22,7 +22,7 @@ internal class MalphiteShieldBeenHit : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite = ownerSpell.CastInfo.Owner;
+        _malphite = buff.SourceUnit;
         RemoveBuff(_malphite, "MalphiteShieldEffect");
         RemoveBuff(_malphite, "MalphiteShield");
     }

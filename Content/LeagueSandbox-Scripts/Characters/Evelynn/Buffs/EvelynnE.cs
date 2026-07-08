@@ -22,7 +22,7 @@ internal class EvelynnE : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn                          =  ownerSpell.CastInfo.Owner;
+        _evelynn                          =  buff.SourceUnit;
         _evelynn.SetStatus(StatusFlags.Ghosted, true);
         StatsModifier.AttackSpeed.PercentBonus += 0.6f + 0.15f *(ownerSpell.CastInfo.SpellLevel -1);
 

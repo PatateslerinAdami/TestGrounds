@@ -21,12 +21,12 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            SealSpellSlot(ownerSpell.CastInfo.Owner, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
+            SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            SealSpellSlot(ownerSpell.CastInfo.Owner, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, false);
+            SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, false);
         }
     }
 
@@ -41,7 +41,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            SetSpell(ownerSpell.CastInfo.Owner, "RivenTriCleaveBuffer", SpellSlotType.SpellSlots, 0).SetCooldown(0.1f);
+            SetSpell(buff.SourceUnit, "RivenTriCleaveBuffer", SpellSlotType.SpellSlots, 0).SetCooldown(0.1f);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

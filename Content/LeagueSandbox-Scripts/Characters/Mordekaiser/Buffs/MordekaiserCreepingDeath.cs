@@ -34,7 +34,7 @@ public class MordekaiserCreepingDeath : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _mordekaiser = ownerSpell.CastInfo.Owner;
+        _mordekaiser = buff.SourceUnit;
         _unit = unit;
 
         var ap = _mordekaiser.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;

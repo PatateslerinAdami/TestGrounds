@@ -22,7 +22,7 @@ internal class EvelynnYellowEye  : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn                          =  ownerSpell.CastInfo.Owner;
+        _evelynn                          =  buff.SourceUnit;
         _yellowEye = AddParticleTarget(_evelynn, unit, "Evelynn_YellowEye", unit, buff.Duration, bone: "C_BUFFBONE_GLB_HEAD_LOC", unitOnly: _evelynn); //Evelynn Yellow Eye Particle bone is important so that it stays overhead whcih is visually correct
     }
 

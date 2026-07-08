@@ -45,7 +45,7 @@ public class UdyrBearActivation : IBuffGameScript {
         };
         unit.SetStatus(StatusFlags.Ghosted, true);
         unit.AddStatModifier(StatsModifier);
-        AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Global_Haste.troy", unit,
+        AddParticleTarget(_udyr, _udyr, "Global_Haste.troy", unit,
                           buff.Duration,             bone: "BUFFBONE_GLB_GROUND_LOC");
     }
 

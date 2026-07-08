@@ -30,7 +30,7 @@ public class IreliaTranscendentBlades : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-       _irelia = ownerSpell.CastInfo.Owner;
+       _irelia = buff.SourceUnit;
        
        _irelia.GetSpell("IreliaTranscendentBlades").CastInfo.ManaCost = 100;
        ApiEventManager.OnSpellCast.AddListener(this, _irelia.GetSpell("IreliaTranscendentBlades"), OnSpellCastUlt);

@@ -43,7 +43,7 @@ internal class AatroxQDescent : IBuffGameScript {
     private bool _released;
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _aatrox = ownerSpell.CastInfo.Owner;
+        _aatrox = buff.SourceUnit;
         _spell = ownerSpell;
         var script = ownerSpell.Script as Spells.AatroxQ;
         var castStart = script?.CastStart ?? unit.Position;

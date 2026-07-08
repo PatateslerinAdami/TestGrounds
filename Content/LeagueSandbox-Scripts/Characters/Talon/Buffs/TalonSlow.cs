@@ -23,18 +23,18 @@ internal class TalonSlow : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _talon = ownerSpell.CastInfo.Owner;
+        _talon = buff.SourceUnit;
         _unit     = unit;
         
         // TalonRake.json Effect2: 20/25/30/35/40% by W level (duration 2s = Effect4).
         var wLevel = _talon.GetSpell("TalonRake")?.CastInfo.SpellLevel ?? 1;
         var slowPercentage = 0.15f + 0.05f * wLevel;
         
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
+        _slow  = AddParticleTarget(_talon, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
         
         StatsModifier.MoveSpeed.PercentBonus -= slowPercentage;
         unit.AddStatModifier(StatsModifier);
-        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+        ApplyAssistMarker(unit, _talon, 10.0f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

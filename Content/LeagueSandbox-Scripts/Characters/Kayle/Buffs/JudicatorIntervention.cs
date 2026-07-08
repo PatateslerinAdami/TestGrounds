@@ -23,7 +23,7 @@ internal class JudicatorIntervention : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _kayle = ownerSpell.CastInfo.Owner;
+        _kayle = buff.SourceUnit;
         _unit  = unit;
         SetStatus(unit, StatusFlags.Invulnerable, true);
         PlayAnimation( _kayle,"Spell4");

@@ -35,8 +35,8 @@ public class SwainBeamDamage : IBuffGameScript
         var movementSlowAmount = buff.BuffVars.GetFloat("slowPercent");
         StatsModifier.MoveSpeed.PercentBonus   -= movementSlowAmount;
         _unit.AddStatModifier(StatsModifier);
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
-        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+        _slow  = AddParticleTarget(_owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
+        ApplyAssistMarker(unit, _owner, 10.0f);
 
     }
 

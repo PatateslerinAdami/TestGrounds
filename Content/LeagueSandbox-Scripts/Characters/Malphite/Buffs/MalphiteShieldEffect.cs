@@ -26,7 +26,7 @@ internal class MalphiteShieldEffect : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite = ownerSpell.CastInfo.Owner;
+        _malphite = buff.SourceUnit;
         _shieldHealth  = _malphite.Stats.HealthPoints.Total * 0.1f;
         _graniteShield = new Shield(_malphite, _malphite, true, true, _shieldHealth, buff);
         unit.AddShield(_graniteShield);

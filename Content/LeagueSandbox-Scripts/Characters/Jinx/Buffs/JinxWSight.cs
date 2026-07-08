@@ -20,7 +20,7 @@ public class JinxWSight : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx = ownerSpell.CastInfo.Owner;
+        _jinx = buff.SourceUnit;
 
         // The perception bubble below already rendered before the vision rework; the only thing
         // missing was actual vision of the hit unit. RevealSpecificUnit fixes that: it sets the

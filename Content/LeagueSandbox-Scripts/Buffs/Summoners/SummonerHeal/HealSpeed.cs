@@ -21,8 +21,8 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_ss_heal_02", unit, buff.Duration);
-            AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_ss_heal_speedboost", unit, buff.Duration);
+            AddParticleTarget(buff.SourceUnit, unit, "global_ss_heal_02", unit, buff.Duration);
+            AddParticleTarget(buff.SourceUnit, unit, "global_ss_heal_speedboost", unit, buff.Duration);
 
             StatsModifier.MoveSpeed.PercentBonus = AreEmpoweredSumsEnabled() ? 100 : 0.3f;
             unit.AddStatModifier(StatsModifier);

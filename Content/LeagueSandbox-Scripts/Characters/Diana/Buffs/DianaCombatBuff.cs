@@ -23,7 +23,7 @@ public class DianaCombatBuff : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _diana = ownerSpell.CastInfo.Owner;
+        _diana = buff.SourceUnit;
         StatsModifier.AttackSpeed.PercentBaseBonus = 0.2f;
         _diana.AddStatModifier(StatsModifier);
     }

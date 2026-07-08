@@ -26,7 +26,7 @@ internal class JinxPassiveMarker : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx  = ownerSpell.CastInfo.Owner;
+        _jinx  = buff.SourceUnit;
         _unit  = unit;
         _spell = ownerSpell;
         _buff = buff;

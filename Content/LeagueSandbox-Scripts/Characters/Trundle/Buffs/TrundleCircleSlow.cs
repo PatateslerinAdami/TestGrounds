@@ -28,8 +28,8 @@ internal class TrundleCircleSlow : IBuffGameScript {
         _unit                              = unit;
         StatsModifier.MoveSpeed.PercentBonus   = -(0.34f + 0.04f * (ownerSpell.CastInfo.SpellLevel - 1));
         _unit.AddStatModifier(StatsModifier);
-        _slow  = AddParticleTarget(ownerSpell.CastInfo.Owner, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
-        ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+        _slow  = AddParticleTarget(buff.SourceUnit, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
+        ApplyAssistMarker(unit, buff.SourceUnit, 10.0f);
 
         // For attack speed and move speed mod changes:
         //ApiEventManager.OnUpdateBuffs.AddListener(this, buff, OnUpdateBuffs, false);

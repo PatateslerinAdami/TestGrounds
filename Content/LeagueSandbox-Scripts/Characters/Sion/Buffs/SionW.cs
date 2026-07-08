@@ -29,7 +29,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _sion = ownerSpell.CastInfo.Owner;
+            _sion = buff.SourceUnit;
             // changeFlags: Riot wire sends bitfield 0x6E when arming the detonate override
             // (and 0x0E when restoring, see OnDeactivate) — never 0.
             SetSpell(_sion, "SionWDetonate", SpellSlotType.SpellSlots, 1, changeFlags: 0x6E);

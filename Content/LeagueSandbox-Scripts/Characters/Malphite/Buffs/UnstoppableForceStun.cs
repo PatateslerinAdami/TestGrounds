@@ -24,7 +24,7 @@ namespace Buffs {
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _malphite = ownerSpell.CastInfo.Owner;
+            _malphite = buff.SourceUnit;
             _stunParticle = AddParticleTarget(_malphite, unit, "Malphite_Base_UnstoppableForce_stun.troy", unit);
             _tarParticle = AddParticleTarget(_malphite, unit, "Malphite_Base_UnstoppableForce_tar.troy",  unit);
             ForceMove(unit, new Vector2(unit.Position.X + 8f, unit.Position.Y + 8f), 8f, gravity: 10f);

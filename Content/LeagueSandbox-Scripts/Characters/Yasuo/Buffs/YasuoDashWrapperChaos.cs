@@ -23,7 +23,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            var owner = ownerSpell.CastInfo.Owner;
+            var owner = buff.SourceUnit;
             int charLevel = owner.Stats.Level;
             int trueELevel = 1;
             if (charLevel >= 13) trueELevel = 5;

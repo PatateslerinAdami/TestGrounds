@@ -24,7 +24,7 @@ internal class JudicatorHolyFervorDebuff : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _kayle                        =  ownerSpell.CastInfo.Owner;
+        _kayle                        =  buff.SourceUnit;
         _spell                        =  ownerSpell;
         StatsModifier.Armor.BaseBonus -= unit.Stats.Armor.Total * 0.03f;
         StatsModifier.MagicResist.BaseBonus -= unit.Stats.MagicResist.Total * 0.03f;

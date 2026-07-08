@@ -16,7 +16,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Yasuo_Base_R_impact_tar", unit, buff.Duration, 1, "BUFFBONE_GLB_GROUND_LOC");
+            AddParticleTarget(buff.SourceUnit, unit, "Yasuo_Base_R_impact_tar", unit, buff.Duration, 1, "BUFFBONE_GLB_GROUND_LOC");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }

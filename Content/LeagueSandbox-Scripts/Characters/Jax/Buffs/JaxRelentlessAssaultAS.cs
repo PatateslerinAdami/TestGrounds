@@ -27,7 +27,7 @@ public class JaxRelentlessAssaultAS  : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
         _buff                                      = buff;
-        _jax                                       = ownerspell.CastInfo.Owner;
+        _jax                                       = buff.SourceUnit;
         StatsModifier.AttackSpeed.PercentBaseBonus = _jax.Stats.Level switch {
             <4 => 0.04f,
             <7 => 0.06f,

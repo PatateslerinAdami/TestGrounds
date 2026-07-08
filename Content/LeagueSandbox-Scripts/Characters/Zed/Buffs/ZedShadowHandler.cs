@@ -40,7 +40,7 @@ internal class ZedShadowHandler : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _zed   = ownerSpell.CastInfo.Owner;
+        _zed   = buff.SourceUnit;
         _spell = ownerSpell;
     }
 

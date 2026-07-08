@@ -25,8 +25,8 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             unit.Stats.ArmorPenetration.PercentBonus += 0.5f;
-            swordGlow = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Yasuo_Base_R_SwordGlow", unit, buff.Duration, 1, "r_hand");
-            //swordGlow = AddParticleTarget(ownerSpell.CastInfo.Owner, ownerSpell.CastInfo.Owner, "Yasuo_Base_R_SwordGlow", ownerSpell.CastInfo.Owner, buff.Duration, 1, "R_PARENTING_HAND_LOC");
+            swordGlow = AddParticleTarget(buff.SourceUnit, unit, "Yasuo_Base_R_SwordGlow", unit, buff.Duration, 1, "r_hand");
+            //swordGlow = AddParticleTarget(buff.SourceUnit, buff.SourceUnit, "Yasuo_Base_R_SwordGlow", buff.SourceUnit, buff.Duration, 1, "R_PARENTING_HAND_LOC");
         }   
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

@@ -28,7 +28,7 @@ namespace Buffs
 {
     internal class FioraFlurryDummy : IBuffGameScript
     {
-        ObjAIBase Fiora;
+        private ObjAIBase _fiora;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
@@ -38,10 +38,10 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Fiora = ownerSpell.CastInfo.Owner as Champion;
-            Fiora.RemoveStatModifier(StatsModifier);
-            StatsModifier.AttackSpeed.PercentBonus = StatsModifier.MoveSpeed.PercentBonus += (0.05f + (Fiora.Spells[2].CastInfo.SpellLevel * 0.02f)) * buff.StackCount;
-            Fiora.AddStatModifier(StatsModifier);
+            _fiora = buff.SourceUnit;
+            _fiora.RemoveStatModifier(StatsModifier);
+            StatsModifier.AttackSpeed.PercentBonus = StatsModifier.MoveSpeed.PercentBonus += (0.05f + (_fiora.Spells[2].CastInfo.SpellLevel * 0.02f)) * buff.StackCount;
+            _fiora.AddStatModifier(StatsModifier);
         }
     }
 }

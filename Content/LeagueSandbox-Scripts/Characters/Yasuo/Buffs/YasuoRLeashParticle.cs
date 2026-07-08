@@ -18,7 +18,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            leashParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Yasuo_Base_R_Beam", unit, buff.Duration);
+            leashParticle = AddParticleTarget(buff.SourceUnit, unit, "Yasuo_Base_R_Beam", unit, buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

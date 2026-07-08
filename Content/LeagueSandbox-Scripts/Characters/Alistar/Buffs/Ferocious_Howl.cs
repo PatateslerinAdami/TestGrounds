@@ -26,7 +26,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _alistar = ownerSpell.CastInfo.Owner;
+            _alistar = buff.SourceUnit;
             var buffs = _alistar.GetBuffs();
             foreach (var buff1 in buffs.Where(buff1 => buff1.BuffType is BuffType.BLIND 
                                                                          or BuffType.KNOCKBACK 

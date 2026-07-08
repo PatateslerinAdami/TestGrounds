@@ -31,7 +31,7 @@ internal class MordekaiserCOTGDot : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _mordekaiser = ownerSpell.CastInfo.Owner;
+        _mordekaiser = buff.SourceUnit;
         _unit        = unit;
         _buff        = buff;
         _spell       = ownerSpell;
@@ -39,12 +39,12 @@ internal class MordekaiserCOTGDot : IBuffGameScript {
         _p = AddParticleTarget(_spell.CastInfo.Owner, _unit, "mordekeiser_cotg_tar", _unit, buff.Duration, flags: (FXFlags) 32);
 
         var basePercentDamage = 0.24f + 0.05f * (ownerSpell.CastInfo.SpellLevel - 1);
-        var ap                = ownerSpell.CastInfo.Owner.Stats.AbilityPower.Total / 50f *  2f * 0.01f;
+        var ap                = _mordekaiser.Stats.AbilityPower.Total / 50f *  2f * 0.01f;
         _damage            = unit.Stats.HealthPoints.Total                      * (basePercentDamage + ap);
 
         _data = unit.TakeDamage(_mordekaiser, _damage/2, DamageType.DAMAGE_TYPE_MAGICAL,
                                 DamageSource.DAMAGE_SOURCE_SPELL, false);
-        ownerSpell.CastInfo.Owner.Stats.CurrentHealth += _data.PostMitigationDamage;
+        _mordekaiser.Stats.CurrentHealth += _data.PostMitigationDamage;
     }
 
     private void OnTargetDeath(DeathData data) {

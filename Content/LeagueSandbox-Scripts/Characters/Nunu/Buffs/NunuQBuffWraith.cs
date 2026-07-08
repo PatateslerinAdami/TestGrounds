@@ -41,7 +41,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _nunu = ownerSpell.CastInfo.Owner;
+            _nunu = buff.SourceUnit;
             _spell = ownerSpell;
             // OnKillUnit fires for ANY unit this champion kills (minions/monsters/champions).
             // OnKill only fires when a CHAMPION victim dies — wrong event for "killing a unit".

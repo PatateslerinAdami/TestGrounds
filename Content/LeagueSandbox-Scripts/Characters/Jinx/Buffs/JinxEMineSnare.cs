@@ -21,10 +21,10 @@ internal class JinxEMineSnare : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _jinx = ownerSpell.CastInfo.Owner;
+        _jinx = buff.SourceUnit;
         AddBuff("JinxEMineVision", 1.5f, 1, ownerSpell, unit, _jinx);
         switch (_jinx.SkinID) {
-            default: _haste = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Jinx_E_Mine_Debuff", unit,
+            default: _haste = AddParticleTarget(_jinx, unit, "Jinx_E_Mine_Debuff", unit,
                                                 buff.Duration,             bone: "BUFFBONE_GLB_GROUND_LOC"); break;
         }
         

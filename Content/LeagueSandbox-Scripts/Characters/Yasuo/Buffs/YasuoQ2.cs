@@ -27,7 +27,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            var caster = ownerSpell.CastInfo.Owner;
+            var caster = buff.SourceUnit;
             SetSpell(caster, "YasuoQ3W", SpellSlotType.SpellSlots, 0);
 
             int charLevel = caster.Stats.Level;

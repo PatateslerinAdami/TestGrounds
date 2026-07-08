@@ -33,14 +33,14 @@ namespace Buffs
             _ownerSpell = ownerSpell;
 
             _hitUnits.Add(unit.NetId);
-            p = AddParticle(ownerSpell.CastInfo.Owner, unit, "sion_base_e_minion", default, lifetime: 5f, size: 2f);
+            p = AddParticle(buff.SourceUnit, unit, "sion_base_e_minion", default, lifetime: 5f, size: 2f);
         }
 
         public void OnUpdate(Buff buff, float diff)
         {
             if (_unit == null || _ownerSpell == null) return;
 
-            var nearbyUnits = EnumerateValidUnitsInRange(_ownerSpell.CastInfo.Owner, _unit.Position, 150f, true,
+            var nearbyUnits = EnumerateValidUnitsInRange(buff.SourceUnit, _unit.Position, 150f, true,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
                 SpellDataFlags.AffectNeutral);
             foreach (var target in nearbyUnits)
@@ -48,7 +48,7 @@ namespace Buffs
                 if (_hitUnits.Contains(target.NetId)) continue;
                 _hitUnits.Add(target.NetId);
 
-                AddParticleTarget(_ownerSpell.CastInfo.Owner, target, "sion_base_e_buf_champ.troy", target,
+                AddParticleTarget(buff.SourceUnit, target, "sion_base_e_buf_champ.troy", target,
                     lifetime: 4f);
 
                 // TODO: Apply the pass-through damage and armor shred/slow buff here

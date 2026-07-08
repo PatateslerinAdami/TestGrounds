@@ -24,7 +24,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; } = new();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _nunu = ownerSpell.CastInfo.Owner;
+            _nunu = buff.SourceUnit;
             StatsModifier.AttackSpeed.PercentBonus = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100f;
             StatsModifier.MoveSpeed.PercentBonus =
                 ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel]/100f;

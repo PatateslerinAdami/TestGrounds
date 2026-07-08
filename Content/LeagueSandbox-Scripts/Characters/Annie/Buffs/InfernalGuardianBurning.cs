@@ -26,7 +26,7 @@ internal class InfernalGuardianBurning : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _annie = ownerSpell.CastInfo.Owner;
+        _annie = buff.SourceUnit;
         _spell = ownerSpell;
         // ownerSpell is the InfernalGuardian (summon) spell. R.cs zeroed the guide spell's cooldown so
         // pet-steering works, which means the 120s summon cooldown no longer lives on any slot. Capture

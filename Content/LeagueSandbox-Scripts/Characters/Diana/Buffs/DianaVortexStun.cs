@@ -31,7 +31,7 @@ internal class DianaVortexStun : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _diana = ownerSpell.CastInfo.Owner;
+        _diana = buff.SourceUnit;
         _spell = ownerSpell;
         AddParticleTarget(_diana, unit, "Diana_Base_E_Tar.troy", unit);
         _bubble = AddUnitPerceptionBubble(unit, 480f, buff.Duration, _diana.Team, revealSpecificUnitOnly: unit);

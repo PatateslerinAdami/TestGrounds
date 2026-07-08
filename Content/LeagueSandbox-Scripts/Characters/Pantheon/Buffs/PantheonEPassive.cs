@@ -30,7 +30,7 @@ public class PantheonEPassive : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _pantheon = ownerSpell.CastInfo.Owner;
+        _pantheon = buff.SourceUnit;
         ApiEventManager.OnPreDealDamage.AddListener(this, _pantheon, OnPreDealDamage);
     }
 

@@ -20,8 +20,8 @@ namespace Buffs
 {
     internal class FioraFlurry : IBuffGameScript
     {
-        Buff Flurry;
-        ObjAIBase Fiora;
+        private Buff _flurry;
+        ObjAIBase _fiora;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
@@ -30,20 +30,20 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            Flurry = buff;
-            Fiora = ownerSpell.CastInfo.Owner as Champion;
-            ApiEventManager.OnKill.AddListener(this, Fiora, OnKill, false);
-            ApiEventManager.OnLaunchAttack.AddListener(this, Fiora, OnAttackAndDash, false);
-            ApiEventManager.OnSpellPostCast.AddListener(this, Fiora.Spells[0], OnAttackAndDash, false);
-            StatsModifier.AttackSpeed.PercentBonus = StatsModifier.AttackSpeed.PercentBonus += (45f + (Fiora.Spells[2].CastInfo.SpellLevel * 15f)) / 100f;
+            _flurry = buff;
+            _fiora = buff.SourceUnit as Champion;
+            ApiEventManager.OnKill.AddListener(this, _fiora, OnKill, false);
+            ApiEventManager.OnLaunchAttack.AddListener(this, _fiora, OnAttackAndDash, false);
+            ApiEventManager.OnSpellPostCast.AddListener(this, _fiora.Spells[0], OnAttackAndDash, false);
+            StatsModifier.AttackSpeed.PercentBonus = StatsModifier.AttackSpeed.PercentBonus += (45f + (_fiora.Spells[2].CastInfo.SpellLevel * 15f)) / 100f;
             unit.AddStatModifier(StatsModifier);
         }
-        public void OnKill(DeathData deathData) { Fiora.Spells[2].SetCooldown(0); }
+        public void OnKill(DeathData deathData) { _fiora.Spells[2].SetCooldown(0); }
         public void OnAttackAndDash(Spell spell)
         {
-            if (Flurry != null && Flurry.StackCount != 0 && !Flurry.Elapsed())
+            if (_flurry != null && _flurry.StackCount != 0 && !_flurry.Elapsed())
             {
-                AddBuff("FioraFlurryDummy", 3.0f, 1, spell, Fiora, Fiora);
+                AddBuff("FioraFlurryDummy", 3.0f, 1, spell, _fiora, _fiora);
             }
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

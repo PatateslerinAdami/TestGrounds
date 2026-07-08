@@ -30,11 +30,11 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _nami = ownerSpell.CastInfo.Owner;
+            _nami = buff.SourceUnit;
             _unit = unit;
             _tideCallersBlessing = ownerSpell;
             _buff = buff;
-            ApplyAssistMarker(unit, ownerSpell.CastInfo.Owner, 10.0f);
+            ApplyAssistMarker(unit, _nami, 10.0f);
             ApiEventManager.OnHitUnit.AddListener(this, unit as ObjAIBase, OnHit);
             _tidecallersBlessingParticle = AddParticleTarget(_nami, unit, "Nami_E_buf", unit, buff.Duration);
             _3 = AddParticleTarget(_nami, unit, "Nami_E_Counter3", unit, buff.Duration, bone: "C_BUFFBONE_GLB_CHEST_LOC");

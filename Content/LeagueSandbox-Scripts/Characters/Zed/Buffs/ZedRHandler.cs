@@ -34,7 +34,7 @@ internal class ZedRHandler : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff          = buff;
-        _zed           = ownerSpell.CastInfo.Owner;
+        _zed           = buff.SourceUnit;
         _spell         = ownerSpell;
         _zedUlt = _zed.GetSpell("ZedUlt");
         _level         = _zedUlt.CastInfo.SpellLevel;

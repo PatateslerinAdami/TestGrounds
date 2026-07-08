@@ -27,14 +27,14 @@ internal class MordekaiserCOTGPet : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff        = buff;
-        _mordekaiser = ownerSpell.CastInfo.Owner;
+        _mordekaiser = buff.SourceUnit;
         AddBuff("MordekaiserCOTGSelf", buff.Duration, 1, ownerSpell, _mordekaiser,
                 _mordekaiser);
         AddBuff("MordekaiserCOTGPetBuff", buff.Duration, 1, ownerSpell, unit, _mordekaiser);
-        ownerSpell.CastInfo.Owner.SetSpell("MordekaiserCotGGuide", 3, true);
+        _mordekaiser.SetSpell("MordekaiserCotGGuide", 3, true);
 
-        _p  = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "mordekaiser_cotg_ring", unit, buff.Duration);
-        _p2 = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "mordekeiser_cotg_skin", unit, buff.Duration);
+        _p  = AddParticleTarget(_mordekaiser, unit, "mordekaiser_cotg_ring", unit, buff.Duration);
+        _p2 = AddParticleTarget(_mordekaiser, unit, "mordekeiser_cotg_skin", unit, buff.Duration);
 
         OnDeath.AddListener(this, unit, OnGhostDeath, true);
         OnHitUnit.AddListener(this, unit as ObjAIBase, OnHit);
@@ -47,8 +47,8 @@ internal class MordekaiserCOTGPet : IBuffGameScript {
         RemoveParticle(_p);
         RemoveParticle(_p2);
 
-        RemoveBuff(ownerSpell.CastInfo.Owner, "MordekaiserCOTGSelf");
-        var spell = ownerSpell.CastInfo.Owner.SetSpell("MordekaiserChildrenOfTheGrave", 3, true);
+        RemoveBuff(buff.SourceUnit, "MordekaiserCOTGSelf");
+        var spell = buff.SourceUnit.SetSpell("MordekaiserChildrenOfTheGrave", 3, true);
         //Check if this is done on-script or should be handled automatically
         spell.SetCooldown(spell.GetCooldown() - buff.TimeElapsed);
     }

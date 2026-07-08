@@ -22,7 +22,7 @@ internal class SionESlow : IBuffGameScript {
     public StatsModifier StatsModifier  { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _sion = ownerSpell.CastInfo.Owner;
+        _sion = buff.SourceUnit;
         _p1 = AddParticleTarget(_sion, unit, unit is Champion ? "sion_base_e_buf_champ.troy" : "Sion_Base_E_Buf.troy", unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
         StatsModifier.MoveSpeed.PercentBonus -= ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100;
         unit.AddStatModifier(StatsModifier);

@@ -24,7 +24,7 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-            _karma                               =  ownerSpell.CastInfo.Owner;
+            _karma                               =  buff.SourceUnit;
             // Rooted derived from BuffType.SNARE.
             AddParticleTarget(_karma, unit,   "Karma_Base_W_tar",   unit,   buff.Duration);
             AddParticleTarget(_karma, _karma, "Karma_Base_W_tar02", unit, buff.Duration);

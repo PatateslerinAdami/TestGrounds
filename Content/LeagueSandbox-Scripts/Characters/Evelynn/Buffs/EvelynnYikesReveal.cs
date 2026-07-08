@@ -22,7 +22,7 @@ internal class EvelynnYikesReveal   : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _evelynn                          =  ownerSpell.CastInfo.Owner;
+        _evelynn                          =  buff.SourceUnit;
         _exclamationMark = AddParticleTarget(_evelynn, _evelynn, "Evelynn-Yikes", _evelynn, size: 0.8f, lifetime: buff.Duration, bone: "C_BUFFBONE_GLB_HEAD_LOC", teamOnly: _evelynn.Team);
     }
 

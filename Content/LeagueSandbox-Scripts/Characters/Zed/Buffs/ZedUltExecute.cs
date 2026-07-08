@@ -31,7 +31,7 @@ internal class ZedUltExecute : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff   = buff;
         _unit   = unit;
-        _zed    = ownerSpell.CastInfo.Owner;
+        _zed    = buff.SourceUnit;
         _spell  = ownerSpell;
         _damage = _zed.Stats.AttackDamage.Total;
         _zed.SetStatus(StatusFlags.Ghosted, true);

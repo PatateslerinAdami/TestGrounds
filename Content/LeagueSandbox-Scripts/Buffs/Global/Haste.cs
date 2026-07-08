@@ -26,8 +26,8 @@ namespace Buffs
         {
             StatsModifier.MoveSpeed.PercentBonus = buff.BuffVars.GetFloat("hastePercent");
             unit.AddStatModifier(StatsModifier);
-            _hasteParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Global_Haste", unit, buff.Duration);
-            _hasteParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "Global_Haste_buf", unit, buff.Duration);
+            _hasteParticle = AddParticleTarget(buff.SourceUnit, unit, "Global_Haste", unit, buff.Duration);
+            _hasteParticle = AddParticleTarget(buff.SourceUnit, unit, "Global_Haste_buf", unit, buff.Duration);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)

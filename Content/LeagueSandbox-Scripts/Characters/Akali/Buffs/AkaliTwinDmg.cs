@@ -41,7 +41,7 @@ public class AkaliTwinDmg : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _buff  = buff;
-        _akali = ownerSpell.CastInfo.Owner;
+        _akali = buff.SourceUnit;
         ApiEventManager.OnUpdateStats.AddListener(_akali, _akali, UpdateStats);
         _p1 = AddParticleTarget(_akali, _akali, "akali_twinDisciplines_DMG_buf", _akali, buff.Duration, bone: "L_BUFFBONE_GLB_HAND_LOC");
     }

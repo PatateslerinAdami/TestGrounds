@@ -24,7 +24,7 @@ internal class GrievousWound : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         ApiEventManager.OnHeal.AddListener(this, unit, OnReceiveHeal);
-        _grievousWoundsoverHeadParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_grievousWound_tar", unit,
+        _grievousWoundsoverHeadParticle = AddParticleTarget(buff.SourceUnit, unit, "global_grievousWound_tar", unit,
             buff.Duration,             bone: "C_BUFFBONE_GLB_OVERHEAD_LOC");
     }
 

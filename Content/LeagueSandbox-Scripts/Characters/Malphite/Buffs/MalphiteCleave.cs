@@ -27,7 +27,7 @@ internal class MalphiteCleave : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _malphite = ownerSpell.CastInfo.Owner;
+        _malphite = buff.SourceUnit;
         ApiEventManager.OnHitUnit.AddListener(this, _malphite, OnHit);
         
     }

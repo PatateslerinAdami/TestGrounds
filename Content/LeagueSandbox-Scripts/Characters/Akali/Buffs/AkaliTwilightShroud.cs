@@ -25,11 +25,11 @@ public class AkaliWStealth : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         var isFirstCast = buff.BuffVars.GetBool("isFirstCast");
-        _akali                             = ownerSpell.CastInfo.Owner;
+        _akali                             = buff.SourceUnit;
         SetStatus(_akali, StatusFlags.RevealSpecificUnit, false);
         SetStatus(_akali, StatusFlags.Stealthed, true);
         SetStatus(_akali, StatusFlags.Ghosted,   true);
-        _p1 = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "akali_twilight_buf", unit, buff.Duration);
+        _p1 = AddParticleTarget(buff.SourceUnit, unit, "akali_twilight_buf", unit, buff.Duration);
         if (!isFirstCast) {
             _p2 = AddParticlePos(_akali, "TEMP_AkaliPoof2", unit.Position, unit.Position, buff.Duration, enemyParticle: "TEMP_AkaliPoof");
         }

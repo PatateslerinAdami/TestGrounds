@@ -37,7 +37,7 @@ public class KarmaSolKimShield : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
         _buff  = buff;
-        _karma = ownerspell.CastInfo.Owner;
+        _karma = buff.SourceUnit;
         _unit  = unit;
         var ap    = _karma.Stats.AbilityPower.Total * 0.5f;
         _shieldHealth  = 80f + 40 * (_karma.GetSpell("KarmaSolKimShield").CastInfo.SpellLevel - 1) + ap;

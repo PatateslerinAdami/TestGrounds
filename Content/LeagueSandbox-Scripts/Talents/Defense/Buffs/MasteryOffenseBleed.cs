@@ -29,7 +29,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _owner = ownerSpell.CastInfo.Owner;
+            _owner = buff.SourceUnit;
             _unit = unit;
         }
 
