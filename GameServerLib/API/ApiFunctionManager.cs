@@ -2380,7 +2380,7 @@ namespace LeagueSandbox.GameServer.API
             return result;
         }
 
-        public static Vector2 GetMovePositionByCollisionOffset(AttackableUnit unit, AttackableUnit target, float offset, bool isBehind = false)
+        public static Vector2 GetMovePositionByCollisionOffset(AttackableUnit unit, AttackableUnit target, float offset = 0f, bool isBehind = false)
         {
             float overshoot = unit.CollisionRadius + target.CollisionRadius + offset;
             if (isBehind)

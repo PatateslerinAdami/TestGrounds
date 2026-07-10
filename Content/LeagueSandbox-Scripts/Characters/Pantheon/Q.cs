@@ -14,7 +14,6 @@ namespace Spells;
 public class PantheonQ : ISpellScript
 {
     private ObjAIBase _pantheon;
-    private Spell _spell;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
@@ -22,15 +21,15 @@ public class PantheonQ : ISpellScript
         {
             Type = MissileType.Target
         },
-        TriggersSpellCasts = true
+        TriggersSpellCasts = true,
+        IsDamagingSpell = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _pantheon = owner;
-        _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate);
-        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -40,25 +39,18 @@ public class PantheonQ : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        var owner = spell.CastInfo.Owner;
-        AddParticle(owner, owner, "pantheon_spearShot_cas", owner.Position);
+        AddParticle(_pantheon, _pantheon, "pantheon_spearShot_cas", _pantheon.Position);
     }
 
-    public void OnDeactivate(ObjAIBase owner, Spell spell)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        ApiEventManager.OnSpellHit.RemoveListener(this, _spell, TargetExecute);
-    }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
-    {
-        var owner = spell.CastInfo.Owner;
+        var ad = _pantheon.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ad;
+        var critDmg = dmg * _pantheon.Stats.CriticalDamage.Total;
 
-        var ad = owner.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
-        var dmg = 75 + 40 * (spell.CastInfo.SpellLevel - 1) + ad;
-        var critDmg = dmg * 1.25f;
-
-        AddParticleTarget(owner, target, "Pantheon_Base_Q_tar.troy", target, bone: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
-        var crit = owner.HasBuff("PantheonEPassive") &&
+        AddParticleTarget(_pantheon, target, "Pantheon_Base_Q_tar.troy", target, bone: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
+        var crit = _pantheon.HasBuff("PantheonEPassive") &&
                    target.Stats.CurrentHealth < target.Stats.HealthPoints.Total * 0.15f;
         target.TakeDamage(
             _pantheon,

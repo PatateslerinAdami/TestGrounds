@@ -21,7 +21,6 @@ public class CharScriptPantheon : ICharScript
     {
         _pantheon = owner;
         ApiEventManager.OnSpellCast.AddListener(this, owner.GetSpell("PantheonQ"), OnSpellsCast);
-        ApiEventManager.OnSpellCast.AddListener(this, owner.GetSpell("PantheonW"), OnSpellsCast);
         ApiEventManager.OnSpellCast.AddListener(this, owner.GetSpell("PantheonE"), OnSpellsCast);
         ApiEventManager.OnSpellChannel.AddListener(this, owner.GetSpell("PantheonRJump"), OnSpellsCast);
         ApiEventManager.OnLaunchAttack.AddListener(this, owner, OnSpellsCast);

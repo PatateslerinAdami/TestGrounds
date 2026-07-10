@@ -42,8 +42,8 @@ public class PantheonW : ISpellScript
     {
         
         AddBuff("Stun", 1f, 1, spell, target, _pantheon);
-        AddBuff("PantheonPassiveShield", 25000f, 1, spell, _pantheon, _pantheon, true);
         _pantheon.RemoveBuffsWithName("PantheonPassiveCounter");
+        AddBuff("PantheonPassiveShield", 25000f, 1, spell, _pantheon, _pantheon, true);
         AddParticleTarget(_pantheon, target, "Pantheon_Base_W_tar", target, flags: FXFlags.SimulateWhileOffScreen);
         var ap = _pantheon.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
@@ -63,13 +63,13 @@ public class PantheonW : ISpellScript
 
     public void OnSpellPostCast(Spell spell)
     {
-        if (_target is not { IsDead: false })
+        if (_target.IsDead)
         {
             return;
         }
 
         var current = _pantheon.Position;
-        var targetPos = _target.Position;
+        var targetPos = GetMovePositionByCollisionOffset(_pantheon, _target);
         var dist = Math.Min(Vector2.Distance(current, targetPos), MaxLeapRange);
         var (gravityVar, speedVar) = GetLeapParameters(dist);
 
@@ -86,8 +86,6 @@ public class PantheonW : ISpellScript
         
         ApiEventManager.OnMoveSuccess.AddListener(this, _pantheon, OnMoveEnd);
         ForceMove(_pantheon, targetPos, speedVar, gravityVar, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, true, ForceMovementOrdersType.CANCEL_ORDER, "PantheonW");
-        ForceMoveToUnit(_pantheon, _target, speedVar, travelTime: -1f, gravity: gravityVar,
-            orders: ForceMovementOrdersType.CANCEL_ORDER);
     }
 
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters)
