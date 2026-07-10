@@ -479,17 +479,23 @@ namespace LeagueSandbox.GameServer.API
         /// (Riot <c>GetParam("TimeBetweenExecutions")</c>); if <paramref name="tickTimeVar"/> is set
         /// and its key holds a value in <paramref name="tickTimeTable"/>, that value OVERRIDES the base
         /// (Riot TickTimeVar). The override is re-read every call, so the cadence can change at runtime.</item>
+        /// <item><paramref name="maxTicks"/> caps the TOTAL number of fires (the executeImmediately fire
+        /// counts); pass 0 for unlimited. Riot's BBExecutePeriodically has NO cap — scripts count
+        /// caller-side (e.g. Pantheon E's <c>ticksRemaining</c>), so this is a LeagueSandbox convenience;
+        /// the count lives beside the anchor, sharing the table's lifecycle (auto-reset per cast for
+        /// InstanceVars / per buff for BuffVars).</item>
         /// </list>
         /// </summary>
         /// <param name="trackTable">Instance VariableTable holding the schedule anchor (Riot TrackTimeVarTable).</param>
         /// <param name="trackVar">Key under which the anchor timestamp is stored (Riot TrackTimeVar).</param>
         /// <param name="intervalMs">Base cadence in ms (Riot GetParam TimeBetweenExecutions; GameTime is ms).</param>
         /// <param name="executeImmediately">Fire once on the first call (Riot ExecuteImmediately).</param>
+        /// <param name="maxTicks">Cap on total fires (0 = unlimited). LeagueSandbox extension ≙ Riot's caller-side counter.</param>
         /// <param name="action">The effect to run per tick (Riot SubBlocks).</param>
         /// <param name="tickTimeTable">Optional table holding a runtime interval override (Riot TickTimeVarTable).</param>
         /// <param name="tickTimeVar">Optional key of the runtime interval override (Riot TickTimeVar); null = no override.</param>
         public static void ExecutePeriodically(
-            VariableTable trackTable, string trackVar, float intervalMs, bool executeImmediately, Action action,
+            VariableTable trackTable, string trackVar, float intervalMs, bool executeImmediately, int maxTicks, Action action,
             VariableTable tickTimeTable = null, string tickTimeVar = null)
         {
             float now = ApiMapFunctionManager.GameTime();
@@ -503,19 +509,36 @@ namespace LeagueSandbox.GameServer.API
                 interval = tickOverride;
             }
 
+            // maxTicks cap (LeagueSandbox extension — not in Riot's BB; Riot caps caller-side via a
+            // separate counter like Pantheon E's ticksRemaining). The fire count is stored next to the
+            // anchor, so it auto-resets with trackTable's lifecycle (fresh per cast/per buff).
+            string countKey = trackVar + "$n";
+            int fired = trackTable.GetInt(countKey);
+            if (maxTicks > 0 && fired >= maxTicks)
+            {
+                return;
+            }
+
+            void Fire()
+            {
+                action();
+                fired++;
+                trackTable.Set(countKey, fired);
+            }
+
             if (!trackTable.TryGet<float>(trackVar, out var track))
             {
                 track = now;
                 trackTable.Set(trackVar, track);
                 if (executeImmediately)
                 {
-                    action();
+                    Fire();
                 }
             }
-            if (track + interval <= now)
+            if ((maxTicks == 0 || fired < maxTicks) && track + interval <= now)
             {
                 trackTable.Set(trackVar, track + interval);
-                action();
+                Fire();
             }
         }
 

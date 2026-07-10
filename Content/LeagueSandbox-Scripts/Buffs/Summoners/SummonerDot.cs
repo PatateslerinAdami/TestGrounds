@@ -42,7 +42,7 @@ namespace Buffs
 
         public void OnUpdate(Buff buff, float diff)
         {
-            ExecutePeriodically(_buff.BuffVars, "igniteTick", 1000f, false, () =>
+            ExecutePeriodically(_buff.BuffVars, "igniteTick", 1000f, false, 0, () =>
             {
                 _target.TakeDamage(_owner, _damage, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_SPELL, false);
             });

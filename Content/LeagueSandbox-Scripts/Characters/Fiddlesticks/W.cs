@@ -151,7 +151,7 @@ namespace Spells
             // S1 BBExecutePeriodically(TimeBetweenExecutions=0.5, TrackTimeVar="DrainExecuted",
             // TrackTimeVarTable="InstanceVars", ExecuteImmediately=false).
             ExecutePeriodically(_spell.CastInfo.InstanceVars, "DrainExecuted", TICK_INTERVAL_MS,
-                executeImmediately: false, DealTick);
+                executeImmediately: false, maxTicks: 0, DealTick);
         }
 
         private void DealTick()

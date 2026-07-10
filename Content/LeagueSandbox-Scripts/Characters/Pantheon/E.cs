@@ -98,7 +98,10 @@ public class PantheonEChannel : ISpellScript
     
     public void OnSpellChannelUpdate(Spell spell, float diff)
     {
-        ExecutePeriodically(spell.CastInfo.InstanceVars, "pantheonETick", 250f, false, () =>
+        // Riot Pantheon_Heartseeker: 3 strikes at t=0/0.25/0.5 (immediate + 2), capped by a dedicated
+        // counter (ticksRemaining=2 + the immediate cast), NOT by the cadence var. maxTicks:3 is our
+        // faithful equivalent of ticksRemaining; executeImmediately:true is Riot's OnBuffActivate hit.
+        ExecutePeriodically(spell.CastInfo.InstanceVars, "pantheonETick", 250f, true, maxTicks: 3, () =>
         {
             // Cone + target flags from SpellData (PantheonEChannel: 35° half, 675u, LockConeToPlayer=0
             // → direction = cast point − caster, fixed since Pantheon is rooted via StopMovement during

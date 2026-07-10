@@ -35,7 +35,7 @@ namespace Buffs
 
         public void OnUpdate(Buff buff, float diff)
         {
-            ExecutePeriodically(buff.BuffVars, "termors2Ticker", 1000f, false, () =>
+            ExecutePeriodically(buff.BuffVars, "termors2Ticker", 1000f, false, 0, () =>
             {
                 Targets(buff.TargetUnit, buff.OriginSpell);
             });

@@ -51,7 +51,7 @@ namespace Buffs
             // structures are hit; the double-damage test (AffectEnemies|AffectMinions) matches only
             // enemy minions, per S1's PercentOfAttack=2 minion branch. Damage base uses the current
             // patch's 6+level curve (the S1 10..23 rank table was changed in a later patch).
-            ExecutePeriodically(buff.BuffVars, "trampleTick", IntervalMs, executeImmediately: true, () => {
+            ExecutePeriodically(buff.BuffVars, "trampleTick", IntervalMs, executeImmediately: true, maxTicks: 0, () => {
                 var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
                 var enemiesInRange = GetUnitsInRange(_alistar, _alistar.Position, 300f, true,
                                                      SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
