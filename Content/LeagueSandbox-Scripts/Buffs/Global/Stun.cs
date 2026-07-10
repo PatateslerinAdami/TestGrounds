@@ -11,6 +11,7 @@ namespace Buffs
 {
     internal class Stun : IBuffGameScript
     {
+        private Particle _stun;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.STUN,
@@ -19,19 +20,17 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; private set; }
 
-        Particle stun;
+       
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            // Wire (Sion Q test replay, LOC_Stun.troy groups): flags 0x0020, bone
-            // C_BuffBone_Glb_Center_Loc, bind = the stunned unit, TargetNetID = 0 —
-            // so AddParticle (not AddParticleTarget) and the center buffbone, not "head".
-            stun = AddParticle(buff.SourceUnit, unit, "LOC_Stun", unit.Position, buff.Duration,
+            _stun = AddParticle(buff.SourceUnit, unit, "LOC_Stun", unit.Position, buff.Duration,
                 bone: "C_BuffBone_Glb_Center_Loc");
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            RemoveParticle(_stun);
         }
     }
 }

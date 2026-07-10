@@ -13,21 +13,18 @@ namespace Spells;
 
 public class FerociousHowl : ISpellScript {
     private ObjAIBase      _alistar;
-    private Spell          _spell;
-    private AttackableUnit _target;
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
+        NotSingleTargetSpell = true,
+        TriggersSpellCasts   = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _alistar = owner;
-        _spell   = spell;
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _target = target;
+        AddBuff("FerociousHowl", 7f, 1, spell, _alistar, _alistar);
     }
 
     public void OnSpellCast(Spell spell) {
@@ -35,6 +32,5 @@ public class FerociousHowl : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        AddBuff("Ferocious_Howl", 7f, 1, _spell, _alistar, _alistar);
     }
 }

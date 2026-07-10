@@ -13,34 +13,32 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace Buffs
 {
-    internal class TrampleBuff : IBuffGameScript {
+    internal class AlistarTrample : IBuffGameScript {
         private       ObjAIBase _alistar;
-        private       Buff      _buff;
-        private const float     IntervalMs = 1000.0f;
         private       Particle  _p1, _p2, _p3, _p4, _p5, _p6;
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType    = BuffType.DAMAGE,
+            BuffType    = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
-            MaxStacks   = 1
+            MaxStacks   = 1,
+            IsDeathRecapSource = true
         };
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
             _alistar = buff.SourceUnit;
-            _buff = buff;
             SetStatus(_alistar, StatusFlags.Ghosted, true);
             _alistar.SetAnimStates(new Dictionary<string, string> {
-                { "Idle1", "Idle5" },
+                { "Idle1", "TRAMPLE" },
                 { "run", "Run2" }
             });
             _p1 = AddParticleTarget(_alistar, _alistar, "alistar_trample_01",   _alistar, buff.Duration);
             _p2 = AddParticleTarget(_alistar, _alistar, "alistar_trample_hand", _alistar, buff.Duration, bone: "L_hand");
             _p3 = AddParticleTarget(_alistar, _alistar, "alistar_trample_hand", _alistar, buff.Duration, bone: "R_hand");
-            _p4 = AddParticleTarget(_alistar, _alistar, "alistar_trample_head", _alistar, buff.Duration, bone: "head");
-            _p5 = AddParticleTarget(_alistar, _alistar, "alistar_nose_puffs", _alistar, buff.Duration, bone: "BUFFBONE_CSTM_NOSE2");
-            _p6 = AddParticleTarget(_alistar, _alistar, "alistar_nose_puffs", _alistar, buff.Duration, bone: "BUFFBONE_CSTM_NOSE1");
+            _p4 = AddParticleTarget(_alistar, _alistar, "alistar_trample_head", _alistar, buff.Duration, bone: "C_Buffbone_Glb_Head_Loc");
+            _p5 = AddParticleTarget(_alistar, _alistar, "alistar_nose_puffs", _alistar, buff.Duration, bone: "BUFFBONE_CSTM_NOSE2", flags: FXFlags.SimulateWhileOffScreen);
+            _p6 = AddParticleTarget(_alistar, _alistar, "alistar_nose_puffs", _alistar, buff.Duration, bone: "BUFFBONE_CSTM_NOSE1", flags: FXFlags.SimulateWhileOffScreen);
         }
 
         public void OnUpdate(Buff buff, float diff) {
@@ -51,23 +49,21 @@ namespace Buffs
             // structures are hit; the double-damage test (AffectEnemies|AffectMinions) matches only
             // enemy minions, per S1's PercentOfAttack=2 minion branch. Damage base uses the current
             // patch's 6+level curve (the S1 10..23 rank table was changed in a later patch).
-            ExecutePeriodically(buff.BuffVars, "trampleTick", IntervalMs, executeImmediately: true, maxTicks: 0, () => {
-                var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
+            ExecutePeriodically(buff.BuffVars, "trampleTick", 1000f, executeImmediately: true, 0, () => {
                 var enemiesInRange = GetUnitsInRange(_alistar, _alistar.Position, 300f, true,
                                                      SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                                                      SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral |
                                                      SpellDataFlags.AffectBuildings | SpellDataFlags.AffectTurrets);
                 foreach (var enemy in enemiesInRange) {
+                    var dmg = 7f + 1f * (_alistar.Stats.Level - 1) + _alistar.Stats.AbilityPower.Total * 0.1f;
                     enemy.TakeDamage(_alistar, IsValidTarget(_alistar, enemy, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectMinions) ? dmg * 2f : dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                                     DamageResultType.RESULT_NORMAL);
+                        DamageResultType.RESULT_NORMAL);
                 }
             });
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            // Remove all six particles created in OnActivate (previously _p4..6 leaked until their
-            // buff.Duration lifetime expired on an early deactivate).
             RemoveParticle(_p1);
             RemoveParticle(_p2);
             RemoveParticle(_p3);

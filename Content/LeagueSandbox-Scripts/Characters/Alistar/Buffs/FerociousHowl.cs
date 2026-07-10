@@ -14,12 +14,12 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace Buffs
 {
-    internal class Ferocious_Howl : IBuffGameScript {
+    internal class FerociousHowl : IBuffGameScript {
         private ObjAIBase _alistar;
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType    = BuffType.HEAL,
+            BuffType    = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks   = 1
         };
@@ -28,6 +28,7 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
             _alistar = buff.SourceUnit;
             var buffs = _alistar.GetBuffs();
+            RemoveBuffsOfType( _alistar, BuffType.COMBAT_ENCHANCER | BuffType.COMBAT_DEHANCER);
             foreach (var buff1 in buffs.Where(buff1 => buff1.BuffType is BuffType.BLIND 
                                                                          or BuffType.KNOCKBACK 
                                                                          or BuffType.KNOCKUP 
@@ -47,21 +48,20 @@ namespace Buffs
                                                                          or BuffType.SUPPRESSION 
                                                                          or BuffType.TAUNT 
                                                                          or BuffType.SLOW)) { RemoveBuff(buff1); }
-            AddParticleTarget(_alistar, unit, "minatuar_unbreakableWill_cas", unit, buff.Duration);
-            AddParticleTarget(_alistar, unit, "feroscioushowl_cas2", unit, buff.Duration);
             ApiEventManager.OnPreTakeDamage.AddListener(this, _alistar, OnPreTakeDamage);
-            StatsModifier.AttackDamage.FlatBonus = 60f + 15f * (ownerSpell.CastInfo.SpellLevel - 1);
+            StatsModifier.AttackDamage.FlatBonus = ownerSpell.SpellData.EffectLevelAmount[3][ownerSpell.CastInfo.SpellLevel];
             unit.AddStatModifier(StatsModifier);
-        }
-
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
         }
 
         private void OnPreTakeDamage(DamageData data) {
             if (data.DamageType is DamageType.DAMAGE_TYPE_MAGICAL or DamageType.DAMAGE_TYPE_PHYSICAL) {
-                data.PostMitigationDamage = data.PostMitigationDamage * 0.3f;
+                data.PostMitigationDamage *= 0.3f;
             }
+        }
+        
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            ApiEventManager.OnPreTakeDamage.RemoveListener(this, _alistar, OnPreTakeDamage);
         }
     }
 }

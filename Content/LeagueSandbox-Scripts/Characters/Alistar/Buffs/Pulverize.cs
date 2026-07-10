@@ -20,16 +20,23 @@ namespace Buffs
         private Spell _spell;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.STUN,
+            BuffType = BuffType.KNOCKUP,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1,
             IsNonDispellable = false
         };
         public StatsModifier StatsModifier { get; private set; }
-
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            AddParticleTarget(buff.SourceUnit, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
+            _alistar = buff.SourceUnit;
+            _spell = ownerSpell;
+            var bouncePos = GetRandomPointInAreaUnit(unit, 10, 10f);
+            ForceMove(unit, bouncePos,10f, 20f, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, orders: ForceMovementOrdersType.CANCEL_ORDER, idealDistance: 10f, movementName: "pulverize");
+        }
+        
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        {
+            AddBuff("Stun", 0.5f, 1, _spell, unit, _alistar);
         }
     }
 }
