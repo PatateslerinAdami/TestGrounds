@@ -14,7 +14,6 @@ namespace Spells;
 
 public class Pulverize : ISpellScript {
     private ObjAIBase _alistar;
-    private AttackableUnit _target;
 
     public SpellScriptMetadata ScriptMetadata => new() {
         NotSingleTargetSpell = true,
@@ -25,24 +24,25 @@ public class Pulverize : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _alistar = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        _target = target;
+        var ap = _alistar.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
+        AddBuff("Pulverize", 1f, 1, spell, target, _alistar);
+        target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+            DamageResultType.RESULT_NORMAL);
     }
 
     public void OnSpellPostCast(Spell spell)
     {
         AddParticlePos(_alistar, "Pulverize_cas.troy", _alistar.Position, _alistar.Position, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _alistar);
-        var ap = _alistar.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
-        var dmg = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel] + ap;
         var unitsInRange = GetUnitsInRange(_alistar, _alistar.Position, 375f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
         foreach (var unit in unitsInRange)
         {
-            AddBuff("Pulverize", 1f, 1, spell, unit, _alistar);
-            unit.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                DamageResultType.RESULT_NORMAL);
+            spell.ApplyEffects(unit);
         }
     }
 }

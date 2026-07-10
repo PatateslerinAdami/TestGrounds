@@ -28,6 +28,20 @@ public class Headbutt : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _alistar = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        SpellEffectCreate("HeadButt_tar.troy", _alistar, _target, null, orientTowards: _target.GetPosition3D(), boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _alistar, scale: 1f);
+        var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+        var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
+        target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+            DamageResultType.RESULT_NORMAL);
+        var buffVars = new VariableTable();
+        buffVars.Set("castOriginX", _castOrigin.X);
+        buffVars.Set("castOriginY", _castOrigin.Y);
+        AddBuff("HeadbuttTarget", 0.75f, 1, _spell, target, _alistar, variableTable: buffVars);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -53,16 +67,7 @@ public class Headbutt : ISpellScript {
     {
         if (parameters.MovementName != "headbuttDash") return;
         if (!IsUnitInRange(_target, unit.Position, 400f, true)) return;
-        SpellEffectCreate("HeadButt_tar.troy", _alistar, _target, null, orientTowards: _target.GetPosition3D(), boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _alistar, scale: 1f);
-        var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
-        var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
-        _target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
-            DamageResultType.RESULT_NORMAL);
-        var buffVars = new VariableTable();
-        buffVars.Set("castOriginX", _castOrigin.X);
-        buffVars.Set("castOriginY", _castOrigin.Y);
-        AddBuff("HeadbuttTarget", 0.75f, 1, _spell, _target, _alistar, variableTable: buffVars);
-
+        _spell.ApplyEffects(_target);
         ApiEventManager.OnMoveSuccess.RemoveListener(this, _alistar, OnMoveSuccess);
     }
 }
