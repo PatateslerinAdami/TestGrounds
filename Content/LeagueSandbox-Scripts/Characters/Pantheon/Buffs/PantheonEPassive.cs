@@ -21,9 +21,10 @@ public class PantheonEPassive : IBuffGameScript
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
-            PersistsThroughDeath = true,
-        BuffType = BuffType.INTERNAL,
-        BuffAddType = BuffAddType.REPLACE_EXISTING
+        BuffType = BuffType.COMBAT_ENCHANCER,
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        IsHidden = true,
+        PersistsThroughDeath = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();

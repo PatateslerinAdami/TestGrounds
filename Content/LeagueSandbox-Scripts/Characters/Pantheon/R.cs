@@ -9,6 +9,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
@@ -23,8 +24,13 @@ public class PantheonRJump : ISpellScript
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true,
+        CastingBreaksStealth = true,
+        IsDamagingSpell = true,
         ChannelDuration = 2f,
-        IsDamagingSpell = false,
+        
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
@@ -35,17 +41,8 @@ public class PantheonRJump : ISpellScript
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _targetPos = new Vector2(end.X, end.Y);
-        switch (_pantheon.Team)
-        {
-            case TeamId.TEAM_BLUE:
-                _p = AddParticle(_pantheon, null, "Pantheon_Base_R_indicator_green", _targetPos,
-                    teamOnly: TeamId.TEAM_BLUE, lifetime: 4.5f);
-                break;
-            case TeamId.TEAM_PURPLE:
-                _p = AddParticle(_pantheon, null, "Pantheon_Base_R_indicator_green", _targetPos,
-                    teamOnly: TeamId.TEAM_PURPLE, lifetime: 4.5f);
-                break;
-        }
+        _p = AddParticle(_pantheon, null, "Pantheon_Base_R_indicator_green", _targetPos,
+            teamOnly: _pantheon.Team, lifetime: 4.5f, flags: FXFlags.SimulateWhileOffScreen, fowVisionRadius: 10f);
 
         SealSpellSlot(_pantheon, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
         SealSpellSlot(_pantheon, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
@@ -55,8 +52,9 @@ public class PantheonRJump : ISpellScript
 
     public void OnSpellChannel(Spell spell)
     {
-        _p3 = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_R_cas", _pantheon);
-        AddBuff("Pantheon_AegisShield", 15000f, 1, spell, _pantheon, _pantheon, true);
+        _p3 = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_R_cas", _pantheon, flags: FXFlags.SimulateWhileOffScreen);
+        AddBuff("PantheonPassiveShield", 25000f, 1, spell, _pantheon, _pantheon, true);
+        _pantheon.RemoveBuffsWithName("PantheonPassiveCounter");
     }
 
     public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
@@ -80,11 +78,11 @@ public class PantheonRJump : ISpellScript
         {
             case TeamId.TEAM_BLUE:
                 _p2 = AddParticle(_pantheon, null, "Pantheon_Base_R_indicator_red", _targetPos,
-                    teamOnly: TeamId.TEAM_PURPLE, lifetime: 3f);
+                    teamOnly: TeamId.TEAM_PURPLE, lifetime: 3f, flags: FXFlags.SimulateWhileOffScreen);
                 break;
             case TeamId.TEAM_PURPLE:
                 _p2 = AddParticle(_pantheon, null, "Pantheon_Base_R_indicator_red", _targetPos,
-                    teamOnly: TeamId.TEAM_BLUE, lifetime: 3f);
+                    teamOnly: TeamId.TEAM_BLUE, lifetime: 3f, flags: FXFlags.SimulateWhileOffScreen);
                 break;
         }
     }
@@ -97,19 +95,52 @@ public class PantheonRFall : ISpellScript
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
-        IsDamagingSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = false,
         ChannelDuration = 1.5f,
         NotSingleTargetSpell = true,
-        DoesntBreakShields = false,
+        
     };
+
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var apMin = _pantheon.Stats.AbilityPower.Total * 0.5f;
+        var apMax = _pantheon.Stats.AbilityPower.Total;
+        var minDamage = 200f + 150f * (_pantheon.GetSpell("PantheonRJump").CastInfo.SpellLevel - 1) + apMin;
+        var maxDamage = 400f + 300f * (_pantheon.GetSpell("PantheonRJump").CastInfo.SpellLevel - 1) + apMax;
+        Vector2 toEnemy = target.Position - _pantheon.Position;
+        var distance = toEnemy.Length();
+        var damage = 200f;
+        if (distance <= 250f)
+        {
+            damage = maxDamage;
+        }
+        else
+        {
+            float factor = 1 - ((distance - 250f) / (700 - 250f));
+            damage = minDamage + factor * (maxDamage - minDamage);
+        }
+
+        target.TakeDamage(_pantheon, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+            false);
+
+        var variables = new VariableTable();
+        variables.Set("slowPercent", 0.3f);
+        AddBuff("Slow", 1f, 1, spell, target, _pantheon, variableTable: variables);
+    }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _pantheon = owner;
         _targetPos = new Vector2(end.X, end.Y);
-        AddBuff("Pantheon_GrandSkyfall", 2f, 1, spell, _pantheon, _pantheon);
+        AddBuff("PantheonRJump", 2f, 1, spell, _pantheon, _pantheon);
         MoveCamera(owner, 0.5f, spell.CastInfo.TargetPosition);
-        //Todo: remove projectiles flying towards him while he jumps
+        DestroyMissileForTarget(_pantheon);
     }
 
     public void OnSpellChannel(Spell spell)
@@ -127,36 +158,14 @@ public class PantheonRFall : ISpellScript
         SealSpellSlot(_pantheon, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, false);
 
         _pantheon.TeleportTo(_targetPos);
-        AddParticle(_pantheon, null, "Pantheon_Base_R_aoe_explosion", _pantheon.Position);
+        AddParticle(_pantheon, null, "Pantheon_Base_R_aoe_explosion", _pantheon.Position, flags: FXFlags.SimulateWhileOffScreen);
 
         var units = GetUnitsInRange(_pantheon, _pantheon.Position, 700, true,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes |
             SpellDataFlags.AffectMinions);
         foreach (var unit in units)
         {
-            var apMin = _pantheon.Stats.AbilityPower.Total * 0.5f;
-            var apMax = _pantheon.Stats.AbilityPower.Total;
-            var minDamage = 200f + 150f * (_pantheon.GetSpell("PantheonRJump").CastInfo.SpellLevel - 1) + apMin;
-            var maxDamage = 400f + 300f * (_pantheon.GetSpell("PantheonRJump").CastInfo.SpellLevel - 1) + apMax;
-            Vector2 toEnemy = unit.Position - _pantheon.Position;
-            float distance = toEnemy.Length();
-            float damage = 200f;
-            if (distance <= 250f)
-            {
-                damage = maxDamage;
-            }
-            else
-            {
-                float factor = 1 - ((distance - 250f) / (700 - 250f));
-                damage = minDamage + factor * (maxDamage - minDamage);
-            }
-
-            unit.TakeDamage(_pantheon, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                false);
-
-            var variables = new VariableTable();
-            variables.Set("slowPercent", 0.3f);
-            AddBuff("Slow", 1f, 1, spell, unit, _pantheon, variableTable: variables);
+            spell.ApplyEffects(unit);
         }
     }
 }

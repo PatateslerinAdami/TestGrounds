@@ -57,8 +57,7 @@ public class PantheonQ : ISpellScript
         var dmg = 75 + 40 * (spell.CastInfo.SpellLevel - 1) + ad;
         var critDmg = dmg * 1.25f;
 
-        AddParticleTarget(owner, target, "pantheon_spearShot_tar", target, bone: "C_BUFFBONE_GLB_HEAD_LOC");
-        AddParticleTarget(owner, target, "pantheon_spearShot_tar_02", target, bone: "BUFFBONE_GLB_GROUND_LOC");
+        AddParticleTarget(owner, target, "Pantheon_Base_Q_tar.troy", target, bone: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
         var crit = owner.HasBuff("PantheonEPassive") &&
                    target.Stats.CurrentHealth < target.Stats.HealthPoints.Total * 0.15f;
         target.TakeDamage(

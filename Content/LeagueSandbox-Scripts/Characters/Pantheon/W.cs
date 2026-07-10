@@ -2,10 +2,12 @@
 using System.Numerics;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using LeaguePackets.Game.Common;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -21,7 +23,6 @@ public class PantheonW : ISpellScript
     private ObjAIBase _pantheon;
     private Spell _spell;
     private AttackableUnit _target;
-    private bool _leapInProgress;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
@@ -34,21 +35,36 @@ public class PantheonW : ISpellScript
         _spell = spell;
         _pantheon = owner;
         ApiEventManager.OnUpdateStats.AddListener(this, owner, OnStatsUpdate);
-        ApiEventManager.OnMoveSuccess.AddListener(this, owner, OnMoveEnd);
-        ApiEventManager.OnMoveFailure.AddListener(this, owner, OnMoveFailure);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        
+        AddBuff("Stun", 1f, 1, spell, target, _pantheon);
+        AddBuff("PantheonPassiveShield", 25000f, 1, spell, _pantheon, _pantheon, true);
+        _pantheon.RemoveBuffsWithName("PantheonPassiveCounter");
+        AddParticleTarget(_pantheon, target, "Pantheon_Base_W_tar", target, flags: FXFlags.SimulateWhileOffScreen);
+        var ap = _pantheon.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
+        target.TakeDamage(_pantheon, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
+
+        if (target.Team != _pantheon.Team && !target.IsDead)
+        {
+            _pantheon.SetTargetUnit(target, true);
+            //_pantheon.UpdateMoveOrder(OrderType.AttackTo); //TODO: Maybe add equivalent of BBIssueOrder
+        }
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _target = target;
-        _leapInProgress = false;
     }
 
     public void OnSpellPostCast(Spell spell)
     {
         if (_target is not { IsDead: false })
         {
-            _target = null;
             return;
         }
 
@@ -66,50 +82,26 @@ public class PantheonW : ISpellScript
         animFactor = Math.Min(animFactor, 1.25f);
 
         FaceDirection(targetPos, _pantheon, true);
-        PlayAnimation(_pantheon, "Spell2", animFactor);
-
-        _leapInProgress = true;
+        PlayAnimation(_pantheon, "Spell2", animFactor, 0, 1f, AnimationFlags.Lock | AnimationFlags.NoBlend);
+        
+        ApiEventManager.OnMoveSuccess.AddListener(this, _pantheon, OnMoveEnd);
+        ForceMove(_pantheon, targetPos, speedVar, gravityVar, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, true, ForceMovementOrdersType.CANCEL_ORDER, "PantheonW");
         ForceMoveToUnit(_pantheon, _target, speedVar, travelTime: -1f, gravity: gravityVar,
             orders: ForceMovementOrdersType.CANCEL_ORDER);
     }
 
     private void OnMoveEnd(AttackableUnit owner, ForceMovementParameters parameters)
     {
-        if (owner != _pantheon || !_leapInProgress || _target == null) return;
-
-        _leapInProgress = false;
-        if (_target.IsDead || !_target.Status.HasFlag(StatusFlags.Targetable))
+        if (parameters.MovementName != "PantheonW") return;
+        StopAnimation(_pantheon, "Spell2", StopAnimationFlags.IgnoreLock);
+        if (_target.IsDead)
         {
-            _target = null;
             return;
         }
 
-        var ap = owner.Stats.AbilityPower.Total;
-        var dmg = 60 + 25 * (_spell.CastInfo.SpellLevel - 1) + ap;
-
-        AddBuff("Pantheon_AegisShield2", 15000f, 1, _spell, _pantheon, _pantheon, true);
-
-        AddBuff("Stun", 1f, 1, _spell, _target, owner as ObjAIBase);
-        AddParticleTarget(owner, _target, "Pantheon_Base_W_tar", _target, bone: "root");
-        _target.TakeDamage(owner, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
-
-        if (_target.Team != owner.Team && owner is ObjAIBase ai && !_target.IsDead)
-        {
-            ai.SetTargetUnit(_target, true);
-            ai.UpdateMoveOrder(OrderType.AttackTo);
-        }
-
-        _target = null;
+        _spell.ApplyEffects(_target);
     }
-
-    private void OnMoveFailure(AttackableUnit owner, ForceMovementParameters parameters)
-    {
-        if (owner != _pantheon) return;
-
-        _leapInProgress = false;
-        _target = null;
-    }
-
+    
     private void OnStatsUpdate(AttackableUnit unit, float diff)
     {
         var ap = _pantheon.Stats.AbilityPower.Total;

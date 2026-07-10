@@ -10,6 +10,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -29,15 +30,11 @@ public class PantheonE : ISpellScript
         _pantheon = owner;
     }
 
-    public void OnPostActivate(ObjAIBase owner, Spell spell)
-    {
-        AddBuff("PantheonEPassive", 25000f, 1, spell, _pantheon, _pantheon, true);
-    }
-
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _pantheon = owner;
         _pantheon.StopMovement();
+        FaceDirection(end, _pantheon);
         SpellCast(_pantheon, 0, SpellSlotType.ExtraSlots, end, end, false, Vector2.Zero);
     }
 }
@@ -46,25 +43,45 @@ public class PantheonEChannel : ISpellScript
 {
     private ObjAIBase _pantheon;
     private Particle _p;
-    private Spell _spell;
-    private float _timer = 250f;
-    private bool _isActive = false;
-    private int _casts = 0;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new()
     {
-        CastingBreaksStealth = false,
-        DoesntBreakShields = true,
-        TriggersSpellCasts = true,
-        IsDamagingSpell = true,
-        NotSingleTargetSpell = true,
         ChannelDuration = 0.75f,
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = false,
+        CastingBreaksStealth = false,
+        IsDamagingSpell = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _pantheon = owner;
-        _spell = spell;
+        ApiEventManager.OnLevelUpSpell.AddListener(this, spell , OnLvelUpSpell);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnLvelUpSpell(Spell spell)
+    {
+        AddBuff("PantheonEPassive", 25000f, 1, spell, _pantheon, _pantheon, true);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var adChamp = _pantheon.Stats.AttackDamage.FlatBonus * 3.6f;
+        var adNoneChamp = _pantheon.Stats.AttackDamage.FlatBonus * 1.8f;
+        var dmgToChampions = 13f + 10f * (_pantheon.GetSpell("PantheonE").CastInfo.SpellLevel - 1) + adChamp;
+        var dmgToNoneChampions = 6.5f + 5f * (_pantheon.GetSpell("PantheonE").CastInfo.SpellLevel - 1) + adNoneChamp;
+
+
+        AddParticle(_pantheon, target, "Pantheon_Base_E_tar", target.Position, flags: FXFlags.UpdateOrientation);
+        target.TakeDamage(
+            _pantheon,
+            target is Champion ? dmgToChampions : dmgToNoneChampions,
+            DamageType.DAMAGE_TYPE_PHYSICAL,
+            DamageSource.DAMAGE_SOURCE_SPELLAOE,
+            false
+        );
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -75,11 +92,22 @@ public class PantheonEChannel : ISpellScript
     public void OnSpellChannel(Spell spell)
     {
         AddBuff("PantheonESound", 0.75f, 1, spell, _pantheon, _pantheon);
-        _casts = 0;
-        _timer = 250f;
-        _isActive = true;
         _p = AddParticleTarget(_pantheon, _pantheon, "Pantheon_Base_E_cas.troy", _pantheon, 0.75f,
             bone: "L_BUFFBONE_GLB_HAND_LOC", flags: FXFlags.SimulateWhileOffScreen | FXFlags.TargetDirection, followGroundTilt: false);
+    }
+    
+    public void OnSpellChannelUpdate(Spell spell, float diff)
+    {
+        ExecutePeriodically(spell.CastInfo.InstanceVars, "pantheonETick", 250f, false, () =>
+        {
+            // Cone + target flags from SpellData (PantheonEChannel: 35° half, 675u, LockConeToPlayer=0
+            // → direction = cast point − caster, fixed since Pantheon is rooted via StopMovement during
+            // the channel). Replaces hardcoded 600u / 80° + manual flags.
+            foreach (var unit in GetUnitsHitBySpell(spell))
+            {
+                spell.ApplyEffects(unit);
+            }
+        });
     }
 
     public void OnSpellChannelCancel(Spell spell, ChannelingStopSource reason)
@@ -89,42 +117,6 @@ public class PantheonEChannel : ISpellScript
 
     public void OnSpellPostChannel(Spell spell)
     {
-        StopAnimation(_pantheon, "Spell3");
         RemoveParticle(_p);
-    }
-
-    public void OnUpdate(float diff)
-    {
-        if (!_isActive) return;
-        _timer -= diff;
-        if (_timer >= 0 || _casts >= 3) return;
-        // Cone + target flags from SpellData (PantheonEChannel: 35° half, 675u, LockConeToPlayer=0
-        // → direction = cast point − caster, fixed since Pantheon is rooted via StopMovement during
-        // the channel). Replaces hardcoded 600u / 80° + manual flags.
-        foreach (var unit in GetUnitsHitBySpell(_spell))
-        {
-            DealDamage(unit);
-        }
-
-        _casts++;
-        _timer = 250f;
-    }
-
-    private void DealDamage(AttackableUnit target)
-    {
-        var adChamp = _pantheon.Stats.AttackDamage.FlatBonus * 3.6f;
-        var adNoneChamp = _pantheon.Stats.AttackDamage.FlatBonus * 1.8f;
-        var dmgToChampions = 13f + 10f * (_pantheon.GetSpell("PantheonE").CastInfo.SpellLevel - 1) + adChamp;
-        var dmgToNoneChampions = 6.5f + 5f * (_pantheon.GetSpell("PantheonE").CastInfo.SpellLevel - 1) + adNoneChamp;
-
-
-        AddParticle(_pantheon, target, "Pantheon_Base_E_tar", target.Position);
-        target.TakeDamage(
-            _pantheon,
-            target is Champion ? dmgToChampions : dmgToNoneChampions,
-            DamageType.DAMAGE_TYPE_PHYSICAL,
-            DamageSource.DAMAGE_SOURCE_SPELLAOE,
-            false
-        );
     }
 }

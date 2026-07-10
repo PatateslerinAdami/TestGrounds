@@ -19,7 +19,7 @@ public class PantheonESound : IBuffGameScript
 {
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
-        BuffType = BuffType.INTERNAL,
+        BuffType = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
 

@@ -12,7 +12,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class Pantheon_GrandSkyfall : IBuffGameScript
+internal class PantheonRJump : IBuffGameScript
 {
     private ObjAIBase _pantheon;
     private float _tickTimer;
