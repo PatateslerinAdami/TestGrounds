@@ -111,13 +111,13 @@ namespace Spells
             {
                 tl.a = target;
             }
-            PlayAnimation(owner, "Spell1_GRAB", timeScale: 1f);
+            PlayAnimation(owner, "Spell1_GRAB", scaleTime: 1f);
             owner.RegisterTimer(new GameScriptTimer(0.1f, () =>
             {
                 StopAnimation(owner, "Spell1_GRAB", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
                 if (!target.IsDead && owner.GetSpell("ThreshQLeap") != null)
                 {
-                    PlayAnimation(owner, "Spell1_PULL1_UpB", timeScale: 1.0f);
+                    PlayAnimation(owner, "Spell1_PULL1_UpB", scaleTime: 1.0f);
                     PerformTug(owner, target);
                 }
             }));
@@ -125,7 +125,7 @@ namespace Spells
             {
                 if (!target.IsDead && owner.GetSpell("ThreshQLeap") != null)
                 {
-                    PlayAnimation(owner, "Spell1_PULL2_UpB", timeScale: 1.0f);
+                    PlayAnimation(owner, "Spell1_PULL2_UpB", scaleTime: 1.0f);
                     PerformTug(owner, target, true);
                 }
             }));

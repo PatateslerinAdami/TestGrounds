@@ -84,7 +84,7 @@ namespace Buffs
                     _owner.Spells[0].SetCooldown(finalCooldown, true);
                 }
                 AddParticleTarget(_owner, _owner, "yasuo_base_eq_cas", _owner);
-                PlayAnimation(_owner, "Spell1_Dash", timeScale: 0.8f);
+                PlayAnimation(_owner, "Spell1_Dash", scaleTime: 0.8f);
                 
                 var timerAnm = new GameScriptTimer(0.5f, () => { StopAnimation(unit, "Spell1_Dash", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock); });
                 unit.RegisterTimer(timerAnm);

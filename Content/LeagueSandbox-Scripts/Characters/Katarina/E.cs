@@ -48,7 +48,7 @@ public class KatarinaE : ISpellScript {
 
     public void OnSpellCast(Spell spell) {
         FaceDirection(_target.Position, _katarina, true);
-        PlayAnimation(_katarina, "spell3", timeScale: 0f, speedScale: 1f,
+        PlayAnimation(_katarina, "spell3", scaleTime: 0f, scaleSpeed: 1f,
                       flags: AnimationFlags.NoBlend); // replay value also had junk bit 7 (unread client-side)
 
         // silent:true skips the batched _movementUpdated broadcast. NotifyTeleport always

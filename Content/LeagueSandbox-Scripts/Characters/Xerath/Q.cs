@@ -210,9 +210,9 @@ namespace Spells
             // SpeedRatio=1.0. Our previous `PlayAnimation(owner, "Spell1Finish", 1.3f)`
             // sent ScaleTime=1.3 + SpeedRatio=0 + flags=0 — all three fields wrong.
             PlayAnimation(owner, "Spell1Finish",
-                timeScale: 0f,
-                startTime: 0f,
-                speedScale: 1f,
+                scaleTime: 0f,
+                startProgress: 0f,
+                scaleSpeed: 1f,
                 flags: AnimationFlags.Lock | AnimationFlags.NoBlend | AnimationFlags.Junk7);
             AddParticlePos(_xerath, "xerath_base_q_aoe_reticle_green", _start, _end, 3.0f,
                 enemyParticle: "xerath_base_q_aoe_reticle_red");

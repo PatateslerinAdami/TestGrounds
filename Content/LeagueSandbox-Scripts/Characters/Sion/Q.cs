@@ -212,11 +212,11 @@ namespace Spells
             Vector2 ownerPos = _sion.Position;
             FaceDirection(ownerPos + _direction * 100f, _sion);
             // Riot wire (all releases): ScaleTime=0, StartProgress=0, SpeedRatio=1, flags=0x05.
-            // Our params map timeScale->ScaleTime / speedScale->SpeedRatio, and the API defaults
-            // (timeScale=1, speedScale=0) send the OPPOSITE of Riot — SpeedRatio=0 is what made
+            // Our params map scaleTime->ScaleTime / scaleSpeed->SpeedRatio, and the API defaults
+            // (scaleTime=1, scaleSpeed=0) send the OPPOSITE of Riot — SpeedRatio=0 is what made
             // the animation play in slow motion.
             PlayAnimation(_sion, slam ? "Spell1_Hit2" : "Spell1_Hit1",
-                timeScale: 0f, startTime: 0f, speedScale: 1f,
+                scaleTime: 0f, startProgress: 0f, scaleSpeed: 1f,
                 flags: AnimationFlags.Lock | AnimationFlags.NoBlend);
 
             // Riot: Sion is locked out of all actions for 0.25s on release (the wire ISA at

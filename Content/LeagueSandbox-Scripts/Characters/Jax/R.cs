@@ -35,7 +35,7 @@ public class JaxRelentlessAssault : ISpellScript {
 
     public void OnSpellCast(Spell spell) { }
 
-    public void OnSpellPostCast(Spell spell) { AddBuff("JaxRelentlessAssault", 8f, 1, spell, _jax, _jax); }
+    public void OnSpellPostCast(Spell spell) { AddBuff("JaxRelentlessAssaultSpeed", 8f, 1, spell, _jax, _jax); }
 
     private void OnLevelUpSpell(Spell spell) {
         if (spell.CastInfo.SpellLevel != 1) return;

@@ -90,7 +90,7 @@ public class CharScriptZed : ICharScript {
             var facingPos = GetPointFromUnit(_zed, 100f, -180f);
             _minion = AddMinion(_zed, "ZedShadow", "ZedShadow", pos, _zed.Team, _zed.SkinID, true, false);
             FaceDirection(facingPos, _minion, true);
-            PlayAnimation(_minion, "Dance_Overwrite", timeScale: 1.15f);
+            PlayAnimation(_minion, "Dance_Overwrite", scaleTime: 1.15f);
         }
 
         if (emotions == Emotions.TAUNT) {

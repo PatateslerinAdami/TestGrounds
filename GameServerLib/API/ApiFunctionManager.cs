@@ -3484,14 +3484,14 @@ namespace LeagueSandbox.GameServer.API
         /// </summary>
         /// <param name="obj">Object that will play the animation.</param>
         /// <param name="animName">Internal name of an animation to play.</param>
-        /// <param name="timeScale">How fast the animation should play. Default 1x speed.</param>
-        /// <param name="startTime">Time in the animation to start at.</param>
-        /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
+        /// <param name="scaleTime">How fast the animation should play. Default 1x speed.</param>
+        /// <param name="startProgress">Time in the animation to start at.</param>
+        /// <param name="scaleSpeed">How much the speed of the GameObject should affect the animation.</param>
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        public static void PlayAnimation(GameObject obj, string animName, float timeScale = 1.0f, float startTime = 0,
-            float speedScale = 0, AnimationFlags flags = 0)
+        public static void PlayAnimation(GameObject obj, string animName, float scaleTime = 1.0f, float startProgress = 0,
+            float scaleSpeed = 0, AnimationFlags flags = 0)
         {
-            obj.PlayAnimation(animName, timeScale, startTime, speedScale, flags);
+            obj.PlayAnimation(animName, scaleTime, startProgress, scaleSpeed, flags);
         }
 
         /// <summary>

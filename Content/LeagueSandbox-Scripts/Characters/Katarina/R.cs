@@ -68,8 +68,8 @@ namespace Spells
             const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
             {
-                default: PlayAnimation(_katarina, "Spell4", timeScale: 0f, speedScale: 1f, flags: spell4Flags); break;
-                case 7:  PlayAnimation(_katarina, "Spell4", timeScale: 0.2f, speedScale: 1f, flags: spell4Flags); break;
+                default: PlayAnimation(_katarina, "Spell4", scaleTime: 0f, scaleSpeed: 1f, flags: spell4Flags); break;
+                case 7:  PlayAnimation(_katarina, "Spell4", scaleTime: 0.2f, scaleSpeed: 1f, flags: spell4Flags); break;
             }
         }
 
