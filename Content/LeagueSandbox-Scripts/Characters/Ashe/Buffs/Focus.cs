@@ -9,36 +9,34 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace Buffs;
 
-// Ashe's Focus passive (patch 4.20). Out of combat (no auto attack for 3s), Ashe gains
-// 4/5/6/7/8 Focus per second (levels 1/5/9/13/17 — replay-verified against her level-up
-// timeline). At 100 Focus her next basic attack is a guaranteed crit (AsheCritChanceReady);
-// after that crit, Focus resets to a value equal to her crit chance %.
-//
-// This buff is the hidden driver (replay: NPC_BuffAdd2 BuffType=1 AURA, IsHidden=1). The
-// visible counter is the separate AsheCritChance buff; the ready state is AsheCritChanceReady.
-// All three MUST be AURA on the wire — a COUNTER-type crashes the 4.20 client (see AsheCritChance.cs).
 public class Focus : IBuffGameScript {
-    private const int   MaxFocus        = 100;
-    private const float CombatWindowMs  = 3000f;   // "not attacked in the last 3 seconds"
-    private const float TickMs          = 1000f;   // Focus gain is per-second
+    private const int    MaxFocus       = 100;
+    private const float  CombatWindowMs = 3000f;   // "not attacked in the last 3 seconds"
+    private const float  TickMs         = 1000f;   // Focus gain is per-second
+    private const string FocusTickKey   = "focusTick";
 
     private ObjAIBase _ashe;
     private Spell     _spell;
     private Buff      _buff;
     private Buff      _display;                     // AsheCritChance (visible counter)
     private int       _lastDisplayStacks = -1;
-    private float     _combatTimer;
-    private float     _tickTimer;
+    private float     _lastAttackTime = -CombatWindowMs;   // spawn = out of combat
+
+    // "In combat" = an auto attack launched within the window (GameTime()-timestamp pattern,
+    // same shape Riot's TaskDefendStructure.lua uses with GetLastTookDamageTime).
+    private bool InCombat => GameTime() - _lastAttackTime < CombatWindowMs;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType             = BuffType.AURA,
         BuffAddType          = BuffAddType.RENEW_EXISTING,
-        PersistsThroughDeath = true,
         IsHidden             = true,
         MaxStacks            = MaxFocus,
+        PersistsThroughDeath = true,
+        IsNonDispellable = true
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -47,8 +45,6 @@ public class Focus : IBuffGameScript {
         _ashe  = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
-        _combatTimer = 0f;
-        _tickTimer   = TickMs;
         ApiEventManager.OnLaunchAttack.AddListener(this, _ashe, OnLaunchAttack);
         // Ashe spawns with Focus fully charged, so her first basic attack is a guaranteed crit.
         _buff.SetStacks(MaxFocus, false);
@@ -60,36 +56,33 @@ public class Focus : IBuffGameScript {
 
     // Any auto attack puts Ashe "in combat": the ramp pauses for CombatWindowMs. Focus is NOT
     // reset by ordinary attacks — only the guaranteed crit resets it (AsheCritChanceReady).
+    // Clearing the tick anchor here is load-bearing: ExecutePeriodically's anchor goes stale
+    // while OnUpdate skips it (combat window / max stacks), and a stale anchor would fire
+    // immediately plus once per frame until caught up. The reset makes the first gain land at
+    // attack + 3s window + full 1s tick, matching the old countdown exactly. Max stacks only
+    // ever drops via the guaranteed-crit auto, so every below-max transition passes through here.
     private void OnLaunchAttack(Spell spell) {
         if (!spell.CastInfo.IsAutoAttack) return;
-        _combatTimer = CombatWindowMs;
-        _tickTimer   = TickMs;
+        _lastAttackTime = GameTime();
+        ExecutePeriodicallyReset(_buff.BuffVars, FocusTickKey);
     }
 
     public void OnUpdate(Buff buff, float diff) {
         UpdateDisplay();
 
-        if (_combatTimer > 0f) {
-            _combatTimer -= diff;
-            return;
-        }
-        if (_buff.StackCount >= MaxFocus) {
+        if (InCombat || _buff.StackCount >= MaxFocus) {
             return;
         }
 
-        _tickTimer -= diff;
-        if (_tickTimer > 0f) {
-            return;
-        }
-        _tickTimer += TickMs;
+        ExecutePeriodically(_buff.BuffVars, FocusTickKey, TickMs, false, 0, () => {
+            var newStacks = Math.Min(MaxFocus, _buff.StackCount + FocusPerSecond());
+            _buff.SetStacks(newStacks, false);
 
-        var newStacks = Math.Min(MaxFocus, _buff.StackCount + FocusPerSecond());
-        _buff.SetStacks(newStacks, false);
-
-        if (newStacks >= MaxFocus && !_ashe.HasBuff("AsheCritChanceReady")) {
-            AddBuff("AsheCritChanceReady", 25000f, 1, _spell, _ashe, _ashe, true);
-        }
-        UpdateDisplay();
+            if (newStacks >= MaxFocus && !_ashe.HasBuff("AsheCritChanceReady")) {
+                AddBuff("AsheCritChanceReady", 25000f, 1, _spell, _ashe, _ashe, true);
+            }
+            UpdateDisplay();
+        });
     }
 
     private int FocusPerSecond() => _ashe.Stats.Level switch {
@@ -130,7 +123,7 @@ public class Focus : IBuffGameScript {
         // Hidden (fresh spawn or just consumed a crit). Reappear only when Focus is building again:
         // out of combat AND with something to show (StackCount > 0 — a 0 wire Count means "remove").
         _display = null;
-        if (_combatTimer <= 0f && _buff.StackCount > 0) {
+        if (!InCombat && _buff.StackCount > 0) {
             _display = AddBuff("AsheCritChance", 25000f, (byte)stacks, _spell, _ashe, _ashe, true);
             _lastDisplayStacks = stacks;
         }

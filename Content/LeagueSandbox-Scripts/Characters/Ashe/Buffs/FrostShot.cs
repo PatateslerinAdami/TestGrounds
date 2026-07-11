@@ -20,6 +20,8 @@ public class FrostShot : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
+        IsHidden = true,
+        IsNonDispellable = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -34,8 +36,6 @@ public class FrostShot : IBuffGameScript {
     private void OnHit(DamageData data) {
         _ashe.Stats.CurrentMana -= 8f;
         if (!IsValidTarget(_ashe, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
-        
-        AddParticleTarget(_ashe, data.Target, "Ashe_Base_Q_tar", data.Target, 2f);
         AddBuff("FrostArrow", 2f, 1, _spell, data.Target, _ashe);
     }
 

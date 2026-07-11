@@ -19,7 +19,9 @@ namespace Spells;
 public class FrostShot : ISpellScript {
     private ObjAIBase _ashe;
     public SpellScriptMetadata ScriptMetadata { get; }  = new () {
+        NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
+        SpellToggleSlot = 1,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -40,7 +42,9 @@ public class FrostArrow : ISpellScript {
         MissileParameters = new MissileParameters {
             Type = MissileType.Target
         },
-        IsDamagingSpell =  true,
-        NotSingleTargetSpell = false
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = false,
+        IsDeathRecapSource = true
     };
 }

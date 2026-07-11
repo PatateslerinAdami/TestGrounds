@@ -1,6 +1,8 @@
+using System.Threading;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
+using LeaguePackets.Game.Events;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -12,44 +14,22 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class ArchersMark : IBuffGameScript
+public class EnchantedCrystalArrow : IBuffGameScript
 {
-    private ObjAIBase _ashe;
-    private Spell _spell;
-    private int _goldGained = 0;
-
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
-        BuffType = BuffType.AURA,
+        BuffType = BuffType.STUN,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        IsHidden = true,
-        IsNonDispellable = true,
-        PersistsThroughDeath = true,
+        MaxStacks = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _ashe = buff.SourceUnit;
-        _spell = ownerSpell;
-        ApiEventManager.OnKillUnit.AddListener(this, _ashe, OnKillUnit);
-    }
-
-    private void OnKillUnit(DeathData data)
-    {
-        var level = _spell.CastInfo.SpellLevel;
-        if (level <= 0) return;
-        const int bonusGold = 3;
-
-
-        if (_ashe is Champion champ) champ.AddGold(data.Unit, bonusGold);
-        _goldGained += bonusGold;
-        SetSpellToolTipVar(_ashe, 0, _goldGained, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        ApiEventManager.OnKillUnit.RemoveListener(this, _ashe, OnKillUnit);
     }
 }

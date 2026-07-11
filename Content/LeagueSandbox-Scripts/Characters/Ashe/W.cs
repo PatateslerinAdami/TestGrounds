@@ -23,7 +23,9 @@ public class Volley : ISpellScript {
     private Vector2 _startPos;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        TriggersSpellCasts = true,
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true
     };
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
@@ -39,11 +41,7 @@ public class Volley : ISpellScript {
 
         var baseDir = Vector2.Normalize(toTarget);
         var distance = toTarget.Length();
-
-        // Per-cast hit dedup shared by all 8 arrows (Riot's InstanceVars equivalent — no networked
-        // buff). A unit takes Volley damage once per cast; arrows reaching an already-hit unit pass
-        // through it (see VolleyAttack.OnSpellHit). inheritVariablesFrom shares this exact set with
-        // every arrow's CastInfo, and keeps overlapping casts (CDR) isolated for free.
+        
         spell.CastInfo.InstanceVars.Set("volleyHits", new HashSet<AttackableUnit>());
 
         for (var i = 0; i < 8; i++) {
@@ -65,8 +63,7 @@ public class VolleyAttack : ISpellScript {
             Type = MissileType.Arc,
         },
         NotSingleTargetSpell = true,
-        TriggersSpellCasts = false,
-        DoesntBreakShields = false
+        TriggersSpellCasts = false
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -75,25 +72,29 @@ public class VolleyAttack : ISpellScript {
     }
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
-        // One Volley hit per unit per cast, tracked in the cast's shared InstanceVars set (created by
-        // Volley, inherited by every arrow). If another arrow of THIS cast already hit this unit,
-        // deal no damage and PASS THROUGH it — don't consume the arrow, so it can still reach a unit
-        // behind. Per-missile re-hits are already prevented by the engine's ObjectsHit dedup.
         var hits = missile.CastInfo.InstanceVars.Get<HashSet<AttackableUnit>>("volleyHits");
         if (hits == null || !hits.Add(target)) {
             return;
         }
 
-        if (_ashe.GetSpell("FrostShot").CastInfo.SpellLevel >= 1) {
-            AddBuff("FrostArrow", 2f, 1, spell, target, _ashe);
+        var qSpell = _ashe.GetSpell("FrostShot");
+        if (qSpell.CastInfo.SpellLevel >= 1) {
+            AddBuff("FrostArrow", 2f, 1, qSpell, target, _ashe);
         }
-
-        var dmg = 40 + 10 * (_ashe.GetSpell("Volley").CastInfo.SpellLevel - 1) + _ashe.Stats.AttackDamage.Total;
-        AddParticleTarget(_ashe, target, "Ashe_Base_W_tar", target);
+        
+        var particleName = _ashe.SkinID switch
+        {
+            6 => "Ashe_Skin06_W_tar.troy",
+            _ => "Ashe_Base_W_tar.troy"
+        };
+        SpellEffectCreate(particleName, _ashe, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
+        
+        var mainSpell = _ashe.GetSpell("Volley");
+        var ad = _ashe.Stats.AttackDamage.Total;
+        var dmg = mainSpell.SpellData.EffectLevelAmount[2][mainSpell.CastInfo.SpellLevel] + ad;
         target.TakeDamage(_ashe, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                           DamageResultType.RESULT_NORMAL);
-
-        // Connected with a fresh target — consume the arrow (Volley arrows stop on a real hit).
+        
         missile.SetToRemove();
     }
 }

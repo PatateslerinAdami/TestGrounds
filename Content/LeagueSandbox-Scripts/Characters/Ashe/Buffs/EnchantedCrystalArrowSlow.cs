@@ -14,25 +14,27 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class FrostArrow : IBuffGameScript {
+public class EnchantedCrystalArrowSlow : IBuffGameScript
+{
     private ObjAIBase _ashe;
-    private Particle _slowFreeze;
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.SLOW,
+
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.SLOW,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         _ashe = buff.SourceUnit;
-        StatsModifier.MoveSpeed.PercentBonus = - ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100;
+        StatsModifier.MoveSpeed.PercentBonus = - ownerSpell.SpellData.EffectLevelAmount[3][ownerSpell.CastInfo.SpellLevel]/100;
         unit.AddStatModifier(StatsModifier);
-        _slowFreeze = SpellEffectCreate("TEMP_TrueIceHit.troy", _ashe, unit, unit, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        RemoveParticle(_slowFreeze);
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
     }
 }
