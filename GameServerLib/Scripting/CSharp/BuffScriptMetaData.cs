@@ -18,6 +18,8 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         
         public bool IsNonDispellable { get; set; } = false; //this is important for things like cleanse or self cc's that should not be removed
         
+        public bool IsPetDurationBuff { get; set; } = false;
+        
         // Riot default is false (LuaScriptBaseBuff::mPersistsThroughDeath(false)): a buff is
         // removed when its holder dies UNLESS it opts in. Buffs that must survive death — revives
         // (Guardian Angel, Morde COTG) and persist-across-respawn passives (Caitlyn headshot,

@@ -37,17 +37,17 @@ namespace Buffs
                 { "Idle1", "TRAMPLE" },
                 { "run", "Run2" }
             });
-            _p1 = SpellEffectCreate("alistar_trample_01", _alistar, _alistar, _alistar, lifetime: buff.Duration);
+            _p1 = SpellEffectCreate("alistar_trample_01", _alistar, _alistar, _alistar, lifetime: buff.Duration, fowVisibilityRadius: 10f);
             _p2 = SpellEffectCreate("alistar_trample_hand", _alistar, _alistar, _alistar, lifetime: buff.Duration,
-                boneName: "L_hand");
+                boneName: "L_hand", fowVisibilityRadius: 10f);
             _p3 = SpellEffectCreate("alistar_trample_hand", _alistar, _alistar, _alistar, lifetime: buff.Duration,
-                boneName: "R_hand");
+                boneName: "R_hand", fowVisibilityRadius: 10f);
             _p4 = SpellEffectCreate("alistar_trample_head", _alistar, _alistar, _alistar, lifetime: buff.Duration,
-                boneName: "C_Buffbone_Glb_Head_Loc");
+                boneName: "C_Buffbone_Glb_Head_Loc", fowVisibilityRadius: 10f);
             _p5 = SpellEffectCreate("alistar_nose_puffs", _alistar, _alistar, _alistar, lifetime: buff.Duration,
-                boneName: "BUFFBONE_CSTM_NOSE2", flags: FXFlags.SimulateWhileOffScreen);
+                boneName: "BUFFBONE_CSTM_NOSE2", flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
             _p6 = SpellEffectCreate("alistar_nose_puffs", _alistar, _alistar, _alistar, lifetime: buff.Duration,
-                boneName: "BUFFBONE_CSTM_NOSE1", flags: FXFlags.SimulateWhileOffScreen);
+                boneName: "BUFFBONE_CSTM_NOSE1", flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
         }
 
         public void OnUpdate(Buff buff, float diff)

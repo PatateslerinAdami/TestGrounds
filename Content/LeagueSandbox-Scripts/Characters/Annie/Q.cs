@@ -23,14 +23,21 @@ public class Disintegrate : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _annie = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
-        var ap                = _annie.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
-        var damage            = 80f + 35f * (spell.CastInfo.SpellLevel - 1) + ap;
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         var wasAliveBeforeHit = !target.IsDead;
-        target.TakeDamage(_annie, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
+        switch (_annie.SkinID) {
+            case 5:
+                AddParticleTarget(_annie, target, "Annie_skin05_Q_tar.troy", target);
+                break;
+            default:
+                SpellEffectCreate("Annie_Q_tar_02.troy", _annie, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _annie, fowVisibilityRadius: 10f);
+                SpellEffectCreate("Annie_Q_tar.troy", _annie, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _annie, fowVisibilityRadius: 10f);
+                break;
+        }
+        
         if (_annie.HasBuff("Pyromania_particle")) {
             var stunDuration = _annie.Stats.Level switch {
                 < 6  => 1.25f,
@@ -40,23 +47,12 @@ public class Disintegrate : ISpellScript {
             AddBuff("Stun", stunDuration, 1, spell, target, _annie);
             RemoveBuff(_annie, "Pyromania_particle");
         } else {
-            AddBuff("Pyromania", 250000f, 1, spell, _annie, _annie, true);
-            if (_annie.GetBuffsWithName("Pyromania").Count == 4) {
-                RemoveBuff(_annie, "Pyromania");
-                AddBuff("Pyromania_particle", 25000f, 1, spell, _annie, _annie, true);
-            }
+            AddBuff("Pyromania", 25000f, 1, spell, _annie, _annie, true);
         }
-
-        switch (_annie.SkinID) {
-            case 5:
-                AddParticleTarget(_annie, target, "Annie_skin05_Q_tar", target);
-                //AddParticleTarget(_annie, target, "Disintegrate_hit_frost",    target);
-                break;
-            default:
-                AddParticleTarget(_annie, target, "Annie_Q_tar", target);
-                AddParticleTarget(_annie, target, "Annie_Q_tar_02",    target);
-                break;
-        }
+        
+        var ap                = _annie.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var damage            = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
+        target.TakeDamage(_annie, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
 
         if (!wasAliveBeforeHit || !target.IsDead) return;
         _annie.IncreasePAR(_annie, spell.CastInfo.ManaCost);

@@ -38,7 +38,7 @@ public class Pulverize : ISpellScript {
 
     public void OnSpellPostCast(Spell spell)
     {
-        SpellEffectCreate("Pulverize_cas.troy", _alistar, null, null, _alistar.Position, _alistar.Position, keywordObject: _alistar);
+        SpellEffectCreate("Pulverize_cas.troy", _alistar, null, null, _alistar.Position, _alistar.Position, keywordObject: _alistar, fowVisibilityRadius: 10f);
         var unitsInRange = GetUnitsInRange(_alistar, _alistar.Position, 375f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
         foreach (var unit in unitsInRange)
         {

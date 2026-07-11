@@ -1348,11 +1348,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="type">Whether the damage is physical, magical, or true.</param>
         /// <param name="source">What the damage came from: attack, spell, summoner spell, or passive.</param>
         /// <param name="damageText">Type of damage the damage text should be.</param>
-        public DamageData TakeDamage(AttackableUnit attacker, float damage, DamageType type, DamageSource source, DamageResultType damageText, IEventSource sourceScript = null)
+        public DamageData TakeDamage(AttackableUnit attacker, float damage, DamageType type, DamageSource source, DamageResultType damageText, IEventSource sourceScript = null, AttackableUnit callForHelpAttacker = null)
         {
             //TODO: Make all TakeDamage functions return DamageData
             DamageData damageData = new DamageData
             {
+                // BB CallForHelpAttackerVar (Riot cfhAttackerID) — split allied aggro credit from the
+                // damage attacker for summoned-object damage. Null → falls back to attacker.
+                CallForHelpAttacker = callForHelpAttacker,
                 // IsAutoAttack means a GENUINE basic-attack swing, and that is set explicitly by
                 // ObjAIBase.AutoAttackHit (the only real auto path). Script-dealt damage — including
                 // on-hit SPELLS that use DAMAGE_SOURCE_ATTACK to proc on-hit effects (Alpha Strike,
@@ -1388,9 +1391,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="type">Whether the damage is physical, magical, or true.</param>
         /// <param name="source">What the damage came from: attack, spell, summoner spell, or passive.</param>
         /// <param name="isCrit">Whether or not the damage text should be shown as a crit.</param>
-        public DamageData TakeDamage(AttackableUnit attacker, float damage, DamageType type, DamageSource source, bool isCrit, IEventSource sourceScript = null)
+        public DamageData TakeDamage(AttackableUnit attacker, float damage, DamageType type, DamageSource source, bool isCrit, IEventSource sourceScript = null, AttackableUnit callForHelpAttacker = null)
         {
-            return TakeDamage(attacker, damage, type, source, Bool2Crit(isCrit), sourceScript);
+            return TakeDamage(attacker, damage, type, source, Bool2Crit(isCrit), sourceScript, callForHelpAttacker);
         }
 
         public void TakeDamage(DamageData damageData, bool isCrit, IEventSource sourceScript = null)

@@ -13,7 +13,6 @@ namespace Spells;
 public class AnnieBasicAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        IsDamagingSpell      = true,
         MissileParameters = new MissileParameters() {
             Type = MissileType.Target
         },
@@ -23,7 +22,6 @@ public class AnnieBasicAttack : ISpellScript {
 public class AnnieBasicAttack2 : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        IsDamagingSpell      = true,
         MissileParameters = new MissileParameters() {
             Type = MissileType.Target
         },
@@ -33,7 +31,6 @@ public class AnnieBasicAttack2 : ISpellScript {
 public class AnnieCritAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        IsDamagingSpell      = true,
         MissileParameters = new MissileParameters() {
             Type = MissileType.Target
         },

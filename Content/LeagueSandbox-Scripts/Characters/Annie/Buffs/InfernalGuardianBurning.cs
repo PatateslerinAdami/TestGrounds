@@ -1,5 +1,6 @@
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -11,72 +12,79 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class InfernalGuardianBurning : IBuffGameScript {
-    private       ObjAIBase _annie;
-    private       Spell     _spell;
-    private       Pet       _pet;
-    private       float     _timer  = 0f;
-    private       float     _summonCooldown;   // R's full summon cooldown, captured at cast (see OnActivate)
-    private const float     MaxTime = 1000f;
+internal class InfernalGuardianBurning : IBuffGameScript
+{
+    private ObjAIBase _annie;
+    private Buff _buff;
+    private Spell _spell;
+    private Pet _pet;
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType = BuffType.COMBAT_ENCHANCER
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.COMBAT_ENCHANCER,
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        MaxStacks = 1,
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         _annie = buff.SourceUnit;
+        _buff = buff;
         _spell = ownerSpell;
-        // ownerSpell is the InfernalGuardian (summon) spell. R.cs zeroed the guide spell's cooldown so
-        // pet-steering works, which means the 120s summon cooldown no longer lives on any slot. Capture
-        // it here (full, CDR already applied by GetCooldown) so OnDeactivate can restore the REMAINING
-        // amount to R when the guide swaps back to the summon.
-        _summonCooldown = ownerSpell.GetCooldown();
+        
+        ApiEventManager.OnDeath.AddListener(this, unit, OnDeath, true);
+        
         if (unit is not Pet pet) return;
         _pet = pet;
 
-        StatsModifier.Armor.FlatBonus        = 20.0f * (ownerSpell.CastInfo.SpellLevel - 1);
-        StatsModifier.MagicResist.FlatBonus  = 20f   * (ownerSpell.CastInfo.SpellLevel - 1);
-        StatsModifier.AttackDamage.FlatBonus = 20f   * (ownerSpell.CastInfo.SpellLevel - 1);
-        StatsModifier.HealthPoints.FlatBonus = 900f  * (ownerSpell.CastInfo.SpellLevel - 1);
+        // The effect tables carry Tibbers' TOTAL stats per R level (Effect2 = health 1200/2100/3000,
+        // Effect3 = attack damage 80/105/130, Effect5 = magic resist 30/50/70); the replay shows Riot
+        // keeps the char-data base and applies the difference as a flat modifier one tick after spawn.
+        // Armor has no effect column of its own but tracks the MR totals exactly on the wire (30->70).
+        var effects = ownerSpell.SpellData.EffectLevelAmount;
+        var level = ownerSpell.CastInfo.SpellLevel;
+        StatsModifier.Armor.FlatBonus = effects[5][level] - pet.Stats.Armor.BaseValue;
+        StatsModifier.MagicResist.FlatBonus = effects[5][level] - pet.Stats.MagicResist.BaseValue;
+        StatsModifier.AttackDamage.FlatBonus = effects[3][level] - pet.Stats.AttackDamage.BaseValue;
+        StatsModifier.HealthPoints.FlatBonus = effects[2][level] - pet.Stats.HealthPoints.BaseValue;
         pet.AddStatModifier(StatsModifier);
         pet.Stats.CurrentHealth = pet.Stats.HealthPoints.Total;
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        unit.Die(CreateDeathData(false,                                  0, unit, unit, DamageType.DAMAGE_TYPE_TRUE,
-                                 DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-        RemoveBuff(buff.SourceUnit, "InfernalGuardianTimer");
-        // Tibbers has ended (killed or the 45s elapsed) — swap Annie's R (slot 3) from the guide spell
-        // back to the summon so she can re-cast Tibbers. Without this, R stayed stuck on
-        // InfernalGuardianGuide after the first cast, so Tibbers could never be re-summoned once it died.
-        var resummon = SetSpell(_annie, "InfernalGuardian", SpellSlotType.SpellSlots, 3);
-
-        // Restore the REMAINING summon cooldown to R: the 120s started at cast, and Tibbers has now been
-        // alive for buff.TimeElapsed seconds. Without this, the swap-back would inherit the guide's
-        // zeroed cooldown (ObjAIBase.SetSpell copies CurrentCooldown) and let Annie re-summon instantly.
-        // Tibbers lives at most 45s while the summon cooldown is 120s, so the remainder is always > 0.
-        float remaining = _summonCooldown - buff.TimeElapsed;
-        if (resummon != null && remaining > 0f) {
-            resummon.SetCooldown(remaining, true);
-        }
+    private void OnDeath(DeathData data)
+    {
+        RemoveBuff(_buff.SourceUnit, "InfernalGuardianBurning");
     }
 
-    public void OnUpdate(Buff buff, float diff) {
-        _timer += diff;
-        if (!(_timer >= MaxTime)) return;
-        if (_pet == null) return;
-        var enemiesInRange = GetUnitsInRange(_annie, _pet.Position, 350f, true,
-                                             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                             SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-        var ap          = _annie.Stats.AbilityPower.Total * _spell.SpellData.Coefficient2;
-        var totalDamage = 35.0f + ap;
-        foreach (var enemy in enemiesInRange) {
-            enemy.TakeDamage(_pet.Owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL,
-                             DamageSource.DAMAGE_SOURCE_PET, false);
+
+    public void OnUpdate(Buff buff, float diff)
+    {
+        ExecutePeriodically(buff.BuffVars, "infernalGuardianBurningTick", 1000f, false, 0, () =>
+        {
+            var ap = _annie.Stats.AbilityPower.Total * _spell.SpellData.Coefficient2;
+            var totalDamage = _spell.SpellData.EffectLevelAmount[4][_spell.CastInfo.SpellLevel] + ap;
+            var enemiesInRange = GetUnitsInRange(_annie, _pet.Position, 350f, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral
+                                             | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
+            foreach (var enemy in enemiesInRange)
+            {
+                enemy.TakeDamage(_pet.Owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL,
+                    DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+            }
+        });
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        ApiEventManager.OnDeath.RemoveListener(this, unit, OnDeath);
+        if (!unit.IsDead)
+        {
+            unit.Die(CreateDeathData(false, 0, unit, unit, DamageType.DAMAGE_TYPE_TRUE,
+                DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
         }
 
-        _timer = 0f;
+        RemoveBuff(buff.SourceUnit, "InfernalGuardianTimer");
     }
 }

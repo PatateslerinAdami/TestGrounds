@@ -33,7 +33,7 @@ public class Headbutt : ISpellScript {
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
-        SpellEffectCreate("HeadButt_tar.troy", _alistar, _target, null, orientTowards: _target.GetPosition3D(), boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _alistar, scale: 1f);
+        SpellEffectCreate("HeadButt_tar.troy", _alistar, _target, null, orientTowards: _target.GetPosition3D(), boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _alistar, scale: 1f, fowVisibilityRadius: 10f);
         var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
         var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
         target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,

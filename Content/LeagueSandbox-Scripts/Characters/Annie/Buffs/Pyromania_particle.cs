@@ -22,14 +22,5 @@ public class Pyromania_particle  : IBuffGameScript {
     };
 
     public StatsModifier StatsModifier { get; } = new();
-
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-    }
-    
-    public void OnUpdate(Buff buff, float diff) {
-    }
-    
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-    }
     
 }

@@ -22,6 +22,27 @@ public class Incinerate : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _annie = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+    }
+
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var particleName = (_annie.SkinID) switch
+        {
+            5 => "Annie_skin05_W_buf.troy",
+            _ => "Annie_W_buf.troy"
+        };
+        SpellEffectCreate(particleName, _annie, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _annie, fowVisibilityRadius: 10f);
+        var ap     = _annie.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var damage = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
+        target.TakeDamage(_annie, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
+        if (!_shouldStun) return;
+        var stunDuration = _annie.Stats.Level switch {
+            < 6  => 1.25f,
+            < 11 => 1.5f,
+            _    => 1.75f
+        };
+        AddBuff("Stun", stunDuration, 1, spell, target, _annie);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
@@ -29,39 +50,20 @@ public class Incinerate : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        //AddParticleTarget(_annie, _annie, "Incinerate_cas", _annie);
         
         if (_annie.HasBuff("Pyromania_particle")) {
             _shouldStun = true;
             RemoveBuff(_annie, "Pyromania_particle");
         } else {
-            AddBuff("Pyromania", 250000f, 1, spell, _annie, _annie, true);
-            if (_annie.GetBuffsWithName("Pyromania").Count == 4) {
-                RemoveBuff(_annie, "Pyromania");
-                AddBuff("Pyromania_particle", 25000f, 1, spell, _annie, _annie, true);
-            }
+            AddBuff("Pyromania", 25000f, 1, spell, _annie, _annie, true);
         }
         
         // Cone + target flags from SpellData (Incinerate: 24.76° half, 625u, LockConeToPlayer=1,
-        // AffectEnemies|Neutral|Minions|Heroes) instead of the hardcoded 650u / 85° + manual flags.
+        // AffectEnemies|Neutral|Minions|Heroes).
         var enemiesInRange = GetUnitsHitBySpell(spell);
         
         foreach (var enemy in enemiesInRange) {
-            
-            switch (_annie.SkinID) {
-                case 5:  AddParticleTarget(_annie, enemy, "Annie_skin05_W_buf", enemy); break;
-                default: AddParticleTarget(_annie, enemy, "Annie_W_buf",       enemy);break; 
-            }
-            var ap     = _annie.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
-            var damage = 70 + 45f * (spell.CastInfo.SpellLevel - 1) + ap;
-            enemy.TakeDamage(_annie, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
-            if (!_shouldStun) continue;
-            var stunDuration = _annie.Stats.Level switch {
-                < 6  => 1.25f,
-                < 11 => 1.5f,
-                _    => 1.75f
-            };
-            AddBuff("Stun", stunDuration, 1, spell, enemy, _annie);
+            spell.ApplyEffects(enemy);
         }
     }
 }

@@ -11,18 +11,14 @@ public class MoltenShield : ISpellScript {
     private ObjAIBase _annie;
 
     public SpellScriptMetadata ScriptMetadata => new() {
+        NotSingleTargetSpell = true,
         TriggersSpellCasts = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) { _annie = owner; }
 
     public void OnSpellPostCast(Spell spell) {
-        AddBuff("Pyromania", 250000f, 1, spell, _annie, _annie, true);
-        if (_annie.GetBuffsWithName("Pyromania").Count == 4) {
-            RemoveBuff(_annie, "Pyromania");
-            AddBuff("Pyromania_particle", 25000f, 1, spell, _annie, _annie, true);
-        }
-
+        AddBuff("Pyromania", 25000f, 1, spell, _annie, _annie, true);
         AddBuff("MoltenShield", 5.0f, 1, spell, spell.CastInfo.Owner, spell.CastInfo.Owner);
     }
 }

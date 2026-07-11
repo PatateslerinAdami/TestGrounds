@@ -26,17 +26,9 @@ public class Pyromania  : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
         _annie = buff.SourceUnit;
-        ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdateStats);
-    }
-    
-    public void OnUpdate(Buff buff, float diff) {
-    }
-
-    private void OnUpdateStats(AttackableUnit unit, float diff) {
-        
-    }
-    
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
+        if (buff.StackCount < 4) return;
+        AddBuff("Pyromania_particle", 25000f, 1, ownerspell, _annie, _annie, true);
+        _annie.RemoveBuffsWithName("Pyromania");
     }
     
 }
