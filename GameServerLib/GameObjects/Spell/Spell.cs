@@ -687,15 +687,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.StopMovement(MoveStopReason.Finished);
             }
 
-            // If we are supposed to automatically cast a skillshot for this spell, then calculate the proper end position before casting.
-            // SERVER-INTERNAL heuristic (not wire-verifiable — Riot's server logic is not
-            // visible): both Circle and Arc are location-targeted skillshot missiles
-            // (Circle: e.g. Diana W orbs; Arc: straight skillshots after the JSON-CastType
-            // cleanup). Originally Circle-only; Arc added so retyped skillshots keep their
-            // auto-computed end position.
+            // Circle missiles ONLY: default the orbit center when the script provides none.
+            // SpellCircleMissile (and the CLIENT, decomp mRotateCenterPosition = mCastInfo.TargetPos)
+            // read the orbit center from CastInfo.TargetPosition, so *something* must be there.
+            // OverrideTargetPositionInScript opts out for scripts that write CastInfo themselves.
+            //
+            // Arc was removed from this block (wire-verified wrong): Riot's CastSpellAns for line
+            // skillshots always carries the (range-clamped) CLICK in TargetPos == TargetPosEnd
+            // (replay 567fd333: LuxLightBinding 79 casts from 216u, LuxPrismaticWave from 70u,
+            // AsheSpiritOfTheHawk 17 casts — never a facing-direction max-range point). The server
+            // missile doesn't need it either — InitializeDestination takes only the DIRECTION from
+            // TargetPositionEnd and computes its own full-range endpoint. Worse, GetCurrentCastRange()
+            // returns the BASE CastRange[0] when it exceeds the rank values (Ashe E: 6000 vs
+            // 2500-5500), so the client flew its CastInfo-spawned missile past max rank range, and
+            // GetUnitsHitBySpell resolved AoEs at the fake point instead of the click.
             if (Script.ScriptMetadata.MissileParameters != null
-                && (Script.ScriptMetadata.MissileParameters.Type == MissileType.Circle
-                 || Script.ScriptMetadata.MissileParameters.Type == MissileType.Arc))
+                && !Script.ScriptMetadata.OverrideTargetPositionInScript
+                && Script.ScriptMetadata.MissileParameters.Type == MissileType.Circle)
             {
                 var targetPos = ApiFunctionManager.GetPointFromUnit(CastInfo.Owner, GetCurrentCastRange());
                 CastInfo.TargetPosition = new Vector3(targetPos.X, _game.Map.NavigationGrid.GetHeightAtLocation(targetPos), targetPos.Y);

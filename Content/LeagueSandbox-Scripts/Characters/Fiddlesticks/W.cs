@@ -124,7 +124,7 @@ namespace Spells
             // "Drain" as in the S1 lua (S1→4.20 buff rename). Fearmonger_marker (HEAL) unchanged.
             AddBuff("DrainChannel", 5.0f, 1, _parentSpell ?? spell, _target, _owner);
             AddBuff("Fearmonger_marker", 5.0f, 1, _parentSpell ?? spell, _owner, _owner);
-            _tetherParticle = AddParticleTarget(_owner, _owner, "Drain", _target, 5.0f, bone: "spine", targetBone: "spine");
+            _tetherParticle = SpellEffectCreate("Drain.troy",_owner, _owner,  _target, lifetime: 5.0f, boneName: "C_Buffbone_Glb_Chest_Loc", targetBoneName: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.SimulateWhileOffScreen);
 
             // S1 sets DrainExecuted = GetTime() in ChannelingStart (the periodic tick anchor), then
             // deals one immediate tick. Pre-seeding the anchor makes the periodic below fire its

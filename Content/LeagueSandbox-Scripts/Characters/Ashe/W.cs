@@ -76,11 +76,6 @@ public class VolleyAttack : ISpellScript {
         if (hits == null || !hits.Add(target)) {
             return;
         }
-
-        var qSpell = _ashe.GetSpell("FrostShot");
-        if (qSpell.CastInfo.SpellLevel >= 1) {
-            AddBuff("FrostArrow", 2f, 1, qSpell, target, _ashe);
-        }
         
         var particleName = _ashe.SkinID switch
         {
@@ -88,6 +83,11 @@ public class VolleyAttack : ISpellScript {
             _ => "Ashe_Base_W_tar.troy"
         };
         SpellEffectCreate(particleName, _ashe, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
+        
+        var qSpell = _ashe.GetSpell("FrostShot");
+        if (qSpell.CastInfo.SpellLevel >= 1) {
+            AddBuff("FrostArrow", 2f, 1, qSpell, target, _ashe);
+        }
         
         var mainSpell = _ashe.GetSpell("Volley");
         var ad = _ashe.Stats.AttackDamage.Total;

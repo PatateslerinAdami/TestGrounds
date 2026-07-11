@@ -17,8 +17,6 @@ public class AsheBasicAttack : ISpellScript {
         MissileParameters = new MissileParameters {
             Type = MissileType.Target
         },
-        IsDamagingSpell      = true,
-        CastingBreaksStealth = true
     };
 }
 
@@ -28,8 +26,6 @@ public class AsheBasicAttack2 : ISpellScript {
         MissileParameters = new MissileParameters {
             Type = MissileType.Target
         },
-        IsDamagingSpell      = true,
-        CastingBreaksStealth = true
     };
 }
 
@@ -42,8 +38,6 @@ public class AsheCritAttack : ISpellScript
         {
             Type = MissileType.Target
         },
-        IsDamagingSpell = true,
-        CastingBreaksStealth = true
     };
 
 }

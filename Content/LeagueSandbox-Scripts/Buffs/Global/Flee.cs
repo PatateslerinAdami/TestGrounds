@@ -35,7 +35,7 @@ internal class Flee : IBuffGameScript
     {
         _unit = unit;
         _owner = buff.SourceUnit;
-        _particle = AddParticleTarget(_owner ?? unit, unit, "Global_Fear.troy", unit, buff.Duration);
+        _particle = SpellEffectCreate("LOC_fear.troy",_owner, unit,  unit, lifetime: buff.Duration, boneName: "C_Buffbone_Glb_Head_Loc");
 
         // Feared is DERIVED from BuffType.FLEE (AttackableUnit.RecomputeBuffEffects) — overlap-safe.
 

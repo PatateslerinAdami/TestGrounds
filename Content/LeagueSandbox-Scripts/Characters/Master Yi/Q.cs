@@ -11,6 +11,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace Spells;
 
@@ -155,7 +156,7 @@ public class AlphaStrikeTeleport : ISpellScript
         
         _coords = GetMovePositionByCollisionOffset(_masterYi, _target, 50f);
 
-        var landing3D = new Vector3(_coords.X, _masterYi.GetHeight(), _coords.Y);
+        var landing3D = new Vector3(_coords.X, GetHeightAtLocation(_coords), _coords.Y);
         spell.CastInfo.TargetPosition = landing3D;
         spell.CastInfo.TargetPositionEnd = landing3D;
 

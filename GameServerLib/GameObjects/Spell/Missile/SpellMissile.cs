@@ -127,9 +127,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// Shared skillshot destination setup for location-targeted missile classes
         /// (line/arc and circle — both derive directly from SpellMissile, mirroring the
         /// flat S4 hierarchy): aims from the launch position toward TargetPositionEnd,
-        /// clamps to the spell's current cast range, honors script end-position
-        /// overrides and falls back to the owner's facing when the cast direction
-        /// degenerates.
+        /// flies the CLIENT's flight range (see <see cref="GetSkillshotRange"/>), honors
+        /// script end-position overrides and falls back to the owner's facing when the
+        /// cast direction degenerates.
         /// </summary>
         protected void InitializeDestination(Vector2 overrideEndPos)
         {
@@ -144,7 +144,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             var goingTo = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z) - Position;
             var dirTemp = Vector2.Normalize(goingTo);
-            var endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
+            var endPos = Position + (dirTemp * GetSkillshotRange());
 
             // usually doesn't happen
             if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y))
@@ -158,7 +158,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                     dirTemp = new Vector2(CastInfo.Owner.Direction.X, CastInfo.Owner.Direction.Z);
                 }
 
-                endPos = Position + (dirTemp * SpellOrigin.GetCurrentCastRange());
+                endPos = Position + (dirTemp * GetSkillshotRange());
                 CastInfo.TargetPositionEnd = new Vector3(endPos.X, 0, endPos.Y);
             }
 
@@ -180,6 +180,33 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // missiles override this with the tangent direction afterwards.
             // (Replay-verified fix, see memory: spell_missile_direction_at_spawn.)
             Direction = new Vector3(dirTemp.X, 0, dirTemp.Y);
+        }
+
+        /// <summary>
+        /// Flight range of a location-targeted skillshot, mirroring the CLIENT's formula
+        /// (decomp SpellLineMissile.cpp:1112-1122, byte-matching 4.17) so the server hitbox
+        /// and the client visual die at the same point:
+        ///   LineMissileEndsAtTargetPoint=1 → the missile flies exactly to the cast target
+        ///     point (distance caster→TargetPositionEnd; the client measures against
+        ///     mCasterPos, not the launch offset);
+        ///   otherwise → CastRange[wire level] — the client indexes with the 0-based wire
+        ///     SpellLevel, so rank 1 uses the BASE CastRange[0] and rank r uses CastRange[r-1].
+        /// The old GetCurrentCastRange() (= max of base and per-rank value) overshot the
+        /// client whenever the base exceeds the rank values (Karma Q 1050 vs 950, Talon W
+        /// 700 vs 650, Yasuo W 1200 vs 800, Ashe E 6000 vs rank) — hits landed past the
+        /// visible missile end.
+        /// </summary>
+        private float GetSkillshotRange()
+        {
+            var targetPosEnd2D = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
+            if (SpellOrigin.SpellData.LineMissileEndsAtTargetPoint)
+            {
+                return Vector2.Distance(CastInfo.Owner.Position, targetPosEnd2D);
+            }
+
+            var castRange = SpellOrigin.SpellData.CastRange;
+            int wireLevel = Math.Clamp(CastInfo.SpellLevel - 1, 0, castRange.Length - 1);
+            return castRange[wireLevel];
         }
 
         /// <summary>

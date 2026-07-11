@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using Buffs;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -13,17 +14,16 @@ namespace Spells
 {
     public class Terrify : ISpellScript
     {
-        private ObjAIBase _owner;
+        private ObjAIBase _fiddleSticks;
         private AttackableUnit _target;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             IsDamagingSpell = true,
             TriggersSpellCasts = true,
-
         };
         
         public void OnActivate(ObjAIBase owner, Spell spell) {
-            _owner = owner;
+            _fiddleSticks = owner;
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
@@ -32,16 +32,11 @@ namespace Spells
         
         public void OnSpellPostCast(Spell spell)
         {
+            SpellEffectCreate("Terrify_tar.troy", _fiddleSticks, _target, _target, boneName: "C_Buffbone_Glb_Head_Loc", flags: FXFlags.SimulateWhileOffScreen);
+            SpellEffectCreate("Terrify_cas.troy", _fiddleSticks, _fiddleSticks, null, flags: FXFlags.SimulateWhileOffScreen);
             var duration = 1.25f + 0.25f * (spell.CastInfo.SpellLevel - 1);
-            /*var fear = new Fear()
-            {
-                RandomDirection = true,
-                slowPercent = 0.5f
-            };*/
-            AddBuff("Flee", duration, 1, spell, _target, _owner);
-            AddBuff("FleeSlow", duration, 1, spell, _target, _owner);
-            //AddBuff(fear, "Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
-
+            AddBuff("FleeSlow", duration, 1, spell, _target, _fiddleSticks);
+            AddBuff("Flee", duration, 1, spell, _target, _fiddleSticks);
         }
     }
 }

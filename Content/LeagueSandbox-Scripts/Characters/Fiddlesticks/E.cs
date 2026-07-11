@@ -27,31 +27,34 @@ namespace Spells
                 CanHitCaster = false,
                 BounceSelection =  BounceSelection.Random
             },
-            IsDamagingSpell = true,
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = false,
             TriggersSpellCasts = true,
+            IsDamagingSpell = true,
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _fiddlesticks = owner;
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+            ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit, false);
         }
-
-        public void OnSpellCast(Spell spell)
+        
+        private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
         {
-        }
-
-        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
-        {
-
+            
+            var particleName = _fiddlesticks.SkinID switch
+            {
+                6 => "Party_DarkWind_tar.troy",
+                _ => "DarkWind_tar.troy"
+            };
+            SpellEffectCreate(particleName, _fiddlesticks, target, target, scale: 1f, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _fiddlesticks, fowVisibilityRadius: 10f);
+            AddParticleTarget(_fiddlesticks, target, spell.SpellData.HitEffectName, target);
+            
+            AddBuff("Silence", 1.2f, 1, spell, target, _fiddlesticks, false);
             var ap = _fiddlesticks.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
             var dmg = spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel] + ap;
             dmg *= IsValidTarget(_fiddlesticks, target,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions) ? 1.5f : 1f;
-            
-            AddBuff("Silence", 1.2f, 1, spell, target, _fiddlesticks, false);
-            AddParticleTarget(_fiddlesticks, target, spell.SpellData.HitEffectName, target);
-            
             target.TakeDamage(_fiddlesticks, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
         }
     }

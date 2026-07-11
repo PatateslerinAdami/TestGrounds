@@ -34,14 +34,16 @@ public class Headbutt : ISpellScript {
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
         SpellEffectCreate("HeadButt_tar.troy", _alistar, _target, null, orientTowards: _target.GetPosition3D(), boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _alistar, scale: 1f, fowVisibilityRadius: 10f);
-        var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
-        var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
-        target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
-            DamageResultType.RESULT_NORMAL);
+        
         var buffVars = new VariableTable();
         buffVars.Set("castOriginX", _castOrigin.X);
         buffVars.Set("castOriginY", _castOrigin.Y);
         AddBuff("HeadbuttTarget", 0.75f, 1, _spell, target, _alistar, variableTable: buffVars);
+        
+        var ap = _alistar.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+        var dmg = _spell.SpellData.EffectLevelAmount[2][_spell.CastInfo.SpellLevel] + ap;
+        target.TakeDamage(_alistar, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
+            DamageResultType.RESULT_NORMAL);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -60,7 +62,6 @@ public class Headbutt : ISpellScript {
         PlayAnimation(_alistar, "Spell2", timeScale, 0,0,AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk6 | AnimationFlags.Junk7);
         ApiEventManager.OnMoveSuccess.AddListener(this, _alistar, OnMoveSuccess);
         ForceMove(_alistar, _target.Position, 1500, 2, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, orders: ForceMovementOrdersType.CANCEL_ORDER,idealDistance: distance, movementName:"headbuttDash");
-        
     }
 
     private void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)

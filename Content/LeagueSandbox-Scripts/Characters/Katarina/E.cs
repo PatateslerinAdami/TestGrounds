@@ -8,6 +8,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace Spells;
 
@@ -40,7 +41,7 @@ public class KatarinaE : ISpellScript {
         _coords = CalcVector(overshoot, _katarina.Position, _target.Position);
         // Replay-verified: CastSpellAns.targetPosition is the landing pos, not the click
         // target's center. Sets up the wire packet that Spell.Cast will broadcast next.
-        var landing3D = new Vector3(_coords.X, _katarina.GetHeight(), _coords.Y);
+        var landing3D = new Vector3(_coords.X, GetHeightAtLocation(_coords), _coords.Y);
         spell.CastInfo.TargetPosition = landing3D;
         spell.CastInfo.TargetPositionEnd = landing3D;
     }

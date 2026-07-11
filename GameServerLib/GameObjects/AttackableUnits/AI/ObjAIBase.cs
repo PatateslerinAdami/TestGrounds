@@ -2723,7 +2723,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             base.TakeDamage(damageData, damageText, sourceScript);
 
-            var attacker = damageData.Attacker;
+            // Everything below is Call-For-Help aggro, which credits the CFH attacker (Riot
+            // cfhAttackerID) — distinct from the damage attacker. Null → falls back to the damage
+            // attacker. See DamageData.CallForHelpAttacker.
+            // NO automatic pet→owner redirect: raw-replay decode (2026-07, ~70 4.20 replays, target-
+            // selection stream 0x6A/0xC0) REFUTED it — turrets target pets AND clones DIRECTLY (Tibbers,
+            // Voidling, Zyra seed, Shaco box, Heimer turret, Wukong/LeBlanc clones all named as the
+            // turret's own target); zero owner-redirect events, and pets vs clones behave identically.
+            // (Pet auto-attacks aren't on the wire — client-autonomous — so the exact "pet AA under
+            // tower" trigger is unobservable, but the target stream shows no redirect.) A script may
+            // still set CallForHelpAttacker explicitly for a specific summoned-object BB spell.
+            var attacker = damageData.CallForHelpAttacker ?? damageData.Attacker;
             if (attacker == null)
             {
                 return;

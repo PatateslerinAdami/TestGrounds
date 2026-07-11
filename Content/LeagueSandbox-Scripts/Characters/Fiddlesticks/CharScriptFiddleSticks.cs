@@ -19,35 +19,50 @@ namespace CharScripts;
 
 public class CharScriptFiddleSticks : ICharScript
 {
-    private ObjAIBase                                _owner;
-    private Spell                                    _spell;
-    private readonly HashSet<AttackableUnit> _affectedUnits = new();
-
+    private ObjAIBase _fiddlesticks;
+    private Vector2 _previousPosition;
+    private bool _isPaused = false;
 
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
-        _owner = owner;
-        _spell = spell;
+        _fiddlesticks = owner;
+        AddBuff("Paranoia", 25000f, 1, spell, owner, owner, true);
+        for (short i = 0; i < 4; i++)
+        {
+            ApiEventManager.OnSpellCast.AddListener(this, _fiddlesticks.Spells[i], OnSpellsCast);
+        }
+
+        ApiEventManager.OnLaunchAttack.AddListener(this, owner, OnSpellsCast);
     }
 
     public void OnUpdate(float diff)
     {
-        //maybe periodic check like 0.25s?
-        var unitsInRange = GetUnitsInRange(_owner, _owner.Position, 800f, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes)
-                           .ToHashSet();
-        
-        foreach (var unit in unitsInRange)
+        if (_fiddlesticks.Position != _previousPosition || _fiddlesticks.IsAttacking)
         {
-            if (_affectedUnits.Add(unit))
-            {
-                AddBuff("ParanoiaMissChance", 1500f, 1, _spell, unit, _owner, infiniteduration: true);
-            }
+            ResetPauseTimer();
+            _previousPosition = _fiddlesticks.Position;
+            return;
         }
-        
-        foreach (var unit in _affectedUnits.Except(unitsInRange).ToList())
+
+        _previousPosition = _fiddlesticks.Position;
+        if (_isPaused) return;
+        ExecutePeriodically(_fiddlesticks.CharVars, "pauseAnimationTick", 5000f, false, 0, () =>
         {
-            RemoveBuff(unit, "ParanoiaMissChance");
-            _affectedUnits.Remove(unit);
-        }
+            PauseAnimation(_fiddlesticks, true);
+            _isPaused = true;
+        });
+    }
+
+    private void OnSpellsCast(Spell spell)
+    {
+        ResetPauseTimer();
+    }
+
+    private void ResetPauseTimer()
+    {
+        ExecutePeriodicallyReset(_fiddlesticks.CharVars, "pauseAnimationTick");
+        if (!_isPaused) return;
+        PauseAnimation(_fiddlesticks, false);
+        _isPaused = false;
     }
 }

@@ -16,8 +16,8 @@ namespace Buffs;
 
 public class ParanoiaMissChance : IBuffGameScript { 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_DEHANCER,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        BuffType    = BuffType.SHRED,
+        BuffAddType = BuffAddType.RENEW_EXISTING,
         MaxStacks   = 1,
     };
 

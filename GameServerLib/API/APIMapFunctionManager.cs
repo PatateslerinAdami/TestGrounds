@@ -417,6 +417,16 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.GameTime;
         }
+
+        /// <summary>
+        /// Terrain height (Y) of the navigation grid at the given 2D map position. For scripts that
+        /// write a world-space Vector3 into CastInfo (OverrideTargetPositionInScript pattern) — the
+        /// same lookup the engine itself uses when it fills TargetPosition/TargetPositionEnd.
+        /// </summary>
+        public static float GetHeightAtLocation(Vector2 position)
+        {
+            return _game.Map.NavigationGrid.GetHeightAtLocation(position);
+        }
  
         /// <summary>
         /// Shared end-of-game ceremony. Riot's split (4.20 Lua): the map's LevelScript

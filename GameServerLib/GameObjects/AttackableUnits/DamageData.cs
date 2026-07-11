@@ -10,6 +10,16 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// </summary>
         public AttackableUnit Attacker { get; set; }
         /// <summary>
+        /// Unit that allied "Call For Help" aggro is credited to — Riot DamageEffect::CallForHelpAttackerID
+        /// (StatsHealth.cpp Health::ApplyDamage <c>cfhAttackerID</c>), DISTINCT from <see cref="Attacker"/>
+        /// (who gets damage/kill credit). Null → falls back to <see cref="Attacker"/> (the common case).
+        /// There is NO automatic pet→owner redirect: raw-replay decode (2026-07) showed 4.20 turrets
+        /// target pets AND clones directly, no owner-redirect. Set it EXPLICITLY only for a specific
+        /// summoned-object BB spell that carries CallForHelpAttackerVar (e.g. Teemo shrooms) if/when a
+        /// replay confirms that spell's ally-CFH really credits the owner.
+        /// </summary>
+        public AttackableUnit CallForHelpAttacker { get; set; }
+        /// <summary>
         /// The raw amount of damage to be inflicted (Pre-mitigated damage)
         /// </summary>
         public float Damage { get; set; }
