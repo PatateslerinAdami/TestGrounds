@@ -25,7 +25,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.AttackDamage.FlatBonus, ReplicationBucket.Local1, 11); //mFlatPhysicalDamageMod
             UpdateFloat(Stats.AttackDamage.PercentBonus, ReplicationBucket.Local1, 12); //mPercentPhysicalDamageMod
             UpdateFloat(Stats.AbilityPower.Total, ReplicationBucket.Local1, 13); //mFlatMagicDamageMod
-            UpdateFloat(Stats.HealthRegeneration.Total, ReplicationBucket.Local1, 14); //mHPRegenRate
+            UpdateFloat(Stats.TotalHealthRegen, ReplicationBucket.Local1, 14); //mHPRegenRate
             UpdateFloat(Stats.CurrentHealth, ReplicationBucket.Map, 0); //mHP
             UpdateFloat(Stats.HealthPoints.Total, ReplicationBucket.Map, 1); //mMaxHP
             // UpdateFloat(Stats.PerceptionRange.FlatBonus, ReplicationBucket.Map, 2); //mFlatBubbleRadiusMod

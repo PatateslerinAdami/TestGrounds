@@ -40,7 +40,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Math.Min(Stats.CriticalChance.Total, 1.0f), ReplicationBucket.Local1, 8); //mCrit
             UpdateFloat(Stats.Armor.Total, ReplicationBucket.Local1, 9); //mArmor
             UpdateFloat(Stats.MagicResist.Total, ReplicationBucket.Local1, 10); //mSpellBlock
-            UpdateFloat(Stats.HealthRegeneration.Total, ReplicationBucket.Local1, 11); //mHPRegenRate
+            UpdateFloat(Stats.TotalHealthRegen, ReplicationBucket.Local1, 11); //mHPRegenRate
             UpdateFloat(Stats.ManaRegeneration.Total, ReplicationBucket.Local1, 12); //mPARRegenRate
             UpdateFloat(Stats.Range.Total, ReplicationBucket.Local1, 13); //mAttackRange
             UpdateFloat(Stats.AttackDamage.FlatBonus, ReplicationBucket.Local1, 14); //mFlatPhysicalDamageMod

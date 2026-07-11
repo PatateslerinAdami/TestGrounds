@@ -47,6 +47,19 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat GoldGivenOnDeath { get; }
         public Stat HealthPoints { get; }
         public Stat HealthRegeneration { get; }
+        /// <summary>
+        /// Char-data BaseFactorHPRegen: fraction of CURRENT max HP regenerated per second, on top of
+        /// the static regen. Zero for champions and lane minions; 0.0015 on pets/monsters/props
+        /// (Tibbers, jungle camps, super minions, Anivia egg, ...).
+        /// </summary>
+        public float HealthRegenerationFactor { get; internal set; }
+        /// <summary>
+        /// Effective HP regen per second: static/modifier regen plus the max-HP-scaling factor part.
+        /// Computed on read because the factor tracks the buffed max HP (wire-verified on Tibbers:
+        /// mHPRegenRate goes 2.3 -> 5.0 when R3 raises max HP 1200 -> 3000). Use this — not
+        /// <see cref="HealthRegeneration"/>.Total — for regen ticks and mHPRegenRate replication.
+        /// </summary>
+        public float TotalHealthRegen => HealthRegeneration.Total + HealthRegenerationFactor * HealthPoints.Total;
         public Stat LifeSteal { get; }
         public Stat MagicResist { get; }
         public Stat MagicPenetration { get; }
@@ -238,6 +251,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             HealthPerLevel = charData.HpPerLevel;
             HealthPoints.BaseValue = charData.BaseHp;
             HealthRegeneration.BaseValue = charData.BaseStaticHpRegen;
+            HealthRegenerationFactor = charData.BaseFactorHpRegen;
             HealthRegenerationPerLevel = charData.HpRegenPerLevel;
             MagicResist.BaseValue = charData.SpellBlock;
             MagicResistPerLevel = charData.SpellBlockPerLevel;
@@ -423,8 +437,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public void Update(AttackableUnit? owner, float diff)
         {
-            if (owner != null && HealthRegeneration.Total > 0 && CurrentHealth < HealthPoints.Total && CurrentHealth > 0)
-                owner.TakeHeal(owner, HealthRegeneration.Total * diff * 0.001f, HealType.HealthRegeneration);
+            if (owner != null && TotalHealthRegen > 0 && CurrentHealth < HealthPoints.Total && CurrentHealth > 0)
+                owner.TakeHeal(owner, TotalHealthRegen * diff * 0.001f, HealType.HealthRegeneration);
 
             if ((byte)ParType > 1) return;
 

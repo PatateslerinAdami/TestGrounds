@@ -38,7 +38,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
                 UpdateFloat(Stats.AttackDamage.FlatBonus, ReplicationBucket.Local1, 14); //mFlatPhysicalDamageMod
                 UpdateFloat(Stats.AttackDamage.PercentBonus, ReplicationBucket.Local1, 15); //mPercentPhysicalDamageMod
                 UpdateFloat(Stats.AbilityPower.Total, ReplicationBucket.Local1, 16); //mFlatMagicDamageMod
-                UpdateFloat(Stats.HealthRegeneration.Total, ReplicationBucket.Local1, 17); //mHPRegenRate
+                UpdateFloat(Stats.TotalHealthRegen, ReplicationBucket.Local1, 17); //mHPRegenRate
                 UpdateFloat(Stats.ManaRegeneration.Total, ReplicationBucket.Local1, 18); //mPARRegenRate
                 UpdateFloat(Stats.MagicResist.FlatBonus, ReplicationBucket.Local1, 19); //mFlatMagicReduction
                 UpdateFloat(Stats.MagicResist.PercentBonus, ReplicationBucket.Local1, 20); //mPercentMagicReduction
@@ -63,7 +63,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
                 UpdateFloat(Stats.AttackDamage.FlatBonus, ReplicationBucket.Local1, 16); //mFlatPhysicalDamageMod
                 UpdateFloat(Stats.AttackDamage.PercentBonus, ReplicationBucket.Local1, 17); //mPercentPhysicalDamageMod
                 UpdateFloat(Stats.AbilityPower.Total, ReplicationBucket.Local1, 18); //mFlatMagicDamageMod
-                UpdateFloat(Stats.HealthRegeneration.Total, ReplicationBucket.Local1, 19); //mHPRegenRate
+                UpdateFloat(Stats.TotalHealthRegen, ReplicationBucket.Local1, 19); //mHPRegenRate
                 UpdateFloat(Stats.ManaRegeneration.Total, ReplicationBucket.Local1, 20); //mPARRegenRate
                 UpdateFloat(Stats.MagicResist.FlatBonus, ReplicationBucket.Local1, 21); //mFlatMagicReduction
                 UpdateFloat(Stats.MagicResist.PercentBonus, ReplicationBucket.Local1, 22); //mPercentMagicReduction

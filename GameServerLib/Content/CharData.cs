@@ -71,6 +71,11 @@ namespace LeagueSandbox.GameServer.Content
         public float BaseDamage { get; private set; } = 10.0f;
         public float BaseHp { get; private set; } = 100.0f;
         public float BaseMp { get; private set; } = 100.0f;
+        // HP regen scaling with CURRENT max HP: regen = BaseStaticHPRegen + BaseFactorHPRegen * MaxHP.
+        // Wire-verified on AnnieTibbers (static 0.5, factor 0.0015): mHPRegenRate replicates 2.3 at
+        // 1200 max HP and 5.0 after the R3 buff raises max HP to 3000 — so the factor tracks the
+        // buffed total, not the char-data base. Nonzero only on pets/monsters/props (38 units).
+        public float BaseFactorHpRegen { get; private set; } = 0.0f;
         public float BaseStaticHpRegen { get; private set; } = 0.30000001f;
         public float BaseStaticMpRegen { get; private set; } = 0.30000001f;
         public float CooldownSpellSlot { get; private set; } = 0.0f;
@@ -164,6 +169,7 @@ namespace LeagueSandbox.GameServer.Content
             BaseDamage = file.GetFloat("Data", "BaseDamage", BaseDamage);
             BaseHp = file.GetFloat("Data", "BaseHP", BaseHp);
             BaseMp = file.GetFloat("Data", "BaseMP", BaseMp);
+            BaseFactorHpRegen = file.GetFloat("Data", "BaseFactorHPRegen", BaseFactorHpRegen);
             BaseStaticHpRegen = file.GetFloat("Data", "BaseStaticHPRegen", BaseStaticHpRegen);
             BaseStaticMpRegen = file.GetFloat("Data", "BaseStaticMPRegen", BaseStaticMpRegen);
 
