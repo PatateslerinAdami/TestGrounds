@@ -24,8 +24,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _stun = AddParticle(buff.SourceUnit, unit, "LOC_Stun", unit.Position, buff.Duration,
-                bone: "C_BuffBone_Glb_Center_Loc");
+            SpellEffectCreate("LOC_Stun.troy", buff.SourceUnit, unit, null, unit.Position, lifetime: buff.Duration, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
