@@ -19,7 +19,6 @@ internal class InfernalGuardianTimer : IBuffGameScript {
         BuffType = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1,
-        IsPetDurationBuff = true,
         PersistsThroughDeath = true,
         IsNonDispellable = true
     };
