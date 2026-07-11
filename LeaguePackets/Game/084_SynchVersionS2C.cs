@@ -17,10 +17,14 @@ namespace LeaguePackets.Game
         private bool[] _enabledDradisMessages = new bool[19];
         private PlayerLoadInfo[] _playerInfo = new PlayerLoadInfo[12];
 
+        // PKT_SynchVersionS2C_s bitfield (MultiplayerPackets.h): ISVERSIONOK=1, LOGCLIENTMETRICSTOFILE=2,
+        // MATCHEDGAME=4, DRADISENABLED=8, EVOENABLED=16. Riot replays carry garbage above the defined
+        // masks (0x2d/0x6d observed); the client only reads these five.
         public bool VersionMatches { get; set; }
         public bool WriteToClientFile { get; set; }
         public bool MatchedGame { get; set; }
         public bool DradisInit { get; set; }
+        public bool EvoEnabled { get; set; }
 
         public int MapToLoad { get; set; }
         public PlayerLoadInfo[] PlayerInfo => _playerInfo;
@@ -55,6 +59,7 @@ namespace LeaguePackets.Game
             this.WriteToClientFile = (bitfield & 2) != 0;
             this.MatchedGame = (bitfield & 4) != 0;
             this.DradisInit = (bitfield & 8) != 0;
+            this.EvoEnabled = (bitfield & 16) != 0;
 
             this.MapToLoad = reader.ReadInt32();
             for (var i = 0; i < this.PlayerInfo.Length; i++)
@@ -99,6 +104,8 @@ namespace LeaguePackets.Game
                 bitfield |= 4;
             if (DradisInit)
                 bitfield |= 8;
+            if (EvoEnabled)
+                bitfield |= 16;
             writer.WriteByte(bitfield);
 
             writer.WriteInt32(MapToLoad);

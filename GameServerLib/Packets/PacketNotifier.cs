@@ -769,7 +769,10 @@ namespace PacketDefinitions420
                     ? Math.Max(0f, m.TimedSpeedDeltaTime - m.GetTimeSinceCreation() / 1000f)
                     : float.MaxValue,
 
-                Bounced = false, //TODO: Implement bouncing projectiles
+                // TODO: set true only when replicating a boomerang line missile already on its
+                // return leg (enter-vision case; replay: returning LuxPrismaticWaveMissile MISREP
+                // carries bounced=1 — client then aims the endpoint at casterPos).
+                Bounced = false,
 
                 CastInfo = castInfo
             };
@@ -3018,13 +3021,14 @@ namespace PacketDefinitions420
             {
                 s.CastInfo.Targets.ForEach(t =>
                 {
+                    // Skip the empty placeholder target (Unit == null) — same rule as the
+                    // MissileReplication builder above: Riot sends ZERO targets for position
+                    // casts (replay 567fd333: 17 AsheSpiritOfTheHawk CastSpellAns all have
+                    // targetCount=0; ours carried 1×netid0). The placeholder exists only so
+                    // server-side CastInfo.Targets[0] is always safe to read.
                     if (t.Unit != null)
                     {
                         castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = t.Unit.NetId, HitResult = (byte)t.HitResult });
-                    }
-                    else
-                    {
-                        castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = 0, HitResult = (byte)t.HitResult });
                     }
                 });
             }
@@ -5247,8 +5251,9 @@ namespace PacketDefinitions420
                     SummonorLevel = 30,
                     SummonorSpell1 = HashString(players[i].SummonerSkills[0]),
                     SummonorSpell2 = HashString(players[i].SummonerSkills[1]),
-                    // TODO
-                    Bitfield = 0,
+                    // TODO: wire IsBot once bot players exist (client builds loading-screen bot cards from it)
+                    IsBot = false,
+                    IsVintageSkin = false,
                     TeamId = (uint)players[i].Team,
                     BotName = "",
                     BotSkinName = "",
@@ -6168,13 +6173,14 @@ namespace PacketDefinitions420
             {
                 s.CastInfo.Targets.ForEach(t =>
                 {
+                    // Skip the empty placeholder target (Unit == null) — same rule as the
+                    // MissileReplication builder above: Riot sends ZERO targets for position
+                    // casts (replay 567fd333: 17 AsheSpiritOfTheHawk CastSpellAns all have
+                    // targetCount=0; ours carried 1×netid0). The placeholder exists only so
+                    // server-side CastInfo.Targets[0] is always safe to read.
                     if (t.Unit != null)
                     {
                         castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = t.Unit.NetId, HitResult = (byte)t.HitResult });
-                    }
-                    else
-                    {
-                        castInfo.Targets.Add(new LeaguePackets.Game.Common.CastInfo.Target() { UnitNetID = 0, HitResult = (byte)t.HitResult });
                     }
                 });
             }

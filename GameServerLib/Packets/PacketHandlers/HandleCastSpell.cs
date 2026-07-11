@@ -47,7 +47,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     && s.SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                     && !ownerCastingSpell.SpellData.CantCancelWhileWindingUp))
             {
-                if (s.Cast(req.Position, req.EndPosition, targetUnit))
+                if (s.Cast(req.Position, req.EndPosition, targetUnit, req.IsHudClickCast))
                 {
                     if (s.CastInfo.SpellSlot >= (int)SpellSlotType.InventorySlots && s.CastInfo.SpellSlot < (int)SpellSlotType.BluePillSlot)
                     {

@@ -26,7 +26,13 @@ namespace LeaguePackets.Game
         public float TimedSpeedDelta { get; set; }
         public float TimedSpeedDeltaTime { get; set; }
 
-        // TODO: verify bitfield
+        // PKT_MissileReplication_s bitfield (AIBasePackets.h): BOUNCED_MASK = 1 is the only defined
+        // flag; Riot replays carry uninitialized garbage in bits 5-7 (~3% of packets), always sent
+        // clean here. Bounced = line missile is already on its RETURN leg (boomerang): the client
+        // sets mStartPos = Position and OverridePlacement aims the endpoint at casterPos instead of
+        // endPoint. Replay-observed once as an enter-vision replication of a returning
+        // LuxPrismaticWaveMissile; the bounce itself is client-simulated, so outbound missiles and
+        // chain segments never set it.
         public bool Bounced { get; set; }
 
         public CastInfo CastInfo { get; set; } = new CastInfo();

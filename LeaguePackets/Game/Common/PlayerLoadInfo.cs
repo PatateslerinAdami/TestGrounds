@@ -9,8 +9,11 @@ namespace LeaguePackets.Game.Common
         public ushort SummonorLevel { get; set; }
         public uint SummonorSpell1 { get; set; }
         public uint SummonorSpell2 { get; set; }
-        //TODO: change bitfield to enum or variables
-        public byte Bitfield { get; set; }
+        // PlayerLiteInfo.bitfield (MultiplayerPackets.h): ISBOT_MASK = 1, ISVINTAGESKIN_MASK = 2.
+        // Riot 4.20 replays carry uninitialized garbage in bits 2-7 (varies per slot, even empty ones);
+        // the client only reads the two defined flags, so we always send them clean.
+        public bool IsBot { get; set; }
+        public bool IsVintageSkin { get; set; }
         public uint TeamId { get; set; }
         public string BotName { get; set; } = "";
         public string BotSkinName { get; set; } = "";
@@ -31,7 +34,9 @@ namespace LeaguePackets.Game.Common
             info.SummonorLevel = reader.ReadUInt16();
             info.SummonorSpell1 = reader.ReadUInt32();
             info.SummonorSpell2 = reader.ReadUInt32();
-            info.Bitfield = reader.ReadByte();
+            byte bitfield = reader.ReadByte();
+            info.IsBot = (bitfield & 1) != 0;
+            info.IsVintageSkin = (bitfield & 2) != 0;
             info.TeamId = reader.ReadUInt32();
             info.BotName = reader.ReadFixedString(64);
             info.BotSkinName = reader.ReadFixedString(64);
@@ -54,7 +59,12 @@ namespace LeaguePackets.Game.Common
             writer.WriteUInt16(info.SummonorLevel);
             writer.WriteUInt32(info.SummonorSpell1);
             writer.WriteUInt32(info.SummonorSpell2);
-            writer.WriteByte(info.Bitfield);
+            byte bitfield = 0;
+            if (info.IsBot)
+                bitfield |= 1;
+            if (info.IsVintageSkin)
+                bitfield |= 2;
+            writer.WriteByte(bitfield);
             writer.WriteUInt32(info.TeamId);
             writer.WriteFixedString(info.BotName, 64);
             writer.WriteFixedString(info.BotSkinName, 64);

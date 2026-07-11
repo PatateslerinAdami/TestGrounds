@@ -425,7 +425,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             return false;
         }
 
-        public bool Cast(Vector2 start, Vector2 end, AttackableUnit unit = null)
+        public bool Cast(Vector2 start, Vector2 end, AttackableUnit unit = null, bool isClickCast = false)
         {
             if ((unit == null && SpellData.TargetingType == TargetingType.Target)
                 || (CastInfo.Owner.MovementParameters != null && !SpellData.CanCastWhileDisabled))
@@ -447,6 +447,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Auto-attack overrides can use non-AA slots (ex: TalonNoxianDiplomacyAttack).
             // If this spell is currently selected as the owner's attack spell, keep AA behavior.
             CastInfo.IsAutoAttack = ShouldTreatAsAutoAttack();
+
+            // Riot echoes the request's HudClickCast bit back in the CastSpellAns bitfield (0x10,
+            // IsClickCasted — replay 567fd333: every player E cast carries it). Script/AI casts
+            // pass the default false; the CastType heuristic below may still force it true.
+            CastInfo.IsClickCasted = isClickCast;
 
             if ((SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY || CurrentAmmo <= 0)
             {

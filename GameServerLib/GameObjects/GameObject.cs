@@ -18,6 +18,9 @@ namespace LeagueSandbox.GameServer.GameObjects
     {
         // Crucial Vars (keep in mind Game is everywhere, which could be an issue for the future)
         protected Game _game;
+        /// <summary>Engine-internal access for components that hang off a unit but live outside
+        /// the GameObject hierarchy (e.g. Replication needs Config.GameFeatures).</summary>
+        internal Game Game => _game;
         protected NetworkIdManager _networkIdManager;
 
         // Function Vars

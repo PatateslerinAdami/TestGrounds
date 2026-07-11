@@ -51,7 +51,14 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.AttackSpeedMultiplier.Total, ReplicationBucket.Local1, 19); //mAttackSpeedMod
             UpdateFloat(Stats.Range.FlatBonus, ReplicationBucket.Local1, 20); //mFlatCastRangeMod
             // TODO: Find out why a negative value is required for ability cooldowns to display properly.
-            UpdateFloat(Stats.CooldownReduction.Total, ReplicationBucket.Local1, 21); //mPercentCooldownMod
+            // The HUD must show the EFFECTIVE CDR: the map's gcd_PercentCooldownModMinimum floor
+            // (-0.4 SR, -0.8 URF) applies to the displayed stat just like to the cooldown math —
+            // buying past the cap must not show >40%. With cooldowns disabled (dev mode,
+            // COOLDOWNS_ENABLED=false) the server never clamps, so replicate the raw stat.
+            float cooldownMod = Owner.Game.Config.GameFeatures.HasFlag(FeatureFlags.EnableCooldowns)
+                ? Stats.GetClampedCooldownReduction()
+                : Stats.CooldownReduction.Total;
+            UpdateFloat(cooldownMod, ReplicationBucket.Local1, 21); //mPercentCooldownMod
             UpdateFloat(Stats.PassiveCooldownEndTime, ReplicationBucket.Local1, 22); //mPassiveCooldownEndTime
             UpdateFloat(Stats.PassiveCooldownTotalTime, ReplicationBucket.Local1, 23); //mPassiveCooldownTotalTime
             UpdateFloat(Stats.ArmorPenetration.FlatBonus, ReplicationBucket.Local1, 24); //mFlatArmorPenetration
