@@ -21,8 +21,8 @@ public class JaxEmpowerTwo  : IBuffGameScript {
     private Particle  _p1, _p2;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
-        BuffAddType = BuffAddType.STACKS_AND_RENEWS,
-        MaxStacks   = 6
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        MaxStacks   = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -31,10 +31,10 @@ public class JaxEmpowerTwo  : IBuffGameScript {
         _buff                                      = buff;
         _jax                                       = buff.SourceUnit;
         _spell = ownerspell;
-        SealSpellSlot(_jax, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerspell.SetCooldown(0f);
-        _p1 = AddParticleTarget(_jax, _jax, "armsmaster_empower_buf", _jax, -1f, bone: "R_hand");
-        _p2 = AddParticleTarget(_jax, _jax, "armsmaster_empower_self_01", _jax, -1f, bone: "R_hand", targetBone: "weapon");
+        SealSpellSlot(_jax, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
+        _p1 = SpellEffectCreate("armsmaster_empower_buf.troy",_jax, _jax,  _jax, lifetime: -1f, boneName: "Buffbone_Cstm_Weapon_1", flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
+        _p2 = SpellEffectCreate("armsmaster_empower_self_01.troy",_jax, _jax,  _jax, lifetime: -1f, boneName: "Buffbone_Cstm_Weapon_1", flags: FXFlags.SimulateWhileOffScreen, targetBoneName: "weapon", fowVisibilityRadius: 10f);
         ApiEventManager.OnHitUnit.AddListener(this, _jax, OnHit);
         _jax.SetAutoAttackSpell("JaxEmpowerAttack", true);
     }
@@ -42,20 +42,20 @@ public class JaxEmpowerTwo  : IBuffGameScript {
     private void OnHit(DamageData data) {
         if (!IsValidTarget(_jax, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         var ap  = _jax.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
-        var dmg = 40f + 35f * (_spell.CastInfo.SpellLevel - 1) + ap;
-        AddParticleTarget(_jax, data.Target, "EmpowerTwoHit_tar", data.Target);
+        var dmg = _spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] + ap;
+        SpellEffectCreate("EmpowerTwoHit_tar.troy",_jax, data.Target,  data.Target, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
         data.Target.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
                                DamageResultType.RESULT_NORMAL);
-        _buff.DeactivateBuff();
+        RemoveBuff(_buff);
     }
     
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-        ApiEventManager.RemoveAllListenersForOwner(this);
+        ApiEventManager.OnHitUnit.RemoveListener(this, _jax, OnHit);
         _jax.ResetAutoAttackSpell();
         RemoveParticle(_p1);
         RemoveParticle(_p2);
         SealSpellSlot(_jax, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);
-        spell.SetCooldown(spell.CastInfo.Cooldown, false);
+        spell.SetCooldown(spell.GetCooldown(), false);
     }
     
 }

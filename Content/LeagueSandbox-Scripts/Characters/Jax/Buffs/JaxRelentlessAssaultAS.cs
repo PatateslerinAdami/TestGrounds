@@ -37,26 +37,5 @@ public class JaxRelentlessAssaultAS  : IBuffGameScript {
             _ => 1.4f
         };
         unit.AddStatModifier(StatsModifier);
-        ApiEventManager.OnUpdateStats.AddListener(this, unit, OnUpdateStats);
     }
-    
-    public void OnUpdate(Buff buff, float diff) {
-        
-    }
-
-    private void OnUpdateStats(AttackableUnit unit, float diff) {
-        var attackSpeed = _jax.Stats.Level switch {
-            <4  => 4f,
-            <7  => 6f,
-            <10 => 8f,
-            <13 => 10f,
-            <16 => 12f,
-            _   => 14
-        };
-        SetBuffToolTipVar(_buff, 0, attackSpeed);
-    }
-    
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-    }
-    
 }

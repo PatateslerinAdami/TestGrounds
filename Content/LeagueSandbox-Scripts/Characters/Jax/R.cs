@@ -12,73 +12,95 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class JaxRelentlessAssault : ISpellScript {
-    private ObjAIBase      _jax;
-    private Spell          _spell;
-    private AttackableUnit _target;
+public class JaxRelentlessAssault : ISpellScript
+{
+    private ObjAIBase _jax;
+    private Spell _spell;
+    private int _hitCount = 1;
 
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        TriggersSpellCasts = true,
         CastingBreaksStealth = true
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _jax   = owner;
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        _jax = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, _jax, OnUpdateStats);
         ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _target = target;
+    private void OnLevelUpSpell(Spell spell)
+    {
+        _spell = spell;
+        if (spell.CastInfo.SpellLevel == 1)
+        {
+            ApiEventManager.OnHitUnit.AddListener(this, _jax, OnHit);
+        }
     }
 
-    public void OnSpellCast(Spell spell) { }
+    private void OnHit(DamageData data)
+    {
+        switch (_hitCount)
+        {
+            case 2:
+            {
+                if (!_jax.HasBuff("JaxEmpowerTwo"))
+                {
+                    _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
+                }
 
-    public void OnSpellPostCast(Spell spell) { AddBuff("JaxRelentlessAssaultSpeed", 8f, 1, spell, _jax, _jax); }
+                break;
+            }
+            case 3:
+            {
+                if (!IsValidTarget(_jax, data.Target,
+                        SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                        SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
 
-    private void OnLevelUpSpell(Spell spell) {
-        if (spell.CastInfo.SpellLevel != 1) return;
-        ApiEventManager.OnHitUnit.AddListener(this, _jax, OnHit);
-        ApiEventManager.OnLevelUpSpell.RemoveListener(this);
-    }
 
-    private void OnHit(DamageData data) {
-        if (!IsValidTarget(_jax, data.Target,
-                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                           SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
+                SpellEffectCreate("RelentlessAssault_tar.troy", _jax, data.Target, data.Target,
+                    flags: FXFlags.SimulateWhileOffScreen, keywordObject: _jax);
 
-        var relentlessAttackBuff = _jax.GetBuffWithName("JaxRelentlessAttack");
-        if (relentlessAttackBuff != null) {
-            var ap  = _jax.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
-            var dmg = 100f + 60f * (_spell.CastInfo.SpellLevel - 1) + ap;
-            AddParticleTarget(_jax, data.Target, "RelentlessAssault_tar", data.Target);
-            data.Target.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
-                                   DamageResultType.RESULT_NORMAL);
+                var rSpell = _jax.Spells[3];
+                var ap = _jax.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
+                var dmg = rSpell.SpellData.EffectLevelAmount[1][rSpell.CastInfo.SpellLevel] + ap;
+                data.Target.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PROC,
+                    DamageResultType.RESULT_NORMAL);
+                if (!_jax.HasBuff("JaxEmpowerTwo"))
+                {
+                    _jax.ResetAutoAttackSpell();
+                }
 
-            RemoveBuff(relentlessAttackBuff);
-            RemoveBuff(_jax, "JaxPassive");
-            return;
+                _hitCount = 0;
+                break;
+            }
         }
 
-        AddBuff("JaxPassive", 2.5f, 1, _spell, _jax, _jax);
-        if (_jax.GetBuffsWithName("JaxPassive").Count >= 2)
-            AddBuff("JaxRelentlessAttack", 2.5f, 1, _spell, _jax, _jax);
+        _hitCount++;
     }
 
-    private void OnUpdateStats(AttackableUnit owner, float diff) {
-        var armorPerBonusAd       = _jax.Stats.AttackDamage.FlatBonus * 0.3f;
-        var magicResistPerBonusAp = _jax.Stats.AbilityPower.Total     * 0.2f;
-        var bonusArmor            = 25f + 10f * (_spell.CastInfo.SpellLevel - 1) + armorPerBonusAd;
-        var bonusMagicResist      = 25f + 10f * (_spell.CastInfo.SpellLevel - 1) + magicResistPerBonusAp;
-        SetSpellToolTipVar(_jax, 0, bonusArmor,       SpellbookType.SPELLBOOK_CHAMPION, 3, SpellSlotType.SpellSlots);
-        SetSpellToolTipVar(_jax, 1, bonusMagicResist, SpellbookType.SPELLBOOK_CHAMPION, 3, SpellSlotType.SpellSlots);
+    public void OnSpellPostCast(Spell spell)
+    {
+        AddBuff("JaxRelentlessAssaultSpeed", 8f, 1, spell, _jax, _jax);
+    }
+
+    private void OnUpdateStats(AttackableUnit owner, float diff)
+    {
+        var armorPerBonusAd = _jax.Stats.AttackDamage.FlatBonus * 0.3f;
+        var magicResistPerBonusAp = _jax.Stats.AbilityPower.Total * 0.2f;
+        var bonusArmor = _spell.SpellData.EffectLevelAmount[3][_spell.CastInfo.SpellLevel] + armorPerBonusAd;
+        var bonusMagicResist = _spell.SpellData.EffectLevelAmount[3][_spell.CastInfo.SpellLevel] + magicResistPerBonusAp;
+        SetSpellToolTipVar(_jax, 1, bonusArmor, SpellbookType.SPELLBOOK_CHAMPION, 3, SpellSlotType.SpellSlots);
+        SetSpellToolTipVar(_jax, 0, bonusMagicResist, SpellbookType.SPELLBOOK_CHAMPION, 3, SpellSlotType.SpellSlots);
     }
 }
 
-public class JaxRelentlessAttack : ISpellScript {
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts = false,
-        IsDamagingSpell    = true
+public class JaxRelentlessAttack : ISpellScript
+{
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
     };
 }

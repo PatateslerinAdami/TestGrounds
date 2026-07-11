@@ -14,8 +14,6 @@ namespace Spells;
 
 public class JaxEmpowerTwo : ISpellScript {
     private ObjAIBase      _jax;
-    private Spell          _spell;
-    private AttackableUnit _target;
 
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts   = true,
@@ -24,19 +22,10 @@ public class JaxEmpowerTwo : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _jax = owner;
-        _spell = spell;
-    }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _target = target;
-    }
-
-    public void OnSpellCast(Spell spell) {
-        
     }
 
     public void OnSpellPostCast(Spell spell) {
-        AddBuff("JaxEmpowerTwo", 10f, 1, spell, _jax, _jax);
+        AddBuff("JaxEmpowerTwo", 6f, 1, spell, _jax, _jax);
     }
 }
 

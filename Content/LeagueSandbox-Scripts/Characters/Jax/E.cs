@@ -13,73 +13,106 @@ using System;
 
 namespace Spells;
 
-public class JaxCounterStrike : ISpellScript {
-    private ObjAIBase      _jax;
-    private Spell          _spell;
-    private AttackableUnit _target;
+public class JaxCounterStrike : ISpellScript
+{
+    private ObjAIBase _jax;
+    private Spell _spell;
 
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true,
+        CastingBreaksStealth = true,
+        IsDamagingSpell = false
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
         _jax = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, _jax, OnUpdateStats);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _target = target;
-        if (!_jax.HasBuff("JaxEvasion")) {
-            PlayAnimation(_jax, "Spell3", 1.9f);
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        if (!_jax.HasBuff("JaxCounterStrike"))
+        {
+            PlayAnimation(_jax, "Spell3", 2.25f, 0f, 1f,
+                AnimationFlags.NoBlend | AnimationFlags.Junk6 | AnimationFlags.Junk7);
         }
     }
 
-    public void OnSpellCast(Spell spell) {
-    }
-
-    public void OnSpellPostCast(Spell spell) {
-        if (_jax.HasBuff("JaxEvasion")) {
-            RemoveBuff(_jax, "JaxEvasion");
-        } else {
-            AddBuff("JaxEvasion", 2f, 1, spell, _jax, _jax);
+    public void OnSpellPostCast(Spell spell)
+    {
+        if (_jax.HasBuff("JaxCounterStrike"))
+        {
+            RemoveBuff(_jax, "JaxCounterStrike");
+        }
+        else
+        {
+            AddBuff("JaxCounterStrike", 2f, 1, spell, _jax, _jax);
         }
     }
 
-    private void OnUpdateStats(AttackableUnit owner, float diff) {
-        var value = 0f;
-        SetSpellToolTipVar(_jax, 0, value, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
+    private void OnUpdateStats(AttackableUnit owner, float diff)
+    {
+        var ad = _jax.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
+        SetSpellToolTipVar(_jax, 1, ad, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
     }
 }
 
-public class JaxCounterStrikeAttack : ISpellScript {
-    private ObjAIBase _jax; 
-    Spell             _counterStrikeAttack;
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = false,
-        IsDamagingSpell = true
+public class JaxCounterStrikeAttack : ISpellScript
+{
+    private ObjAIBase _jax;
+    private Spell _counterStrikeAttack;
+
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = false,
+        IsDamagingSpell = true,
+        IsDeathRecapSource = true
+        
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
         _counterStrikeAttack = spell;
-        _jax                 = owner;
+        _jax = owner;
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        var attacksDodged = spell.CastInfo.InstanceVars.GetFloat("attacksDodged");
-        PlayAnimation(_jax, "Spell3b", 0.5f);
-        AddParticleTarget(_jax, _jax, "Counterstrike_cas", _jax, 1.5f);
-        // SelfAOE radius + flags from SpellData (CastRadius=300, was hardcoded 375).
-        var enemiesInRange = GetUnitsHitBySpell(spell);
-        var ad  = _jax.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
-        var dmg = 50f + 25f * (_jax.GetSpell("JaxCounterStrike").CastInfo.SpellLevel - 1) + ad;
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var mainSpell = _jax.GetSpell("JaxCounterStrike");
+        
+        AddBuff("Stun", 1f, 1, mainSpell, target, _jax);
+        
+        
+        var ad = _jax.Stats.AttackDamage.FlatBonus * mainSpell.SpellData.Coefficient;
+        var dmg = mainSpell.SpellData.EffectLevelAmount[1][mainSpell.CastInfo.SpellLevel] + ad;
+        var attacksDodged = _jax.CharVars.GetFloat("attacksDodged");
         dmg += dmg * Math.Min(1f, attacksDodged);
-        foreach (var enemy in enemiesInRange) {
-            AddParticleTarget(_jax, enemy, spell.SpellData.HitEffectName, _jax, bone: spell.SpellData.HitBoneName);
-            AddBuff("Stun", 1f, 1, _jax.GetSpell("JaxCounterStrike"), enemy, _jax);
-            enemy.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                             DamageResultType.RESULT_NORMAL);
+        target.TakeDamage(_jax, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+            DamageResultType.RESULT_NORMAL);
+
+        _jax.CharVars.Set("attacksDodged", 0f);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
+        PlayAnimation(_jax, "Spell3b", 0f, 0f, 1f,
+            AnimationFlags.NoBlend | AnimationFlags.Junk6 | AnimationFlags.Junk7);
+        SpellEffectCreate("Counterstrike_cas.troy", _jax, _jax, _jax, flags: FXFlags.SimulateWhileOffScreen);
+        
+        var enemiesInRange = ForEachUnitInTargetArea(_jax, _jax.Position, 375f,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
+            SpellDataFlags.AffectHeroes);
+        foreach (var enemy in enemiesInRange)
+        {
+            spell.ApplyEffects(enemy);
         }
     }
 }

@@ -10,18 +10,10 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace CharScripts;
 
 public class CharScriptJax : ICharScript {
-    private ObjAIBase _jax;
-    private Spell     _spell;
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
-        _jax   = owner;
-        _spell = spell;
-        ApiEventManager.OnHitUnit.AddListener(this, _jax, OnHit);
-    }
-
-    private void OnHit(DamageData data) {
-        AddBuff("JaxRelentlessAssaultAS", 2.5f, 1, _spell, _jax, _jax);
+        AddBuff("JaxPassive", 25000f, 1, spell, owner, owner, true);
     }
 }

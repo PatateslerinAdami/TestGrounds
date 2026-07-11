@@ -14,40 +14,34 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class JaxRelentlessAttack  : IBuffGameScript {
+public class JaxRelentlessAssaultSpeed  : IBuffGameScript {
     private ObjAIBase _jax;
-    private bool      _pendingAutoAttackOverride;
+    private Buff      _buff;
+    private Particle  _p1;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+            PersistsThroughDeath = true,
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1,
-        IsHidden = true
+        MaxStacks   = 1
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _jax = buff.SourceUnit;
-        _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
-    }
-
-    public void OnUpdate(Buff buff, float diff) {
-        if (!_pendingAutoAttackOverride) return;
-        TryApplyAutoAttackOverride();
-    }
-
-    private void TryApplyAutoAttackOverride() {
-        if (_jax.IsAttacking) {
-            _pendingAutoAttackOverride = true;
-            return;
-        }
-
-        _pendingAutoAttackOverride = false;
-        _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
+        _buff                               = buff;
+        _jax                                = buff.SourceUnit;
+        var armorPerBonusAd = _jax.Stats.AttackDamage.FlatBonus * 0.3f;
+        var magicResistPerBonusAp = _jax.Stats.AbilityPower.Total * 0.2f;
+        var bonusArmor = ownerspell.SpellData.EffectLevelAmount[3][ownerspell.CastInfo.SpellLevel] + armorPerBonusAd;
+        var bonusMagicResist = ownerspell.SpellData.EffectLevelAmount[3][ownerspell.CastInfo.SpellLevel] + magicResistPerBonusAp;
+        StatsModifier.Armor.FlatBonus       = bonusArmor;
+        StatsModifier.MagicResist.FlatBonus = bonusMagicResist;
+        unit.AddStatModifier(StatsModifier);
+        _p1 = AddParticleTarget(_jax, _jax, "JaxRelentlessAssault_buf", _jax, buff.Duration);
     }
     
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
-        _jax.ResetAutoAttackSpell();
+        RemoveParticle(_p1);
     }
     
 }

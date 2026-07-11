@@ -14,135 +14,143 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class JaxLeapStrike : ISpellScript {
-    private ObjAIBase      _jax;
-    private Spell          _spell;
+public class JaxLeapStrike : ISpellScript
+{
+    private ObjAIBase _jax;
+    private Spell _spell;
     private AttackableUnit _target;
 
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
-        CastingBreaksStealth = true,
-        CastTime             = 0f,
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        NotSingleTargetSpell = false,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true,
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _jax   = owner;
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
+        _jax = owner;
         _spell = spell;
         ApiEventManager.OnUpdateStats.AddListener(this, _jax, OnUpdateStats);
-        //ApiEventManager.OnMoveFailure.AddListener(this, owner, OnMoveFailure);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        var ad = _jax.Stats.AttackDamage.FlatBonus * spell.SpellData.Coefficient;
+        var ap = _jax.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var damage = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ad + ap;
+
+        if (!IsValidTarget(_jax, target,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
+                SpellDataFlags.AffectNeutral)) return;
+        SpellEffectCreate("jax_leapstrike_tar.troy", _jax, target, null, keywordObject: _jax, flags: FXFlags.None);
+        target.TakeDamage(_jax, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+        _jax.SetTargetUnit(target);
+    }
+
+    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+    {
         _target = target;
         _jax.StopMovement();
-    }
-
-    public void OnSpellCast(Spell spell) {
-        var distance  = Vector2.Distance(_jax.Position, _target.Position);
-        var   timeScale = 1f;
-        if (distance < 150) {
+        var distance = Vector2.Distance(_jax.Position, _target.Position);
+        var timeScale = 1f;
+        if (distance < 150)
+        {
             timeScale = 0.5f;
             FaceDirection(_target.Position, _jax, true);
-        } else { FaceDirection(GetPositionByOffset(0f, -150f), _jax, true); }
+        }
+        else
+        {
+            FaceDirection(GetMovePositionByCollisionOffset(_jax, _target), _jax, true);
+        }
 
-        PlayAnimation(_jax, "Spell2", timeScale);
-        ApiEventManager.OnMoveSuccess.AddListener(this, _jax, OnMoveEnd);
+        SpellEffectCreate("jax_immortal_Q_cas.troy", _jax, _jax, _jax, boneName: "C_Buffbone_Glb_Chest_Loc",
+            flags: FXFlags.SimulateWhileOffScreen);
+        SpellEffectCreate("jax_immortal_Q_cas_02.troy", _jax, _jax, _jax, flags: FXFlags.SimulateWhileOffScreen);
+        SpellEffectCreate("jax_immortal_Q_cas_03.troy", _jax, _jax, _jax, boneName: "Weapon",
+            flags: FXFlags.SimulateWhileOffScreen);
+        PlayAnimation(_jax, "Spell2", timeScale, flags: AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk6 | AnimationFlags.Junk7);
+    }
+
+    public void OnSpellCast(Spell spell)
+    {
         
     }
 
-    public void OnSpellPostCast(Spell spell) {
+    public void OnSpellPostCast(Spell spell)
+    {
         float gravityVar;
         float speedVar;
         var distance = Vector2.Distance(_jax.Position, _target.Position);
-        switch (distance) {
+        switch (distance)
+        {
             case >= 600:
                 gravityVar = 50;
-                speedVar   = 1650;
+                speedVar = 1650;
                 break;
             case >= 500:
                 gravityVar = 60;
-                speedVar   = 1500;
+                speedVar = 1500;
                 break;
             case >= 400:
                 gravityVar = 70;
-                speedVar   = 1350;
+                speedVar = 1350;
                 break;
             case >= 300:
                 gravityVar = 80;
-                speedVar   = 1300;
+                speedVar = 1300;
                 break;
             case >= 200:
                 gravityVar = 90;
-                speedVar   = 1200;
+                speedVar = 1200;
                 break;
             case >= 100:
                 gravityVar = 150;
-                speedVar   = 1100;
+                speedVar = 1100;
                 break;
             default:
                 gravityVar = 500;
-                speedVar   = 1100;
+                speedVar = 1100;
                 break;
         }
 
-        FaceDirection(distance <= 150f ? _target.Position : GetPositionByOffset(0f, -150f), _jax, true);
+        FaceDirection(distance <= 150f ? _target.Position : GetMovePositionByCollisionOffset(_jax, _target), _jax, true);
 
-        ForceMove(_jax, GetPositionByOffset(0f, -150f), speedVar, gravity: gravityVar, facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION);
+        ApiEventManager.OnMoveFailure.AddListener(this, _jax, OnMoveFailure);
+        ApiEventManager.OnMoveSuccess.AddListener(this, _jax, OnMoveSuccess);
+        ForceMove(_jax, GetMovePositionByCollisionOffset(_jax, _target), speedVar, gravity: gravityVar,
+            ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, false, true,
+            ForceMovementOrdersType.CANCEL_ORDER, "JaxLeapStrike");
     }
 
-    private Vector2 GetPositionByOffset(float angleOffset, float distanceOffset) {
-        var toTarget = _target.Position - _jax.Position;
-        if (toTarget.LengthSquared() <= float.Epsilon) { return _target.Position; }
-
-        var direction = Vector2.Normalize(toTarget);
-        var angleRad  = angleOffset * (MathF.PI / 180.0f);
-        var sin       = MathF.Sin(angleRad);
-        var cos       = MathF.Cos(angleRad);
-        var rotatedDirection = new Vector2(
-            direction.X * cos - direction.Y * sin,
-            direction.X * sin + direction.Y * cos
-        );
-
-        return _target.Position + rotatedDirection * distanceOffset;
+    private void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)
+    {
+        if (parameters.MovementName != "JaxLeapStrike") return;
+        _spell.ApplyEffects(_target);
+        ApiEventManager.OnMoveSuccess.RemoveListener(this, _jax, OnMoveSuccess);
+        ApiEventManager.OnMoveFailure.RemoveListener(this, _jax, OnMoveFailure);
     }
 
-    private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters) {
-        var ad     = _jax.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
-        var ap     = _jax.Stats.AbilityPower.Total     * _spell.SpellData.Coefficient;
-        var damage = 70f + 40f * (_spell.CastInfo.SpellLevel - 1) + ad + ap;
-
-        if (!IsValidTarget(_jax, _target,
-                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
-                SpellDataFlags.AffectNeutral)) return;
-        AddParticleTarget(_jax, _target, "jax_leapstrike_tar", _target);
-        if (_jax.HasBuff("JaxEmpowerTwo")) {
-            var empowerAp = _jax.Stats.AbilityPower.Total * _jax.GetSpell("JaxEmpowerTwo").SpellData.Coefficient;
-            var dmg       = 40f + 35f * (_jax.GetSpell("JaxEmpowerTwo").CastInfo.SpellLevel - 1) + empowerAp;
-            damage += dmg;
-            RemoveBuff(_jax, "JaxEmpowerTwo");
-            AddParticleTarget(_jax, _target, "EmpowerTwoHit_tar", _target);
-        }
-        _target.TakeDamage(_jax, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
-        _jax.SetTargetUnit(_target);
+    private void OnMoveFailure(AttackableUnit unit, ForceMovementParameters parameters)
+    {
+        if (parameters.MovementName != "JaxLeapStrike") return;
+        ApiEventManager.OnMoveSuccess.RemoveListener(this, _jax, OnMoveSuccess);
+        ApiEventManager.OnMoveFailure.RemoveListener(this, _jax, OnMoveFailure);
     }
 
-    private void OnUpdateStats(AttackableUnit owner, float diff) {
+    private void OnUpdateStats(AttackableUnit owner, float diff)
+    {
         var ad = _jax.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
-        var ap = _jax.Stats.AbilityPower.Total     * _spell.SpellData.Coefficient;
+        var ap = _jax.Stats.AbilityPower.Total * _spell.SpellData.Coefficient;
         SetSpellToolTipVar(_jax, 0, ad, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
         SetSpellToolTipVar(_jax, 1, ap, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
     }
 }
 
-public class JaxLeapStrikeAttack : ISpellScript {
-    private ObjAIBase _jax;
-
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts = true,
-        IsDamagingSpell    = true
+public class JaxLeapStrikeAttack : ISpellScript
+{
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
     };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) { _jax = owner; }
-
-    public void OnSpellPostCast(Spell spell) { _jax.ResetAutoAttackSpell(); }
 }
