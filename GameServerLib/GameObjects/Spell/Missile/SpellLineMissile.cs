@@ -14,6 +14,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         // Whether the tracked initial target was already hit (LineMissileTrackUnitsAndContinues:
         // tracking stops after the first target hit and the missile continues straight).
         private bool _hitInitialTarget;
+        // bLineMissileBounces return leg (S4 SpellLineMissile.cpp:826-900): instead of dying at
+        // endpoint/target/hit-budget, the missile turns around and homes on the caster, re-hitting
+        // everything on the way back (Lux W boomerang; Draven R adds UsesAccelerationForBounce).
+        private bool _hasBounced;
+
+        // Read by MissileReplication construction: an enter-vision replication of a returning
+        // missile must carry the wire Bounced flag so the client aims it at the caster.
+        public bool HasBounced => _hasBounced;
 
         // Arc = the client's LINE missile class (S4 CreateArcMissile instantiates
         // SpellLineMissileClient). Derives directly from SpellMissile like Riot's flat
@@ -50,7 +58,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 return;
             }
 
-            if (!HasDestination() || _atDestination)
+            // Reaching the endpoint with bLineMissileBounces set starts the return leg instead
+            // of ending the missile (a bounced missile that arrives back at the caster ends
+            // normally below).
+            if (_atDestination && !_hasBounced
+                && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileBounces != 0)
+            {
+                Bounce();
+            }
+            else if (!HasDestination() || _atDestination)
             {
                 // Reaching the max-range endpoint is client-INFERABLE (the client knows
                 // launch + direction + range + speed), so Riot sends NO DestroyClientMissile
@@ -71,18 +87,42 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 float accel = SpellOrigin.SpellData.MissileAccel;
                 if (accel != 0)
                 {
-                    _moveSpeed += accel * (diff / 1000.0f);
-
-                    float minSpeed = SpellOrigin.SpellData.MissileMinSpeed;
-                    float maxSpeed = SpellOrigin.SpellData.MissileMaxSpeed;
-
-                    if (minSpeed > 0 && _moveSpeed < minSpeed)
+                    // S4 SpellLineMissile.cpp:576: a LineMissileUsesAccelerationForBounce missile
+                    // ignores its normal acceleration and decelerates at -|accel| once it can no
+                    // longer stop before the endpoint (v²/2|a| >= remaining distance), so it
+                    // arrives at ~0 speed for the turn-around (Draven R blades slowing into the
+                    // reversal). Floored at 0: physically v reaches 0 exactly at the endpoint;
+                    // the floor only absorbs discretization error (next tick re-accelerates).
+                    if (!_hasBounced && SpellOrigin.SpellData.LineMissileUsesAccelerationForBounce
+                        && _moveSpeed > 0
+                        && _moveSpeed * _moveSpeed / (2f * Math.Abs(accel)) >= Vector2.Distance(Position, Destination))
                     {
-                        _moveSpeed = minSpeed;
+                        _moveSpeed = Math.Max(0f, _moveSpeed - Math.Abs(accel) * (diff / 1000f));
                     }
-                    else if (maxSpeed > 0 && _moveSpeed > maxSpeed)
+                    else
                     {
-                        _moveSpeed = maxSpeed;
+                        _moveSpeed += accel * (diff / 1000.0f);
+
+                        // The S4 clamp is one-sided by accel sign (SpellLineMissile.cpp:600):
+                        // accelerating clamps only at MissileMaxSpeed, decelerating only at
+                        // MissileMinSpeed. Matters post-bounce: a reversed (negative) speed must
+                        // rise back through 0 without snapping to the minimum.
+                        if (accel > 0)
+                        {
+                            float maxSpeed = SpellOrigin.SpellData.MissileMaxSpeed;
+                            if (maxSpeed > 0 && _moveSpeed > maxSpeed)
+                            {
+                                _moveSpeed = maxSpeed;
+                            }
+                        }
+                        else
+                        {
+                            float minSpeed = SpellOrigin.SpellData.MissileMinSpeed;
+                            if (_moveSpeed < minSpeed)
+                            {
+                                _moveSpeed = minSpeed;
+                            }
+                        }
                     }
                 }
             }
@@ -92,11 +132,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // point) only remains as the fallback once the target is gone/dead. With the
             // AndContinues variant, tracking stops after the initial target was hit and the
             // missile continues straight. E.g. Talon W return blades (TalonRakeMissileTwo).
-            if (TargetUnit != null && !TargetUnit.IsDead
+            if (TargetUnit != null && !TargetUnit.IsDead && !_hasBounced
                 && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileTrackUnits
                 && !(SpellOrigin.SpellData.LineMissileTrackUnitsAndContinues && _hitInitialTarget))
             {
                 Destination = TargetUnit.Position;
+            }
+
+            // S4 SpellLineMissile.cpp:706: a bounced missile re-aims its endpoint at the caster's
+            // position EVERY frame, so the return leg follows a moving caster. (The client gates
+            // the re-aim on caster visibility because it may not know the position in fog — the
+            // server always does.)
+            if (_hasBounced && CastInfo?.Owner != null)
+            {
+                Destination = CastInfo.Owner.Position;
             }
 
             _timeSinceCreation += diff;
@@ -134,6 +183,29 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (Destination != Vector2.Zero)
             {
                 CheckFlagsForUnit(collider as AttackableUnit);
+            }
+        }
+
+        /// <summary>
+        /// Starts the bLineMissileBounces return leg (S4 SpellLineMissile.cpp:858-899): the missile
+        /// turns around at its endpoint (or when its hit budget fills), clears the already-hit list
+        /// so the way back re-hits everything, and homes on the caster from now on (see Update).
+        /// </summary>
+        private void Bounce()
+        {
+            _hasBounced = true;
+            _atDestination = false;
+            ObjectsHit.Clear();
+            Destination = CastInfo.Owner.Position;
+
+            // S4: with UsesAccelerationForBounce the speed is negated at the turn-around (it
+            // decelerated to ~0 on approach, then the positive accel drives it back up toward the
+            // caster — Draven R). Without it, Riot only zeroes the velocity for one frame and the
+            // next frame re-derives it from the unchanged speed toward the new endpoint (Lux W
+            // returns at constant speed) — our scalar speed model needs no change for that.
+            if (SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileUsesAccelerationForBounce)
+            {
+                _moveSpeed = -_moveSpeed;
             }
         }
 
@@ -219,14 +291,21 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // Per-level hit budget (S4 SpellLineMissile.cpp:437+763: mi_MaximumHits
             // [SpellLevel], LINE rule 0 = uncapped — the OPPOSITE of the chain-missile
             // "0 = never bounce"). The budget-filling hit still applies its effects;
-            // the missile ends right after. S4's bLineMissileBounces return-flight
-            // (endpoint reset to caster + mAlreadyHit.clear() so the way back re-hits
-            // everything — Sivir Q boomerang) is NOT ported: no consumer in the roster.
+            // the missile ends right after — or, with bLineMissileBounces, starts its
+            // return leg instead (filling the budget is a bounce trigger alongside
+            // endpoint/target arrival, S4:838; Bounce() clears the budget again).
             int maxHits = SpellOrigin?.Script?.ScriptMetadata?.MissileParameters?
                 .GetMaximumHits(CastInfo.SpellLevel) ?? 0;
             if (maxHits > 0 && ObjectsHit.Count >= maxHits)
             {
-                SetToRemove();
+                if (!_hasBounced && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileBounces != 0)
+                {
+                    Bounce();
+                }
+                else
+                {
+                    SetToRemove();
+                }
             }
         }
 
