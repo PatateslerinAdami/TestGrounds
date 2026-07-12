@@ -53,13 +53,16 @@ namespace Spells
             // actual W anchor: replay c0896952 character="TestCubeRender" skin="Poot"). We spawn it
             // ignoreCollision:true → SpawnMinionS2C.IgnoreCollision tells the client not to collide
             // (the lightweight obj_AI_Marker we tried instead empirically blocked pathing at the
-            // caster's position — confirmed in-game). targetable:false → not clickable. The
-            // telegraph binds to it with TargetPosition = the off-map sentinel (-3679,-3706) so the
-            // .troy draws its own FIXED-length rift from the anchor's orientation.
+            // caster's position — confirmed in-game). Riot dummy spawn form (S1 Lua BBSpawnMinion
+            // at TestCubeRender: Placemarker/Rooted/Invulnerable/MagicImmune + Ghosted): untargetable
+            // + immune; the health bar/model hide comes from CharData NeverRender=1 alone (engine
+            // sets the replicated NoRender state — no ShowHealthBar packet, Riot never sends one).
+            // The telegraph binds to it with TargetPosition = the off-map sentinel (-3679,-3706) so
+            // the .troy draws its own FIXED-length rift from the anchor's orientation.
             var riftAnchor = AddMinion(owner, "TestCubeRender", "VelkozWRift", _velkoz.Position,
                 owner.Team, ignoreCollision: true, targetable: false, isVisible: true, aiPaused: true,
-                useSpells: false);
-            HideHealthBar(riftAnchor);
+                useSpells: false, rooted: true, invulnerable: true, magicImmune: true);
+            SetStatus(riftAnchor, StatusFlags.Ghosted, true);
             FaceDirection(targetPos, riftAnchor, isInstant: true);
             var offMapTarget = new Vector2(-367f, -421f); // int16-encodes to (-3679,-3706)
             AddParticle(owner, riftAnchor, "velkoz_base_w_telegraph_green.troy", offMapTarget,

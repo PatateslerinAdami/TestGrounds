@@ -86,6 +86,13 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// </summary>
         public Vector2 Position { get; protected set; }
         /// <summary>
+        /// Riot's engine-default spawn facing: world +Z. Replay-verified on stationary spawned
+        /// minions (Jinx E chompers): the spawn 0xBA carries MovementDataStop with
+        /// Forward = (0, 1). Units that never received an explicit facing keep this heading.
+        /// </summary>
+        public static readonly Vector3 DEFAULT_FACING = new Vector3(0, 0, 1);
+
+        /// <summary>
         /// 3D orientation of this GameObject (based on ground-level).
         /// </summary>
         public Vector3 Direction { get; protected set; }
@@ -139,7 +146,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 NetId = _networkIdManager.GetNewNetId(); // base class assigns a netId
             }
             Position = position;
-            Direction = Vector3.Zero;
+            Direction = DEFAULT_FACING;
             CollisionRadius = collisionRadius;
             PathfindingRadius = pathingRadius;
             VisionRadius = visionRadius;

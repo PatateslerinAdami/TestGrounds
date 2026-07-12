@@ -47,12 +47,15 @@ namespace LeagueSandbox.GameServer.Players
             info.ClientId = _players.Count;
             _userIdsPerTeam[teamId]++;
 
-            // Check if this is a bot (PlayerId = -1)
-            bool isBot = config.PlayerID <= -1;
+            // Bot slot: either declared explicitly ("isBot": true in GameInfo) or via the legacy
+            // PlayerId <= -1 convention. Bots are spawned at game start with the bot AI and no
+            // client is ever expected on the slot.
+            bool isBot = config.IsBot || config.PlayerID <= -1;
 
             if (isBot)
             {
-                // Set bot connection flags to prevent AFK protection
+                // Mark the slot as "connected" so game start / AFK protection / all-players-left
+                // checks never wait on it.
                 info.IsDisconnected = false;
                 info.IsStartedClient = true;
                 info.IsMatchingVersion = true;
@@ -66,7 +69,7 @@ namespace LeagueSandbox.GameServer.Players
                 info,
                 0,
                 teamId,
-                AIScript: config.AIScript
+                AIScript: isBot && string.IsNullOrEmpty(config.AIScript) ? "BotAI" : config.AIScript
             );
 
             if (isBot)

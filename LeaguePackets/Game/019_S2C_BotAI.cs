@@ -27,7 +27,6 @@ namespace LeaguePackets.Game
             this.AITask = reader.ReadFixedString(64);
             for (var i = 0; i < 3; i++)
             {
-                //TODO: optimize last string to use ReadFixedStringLast ??
                 this.States[i] = reader.ReadFixedString(64);
             }
         }
@@ -39,7 +38,6 @@ namespace LeaguePackets.Game
             writer.WriteFixedString(AITask, 64);
             for (var i = 0; i < 3; i++)
             {
-                //TODO: optimize last string to use WriteFixedStringLast ??
                 writer.WriteFixedString(_states[i], 64);
             }
         }

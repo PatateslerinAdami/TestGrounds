@@ -219,10 +219,16 @@ namespace LeagueSandbox.GameServer.Content
         /// <param name="attacker">AI which cast the spell.</param>
         /// <param name="target">Unit which is being affected.</param>
         /// <param name="overrideFlags">SpellDataFlags to use in place of the ones in this SpellData.</param>
+        /// <param name="forceTargetable">Skip the untargetability gate — for a spell's DESIGNATED
+        /// target (explicit cast target / homing missile's TargetUnit). Riot validates targetability
+        /// at ACQUISITION (click, auto-target, AoE collection), not at execution: wire-proven by
+        /// Vel'koz E, whose per-cast placemarker replicates IsTargetable=false + NonTargetableAll +
+        /// Invulnerable yet is targeted by the script cast, hit by the homing missile and killed by
+        /// the detonation (replay c3a95050: MISREP target = the placemarker, NPC_Die 300ms later).</param>
         /// <returns>True/False.</returns>
-        public bool IsValidTarget(ObjAIBase attacker, AttackableUnit target, SpellDataFlags overrideFlags = 0)
+        public bool IsValidTarget(ObjAIBase attacker, AttackableUnit target, SpellDataFlags overrideFlags = 0, bool forceTargetable = false)
         {
-            bool overrideTargetable = false;
+            bool overrideTargetable = forceTargetable;
             var useFlags = Flags;
 
             if (overrideFlags > 0)
@@ -233,9 +239,12 @@ namespace LeagueSandbox.GameServer.Content
             {
                 overrideTargetable = true;
             }
+            // No EnemyCanUse check here — verified: ValidTargetCheck's useable override calls the
+            // team-BLIND AttackableUnit::IsUseable() (`!dead && useable-state`). The Ally/Enemy/
+            // Minion permission gates live exclusively in the USE-interaction system
+            // (UseableComponent::IsAllowedToUse — ported in HandleUseObject), not in spell targeting.
             if (target.CharData.IsUseable && Flags.HasFlag(SpellDataFlags.AffectUseable))
             {
-                //TODO: Verify if we need a check for CharData.UsableByEnemy here too.
                 overrideTargetable = true;
             }
 
@@ -246,6 +255,31 @@ namespace LeagueSandbox.GameServer.Content
             // flag with GetIsTargetableToTeam, which already includes it, so it was always false → dead code,
             // letting untargetable units through to AoE/spell hit-detection.)
             if (!target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
+            {
+                return false;
+            }
+
+            // Self shortcuts — S4 TargetHelper::ValidTargetCheck order: AlwaysSelf (0x40000) is an
+            // unconditional ACCEPT for the caster itself (placed BEFORE the dead/team/type checks,
+            // so self-buffs work while dead — 436 spells carry it); NotAffectSelf (0x2000) rejects
+            // the caster (202 spells, e.g. Katarina E can't jump to herself).
+            if (target == attacker)
+            {
+                if (useFlags.HasFlag(SpellDataFlags.AlwaysSelf))
+                {
+                    return true;
+                }
+                if (useFlags.HasFlag(SpellDataFlags.NotAffectSelf))
+                {
+                    return false;
+                }
+            }
+
+            // S4 ValidTargetCheck: a spell whose OWN flags carry NonTargetableAlly/Enemy never
+            // validates any target (`if (flags & 0x1800000) return false;`) — on spell flags the
+            // bits act as a hard disable, unlike their per-unit stat meaning. No 4.20 spell JSON
+            // sets them, so this is a faithful no-op guard.
+            if (useFlags.HasFlag(SpellDataFlags.NonTargetableAlly) || useFlags.HasFlag(SpellDataFlags.NonTargetableEnemy))
             {
                 return false;
             }
@@ -276,28 +310,68 @@ namespace LeagueSandbox.GameServer.Content
                 }
                 else
                 {
+                    // Per-class gates — faithful port of the S4 per-class IsValidSpellTarget
+                    // virtuals dispatched by TargetHelper::ValidTargetCheck:
+                    //   obj_AI_Minion  (AIMinion.cpp:631)  — decoded below
+                    //   obj_AI_Turret  (AITurret.cpp:359)  — `return (Flags >> 17) & 1` = AffectTurrets
+                    //   obj_Building   (Building.cpp:316)  — `return (Flags >> 12) & 1` = AffectBuildings
+                    //   AIHero         (AIHero.cpp:887)    — AffectHeroes (see note at the case)
+                    //   obj_AI_Marker  — always false; LevelPropAI — IsUseable() (no flag)
                     switch (target)
                     {
-                        // TODO: Verify all
-                        // Order is important
-                        case LaneMinion _ when useFlags.HasFlag(SpellDataFlags.AffectMinions)
-                                        && !useFlags.HasFlag(SpellDataFlags.IgnoreLaneMinion):
-                            valid = true;
-                            break;
-                        case Minion m when (!(m is Pet) && useFlags.HasFlag(SpellDataFlags.AffectNotPet))
-                                    || (m is Pet && useFlags.HasFlag(SpellDataFlags.AffectUseable))
-                                    || (m.IsWard && useFlags.HasFlag(SpellDataFlags.AffectWards))
-                                    || (!(m is Pet pet && pet.IsClone) && useFlags.HasFlag(SpellDataFlags.IgnoreClones))
-                                    || (target.Team == attacker.Team && !useFlags.HasFlag(SpellDataFlags.IgnoreAllyMinion))
-                                    || (target.Team != attacker.Team && target.Team != TeamId.TEAM_NEUTRAL && !useFlags.HasFlag(SpellDataFlags.IgnoreEnemyMinion))
-                                    || useFlags.HasFlag(SpellDataFlags.AffectMinions):
-                            if (!(target is LaneMinion))
+                        case Minion m:
+                            // Clone minions (CharacterRecord clone flag) validate as HEROES:
+                            // `return (Flags & 0x80010000) == 0x10000` = AffectHeroes set AND
+                            // IgnoreClones clear (IgnoreClones' only 4.20 user is Zilean R,
+                            // which must not revive a clone).
+                            if (m is Pet clonePet && clonePet.IsClone)
                             {
-                                valid = true;
+                                valid = useFlags.HasFlag(SpellDataFlags.AffectHeroes)
+                                    && !useFlags.HasFlag(SpellDataFlags.IgnoreClones);
                                 break;
                             }
-                            // already got checked in LaneMinion
-                            valid = false;
+                            // AffectNotPet EXCLUDES pets (it is not an inclusion criterion for
+                            // non-pets — no 4.20 spell sets it, faithful no-op).
+                            if (m is Pet && useFlags.HasFlag(SpellDataFlags.AffectNotPet))
+                            {
+                                valid = false;
+                                break;
+                            }
+                            // Ignore*Minion are pure EXCLUSION flags (the old code treated their
+                            // absence as an inclusion criterion, which validated any enemy minion
+                            // for spells WITHOUT AffectMinions — e.g. Ignite could hit minions
+                            // through AoE collection).
+                            if (m.Team == attacker.Team && useFlags.HasFlag(SpellDataFlags.IgnoreAllyMinion))
+                            {
+                                valid = false;
+                                break;
+                            }
+                            if (m.Team != attacker.Team && m.Team != TeamId.TEAM_NEUTRAL
+                                && useFlags.HasFlag(SpellDataFlags.IgnoreEnemyMinion))
+                            {
+                                valid = false;
+                                break;
+                            }
+                            // Riot returns EARLY for these two (skipping the ward/AffectMinions
+                            // gates) — kept literally: IgnoreLaneMinion → anything but a lane
+                            // minion; AffectBarracksOnly → lane minions only (sole 4.20 user:
+                            // ItemPromote).
+                            if (useFlags.HasFlag(SpellDataFlags.IgnoreLaneMinion))
+                            {
+                                valid = !(m is LaneMinion);
+                                break;
+                            }
+                            if (useFlags.HasFlag(SpellDataFlags.AffectBarracksOnly))
+                            {
+                                valid = m is LaneMinion;
+                                break;
+                            }
+                            if (m.IsWard && !useFlags.HasFlag(SpellDataFlags.AffectWards))
+                            {
+                                valid = false;
+                                break;
+                            }
+                            valid = useFlags.HasFlag(SpellDataFlags.AffectMinions);
                             break;
                         case BaseTurret _ when useFlags.HasFlag(SpellDataFlags.AffectTurrets):
                             valid = true;
@@ -308,6 +382,10 @@ namespace LeagueSandbox.GameServer.Content
                         case Nexus _ when useFlags.HasFlag(SpellDataFlags.AffectBuildings):
                             valid = true;
                             break;
+                        // AIHero.cpp:887 also has a partially-decoded special state (offset 0xBF5
+                        // set + 0xBF0 == 0) that validates the hero via AffectMinions instead, and
+                        // an extra dead-hero exclusion on flag bit 8 — neither state is identified
+                        // yet, so we keep the plain AffectHeroes gate.
                         case Champion _ when useFlags.HasFlag(SpellDataFlags.AffectHeroes):
                             valid = true;
                             break;
@@ -316,7 +394,18 @@ namespace LeagueSandbox.GameServer.Content
                             break;
                     }
 
-                    // TODO: Verify if placing this here is okay.
+                    // Verified vs S4 TargetHelper::ValidTargetCheck (TargetHelper.cpp:408): Riot has
+                    // the SAME standalone neutral gate after the friends/enemies branch —
+                    // `if (objTeam == NEUTRAL && !(flags & 0x4000)) return false;`. Its position
+                    // relative to the unit-type checks is irrelevant (pure AND chain, only ever
+                    // sets valid = false).
+                    //
+                    // Deliberately NOT ported from ValidTargetCheck: the trailing visibility gate
+                    // (`!(flags & IgnoreVisibilityCheck) && !obj->IsVisibleTo(casterID)`) and the
+                    // IsImportantBotTarget gate (flags & 0x40). Both live in the CLIENT binary's
+                    // copy (client-side target selection/prediction); server-side fog behavior
+                    // contradicts a blanket port — Karthus R carries NO IgnoreVisibilityCheck yet
+                    // hits fogged champions. Revisit only with server-side evidence.
                     if (target.Team == TeamId.TEAM_NEUTRAL && !useFlags.HasFlag(SpellDataFlags.AffectNeutral))
                     {
                         valid = false;
@@ -344,7 +433,10 @@ namespace LeagueSandbox.GameServer.Content
             return (1.0f + DelayCastOffsetPercent) * 0.5f;
         }
 
-        // TODO: Implement this (where it is verified to be needed)
+        // Consumed by Spell.Cast: CastInfo.DesignerTotalTime for non-channel spells mirrors this
+        // (channel spells use cast+channel instead). Replay-verified against CastSpellAns — the
+        // client uses DesignerTotalTime as the post-cast input-lockout window (see the note at
+        // the Spell.cs call sites).
         public float GetCastTimeTotal()
         {
             return (1.0f + DelayTotalTimePercent) * 2.0f;

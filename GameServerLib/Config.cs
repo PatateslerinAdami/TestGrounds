@@ -416,6 +416,9 @@ public class GameConfig
 
 public class PlayerConfig
 {
+    // 16 zero bytes — a valid Blowfish key for slots that never handshake (bots).
+    private const string BOT_BLOWFISH_KEY = "AAAAAAAAAAAAAAAAAAAAAA==";
+
     public long PlayerID { get; private set; }
     public string Rank { get; private set; }
     public string Name { get; private set; }
@@ -430,6 +433,14 @@ public class PlayerConfig
     public RuneCollection Runes { get; private set; }
     public TalentInventory Talents { get; private set; }
     public string AIScript { get; private set; }
+    /// <summary>
+    /// Config-declared bot: the server spawns this champion with the bot AI at game start and
+    /// never waits for a client on the slot. Riot's wire model for bot slots (4.20 co-op replay
+    /// a5347e9d, SynchVersion PlayerLiteInfo): ID=-1, isBot bit set, botName/botSkinName =
+    /// champion model, summoner level 1, no elo, icon -1; bots never appear in the
+    /// loading-screen roster/rename/reskin packets (only the humans do).
+    /// </summary>
+    public bool IsBot { get; private set; }
 
     private JToken _playerData;
 
@@ -437,23 +448,31 @@ public class PlayerConfig
     public PlayerConfig(JToken playerData)
     {
         _playerData = playerData;
-        PlayerID = (long)playerData.SelectToken("playerId");
-        Rank = (string)playerData.SelectToken("rank");
-        Name = (string)playerData.SelectToken("name");
+        IsBot = ((bool?)playerData.SelectToken("isBot")) ?? false;
         Champion = (string)playerData.SelectToken("champion");
 
+        // A bot entry only requires "isBot", "champion" and "team" — everything else falls back
+        // to the replay-observed bot values. Riot bots carry PlayerID -1 on the wire; a config
+        // playerId on a bot entry is deliberately ignored (the handshake must never match it).
+        PlayerID = IsBot ? -1 : (long)playerData.SelectToken("playerId");
+        Rank = (string)playerData.SelectToken("rank") ?? "";
+        Name = (string)playerData.SelectToken("name") ?? (IsBot ? Champion : "");
+
         Team = TeamId.TEAM_PURPLE;
-        if (((string)playerData.SelectToken("team")).ToLower().Equals("blue"))
+        var teamStr = (string)playerData.SelectToken("team") ?? "";
+        if (teamStr.ToLower().Equals("blue"))
         {
             Team = TeamId.TEAM_BLUE;
         }
-        
-        Skin = (short)playerData.SelectToken("skin");
-        Summoner1 = (string)playerData.SelectToken("summoner1");
-        Summoner2 = (string)playerData.SelectToken("summoner2");
-        Ribbon = (short)playerData.SelectToken("ribbon");
-        Icon = (int)playerData.SelectToken("icon");
-        BlowfishKey = (string)playerData.SelectToken("blowfishKey");
+
+        Skin = (short?)playerData.SelectToken("skin") ?? 0;
+        // All bots in the 4.20 co-op replay share the same summoner pair on the wire:
+        // SummonerBoost (hash 105717908) + SummonerSmite (106858133).
+        Summoner1 = (string)playerData.SelectToken("summoner1") ?? (IsBot ? "SummonerBoost" : "SummonerFlash");
+        Summoner2 = (string)playerData.SelectToken("summoner2") ?? (IsBot ? "SummonerSmite" : "SummonerHeal");
+        Ribbon = (short?)playerData.SelectToken("ribbon") ?? 0;
+        Icon = (int?)playerData.SelectToken("icon") ?? (IsBot ? -1 : 0);
+        BlowfishKey = (string)playerData.SelectToken("blowfishKey") ?? (IsBot ? BOT_BLOWFISH_KEY : null);
         AIScript = (string)playerData.SelectToken("aiScript") ?? "";
     }
 
@@ -468,7 +487,7 @@ public class PlayerConfig
                 Runes.Add(Convert.ToInt32(runeCategory.Name), Convert.ToInt32(runeCategory.Value));
             }
         }
-        else
+        else if (!IsBot)
         {
             _logger.Warn($"No runes found for player {PlayerID}!");
         }

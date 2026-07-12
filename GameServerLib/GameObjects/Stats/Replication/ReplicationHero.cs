@@ -50,7 +50,12 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             // UpdateFloat(Stats.MagicResist.PercentBonus, ReplicationBucket.Local1, 18); //mPercentMagicReduction
             UpdateFloat(Stats.AttackSpeedMultiplier.Total, ReplicationBucket.Local1, 19); //mAttackSpeedMod
             UpdateFloat(Stats.Range.FlatBonus, ReplicationBucket.Local1, 20); //mFlatCastRangeMod
-            // TODO: Find out why a negative value is required for ability cooldowns to display properly.
+            // The value is NEGATIVE by definition: mPercentCooldownMod is a signed multiplier
+            // delta, not a "CDR percent" — the client computes every displayed cooldown as
+            // (1.0 + mPercentCooldownMod) x baseCooldown (SpellbookRouter::GetTotalCooldownTime
+            // WithCDR + the tooltip renderer, both literal in the decomp), so 40% CDR must arrive
+            // as -0.4 (x0.6). Same axis as the server's cd *= 1 + CDR math and the
+            // gcd_PercentCooldownModMinimum = -0.4 cap (a negative floor).
             // The HUD must show the EFFECTIVE CDR: the map's gcd_PercentCooldownModMinimum floor
             // (-0.4 SR, -0.8 URF) applies to the displayed stat just like to the cooldown math —
             // buying past the cap must not show >40%. With cooldowns disabled (dev mode,

@@ -101,10 +101,28 @@ namespace LeagueSandbox.GameServer.Content
         public float HpRegenPerLevel { get; private set; }
         public bool IsMelee { get; private set; } //Yes or no
         public bool Immobile { get; private set; } = false;
+        /// <summary>
+        /// CharData "NeverRender" (invisible dummy units like TestCubeRender*): the S4 client maps
+        /// it to CharacterRecordFlags::kNeverRender and sets CharState.SetNoRender(true) at load
+        /// (AIBase.cpp:500) — IsVisible() then returns false, hiding model AND health bar (particles
+        /// only render with ForceRenderParticles). The state is REPLICATED, so the server must set
+        /// it too (StatusFlags.NoRender at unit init) or the first replication clobbers the client's
+        /// locally-derived bit and the health bar pops back in.
+        /// </summary>
+        public bool NeverRender { get; private set; } = false;
         public bool IsTower { get; private set; } = false;
         public bool IsUseable { get; private set; } = false;
+        /// <summary>
+        /// Useable "GoldRedirectTargetUseableOnly" (UseableComponent.cpp:57): when set, ONLY the
+        /// unit's GoldRedirectTarget may use the object — overrides the Ally/Enemy/Minion gates.
+        /// </summary>
+        public bool GoldRedirectTargetUseableOnly { get; private set; } = false;
         public float LocalGoldGivenOnDeath { get; private set; } = 0.0f;
-        public bool MinionUseable { get; private set; } = false;
+        // Riot's raw ini key is "MinionUsable" (no second 'e'), but our inibin converter
+        // normalized it to "MinionUseable" in the JSON exports (verified: 5 Stats JSONs carry
+        // "MinionUseable", none "MinionUsable") — so the parse key below matches OUR data.
+        // Default TRUE per UseableComponent's ctor + InitFromFile.
+        public bool MinionUseable { get; private set; } = true;
         public string MinionUseSpell { get; private set; } = string.Empty;
         public int MoveSpeed { get; private set; } = 100;
         public float MpPerLevel { get; private set; } = 10.0f;
@@ -194,6 +212,7 @@ namespace LeagueSandbox.GameServer.Content
                    || isMeleeStr.Equals("true", StringComparison.OrdinalIgnoreCase);
             LocalGoldGivenOnDeath = file.GetFloat("Data", "LocalGoldGivenOnDeath", LocalGoldGivenOnDeath);
             MoveSpeed = file.GetInt("Data", "MoveSpeed", MoveSpeed);
+            NeverRender = file.GetBool("Data", "NeverRender", NeverRender);
             MpRegenPerLevel = file.GetFloat("Data", "MPRegenPerLevel", MpRegenPerLevel);
             MpPerLevel = file.GetFloat("Data", "MPPerLevel", MpPerLevel);
             PathfindingCollisionRadius = file.GetFloat("Data", "PathfindingCollisionRadius", PathfindingCollisionRadius);
@@ -207,6 +226,7 @@ namespace LeagueSandbox.GameServer.Content
             HeroUseSpell = file.GetString("Useable", "HeroUseSpell", HeroUseSpell);
             CooldownSpellSlot = file.GetFloat("Useable", "CooldownSpellSlot", CooldownSpellSlot);
             IsUseable = file.GetBool("Useable", "IsUseable", IsUseable);
+            GoldRedirectTargetUseableOnly = file.GetBool("Useable", "GoldRedirectTargetUseableOnly", GoldRedirectTargetUseableOnly);
             MinionUseable = file.GetBool("Useable", "MinionUseable", MinionUseable);
             MinionUseSpell = file.GetString("Useable", "MinionUseSpell", MinionUseSpell);
 

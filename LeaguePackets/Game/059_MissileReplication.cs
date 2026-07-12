@@ -57,7 +57,9 @@ namespace LeaguePackets.Game
             this.Bounced = (bitfield & 1) != 0;
 
             this.CastInfo = reader.ReadCastInfo();
-            //TODO: read pad bytes if any(should be 512 byte buffer)?
+            // No trailing pad: the 4.17 struct declares a fixed castInfoBuf[512] (packet size
+            // 0x26e = 622), but the 4.20 wire sends the CastInfo compactly serialized with no
+            // padding — replay MISREPs are 212/217 bytes total. Nothing follows the CastInfo.
         }
         protected override void WriteBody(ByteWriter writer)
         {

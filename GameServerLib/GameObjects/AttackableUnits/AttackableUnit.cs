@@ -411,6 +411,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 StatusFlags.CanMove | StatusFlags.CanMoveEver |
                 StatusFlags.Targetable, true
             );
+            // CharData NeverRender (TestCubeRender* dummies): mirror the client's load-time
+            // CharState.SetNoRender(true) (S4 AIBase.cpp:500) in the replicated state — the
+            // client's IsVisible() gates model AND health bar on it, and particles only render
+            // with ForceRenderParticles. Without the server-side bit, our CharacterState
+            // replication clobbers the client's locally-derived NoRender and the dummy shows a
+            // floating health bar (Riot sends NO ShowHealthBar packet for these units).
+            if (CharData.NeverRender)
+            {
+                SetStatus(StatusFlags.NoRender, true);
+            }
             MovementParameters = null;
             Stats.AttackSpeedMultiplier.BaseValue = 1.0f;
 

@@ -45,7 +45,7 @@ namespace LeaguePackets
         UnitAddGold = 0x22,                             //DONE?
         AddRegion = 0x23,                               //DONE?
         S2C_MoveRegion = 0x24,                          //DONE?
-        S2C_MoveCameraToPoint = 0x25,                   //TODO: bitfield
+        S2C_MoveCameraToPoint = 0x25,                   // bitfield resolved: bit0 = StartAtCurrentCameraPosition (only flag; "UnlockCamera" bit1 was invented) — see 037
         S2C_LineMissileHitList = 0x26,                  //DONE?
         S2C_MuteVolumeCategory = 0x27,                  //DONE?
         ServerTick = 0x28,                              //DONE?
@@ -67,8 +67,8 @@ namespace LeaguePackets
         FX_Kill = 0x38,                                 //DONE?
         NPC_UpgradeSpellReq = 0x39,                     //DONE?
         UseObjectC2S = 0x3A,                            //DONE?
-        MissileReplication = 0x3B,                      //TODO: enhancements?
-        MovementDriverReplication = 0x3C,               //TODO: enums/bitfields
+        MissileReplication = 0x3B,                      // resolved: bitfield bit0 = Bounced (return leg), CastInfo compact on wire (no 512 pad) — see 059_MissileReplication.cs
+        MovementDriverReplication = 0x3C,               // resolved: MovementParamType factory key + HomingData decoded (MovementPropertyFlags = reserved/never read) — see 060/Common
         S2C_HighlightHUDElement = 0x3D,                 //DONE?
         SwapItemAns = 0x3E,                             //DONE?
         NPC_LevelUp = 0x3F,                             //DONE?
@@ -84,7 +84,7 @@ namespace LeaguePackets
         C2S_PlayVOCommand = 0x49,                       //DONE?
         HeroReincarnate = 0x4A,                         //DONE?
         C2S_OnScoreBoardOpened = 0x4B,                  //DONE?
-        S2C_CreateHero = 0x4C,                          //TODO: Unknowns
+        S2C_CreateHero = 0x4C,                          // bitfields resolved: bit0 of trailing byte = ChangeHero (in-place hero swap), rest garbage — see 076_S2C_CreateHero.cs
         SPM_AddMemoryListener = 0x4D,                   //Unused
         SPM_HierarchicalMemoryUpdate = 0x4E,            //Unused
         S2C_ToggleUIHighlight = 0x4F,                   //DONE?
@@ -119,10 +119,10 @@ namespace LeaguePackets
         S2C_ChainMissileSync = 0x6C,                    //DONE?
         C2S_OnTipEvent = 0x6D,                          //DONE?
         S2C_ForceCreateMissile = 0x6E,                  //DONE?
-        BuyItemAns = 0x6F,                              //TODO: bitfield
+        BuyItemAns = 0x6F,                              // bitfield resolved: 0x40 = ItemCallout ("bought X" ally announcement), rest unused — see 111_BuyItemAns.cs
         S2C_SetSpellData = 0x70,                        //DONE?
         S2C_PauseAnimation = 0x71,                      //DONE?
-        NPC_IssueOrderReq = 0x72,                       //TODO: better type detection
+        NPC_IssueOrderReq = 0x72,                       // resolved: trailing MovementData has NO wire discriminator — presence = packet length (see 114_NPC_IssueOrderReq.cs)
         S2C_CameraBehavior = 0x73,                      //DONE?
         S2C_AnimatedBuildingSetCurrentSkin = 0x74,      //DONE?
         Connected = 0x75,                               //DONE?
@@ -189,7 +189,7 @@ namespace LeaguePackets
         SetFadeOut_Push = 0xB2,                         //DONE?
         S2C_OpenTutorialPopup = 0xB3,                   //DONE?
         S2C_RemoveUnitHighlight = 0xB4,                 //DONE?
-        NPC_CastSpellAns = 0xB5,                        //TODO: Unknowns
+        NPC_CastSpellAns = 0xB5,                        // bitfield resolved: bit0 = continuation cast (charge-fire), see 181_NPC_CastSpellAns.cs
         SPM_HierarchicalBBProfileUpdate = 0xB6,         //Unused
         NPC_BuffAdd2 = 0xB7,                            //DONE?
         S2C_OpenAFKWarningMessage = 0xB8,               //DONE
@@ -216,7 +216,7 @@ namespace LeaguePackets
         C2S_OnQuestEvent = 0xCD,                        //DONE?
         S2C_ShowHealthBar = 0xCE,                       //DONE?
         SpawnBotS2C = 0xCF,                             //DONE?
-        SpawnLevelPropS2C = 0xD0,                       //TODO: bitfield
+        SpawnLevelPropS2C = 0xD0,                       // bitfield resolved: uint16 = TeamID (TEAMID_MASK=511), see 208_SpawnLevelPropS2C.cs
         UpdateLevelPropS2C = 0xD1,                      //DONE?
         AttachFlexParticleS2C = 0xD2,                   //DONE?
         S2C_HandleCapturePointUpdate = 0xD3,            //DONE?

@@ -33,9 +33,16 @@ namespace LeaguePackets.Game
         public float TimeSinceDeath { get; set; }
 
         public CreateHeroDeath CreateHeroDeath { get; set; }
-        // FIXME: fix these unknowns
-        public bool Unknown1 { get; set; } // something with scripts
-        public bool Unknown2 { get; set; } // something with spawn
+        // Trailing bitfield. The 4.17 header packed DeathState (bits 0-2, DEATHSTATE_MASK=7) and
+        // ChangeHero (bit 3, CHANGEHERO_MASK=8) here; 4.20 moved DeathState into the explicit
+        // uint32 above (+3 bytes, replay: all packets 203 bytes), leaving ChangeHero as the only
+        // remaining flag — re-packed at bit 0. ChangeHero = client resolves an EXISTING hero by
+        // NetID and swaps it in place instead of creating a new one (GameClient.cpp:869 hero-swap
+        // path). Wire evidence (621 packets, ~39 games): bit 0 is NEVER set (no hero swap occurs
+        // in normal games); bits 1-7 are uninitialized garbage — per-GAME constant across all
+        // heroes (same stack frame reused in Riot's spawn loop), ~50-78% set per bit. We always
+        // send them clean.
+        public bool IsChangeHero { get; set; }
 
         protected override void ReadBody(ByteReader reader)
         {
@@ -59,8 +66,7 @@ namespace LeaguePackets.Game
             this.CreateHeroDeath = (CreateHeroDeath)reader.ReadUInt32();
 
             byte bitfield2 = reader.ReadByte();
-            this.Unknown1 = (bitfield2 & 0x01) != 0;
-            this.Unknown2 = (bitfield2 & 0x02) != 0;
+            this.IsChangeHero = (bitfield2 & 0x01) != 0;
         }
         protected override void WriteBody(ByteWriter writer)
         {
@@ -90,13 +96,9 @@ namespace LeaguePackets.Game
             writer.WriteUInt32((uint)CreateHeroDeath);
 
             byte bitfield2 = 0;
-            if (Unknown1)
+            if (IsChangeHero)
             {
                 bitfield2 |= 0x01;
-            }
-            if (Unknown2)
-            {
-                bitfield2 |= 0x02;
             }
             writer.WriteByte(bitfield2);
         }

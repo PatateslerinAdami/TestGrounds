@@ -25,6 +25,29 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             var champion = _playerManager.GetPeerInfo(userId).Champion;
             var target = _game.ObjectManager.GetObjectById(req.TargetNetID) as AttackableUnit;
 
+            // Use permission — port of UseableComponent::IsAllowedToUse (UseableComponent.cpp:69,
+            // was missing entirely: the server trusted the client): dead/non-useable objects are
+            // unusable; GoldRedirectTargetUseableOnly restricts to the object's gold-redirect
+            // target; otherwise same-team needs AllyCanUse and cross-team needs EnemyCanUse.
+            // (Riot's `!IsHero && !MinionUsable` reject can't fire here — the user is a champion.)
+            if (target == null || target.IsDead || !target.CharData.IsUseable)
+            {
+                return false;
+            }
+            if (target.CharData.GoldRedirectTargetUseableOnly)
+            {
+                if ((target as LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase)?.GoldRedirectTarget != champion)
+                {
+                    return false;
+                }
+            }
+            else if (!(target.Team == champion.Team
+                        ? target.CharData.AllyCanUse
+                        : target.CharData.EnemyCanUse))
+            {
+                return false;
+            }
+
             champion.SetSpell(target.CharData.HeroUseSpell, (byte)SpellSlotType.UseSpellSlot, true);
 
             var s = champion.Spells[(short)SpellSlotType.UseSpellSlot];

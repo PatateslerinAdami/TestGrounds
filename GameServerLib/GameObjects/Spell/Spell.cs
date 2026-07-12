@@ -279,7 +279,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void ApplyEffects(AttackableUnit u, SpellMissile m = null)
         {
-            if (!u.GetIsTargetableToTeam(CastInfo.Owner.Team))
+            // The untargetability gate does NOT apply to a designated SAME-TEAM target (explicit
+            // cast target / homing missile's TargetUnit): Riot validates ally-directed executions
+            // at acquisition only. Wire-proven by Vel'koz E — its own-team per-cast placemarker
+            // replicates IsTargetable=false + NonTargetableAll + Invulnerable, yet the script cast
+            // targets it, the homing missile connects and the detonation kills it (replay
+            // c3a95050: MISREP target = placemarker, NPC_Die 300ms later). Against ENEMIES the
+            // gate stands even for designated targets: Fizz E dodges an in-flight SpellFluxMissile
+            // wire-silently (replay ba2b1e23 — no damage during/after the untargetable window,
+            // no destroy). Same team-asymmetry as the spell-shield gate below (ally executions
+            // never blocked). AoE collection keeps filtering untargetables upstream.
+            bool designatedAlly = u.Team == CastInfo.Owner.Team
+                && ((m != null && m.TargetUnit == u)
+                    || (CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit == u));
+            if (!designatedAlly && !u.GetIsTargetableToTeam(CastInfo.Owner.Team))
             {
                 return;
             }
@@ -478,10 +491,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             CastInfo.Targets.Clear();
 
-            // TODO: Unhardcode (wind down? If so, make it cancelable via casting a different spell and via changing move order to AttackTo or MoveTo.)
+            // 0 is the correct default for both fields — replay-verified (630b7ceb: 2541/2599
+            // CastSpellAns carry ExtraCastTime = StartCastTime = 0; full breakdown of the two
+            // non-zero patterns — AA-cycle drift compensation and late-announce fast-forward —
+            // at the same assignment in the Cast(CastInfo,...) overload). The old "wind down?/
+            // extra windup?" guesses here were wrong.
             CastInfo.ExtraCastTime = 0.0f;
             CastInfo.Cooldown = GetCooldown();
-            // TODO: Unhardcode (extra windup?)
+            _pendingCooldownReduction = 0f;
             CastInfo.StartCastTime = 0.0f;
 
             var trueChannel = GetEffectiveChannelDuration();
@@ -548,18 +565,31 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Must be the recharge DURATION, not CurrentAmmoCooldown (which is 0 before the consume).
             CastInfo.AmmoRechargeTime = GetAmmoRechageTime();
 
-            // TODO: Account for multiple targets
+            // Multi-target CastSpellAns (instant AoE executions — Riot's ANS carries the FULL hit
+            // list, replay: up to 19 targets on Tantrum/RenektonCleave-class point-blank AoEs; the
+            // client drives per-target hit confirmation from it): Riot fills the list BEFORE the
+            // announce via the AdjustCastInfoBuildingBlocks hook + BBAdjustCastInfoCenterAOE.
+            // Our equivalent: the SCRIPT calls ApiFunctionManager.AddCastTargetsInRange(spell,
+            // center, range) in OnSpellPreCast (which runs before the ANS notify, like Riot's
+            // hook) and iterates the returned list for its damage loop instead of re-querying in
+            // OnSpellPostCast. The designated target added below stays entry[0].
+            // Missiles are unaffected (wire-verified single-target, see SpellMissile ctor).
             CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.IsNextAutoMiss, CastInfo.Owner.IsNextAutoDodged)));
 
-            // TODO: implement check for IsForceCastingOrChannel and IsOverrideCastPosition
-            if (SpellData.CastType == (int)CastType.CAST_TargetMissile
-             || SpellData.CastType == (int)CastType.CAST_ChainMissile)
-            {
-                // TODO: Verify
-                CastInfo.IsClickCasted = true;
-            }
+            // IsClickCasted stays at the caller's value — the bit is purely the echo of the
+            // CLIENT's HudClickCast request flag, never derived from CastType. Replay-refuted on
+            // the same spell pair (28161fa2): JinxW player casts carry 0x10 while Riot's own
+            // server-initiated JinxWMissile sub-casts are 59/59 x bitfield 0x00 despite being
+            // CastType 1 target missiles; smart-casts also arrive as 0x00 (JinxE 14x0x10/7x0x00).
+            // A former CastType 1/2 heuristic forced true here, clobbering both cases.
+            // IsForceCastingOrChannel / IsOverrideCastPosition are set from the request/API
+            // parameters and written to the wire as-is — nothing to derive here either.
 
-            // TODO: Verify
+            // Verified vs the S4 client's own cast construction: mSpellCastLaunchPos = the
+            // caster's CURRENT 3D position at cast time (AIBaseClient.cpp:2077 for attacks;
+            // SpellMissileManager::CreateMissile uses it as the missile launch pos with a
+            // CasterObj->Position fallback). Remote launches (Talon W return blades) override it
+            // via the SpellCast API's overrideCastPos — see the note there.
             CastInfo.SpellCastLaunchPosition = CastInfo.Owner.GetPosition3D();
 
             var targetingType = SpellData.TargetingType;
@@ -592,7 +622,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
 
             // All spell checks and steps passed, set the casting spell on the owner.
-            // TODO: Verify if we should also do this for manual SpellCasts
+            // The channel break below is DELIBERATELY player-path-only (the API overload mirrors
+            // SetCastSpell + CastCancelCheck but not this): breaking channels on cast is ORDER-
+            // pipeline behavior at Riot too (S4 AIBase.cpp:1510 — the kCasting stop lives in the
+            // order handler, gated on !toggled && !DoesntBreakChannels && !isAutoAttack &&
+            // !IsCharging). Script/API casts must NOT break the owner's channel: channel scripts
+            // fire their tick executions as API sub-casts (Vel'koz R ticks, charge-fire, Katarina
+            // R daggers) — a channel-breaking API cast would make every such channel self-cancel.
             if (!CastInfo.IsAutoAttack)
             {
                 if (!SpellData.DoesntBreakChannels)
@@ -653,7 +689,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         {
                             CastInfo.Owner.StopMovement(MoveStopReason.Finished);
                         }
-                        // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
+                        // Order-pipeline state: this is the order-driven cast path, so claiming
+                        // the CastSpell move order here mirrors Riot's HandleNewOrder
+                        // (AI_TEMP_CASTSPELL) taking the unit's order for the cast.
                         CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                     }
 
@@ -712,7 +750,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 var targetPos = ApiFunctionManager.GetPointFromUnit(CastInfo.Owner, GetCurrentCastRange());
                 CastInfo.TargetPosition = new Vector3(targetPos.X, _game.Map.NavigationGrid.GetHeightAtLocation(targetPos), targetPos.Y);
-                // TODO: Verify if we should also override TargetPositionEnd (probably not due to things like Viktor E).
+                // TargetPositionEnd stays UNTOUCHED — verified three ways: (1) the client's only
+                // circle-missile consumer reads TargetPos alone (mRotateCenterPosition); (2) Riot's
+                // wire keeps End as the raw request value, never a synthesized point (Ahri W ANS:
+                // TargetPos/End independent, usually a few units apart, one identical); (3) the old
+                // Viktor-E concern is moot anyway since this block became Circle-only — DragDirection
+                // spells never reach it.
             }
 
             if (CastInfo.IsAutoAttack && CastInfo.Owner.IsMelee)
@@ -905,6 +948,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         {
             CastInfo = castInfo;
             CastInfo.IsAutoAttack = ShouldTreatAsAutoAttack();
+            // Initializer, mirroring the player-path overload: RADIAL = orient by direction
+            // (skillshots); the attack/target branches below refine to TARGETED/MELEE, which the
+            // LookAt notify maps to LookAtType.Unit (orient at the target unit).
+            _attackType = AttackType.ATTACK_TYPE_RADIAL;
             /*
             if (CastInfo.Targets == null)
             {
@@ -956,6 +1003,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             //      windup by StartCastTime.
             CastInfo.ExtraCastTime = 0.0f;
             CastInfo.Cooldown = GetCooldown();
+            _pendingCooldownReduction = 0f;
             CastInfo.StartCastTime = 0.0f;
 
             var trueChannel = GetEffectiveChannelDuration();
@@ -1007,6 +1055,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Otherwise, use the normal auto attack setup
             if (CastInfo.IsAutoAttack)
             {
+                // Mirrors the player path: attacks orient at the target UNIT (LookAtType.Unit),
+                // not by direction. The melee refinement below may override to MELEE.
+                _attackType = AttackType.ATTACK_TYPE_TARGETED;
                 CastInfo.UseAttackCastTime = true;
                 CastInfo.IsSecondAutoAttack = CastInfo.Owner.HasMadeInitialAttack;
             }
@@ -1021,16 +1072,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // Must be the recharge DURATION, not CurrentAmmoCooldown (which is 0 before the consume).
             CastInfo.AmmoRechargeTime = GetAmmoRechageTime();
 
-            // TODO: implement check for IsForceCastingOrChannel and IsOverrideCastPosition
-            if (SpellData.CastType == (int)CastType.CAST_TargetMissile
-             || SpellData.CastType == (int)CastType.CAST_ChainMissile)
-            {
-                // TODO: Verify
-                CastInfo.IsClickCasted = true;
-            }
+            // IsClickCasted stays at the caller's value — the bit is purely the echo of the
+            // CLIENT's HudClickCast request flag, never derived from CastType. Replay-refuted on
+            // the same spell pair (28161fa2): JinxW player casts carry 0x10 while Riot's own
+            // server-initiated JinxWMissile sub-casts are 59/59 x bitfield 0x00 despite being
+            // CastType 1 target missiles; smart-casts also arrive as 0x00 (JinxE 14x0x10/7x0x00).
+            // A former CastType 1/2 heuristic forced true here, clobbering both cases.
+            // IsForceCastingOrChannel / IsOverrideCastPosition are set from the request/API
+            // parameters and written to the wire as-is — nothing to derive here either.
 
-            // TODO: Verify
-            _attackType = AttackType.ATTACK_TYPE_RADIAL;
+            // Unit-target spells orient at the target unit (player-path parity: the
+            // TargetingType.Target branch there sets TARGETED alongside its range check, which
+            // this forced/API path deliberately skips).
+            if (SpellData.TargetingType == TargetingType.Target
+                && CastInfo.Targets.Count > 0 && CastInfo.Targets[0].Unit != null)
+            {
+                _attackType = AttackType.ATTACK_TYPE_TARGETED;
+            }
 
             if (cast && (!CastInfo.IsAutoAttack && !SpellData.IsToggleSpell
                         || (!SpellData.NoWinddownIfCancelled
@@ -1078,7 +1136,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                             {
                                 CastInfo.Owner.StopMovement(MoveStopReason.Finished);
                             }
-                            // TODO: Verify if we should move this outside of this TriggersSpellCasts if statement.
+                            // Stays INSIDE the TriggersSpellCasts/channel gate on purpose: the
+                            // move order is ORDER-pipeline state (Riot: HandleNewOrder's
+                            // AI_TEMP_CASTSPELL). Announced casts and channels claim it; SILENT
+                            // sub-executions (TriggersSpellCasts=false) run order-less at Riot
+                            // and must not stomp the owner's current order — a passive-proc
+                            // sub-cast mid-walk would otherwise cancel the player's move.
                             CastInfo.Owner.UpdateMoveOrder(OrderType.CastSpell, true);
                         }
                     }
@@ -1148,8 +1211,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     CastInfo.Owner.MaxAttackSpeedOverride,
                     CastInfo.Owner.MinAttackSpeedOverride);
 
-                // TODO: Verify if this should be affected by cast variable.
-                if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
+                // Gated on `cast` like every other wire announce in this function (LookAt, both
+                // CastSpellAns sites): Basic_Attack/Basic_Attack_Pos ARE the cast-announce of an
+                // attack — the client starts its windup animation and spawns its own attack
+                // missile from them. A fire-without-casting attack (cast=false: effects only, no
+                // pipeline) must stay wire-silent here or the client would animate a swing the
+                // server never performs AND double the missile (client-autonomous + our MISREP).
+                if (cast && CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
                     // Minions/pets auto-attack AUTONOMOUSLY on the client. Once a Basic_Attack puts them
                     // into the hardcode-attack state, obj_AI_Minion::UpdatePimpl (mac decomp 4.17,
@@ -1411,23 +1479,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
-            // TODO: Verify if this should only be checked at the start of channeling.
-            if (!SpellData.CanMoveWhileChanneling && CastInfo.Owner.MovementParameters != null)
-            {
-                CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.Move);
-                return;
-            }
-
             // M2 Phase 3: a channel is a cast — cast-disabling CC (charm/fear/silence/stun/suppress/taunt)
             // clears the CanCast capability (BuffType.ToCapabilityDisable). Query the CC BUFFS directly via
             // IsUnderCastDisablingCC, NOT the raw !CanCast flag: Channel() imperatively clears CanCast as its
             // OWN action-lock (Spell.cs Channel(): SetStatus(CanCast,false)), so checking the flag would make
             // every channel self-cancel on its first tick (StunnedOrSilencedOrTaunted) instantly.
+            // Checked BEFORE the forced-movement layer below so CC'd displacements (knockups/
+            // knockbacks carry CC-typed buffs — the Riot path) report the Riot-correct stop reason.
             if (CastInfo.Owner.IsUnderCastDisablingCC)
             {
                 CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.StunnedOrSilencedOrTaunted);
                 return;
             }
+
+            // Deliberately NO forced-movement poll here — Riot has none (S1: engine
+            // ChannelingStop callers are death, the order pipeline and scripts). Displacements
+            // break channels exclusively via their CC-typed buffs (knockback/knockup — caught by
+            // the IsUnderCastDisablingCC check above; script convention: every knockback/knockup
+            // carries its CC buff). Self-dashes carry no CC by design and can only start through
+            // another cast, which already broke the channel via the Casting check below. A former
+            // per-tick MovementParameters check here mis-reported CC'd displacements as
+            // Move-source stops and would have broken any legitimate channel-while-dashing case.
+
             if (SpellData.TargetingType == TargetingType.Target)
             {
                 if (CastInfo.Targets.Count <= 0 || CastInfo.Targets[0].Unit == null)
@@ -1457,7 +1530,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            // TODO: ChannelingStopSource.HeroReincarnate
+            // ChannelingStopSource.HeroReincarnate is NOT a tick-check condition — Riot fires it
+            // imperatively from the reincarnate path (AIHero::DoReincarnateHeroAlive,
+            // AIHero.cpp:916); mirrored in Champion.Respawn.
 
             var order = CastInfo.Owner.MoveOrder;
             if (!SpellData.CanMoveWhileChanneling
@@ -1492,7 +1567,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 return;
             }
 
-            // TODO: ChannelingStopSource.Unknown
+            // ChannelingStopSource.Unknown: a SCRIPT-API constant, not an engine condition — S1
+            // registers it as a Lua global for BBStopChanneling (luabuildingblockhelper.cpp:16968)
+            // so spell scripts could pass it, but zero scripts in the whole S1 corpus do (usage
+            // histogram: LostTarget 18, Move 7, Die 5, Stunned 2, TimeCompleted 1, NotCancelled 1,
+            // Unknown 0) and no engine send-site exists in S1 or the 4.17 decomp. Receive-side it
+            // behaves like TimeCompleted/Animation (skips the spellbook cast-stop). Our scripts
+            // can pass it via StopChanneling if ever needed; nothing to check here.
         }
 
         public void StopChanneling(ChannelingStopCondition condition, ChannelingStopSource reason)
@@ -1543,7 +1624,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         }
                     }
                 }
-                // TODO: Find out how League calculates cooldown reduction for incomplete channels (assuming it isn't done in-script).
             }
 
             State = SpellState.STATE_READY;
@@ -1551,6 +1631,34 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (reason == ChannelingStopSource.TimeCompleted)
             {
                 FinishChanneling();
+            }
+            else if (!IsChargeSpell)
+            {
+                // Riot does NO cooldown recalculation for incomplete channels: the FULL cooldown
+                // starts at CAST time (CastSpellAns.Cooldown — ability slots 0-3 tick client-side
+                // from that packet) and simply keeps running however the channel ends.
+                // Replay-verified (39988886, Katarina R): interrupted lotuses get no
+                // CHAR_SetCooldown correction at all, and the Voracity −15s corrections that DO
+                // appear match "announced CD − time since cast − 15" to the frame — proving the
+                // cooldown clock runs from the cast announce. Server-side CurrentCooldown only
+                // ticks in STATE_COOLDOWN, so enter it with the cast+channel time already elapsed
+                // (previously a cancelled channel got NO cooldown at all). Charge spells keep
+                // their own pipeline (ExpireCharge / fire-ANS).
+                float elapsed = CastInfo.DesignerCastTime
+                    + Math.Max(0f, GetEffectiveChannelDuration() - Math.Max(0f, CurrentChannelDuration));
+                float remaining = GetCooldown() - elapsed - ConsumePendingCooldownReduction();
+                if (remaining > 0)
+                {
+                    State = SpellState.STATE_COOLDOWN;
+                    CurrentCooldown = remaining;
+                    SetPassiveCooldownStats(remaining);
+                    // Slots 0-3 need no packet (client already ticks from CastSpellAns);
+                    // summoner/item slots mirror the FinishCasting/FinishChanneling convention.
+                    if (CastInfo.SpellSlot >= 4)
+                    {
+                        _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, remaining, GetCooldown());
+                    }
+                }
             }
         }
 
@@ -1609,7 +1717,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     State = SpellState.STATE_COOLDOWN;
 
-                    CurrentCooldown = GetCooldown();
+                    CurrentCooldown = Math.Max(0f, GetCooldown() - ConsumePendingCooldownReduction());
                     SetPassiveCooldownStats(CurrentCooldown);
 
                     // Champion ability slots (Q/W/E/R = 0..3) derive their cooldown client-side from CastSpellAns.
@@ -1756,7 +1864,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            CurrentCooldown = GetCooldown();
+            // Riot's cooldown clock runs from CAST (CastSpellAns.Cooldown; see StopChanneling's
+            // cancel branch for the replay evidence) — a completed channel therefore enters
+            // server-side cooldown with the cast + full channel duration already elapsed,
+            // keeping CurrentCooldown in sync with the client's CastSpellAns-derived timer.
+            CurrentCooldown = Math.Max(0f,
+                GetCooldown() - (CastInfo.DesignerCastTime + GetEffectiveChannelDuration())
+                - ConsumePendingCooldownReduction());
             SetPassiveCooldownStats(CurrentCooldown);
 
             // See FinishCasting: ability slots 0..3 are client-driven from CastSpellAns; only summoner+item slots need this.
@@ -1812,7 +1926,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 }
             }
 
-            CurrentCooldown = GetCooldown();
+            CurrentCooldown = Math.Max(0f, GetCooldown() - ConsumePendingCooldownReduction());
             SetPassiveCooldownStats(CurrentCooldown);
 
             if (CastInfo.SpellSlot >= 4)
@@ -1984,10 +2098,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     }
             }
 
-            // If the position is the same as the destination, the server will have destroyed the missile before notifying of creation, causing the client to crash.
-            // TODO: Make a better check.
-            if (p == null || (p.HasDestination() && p.Position == p.Destination)
-                || p.Position == p.GetTargetPosition())
+            // A former guard here dropped missiles spawned exactly at their destination ("server
+            // destroys before notifying creation → client crash"). That ordering is obsolete:
+            // ObjectManager.AddObject runs SpawnObject INLINE (see the HasClientCastInfo note
+            // below), so the creation MISREP is always on the wire before the missile's first
+            // Update can remove it. The guard actively HARMED point-blank casts — the missile was
+            // silently eaten (no OnSpellHit/OnSpellMissileEnd, scripts left hanging) where Riot
+            // spawns it and lets it hit instantly via the normal arrival path.
+            if (p == null)
             {
                 return null;
             }
@@ -2328,8 +2446,60 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
+        // Cooldown reductions (Katarina Voracity & co.) landing while this spell's cast/channel is
+        // still in flight: the cooldown clock only materializes in FinishCasting/FinishChanneling/
+        // StopChanneling/ExpireCharge (Riot's clock runs from the cast announce), so mid-flight
+        // reductions accumulate here and the recomputes subtract them. Reset on every cast announce.
+        private float _pendingCooldownReduction;
+
+        private float ConsumePendingCooldownReduction()
+        {
+            float value = _pendingCooldownReduction;
+            _pendingCooldownReduction = 0f;
+            return value;
+        }
+
+        /// <summary>
+        /// Remaining cooldown regardless of state: the ticking value in STATE_COOLDOWN; while the
+        /// cast/channel is still in flight, the announce-derived projection (announced CD − elapsed −
+        /// pending mid-flight reductions) — this is exactly the replay-verified Voracity wire formula
+        /// R_cast_cd − Δt − 15×takedowns; 0 when ready. Use this for wire packets that must report the
+        /// effective cooldown mid-cast (Katarina Voracity slot=3: a kill DURING the R channel read
+        /// CurrentCooldown = 0 and told the client the ult was ready).
+        /// </summary>
+        public float GetEffectiveCooldownRemaining()
+        {
+            switch (State)
+            {
+                case SpellState.STATE_COOLDOWN:
+                    return CurrentCooldown;
+                case SpellState.STATE_CASTING:
+                case SpellState.STATE_CHANNELING:
+                {
+                    // CurrentCastTime / CurrentChannelDuration tick DOWN (Update: -= diff).
+                    float elapsedCast = Math.Max(0f, CastInfo.DesignerCastTime - Math.Max(0f, CurrentCastTime));
+                    float elapsedChannel = State == SpellState.STATE_CHANNELING
+                        ? Math.Max(0f, GetEffectiveChannelDuration() - Math.Max(0f, CurrentChannelDuration))
+                        : 0f;
+                    return Math.Max(0f, GetCooldown() - elapsedCast - elapsedChannel - _pendingCooldownReduction);
+                }
+                default:
+                    return 0f;
+            }
+        }
+
         public void LowerCooldown(float lowerValue, bool silent = false)
         {
+            // Mid-flight (cast/channel in progress) the clock is not materialized yet — CurrentCooldown
+            // is still 0, so SetCooldown(0 − x) would hit the ≤0 branch, the casting/channeling guard
+            // would drop it, and the finish recompute would overwrite it anyway: the reduction vanished
+            // twice over (Katarina killing with R mid-channel lost the −15s server-side while the
+            // Voracity packet showed the client a ready ult). Accumulate; the recompute applies it.
+            if (State == SpellState.STATE_CASTING || State == SpellState.STATE_CHANNELING)
+            {
+                _pendingCooldownReduction += lowerValue;
+                return;
+            }
             SetCooldown(CurrentCooldown - lowerValue, silent: silent);
         }
 
@@ -2582,14 +2752,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
         }
 
-        public void SetToolTipVar<T>(int tipIndex, T value) where T : struct
+        public void SetToolTipVar<T>(int tipIndex, T value, bool hide = false) where T : struct
         {
-            ToolTipData.Update(tipIndex, value);
-
-            if (CastInfo.Owner is Champion champ)
-            {
-                champ.AddToolTipChange(ToolTipData);
-            }
+            ToolTipData.Update(tipIndex, value, hide);
+            // Queued into the game-wide per-tick bulk flush (see Game.AddToolTipChange).
+            _game.AddToolTipChange(ToolTipData);
         }
         public void UpdateCharge(Vector3 position, bool forceStop)
         {

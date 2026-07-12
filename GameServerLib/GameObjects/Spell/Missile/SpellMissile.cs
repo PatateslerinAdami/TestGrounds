@@ -92,7 +92,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             CastInfo = castInfo;
 
-            // TODO: Implement full support for multiple targets.
             if (castInfo.Targets.Count > 0 && castInfo.Targets[0].Unit != null)
             {
                 TargetUnit = castInfo.Targets[0].Unit;
@@ -236,7 +235,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 return;
             }
 
-            if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))
+            // Untargetability cancels the flight only against ENEMY targets (Fizz E dodges an
+            // in-flight SpellFluxMissile — replay ba2b1e23: no damage during/after the window).
+            // A designated SAME-TEAM target keeps the missile flying while untargetable —
+            // Vel'koz E's own-team placemarker replicates IsTargetable=false yet the homing
+            // missile connects and detonates (replay c3a95050). Same team-asymmetry as the
+            // ApplyEffects gate / spell-shield gate.
+            if (HasTarget() && !TargetUnit.IsDead
+                && (TargetUnit.Status.HasFlag(StatusFlags.Targetable) || TargetUnit.Team == CastInfo.Owner.Team))
             {
                 _timeSinceCreation += diff;
                 UpdateTimedSpeedChange();
@@ -247,8 +253,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             }
             else
             {
-                // Destroy any missiles which are targeting an untargetable unit.
-                // TODO: Verify if this should apply to SpellSector.
+                // Destroy any missiles which are targeting a dead or enemy-untargetable unit.
+                // (Riot's dodge is wire-silent — no 0x5A observed — but our client copy can't
+                // infer a mid-flight fizzle, so we keep sending the destroy.)
                 //Direction = new Vector3();
                 SetToRemove();
             }
@@ -514,7 +521,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public virtual void CheckFlagsForUnit(AttackableUnit unit)
         {
-            if (unit == null || !HasTarget() || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit) || TargetUnit != unit)
+            // forceTargetable — ALLIED designated targets only: a homing missile arriving at its
+            // designated SAME-TEAM target executes even if that target is untargetable (wire-proven:
+            // Vel'koz E's own-team placemarker replicates IsTargetable=false + NonTargetableAll and
+            // is still hit and killed by the homing missile, replay c3a95050). Against ENEMIES,
+            // untargetability blocks execution: Fizz E dodges an in-flight SpellFluxMissile
+            // wire-silently — no damage during/after the untargetable window, no destroy packet
+            // (replay ba2b1e23 t=1413.6-1415). Same team-asymmetry as the spell-shield gate
+            // (ally executions are never blocked). Affect/team/dead filters still apply.
+            if (unit == null || !HasTarget() || TargetUnit != unit
+                || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit,
+                        forceTargetable: unit.Team == CastInfo.Owner.Team))
             {
                 return;
             }

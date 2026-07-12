@@ -196,7 +196,9 @@ namespace PacketDefinitions420
         {
             var rq = new NPC_IssueOrderReq();
             rq.Read(data);
-            if(rq.MovementData.Waypoints == null)
+            // MovementData itself is null for a bare 18-byte order without an attached path
+            // (wire-legal — presence is length-only); previously this line NRE'd on such packets.
+            if(rq.MovementData?.Waypoints == null)
             {
                 return null;
             }

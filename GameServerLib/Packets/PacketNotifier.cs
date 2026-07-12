@@ -220,7 +220,9 @@ namespace PacketDefinitions420
                 // 0xBA LookAt + the embedded movement path. For non-champion units the standalone 0x50 is
                 // redundant and a wire divergence, so only champions keep the explicit broadcast.
                 // See docs/LANE_MINION_WIRE_VERIFICATION.md (D2).
-                if (isChampion && a.Direction != Vector3.Zero)
+                // DEFAULT_FACING = "never explicitly faced" (spawn default, world +Z) — skip the
+                // broadcast for it exactly like the old Vector3.Zero sentinel.
+                if (isChampion && a.Direction != GameObject.DEFAULT_FACING)
                 {
                     NotifyFaceDirection(a, a.Direction, true);
                 }
@@ -294,7 +296,7 @@ namespace PacketDefinitions420
             // (Static jungle monsters orient via an explicit post-spawn S2C_FaceDirection, NOT this
             // embedded LookAt field — the client does not honor the field on a never-moved unit. See
             // MonsterCamp.AddMonster.)
-            var lookAtDirection = (isChampion && o.Direction != Vector3.Zero) ? o.Direction : new Vector3(1, 0, 0);
+            var lookAtDirection = (isChampion && o.Direction != GameObject.DEFAULT_FACING) ? o.Direction : new Vector3(1, 0, 0);
 
             var enterVis = new OnEnterVisibilityClient
             {
@@ -769,10 +771,10 @@ namespace PacketDefinitions420
                     ? Math.Max(0f, m.TimedSpeedDeltaTime - m.GetTimeSinceCreation() / 1000f)
                     : float.MaxValue,
 
-                // TODO: set true only when replicating a boomerang line missile already on its
-                // return leg (enter-vision case; replay: returning LuxPrismaticWaveMissile MISREP
-                // carries bounced=1 — client then aims the endpoint at casterPos).
-                Bounced = false,
+                // A boomerang line missile already on its return leg replicates with bounced=1
+                // (enter-vision case; replay: returning LuxPrismaticWaveMissile MISREP — the
+                // client then aims the endpoint at casterPos and re-homes on the caster).
+                Bounced = (m as SpellLineMissile)?.HasBounced ?? false,
 
                 CastInfo = castInfo
             };
@@ -3051,15 +3053,14 @@ namespace PacketDefinitions420
                 // WaypointGroups poisons mSyncID and the client drops every post-cast move order
                 // (= "can't move after casting"). See PacketExtensions.WireSyncID.
                 CasterPositionSyncID = PacketExtensions.WireSyncID,
-                // bitfield bit 0 ("Unknown1" in our wire-name): client-side packet-routing flag.
-                // S4 decomp (obj_AI_Base_PImpl_Int.cpp:2987) shows the client routes through a
-                // DIFFERENT path when bit 0 = 1 — Spell::SpellbookRouter::ChooseSpellbook +
-                // matching SpellNetID lookup, used for "continuation casts" of an already-active
-                // spell instance (e.g. charge-fire). Default false for fresh casts.
-                // Replay-verified Varus Q: charge-start CastSpellAns has bit=0, fire CastSpellAns
-                // has bit=1 — needed for the client to recognize the second packet as the same
+                // Bitfield bit 0: client packet-routing flag. S4 decomp
+                // (obj_AI_Base_PImpl_Int.cpp:2987): bit=1 routes through
+                // Spell::SpellbookRouter::ChooseSpellbook + SpellNetID lookup — "continuation
+                // cast" of an already-active spell instance (e.g. charge-fire). Default false
+                // for fresh casts. Replay-verified Varus Q: charge-start bit=0, fire bit=1 —
+                // needed for the client to recognize the second packet as the same
                 // SpellInstanceClient that's already in charge state.
-                Unknown1 = isContinuationFromExistingCast,
+                IsContinuationCast = isContinuationFromExistingCast,
                 CastInfo = castInfo
             };
             _packetHandlerManager.BroadcastPacketVision(s.CastInfo.Owner, castAnsPacket.GetBytes(), Channel.CHL_S2C);
@@ -3665,11 +3666,16 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="clientInfo">Information about the client which had their hero created.</param>
         /// <param name="userId">User to send the packet to. Set to -1 to broadcast.</param>
-        public void NotifyS2C_CreateHero(ClientInfo clientInfo, int userId = -1, bool doVision = false)
+        public void NotifyS2C_CreateHero(ClientInfo clientInfo, int userId = -1, bool doVision = false, bool isChangeHero = false)
         {
             var champion = clientInfo.Champion;
             var heroPacket = new S2C_CreateHero()
             {
+                // ChangeHero: the client reuses the EXISTING hero entity for this NetID instead of
+                // creating a new one (falls back to a fresh create when it doesn't know the NetID —
+                // safe for reconnects). Pair with S2C_ChangeCharacterData(ReplaceCharacterPackage)
+                // to actually swap model+spells; the CreateHero alone only re-binds the entity.
+                IsChangeHero = isChangeHero,
                 NetID = champion.NetId,
                 ClientID = clientInfo.ClientId,
                 // NetNodeID,
@@ -4063,13 +4069,12 @@ namespace PacketDefinitions420
         /// <param name="travelTime">The time the camera will have to travel the given distance</param>
         /// <param name="startFromCurretPosition">Wheter or not it starts from current position</param>
         /// <param name="unlockCamera">Whether or not the camera is unlocked</param>
-        public void NotifyS2C_MoveCameraToPoint(ClientInfo player, Vector3 startPosition, Vector3 endPosition, float travelTime = 0, bool startFromCurretPosition = true, bool unlockCamera = false)
+        public void NotifyS2C_MoveCameraToPoint(ClientInfo player, Vector3 startPosition, Vector3 endPosition, float travelTime = 0, bool startFromCurretPosition = true)
         {
             var cam = new S2C_MoveCameraToPoint
             {
                 SenderNetID = player.Champion.NetId,
                 StartFromCurrentPosition = startFromCurretPosition,
-                UnlockCamera = unlockCamera,
                 TravelTime = travelTime,
                 TargetPosition = endPosition
             };
@@ -5244,37 +5249,35 @@ namespace PacketDefinitions420
 
             for (int i = 0; i < players.Count; i++)
             {
+                bool isBot = players[i].Champion?.IsBot ?? false;
+
                 var info = new PlayerLoadInfo
                 {
                     PlayerID = players[i].PlayerId,
                     // TODO: Change to players[i].Item2.SummonerLevel
-                    SummonorLevel = 30,
+                    SummonorLevel = (ushort)(isBot ? 1 : 30),
                     SummonorSpell1 = HashString(players[i].SummonerSkills[0]),
                     SummonorSpell2 = HashString(players[i].SummonerSkills[1]),
-                    // TODO: wire IsBot once bot players exist (client builds loading-screen bot cards from it)
-                    IsBot = false,
+                    IsBot = isBot,
                     IsVintageSkin = false,
                     TeamId = (uint)players[i].Team,
-                    BotName = "",
-                    BotSkinName = "",
                     EloRanking = players[i].Rank,
-                    BotSkinID = 0,
-                    BotDifficulty = 0,
                     ProfileIconId = players[i].Icon,
                     // TODO: Unhardcode these two.
                     AllyBadgeID = 0,
                     EnemyBadgeID = 0
                 };
 
-                /*
-                if(players[i].IsBot)
+                // Bot slot wire model (4.20 co-op replay a5347e9d): botName/botSkinName = the raw
+                // champion model, NO "Bot" suffix — the client renders "(Champion) Bot" itself.
+                // BotDifficulty is 0 on the wire even for real Riot bots.
+                if (isBot)
                 {
-                    info.BotName = players[i].Champion.Model + "Bot";
+                    info.BotName = players[i].Champion.Model;
                     info.BotSkinName = players[i].Champion.Model;
                     info.BotSkinID = players[i].SkinNo;
-                    info.BotDifficulty = players[i].BotDifficulty;
+                    info.BotDifficulty = 0;
                 }
-                */
 
                 syncVersion.PlayerInfo[i] = info;
             }
@@ -6200,7 +6203,7 @@ namespace PacketDefinitions420
                 // Shares the per-object movement gate (CanSyncUpdate(casterPosSyncID)) — must use the
                 // same scale as WireSyncID or post-cast move orders get dropped.
                 CasterPositionSyncID = PacketExtensions.WireSyncID,
-                Unknown1 = false,
+                IsContinuationCast = false,
                 CastInfo = castInfo
             };
 

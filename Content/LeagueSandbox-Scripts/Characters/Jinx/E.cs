@@ -46,12 +46,9 @@ public class JinxE : ISpellScript {
         var perpendicular = new Vector2(-forward.Y, forward.X);
 
         
-        var leftTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget1", _targetPosition + perpendicular * 200.0f, _jinx.Team, 0, true, true, isVisible: false);
-        HideHealthBar(leftTarget);
-        var centerTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget2", _targetPosition, _jinx.Team, 0, true, true, isVisible: false);
-        HideHealthBar(centerTarget);
-        var rightTarget = AddMinion(_jinx, "TestCubeRender10Vision", "ChomperTarget3", _targetPosition - perpendicular * 200.0f, _jinx.Team, 0, true,  true, isVisible: false);
-        HideHealthBar(rightTarget);
+        var leftTarget = AddMinion(_jinx, "TestCubeRender10Vision", "k", _targetPosition + perpendicular * 200.0f, _jinx.Team, 0, true, false, isVisible: false, rooted: true, magicImmune: true, invulnerable: true);
+        var centerTarget = AddMinion(_jinx, "TestCubeRender10Vision", "k", _targetPosition, _jinx.Team, 0, true, false, isVisible: false, rooted: true, magicImmune: true, invulnerable: true);
+        var rightTarget = AddMinion(_jinx, "TestCubeRender10Vision", "k", _targetPosition - perpendicular * 200.0f, _jinx.Team, 0, true,  false, isVisible: false, rooted: true, magicImmune: true, invulnerable: true);
         
         SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, true, leftTarget,  Vector2.Zero);
         SpellCast(_jinx, 4, SpellSlotType.ExtraSlots, true, centerTarget,  Vector2.Zero);
@@ -87,11 +84,10 @@ public class JinxEHit : ISpellScript {
     private void OnMissileHit(SpellMissile missile, AttackableUnit target)
     {
         target.Die(CreateDeathData(false, 0, target, target, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0));
-        var chomper = AddMinion(_jinx, "JinxMine", "FlameChompers", missile.Position, _jinx.Team, _jinx.SkinID, true, false,  0);
+        var chomper = AddMinion(_jinx, "JinxMine", "Cupcake Trap", missile.Position, _jinx.Team, _jinx.SkinID, true, false,  0);
         AddBuff("JinxEMine", 5.75f, 1, _spell, chomper, _jinx);
-        //TODO: refactor spawn default engine wide, because: In the replays riot spawns minions with the engine-default facing: OnEnterVisibilityClient carries
-        // MovementDataStop with Forward = (0, 1) = world +Z,
-        FaceDirection(chomper.Position + new Vector2(0f, 100f), chomper, true);
+        // Facing: engine-wide spawn default is world +Z (GameObject.DEFAULT_FACING) — matches
+        // Riot's wire (spawn 0xBA MovementDataStop Forward = (0, 1)); no explicit FaceDirection.
         ApiEventManager.OnLaunchMissile.RemoveListener(this, _spell, OnLaunchMissile);
         ApiEventManager.OnSpellMissileHit.RemoveListener(this, missile, OnMissileHit);
         missile.SetToRemove();

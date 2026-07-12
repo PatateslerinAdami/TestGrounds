@@ -2336,6 +2336,41 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Fills the spell's <c>CastInfo.Targets</c> with every valid unit in <paramref name="range"/>
+        /// around <paramref name="center"/> — the port of Riot's <c>BBAdjustCastInfoCenterAOE</c>
+        /// (S1 luabuildingblockhelper.cpp: area query via TargetHelper::GetSelectedUnitsCircle +
+        /// SpellCastInfo::AddTarget per hit, run from the AdjustCastInfoBuildingBlocks hook).
+        /// Call from <c>OnSpellPreCast</c> — it runs BEFORE the CastSpellAns notify, exactly like
+        /// Riot's hook — so the ANS announces the FULL hit list (replay-verified: instant
+        /// point-blank AoEs like Tantrum/RenektonCleave carry up to 19 targets in one ANS; the
+        /// client drives per-target hit confirmation from it). Returns the added units so the
+        /// script's damage loop can iterate the SAME list instead of re-querying.
+        /// Null/duplicate/pre-existing entries are skipped; HitResult is HIT_Normal (spell hits
+        /// don't crit — attack crits are baked at the attack pipeline).
+        /// </summary>
+        /// <param name="spell">Spell whose CastInfo gets the targets.</param>
+        /// <param name="center">AoE center (self-AoE: the caster's position; Tristana-R-style: the hit target's position).</param>
+        /// <param name="range">Collection radius.</param>
+        /// <param name="overrideFlags">Affect flags to use instead of the spell's own (0 = spell's flags).</param>
+        public static List<AttackableUnit> AddCastTargetsInRange(Spell spell, Vector2 center, float range,
+            SpellDataFlags overrideFlags = 0)
+        {
+            var flags = overrideFlags > 0 ? overrideFlags : spell.SpellData.Flags;
+            var units = GetUnitsInRange(spell.CastInfo.Owner, center, range, true, flags);
+            var added = new List<AttackableUnit>(units.Count);
+            foreach (var unit in units)
+            {
+                if (unit == null || spell.CastInfo.Targets.Exists(t => t.Unit == unit))
+                {
+                    continue;
+                }
+                spell.CastInfo.Targets.Add(new CastTarget(unit, HitResult.HIT_Normal));
+                added.Add(unit);
+            }
+            return added;
+        }
+
+        /// <summary>
         /// Alive lane minions of a team (Riot bot API GetMinions(team, laneId)). Pass <paramref name="lane"/>
         /// to restrict to one lane (LaneMinion.Lane, set at spawn from the barracks), or null for all lanes.
         /// Used by the bot tasks (TaskPushLane = own team + lane, TaskKillMinion = enemy team / all lanes).
@@ -4304,7 +4339,7 @@ namespace LeagueSandbox.GameServer.API
         /// <summary>
         /// Unified charge-fire trigger. Replay-verified Riot patterns — both styles always emit
         /// the parent channel-end signal (<c>NPC_CastSpellAns(parent slot, SAME NetIDs as
-        /// charge-start, Unknown1=true)</c>) to clear the client charge bar. The
+        /// charge-start, IsContinuationCast=true)</c>) to clear the client charge bar. The
         /// <paramref name="fireWithoutCasting"/> flag picks which sub-action accompanies it:
         /// <list type="bullet">
         ///   <item><b><c>fireWithoutCasting = true</c></b> (default, Missile-style, Varus Q
@@ -4314,7 +4349,7 @@ namespace LeagueSandbox.GameServer.API
         ///   is just a missile (no per-cast setup needed besides on-hit damage).</item>
         ///   <item><b><c>fireWithoutCasting = false</c></b> (Sector/effect-style, Xerath Q
         ///   pattern): runs full <see cref="SpellCast"/> on the sub-spell. Emits
-        ///   <c>NPC_CastSpellAns(sub-slot, NEW NetIDs, Unknown1=false)</c> AND triggers the
+        ///   <c>NPC_CastSpellAns(sub-slot, NEW NetIDs, IsContinuationCast=false)</c> AND triggers the
         ///   sub-script's OnSpellPreCast/Cast/PostCast hooks (sector creation, particles, anim,
         ///   status flags). NO <c>MissileReplication</c>. Use when the sub-spell needs its own
         ///   cast-pipeline logic.</item>
@@ -4361,13 +4396,13 @@ namespace LeagueSandbox.GameServer.API
             else
             {
                 // Sector/effect-style — full SpellCast pipeline. Sub-script's OnSpellPreCast etc.
-                // hooks run. Wire emits NPC_CastSpellAns(sub-slot, new NetIDs, Unknown1=false).
+                // hooks run. Wire emits NPC_CastSpellAns(sub-slot, new NetIDs, IsContinuationCast=false).
                 SpellCast(caster, subSlot, subSlotType, start, targetPos,
                     fireWithoutCasting: false, overrideCastPos: Vector2.Zero);
             }
 
             // Always: parent channel-end signal NPC_CastSpellAns(parent-slot, SAME NetIDs as
-            // charge-start, Unknown1=true). Tells the client to exit charge state and clear
+            // charge-start, IsContinuationCast=true). Tells the client to exit charge state and clear
             // the charge HUD. Without this packet the client keeps the HUD bar visible
             // indefinitely — empirically verified 2026-05-17 (collapsing into the sub-spell
             // packet via isContinuation didn't fire the parent's exit-charge handler).

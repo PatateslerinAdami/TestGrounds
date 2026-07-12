@@ -12,10 +12,13 @@ namespace LeaguePackets.Game
     public class S2C_MoveCameraToPoint : GamePacket // 0x25
     {
         public override GamePacketID ID => GamePacketID.S2C_MoveCameraToPoint;
+        // Bit 0 is the ONLY defined flag (PKT_S2C_MoveCameraToPoint_s:
+        // STARTATCURRENTCAMERAPOSITION_MASK = 1; the client handler AIHeroClient.cpp:921 reads
+        // `bitfield & 1` and nothing else). Set → the camera pans from its CURRENT position to
+        // targetPosition and startPosition is ignored; clear → it pans from startPosition.
+        // A former "UnlockCamera" bit-1 property here was invented — no such flag exists.
         public bool StartFromCurrentPosition { get; set; }
-        // This is applied only when StartFromCurrentPosition is true
-        public bool UnlockCamera { get; set; }
-        // This is used only when StartFromCurrentPosition is false
+        // Only used when StartFromCurrentPosition is false.
         public Vector3 StartPosition { get; set; }
         public Vector3 TargetPosition { get; set; }
         public float TravelTime { get; set; }
@@ -25,7 +28,6 @@ namespace LeaguePackets.Game
 
             byte bitfield = reader.ReadByte();
             this.StartFromCurrentPosition = (bitfield & 0x01) != 0;
-            this.UnlockCamera = (bitfield & 0x02) != 0; 
 
             this.StartPosition = reader.ReadVector3();
             this.TargetPosition = reader.ReadVector3();
@@ -36,8 +38,6 @@ namespace LeaguePackets.Game
             byte bitfield = 0;
             if (StartFromCurrentPosition)
                 bitfield |= 0x01;
-            if (UnlockCamera)
-                bitfield |= 0x02;
             writer.WriteByte(bitfield);
 
             writer.WriteVector3(StartPosition);

@@ -3441,6 +3441,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return false;
             }
 
+            // While another cast is winding up, wait — never double-cast. This used to be gated
+            // via MoveOrder == TempCastSpell, which broke the postponed cast permanently as soon
+            // as a spell WEAVED during the move-to-cast finished: FinishCasting rewrites the move
+            // order (InstantCast + walking → MoveTo, Spell.cs:1660-1666), so the gate failed every
+            // tick and the unit walked to the cast point without ever casting (Jax: Q out of
+            // range, then W mid-walk). Cancellation doesn't need the gate — every new player
+            // order clears SpellToCast in HandleMove, and the cast/finish paths clear their own.
+            if (GetCastSpell() != null)
+            {
+                return true;
+            }
+
             // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
             float idealRange = SpellToCast.GetCurrentCastRange();
 
@@ -3449,14 +3461,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // target (kept separate from the attack TargetUnit — option A). PostponedCastTarget is NOT
             // cleared here — the cast may still be winding up (re-entry casts are rejected while casting);
             // it is dropped together with SpellToCast in SetSpellToCast(null) at FinishCasting.
-            if (MoveOrder == OrderType.TempCastSpell
-                && PostponedCastTarget != null
+            if (PostponedCastTarget != null
                 && Vector2.DistanceSquared(PostponedCastTarget.Position, SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
             {
                 SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z), PostponedCastTarget);
             }
-            else if (MoveOrder == OrderType.TempCastSpell
-                    && PostponedCastTarget == null
+            else if (PostponedCastTarget == null
                     && Vector2.DistanceSquared(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
             {
                 SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.CursorPos.X, SpellToCast.CastInfo.CursorPos.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z));

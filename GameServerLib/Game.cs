@@ -22,6 +22,7 @@ using GameServerLib.Handlers;
 using GameServerCore.Packets.PacketDefinitions;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Quests;
 using System.Threading;
 using System.Runtime.InteropServices;
@@ -643,12 +644,40 @@ namespace LeagueSandbox.GameServer
                 _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
             }
 
+            // Tooltip-var flush — Riot batches ALL units' tooltip changes of the tick into ONE
+            // S2C_ToolTipVars (replay 3aa3f21f: 316/467 mid-game multi-block packets are
+            // cross-owner, owners include turrets/minions, uint16 count + 85-byte blocks). Runs
+            // after objects/scripts/timers so every SetToolTipVar of this tick is included.
+            if (_toolTipsChanged.Count > 0)
+            {
+                PacketNotifier.NotifyS2C_ToolTipVars(_toolTipsChanged);
+                foreach (var tip in _toolTipsChanged)
+                {
+                    tip.MarkAsUnchanged();
+                }
+                _toolTipsChanged.Clear();
+            }
+
             // By default, synchronize the game time between server and clients every 10 seconds
             _nextSyncTime += diff;
             if (_nextSyncTime >= 10 * 1000)
             {
                 PacketNotifier.NotifySynchSimTimeS2C(GameTime);
                 _nextSyncTime = 0;
+            }
+        }
+
+        private readonly List<ToolTipData> _toolTipsChanged = new List<ToolTipData>();
+
+        /// <summary>
+        /// Queues a unit's changed tooltip data for this tick's bulk S2C_ToolTipVars flush (any
+        /// unit — Riot sends buff tooltip vars for turrets/minions too, not just champions).
+        /// </summary>
+        public void AddToolTipChange(ToolTipData data)
+        {
+            if (data != null && !_toolTipsChanged.Contains(data))
+            {
+                _toolTipsChanged.Add(data);
             }
         }
 

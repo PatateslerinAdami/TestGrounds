@@ -3,22 +3,25 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 
 namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 {
-    // TODO: Cleanup
     public class ToolTipData
     {
+        // Wire model (S2C_ToolTipVars 0x7F, decomp GameClient.cpp:1727): each tooltip slot carries
+        // 16 RAW FLOATS + 16 hide-from-enemy bools — the client stores them verbatim as float
+        // arrays (Spell::SpellDataInst::SetToolTipVars(const float*) / Buff::BuffManagerClient::
+        // SetBuffToolTipVars(uchar, const float*) / SetHideToolTipsToEnemyVars(const bool*)).
+        // There is NO per-value type on the wire: ints and bools are simply sent as their float
+        // representation (bool → 1.0f/0.0f). A former per-value IsFloat flag here was copy-paste
+        // from the Replication encoder (where it selects float-vs-varint) and was never consumed.
         public class ToolTipValue
         {
             public bool Hide { get; set; } = false;
             public float Value { get; set; } = 0.0f;
-            public bool IsFloat { get; set; } = false;
             public bool Changed { get; set; } = false;
 
             public ToolTipValue() { }
         }
 
-        protected readonly AttackableUnit Owner;
-        protected readonly Spell Spell;
-        protected readonly Buff Buff;
+        private readonly AttackableUnit Owner;
 
         public uint NetID => Owner.NetId;
         public byte Slot { get; private set; }
@@ -31,13 +34,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Populate(Values);
 
             Owner = owner;
-            Spell = spell;
-            Buff = buff;
 
             if (spell != null)
             {
                 // The slots seem to start at 60 for spell tooltips.
-                Slot = (byte)(Spell.CastInfo.SpellSlot + 60);
+                Slot = (byte)(spell.CastInfo.SpellSlot + 60);
             }
             else if (buff != null)
             {
@@ -49,51 +50,43 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             // End result is counted as a spell tooltip as slot is read from 60.
         }
 
-        private void DoUpdate(float value, int primary, bool isFloat, bool isHidden = false)
+        // Values[] is fully populated in the constructor, so entries are never null here.
+        private void DoUpdate(float value, int primary, bool isHidden)
         {
-            if (Values[primary] == null)
+            var slot = Values[primary];
+            if (slot.Value != value || slot.Hide != isHidden)
             {
-                Values[primary] = new ToolTipValue
-                {
-                    Hide = isHidden,
-                    Value = value,
-                    IsFloat = isFloat,
-                    Changed = true
-                };
-                Changed = true;
-            }
-            else if (Values[primary].Value != value)
-            {
-                Values[primary].Hide = isHidden;
-                Values[primary].IsFloat = isFloat;
-                Values[primary].Value = value;
-                Values[primary].Changed = true;
+                slot.Hide = isHidden;
+                slot.Value = value;
+                slot.Changed = true;
                 Changed = true;
             }
         }
 
-        protected void UpdateUint(uint value, int primary)
+        private void UpdateUint(uint value, int primary, bool hide)
         {
-            DoUpdate(value, primary, false);
+            DoUpdate(value, primary, hide);
         }
 
-        protected void UpdateInt(int value, int primary)
+        private void UpdateInt(int value, int primary, bool hide)
         {
-            DoUpdate(value, primary, false);
+            DoUpdate(value, primary, hide);
         }
 
-        protected void UpdateBool(bool value, int primary)
+        private void UpdateBool(bool value, int primary, bool hide)
         {
-            // TODO: Verify
-            DoUpdate(value ? 1f : 0f, primary, false);
+            // bool → 1.0f/0.0f is the wire form: the client reads all 16 slots as raw floats
+            // (see wire-model note on ToolTipValue).
+            DoUpdate(value ? 1f : 0f, primary, hide);
         }
 
-        protected void UpdateFloat(float value, int primary)
+        private void UpdateFloat(float value, int primary, bool hide)
         {
-            DoUpdate(value, primary, true);
+            DoUpdate(value, primary, hide);
         }
 
-        // TODO: Find a use case for this.
+        // Dirty-flag reset, called by Game.Update's per-tick bulk flush after this data was sent
+        // in the tick's single S2C_ToolTipVars (Riot batches all units' changes into one packet).
         public void MarkAsUnchanged()
         {
             foreach (var x in Values)
@@ -107,23 +100,25 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Changed = false;
         }
 
-        public void Update<T>(int tipIndex, T value) where T : struct
+        /// <param name="hide">Wire "hide from enemy" bool for this slot (client
+        /// SetHideToolTipsToEnemyVars) — obfuscates the value on enemy clients.</param>
+        public void Update<T>(int tipIndex, T value, bool hide = false) where T : struct
         {
             if (value is bool boolVal)
             {
-                UpdateBool(boolVal, tipIndex);
+                UpdateBool(boolVal, tipIndex, hide);
             }
             else if (value is int intVal)
             {
-                UpdateInt(intVal, tipIndex);
+                UpdateInt(intVal, tipIndex, hide);
             }
             else if (value is uint uintVal)
             {
-                UpdateUint(uintVal, tipIndex);
+                UpdateUint(uintVal, tipIndex, hide);
             }
             else if (value is float floatVal)
             {
-                UpdateFloat(floatVal, tipIndex);
+                UpdateFloat(floatVal, tipIndex, hide);
             }
         }
 
@@ -132,7 +127,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Slot = slot;
         }
 
-        public static void Populate(ToolTipValue[] arr)
+        private static void Populate(ToolTipValue[] arr)
         {
             for (int i = 0; i < arr.Length; i++)
             {

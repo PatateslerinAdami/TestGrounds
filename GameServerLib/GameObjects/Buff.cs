@@ -250,14 +250,13 @@ namespace LeagueSandbox.GameServer.GameObjects
             }
         }
 
-        public void SetToolTipVar<T>(int tipIndex, T value) where T : struct
+        public void SetToolTipVar<T>(int tipIndex, T value, bool hide = false) where T : struct
         {
-            ToolTipData.Update(tipIndex, value);
-
-            if (TargetUnit is Champion champ)
-            {
-                champ.AddToolTipChange(ToolTipData);
-            }
+            ToolTipData.Update(tipIndex, value, hide);
+            // Any unit — Riot's bulk 0x7F carries buff tooltip vars for turrets/minions too
+            // (replay: mid-game blocks with owner netids 0x400004xx, slot 1). The old
+            // "is Champion" gate silently dropped those.
+            _game.AddToolTipChange(ToolTipData);
         }
 
         public bool IsBuffInfinite()

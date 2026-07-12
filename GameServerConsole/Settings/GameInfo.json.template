@@ -63,8 +63,20 @@
                 "4221": 1,
                 "4222": 3,
                 "4232": 1
-            }        
+            }
         }
+        // Bot slot example
+        //,
+        //{
+        //    "isBot": true,
+        //    "champion": "Ashe",
+        //    "team": "PURPLE",
+        //    "skin": 0,
+        //    "summoner1": "SummonerBoost",
+        //    "summoner2": "SummonerSmite",
+        //    "runes": { "1": 5245 },
+        //    "talents": { "4111": 1 }
+        //}
     ],
     "game": {
         "map": 1,

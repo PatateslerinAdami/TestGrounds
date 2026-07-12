@@ -74,7 +74,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 // no 0x5A; only unit hits, which remove the missile early/off-schedule, get a
                 // destroy). Unit-hit removal goes through CheckFlagsForUnit / the script's
                 // SetToRemove instead and keeps the destroy.
-                if (_atDestination)
+                //
+                // EXCEPTION — arrival at a LIVE tracked unit (LineMissileTrackUnits homing onto
+                // a moving unit, e.g. Talon W return blade catching Talon): NOT client-inferable.
+                // The client homes its own copy onto its own copy of the unit, whose position
+                // lags the server's while the unit moves, so the client missile never reaches it
+                // until the unit stops — the blade visibly trails the unit for as long as it keeps
+                // moving. Keep the destroy so the client removes the missile the instant the
+                // server's copy arrives.
+                bool tracksLiveTarget = TargetUnit != null && !TargetUnit.IsDead
+                    && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileTrackUnits;
+                if (_atDestination && !tracksLiveTarget)
                 {
                     SuppressDestroyNotify = true;
                 }

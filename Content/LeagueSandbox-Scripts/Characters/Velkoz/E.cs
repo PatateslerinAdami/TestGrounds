@@ -37,8 +37,18 @@ namespace Spells
         public void OnSpellPostCast(Spell spell)
         {
             
-            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0, true, true, isVisible: false);
-            HideHealthBar(hiddenMinion);
+            // Riot spawn form for TestCube dummies — S1 Lua evidence (CassiopeiaMiasma.lua
+            // BBSpawnMinion at "TestCubeRender"): Placemarker=true (untargetable), Rooted=true,
+            // Invulnerable=true, MagicImmune=true, IgnoreCollision=true + SetGhosted after. The
+            // health bar / model hiding is NOT part of this — that comes from CharData
+            // NeverRender=1 alone (now honored engine-side via StatusFlags.NoRender). Wire note:
+            // the SpawnMinion packet's targetable bit and IsTargetableToTeam (always
+            // TargetableToAll on the Riot wire, for every unit class) do NOT carry the
+            // untargetability — it is replicated unit state.
+            var hiddenMinion = AddMinion(_velkoz, "TestCubeRender10Vision", "hiddenMinion", _endPos, _velkoz.Team, 0,
+                ignoreCollision: true, targetable: false, isVisible: false,
+                rooted: true, invulnerable: true, magicImmune: true);
+            SetStatus(hiddenMinion, StatusFlags.Ghosted, true);
             SpellCast(_velkoz, 2, SpellSlotType.ExtraSlots, true, hiddenMinion, Vector2.Zero);
             AddParticlePos(_velkoz, "Velkoz_Base_E_AOE_green.troy", _endPos, _endPos, lifetime: 0.8f, enemyParticle: "Velkoz_Base_E_AOE_red.troy");
         }

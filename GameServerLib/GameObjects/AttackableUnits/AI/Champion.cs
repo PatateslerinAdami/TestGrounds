@@ -34,7 +34,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public int ClientId { get; private set; }
         private uint _playerHitId;
-        private List<ToolTipData> _tipsChanged;
         public Shop Shop { get; protected set; }
         public float RespawnTimer { get; private set; }
         public int DeathSpree { get; set; } = 0;
@@ -47,6 +46,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public byte SkillPoints { get; set; }
 
         public override bool SpawnShouldBeHidden => false;
+
+        // Set by the !changechampion cheat: this Champion object replaced a previous one on the
+        // SAME NetID mid-game. OnSpawn then sends S2C_CreateHero with the ChangeHero bit (client
+        // reuses its existing hero entity; falls back to a fresh create if it has none — safe for
+        // reconnects) plus S2C_ChangeCharacterData(ReplaceCharacterPackage) to swap model+spells.
+        // Stays true for the rest of the game so late spawns/reconnects take the same safe path.
+        public bool SpawnAsChangeHero { get; set; }
 
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
         public bool teamChanged = false;
@@ -92,7 +98,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             Replication = new ReplicationHero(this);
 
-            _tipsChanged = new List<ToolTipData>();
 
             if (clientInfo.PlayerId == -1)
             {
@@ -163,7 +168,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // packet was tried (NotifyS2C_SpawnBot) but the 4.20 client mis-positions the bot from it
             // (turret homed off-map) — it's a pre-4.18 path (BotRank deprecated) the client no longer
             // positions heroes from. CreateHero renders bots correctly, so we keep it.
-            _game.PacketNotifier.NotifyS2C_CreateHero(peerInfo, userId, doVision);
+            _game.PacketNotifier.NotifyS2C_CreateHero(peerInfo, userId, doVision, SpawnAsChangeHero);
+            if (SpawnAsChangeHero)
+            {
+                // The ChangeHero CreateHero only re-binds the client's existing entity; the actual
+                // model+spell swap is the character-package replace (Elise-style form swaps use the
+                // same packet with the package kept — replay: 0x97 carries "EliseSpider").
+                _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this, userId, (uint)SkinID,
+                    modelOnly: false, overrideSpells: true, replaceCharacterPackage: true);
+            }
             _game.PacketNotifier.NotifyAvatarInfo(peerInfo, userId);
 
             bool ownChamp = peerInfo.ClientId == userId;
@@ -261,19 +274,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return LevelUpSpell(slot, true);
         }
 
-        public void AddToolTipChange(ToolTipData data)
-        {
-            if (!_tipsChanged.Contains(data))
-            {
-                _tipsChanged.Add(data);
-            }
-        }
-
-        public void ClearToolTipsChanged()
-        {
-            _tipsChanged.Clear();
-        }
-
         float _goldTimer;
         float _EXPTimer;
         public override void Update(float diff)
@@ -333,13 +333,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
             }
 
-            // TODO: Find out the best way to bulk send these for all champions (tool tip handler?).
-            // League sends a single packet detailing every champion's tool tip changes.
-            if (_tipsChanged.Count > 0)
-            {
-                _game.PacketNotifier.NotifyS2C_ToolTipVars(_tipsChanged);
-                ClearToolTipsChanged();
-            }
+            // Tooltip-var changes are flushed game-wide in ONE bulk S2C_ToolTipVars per tick
+            // (Game.Update end) — replay-verified Riot shape (cross-owner blocks, incl. non-champions).
         }
 
         public void Respawn()
@@ -363,6 +358,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Shop.SetShopState(true, false);
             RespawnTimer = -1;
             SetForceMovementState(false, MoveStopReason.HeroReincarnate);
+            // Riot fires the HeroReincarnate channel-stop imperatively from the reincarnate path
+            // (AIHero::DoReincarnateHeroAlive, AIHero.cpp:916) — not from the per-tick cancel
+            // check. Covers a channel that survived death into the respawn (belt against
+            // channel-state leaks; normally the Die stop already ended it).
+            if (ChannelSpell != null)
+            {
+                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.HeroReincarnate);
+            }
             ApiEventManager.OnResurrect.Publish(this);
             SetCastSpell(null);
         }

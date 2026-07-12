@@ -71,7 +71,7 @@ namespace GameServerCore.Scripting.CSharp
         }
 
         // Charge complete — player released OR max charge time elapsed. Missile fire goes here.
-        // Engine handles the wire-side fire (re-broadcast NPC_CastSpellAns with Unknown1=true) so
+        // Engine handles the wire-side fire (re-broadcast NPC_CastSpellAns with IsContinuationCast=true) so
         // the script's job is just spawning the actual missile + cleanup.
         void OnSpellChargeFire(Spell spell)
         {

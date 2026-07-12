@@ -17,7 +17,11 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, JoinTeamRequest req)
         {
-            var players = _playerManager.GetPlayers(true);
+            // Humans only: Riot's loading screen carries bots exclusively via the SynchVersion
+            // PlayerLiteInfo slots (isBot + botName) — the 4.20 co-op replay's TeamRosterUpdate
+            // lists just the human player and Rename/Reskin are only sent for humans. Bot slots
+            // all share PlayerID -1, which would collide here anyway.
+            var players = _playerManager.GetPlayers(false);
             uint version = uint.Parse(Config.VERSION.ToString().Replace(".", string.Empty));
 
             // Builds team info e.g. first UserId set on Blue has ClientId 0

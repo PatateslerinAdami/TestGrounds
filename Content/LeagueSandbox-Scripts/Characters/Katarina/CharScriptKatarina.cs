@@ -47,8 +47,13 @@ public class CharScriptKatarina : ICharScript
         var r = _katarina.GetSpell("KatarinaR");
         r?.LowerCooldown(15.0f, silent: true);
 
-        // Wire emit: 4 packets per Voracity event matching Riot's exact shape.
-        NotifyVoracityProc(_katarina, isOwnKill, r?.CurrentCooldown ?? 0f);
+        // Wire emit: 4 packets per Voracity event matching Riot's exact shape. The slot=3 value must
+        // be the EFFECTIVE remaining cooldown: a kill DURING the R channel happens before the clock
+        // materializes (CurrentCooldown still 0 until FinishChanneling), so reading CurrentCooldown
+        // told the client the ult was ready while the server kept it on cooldown.
+        // GetEffectiveCooldownRemaining projects announced CD − elapsed − pending reductions — the
+        // replay-verified R_cast_cd − Δt − 15×takedowns formula in every state.
+        NotifyVoracityProc(_katarina, isOwnKill, r?.GetEffectiveCooldownRemaining() ?? 0f);
 
         // Particle: replay-empirically Riot DOES broadcast `katarina_spell_refresh_indicator.troy`
         // (hash 48865785) as FX_Create_Group on every Voracity event — 21/22 hits in the
