@@ -63,7 +63,7 @@ namespace Spells
             _spell = spell;
         }
 
-        public void OnSpellCast(Spell spell)
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
             const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
             switch (_katarina.SkinID)
@@ -71,6 +71,11 @@ namespace Spells
                 default: PlayAnimation(_katarina, "Spell4", scaleTime: 0f, scaleSpeed: 1f, flags: spell4Flags); break;
                 case 7:  PlayAnimation(_katarina, "Spell4", scaleTime: 0.2f, scaleSpeed: 1f, flags: spell4Flags); break;
             }
+        }
+
+        public void OnSpellCast(Spell spell)
+        {
+            
         }
 
         public void OnSpellChannel(Spell spell)

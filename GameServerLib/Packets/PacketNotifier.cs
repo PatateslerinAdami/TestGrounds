@@ -3078,7 +3078,7 @@ namespace PacketDefinitions420
                 DeathData = new LeaguePackets.Game.Common.DeathData
                 {
                     BecomeZombie = data.BecomeZombie,
-                    DieType = data.DieType,
+                    DieType = (byte)data.DieType,
                     KillerNetID = data.Killer.NetId,
                     DamageType = (byte)data.DamageType,
                     DamageSource = (byte)data.DamageSource,
@@ -3123,7 +3123,7 @@ namespace PacketDefinitions420
                 DeathData = new LeaguePackets.Game.Common.DeathData
                 {
                     KillerNetID = killerNetID,
-                    DieType = deathData.DieType,
+                    DieType = (byte)deathData.DieType,
                     DamageType = (byte)deathData.DamageType,
                     DamageSource = (byte)deathData.DamageSource,
                     BecomeZombie = deathData.BecomeZombie,
@@ -4227,7 +4227,7 @@ namespace PacketDefinitions420
                 DeathData = new LeaguePackets.Game.Common.DeathData
                 {
                     BecomeZombie = data.BecomeZombie,
-                    DieType = data.DieType,
+                    DieType = (byte)data.DieType,
                     DamageType = (byte)data.DamageType,
                     DamageSource = (byte)data.DamageSource,
                     DeathDuration = data.DeathDuration

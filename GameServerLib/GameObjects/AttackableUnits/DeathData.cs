@@ -10,10 +10,11 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// </summary>
         public bool BecomeZombie { get; set; }
         /// <summary>
-        /// The type of death. Values unknown.
+        /// The type of death. Dead wire field — the client never consumes it (DoNPCDie ignores it,
+        /// DoDieBroadcast recomputes it locally); Riot's server sends MINION_DIE (0) unconditionally.
+        /// See <see cref="GameServerCore.Enums.DieType"/>.
         /// </summary>
-        /// TODO: Create an enum for this.
-        public byte DieType { get; set; }
+        public DieType DieType { get; set; }
         /// <summary>
         /// Unit which is dying.
         /// </summary>

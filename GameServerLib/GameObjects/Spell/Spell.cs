@@ -566,14 +566,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.AmmoRechargeTime = GetAmmoRechageTime();
 
             // Multi-target CastSpellAns (instant AoE executions — Riot's ANS carries the FULL hit
-            // list, replay: up to 19 targets on Tantrum/RenektonCleave-class point-blank AoEs; the
-            // client drives per-target hit confirmation from it): Riot fills the list BEFORE the
-            // announce via the AdjustCastInfoBuildingBlocks hook + BBAdjustCastInfoCenterAOE.
-            // Our equivalent: the SCRIPT calls ApiFunctionManager.AddCastTargetsInRange(spell,
-            // center, range) in OnSpellPreCast (which runs before the ANS notify, like Riot's
-            // hook) and iterates the returned list for its damage loop instead of re-querying in
-            // OnSpellPostCast. The designated target added below stays entry[0].
-            // Missiles are unaffected (wire-verified single-target, see SpellMissile ctor).
+            // list, replay: up to 19 targets on Tantrum-class point-blank AoEs): the Cone/SelfAOE
+            // class is filled ENGINE-side by FillCastTargetsFromSpellShape (called after
+            // OnSpellPreCast below — see its doc for the replay/S1 evidence; strictly data-driven,
+            // announce != damage). Scripts use ApiFunctionManager.AddCastTargetsInRange in
+            // OnSpellPreCast only for irregular shapes (target-position AoEs like Tristana R
+            // splash — S1 BBAdjustCastInfoCenterAOE form). The designated target added below
+            // stays entry[0]. Missiles are unaffected (wire-verified single-target, see
+            // SpellMissile ctor).
             CastInfo.Targets.Add(new CastTarget(unit, CastTarget.GetHitResult(unit, CastInfo.IsAutoAttack, CastInfo.Owner.IsNextAutoCrit, CastInfo.Owner.IsNextAutoMiss, CastInfo.Owner.IsNextAutoDodged)));
 
             // IsClickCasted stays at the caller's value — the bit is purely the echo of the
@@ -657,6 +657,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _logger.Error(null, e);
             }
+            // After OnSpellPreCast (scripts may override TargetPosition) and BEFORE the ANS
+            // notify + the fakePos TargetPosition rewrite further down.
+            FillCastTargetsFromSpellShape();
             if (CastInfo.Owner.Status.HasFlag(StatusFlags.Stealthed) && Script.ScriptMetadata.CastingBreaksStealth)
             {
                 var packetInfo = new DelayedSpellPacketInfo(this, _game.GameTime);
@@ -944,6 +947,53 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             return true;
         }
+        /// <summary>
+        /// Engine-side announce fill for the static-AoE targeting types (Riot's spelltargeting
+        /// model): Cone and SelfAOE spells resolve their hit set AT CAST from SpellData geometry
+        /// (CastConeDistance/CastConeAngle resp. CastRadius) + the spell's own affect flags, and
+        /// the CastSpellAns carries the full list. Replay-proven across 55 games: EVERY Cone/
+        /// SelfAOE damage spell announces multi-target (Incinerate 0-9 incl. empty whiffs,
+        /// Pulverize 1-12, Tantrum 7, CurseoftheSadMummy 11, KatarinaW 0-4...), with zero
+        /// counterexamples; missile-carried Area spells announce EMPTY (ZiggsR/TwitchVenomCask —
+        /// their hit set exists only at impact), which is why Area/Location is NOT auto-filled.
+        /// S1 source corroboration: Incinerate.lua contains no query blocks at all — only
+        /// TargetExecuteBuildingBlocks run per engine-selected unit (GetSelectedUnitsCone,
+        /// spelltargetingcone.cpp). The fill is STRICTLY data-driven, even when the data flags
+        /// don't match the spell's damage: KatarinaW ships without AffectEnemies (0x1C004) and
+        /// Riot's ANS accordingly announces ONLY jungle monsters (every populated W target in the
+        /// Kat replay NetID-resolved to Razorbeak/Scuttle/Red camp — never an enemy champion);
+        /// RivenMartyr (Friends|Heroes) announces ally heroes. So do NOT "correct" flags here —
+        /// announce != damage. The client consumes the list for the SpellRevealsChampion
+        /// caster-reveal and the SomeUnitsAlive cast-frame gate — NOT for hit FX (that loop is
+        /// gated on isAutoAttack || ApplyAttackEffect), so scripts keep their own particle loops
+        /// and re-query at execution for damage with their own flags (Riot's ForEach form).
+        /// ApiFunctionManager.AddCastTargetsInRange stays as the script-side tool for irregular
+        /// shapes (target-position AoEs like Tristana R splash) — both sides dedup.
+        /// </summary>
+        private void FillCastTargetsFromSpellShape()
+        {
+            if (CastInfo.IsAutoAttack
+                || (SpellData.TargetingType != TargetingType.Cone
+                    && SpellData.TargetingType != TargetingType.SelfAOE))
+            {
+                return;
+            }
+
+            foreach (var unit in ApiFunctionManager.GetUnitsHitBySpell(this))
+            {
+                // Wire cap: the CastInfo packet writer rejects > 32 targets (Riot's observed
+                // wire max is 19; the null placeholder entry is skipped by the notifier).
+                if (CastInfo.Targets.Count >= 32)
+                {
+                    break;
+                }
+                if (unit != null && !CastInfo.Targets.Exists(t => t.Unit == unit))
+                {
+                    CastInfo.Targets.Add(new CastTarget(unit, HitResult.HIT_Normal));
+                }
+            }
+        }
+
         public bool Cast(CastInfo castInfo, bool cast, bool isContinuation = false)
         {
             CastInfo = castInfo;
@@ -974,6 +1024,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _logger.Error(null, e);
             }
+            // Engine announce fill, mirroring the player path. Runs for API casts too: Riot's
+            // engine-side selection is targeting-type-driven regardless of who initiated the
+            // cast (silent fireWithoutCasting casts simply never send the ANS that would carry
+            // the list; scripts may still iterate it).
+            FillCastTargetsFromSpellShape();
 
             var stats = CastInfo.Owner.Stats;
 

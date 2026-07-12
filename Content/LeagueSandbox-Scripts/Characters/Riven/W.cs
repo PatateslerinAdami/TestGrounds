@@ -26,9 +26,13 @@ namespace Spells
             AddParticleTarget(_owner, _owner, "Riven_Base_W_Cast.troy", _owner);
             AddParticleTarget(_owner, _owner, "exile_W_weapon_cas.troy", _owner, bone: "weapon");
 
-            // Riven's 4.20 data is corrupt (affect flags are Friends|Heroes; CastRadius=250 doesn't
-            // match the stable 300/360 effect radius from the wiki/patch history). So override both:
-            // enemy flags + radius 300 (centered; our GetUnitsInRange is center-to-center).
+            // Riven's 4.20 DAMAGE set can't come from the data (affect flags are Friends|Heroes;
+            // CastRadius=250 doesn't match the stable 300/360 effect radius from the wiki/patch
+            // history) — override both: enemy flags + radius 300 (center-to-center).
+            // Do NOT "fix" the announce side to match: the engine's FillCastTargetsFromSpellShape
+            // announces with the DATA flags (ally heroes in 250u), which IS Riot's wire form —
+            // KatarinaW replay proof: Riot fills the ANS strictly from data flags even when they
+            // don't match the damage (her W announces only jungle monsters). Announce != damage.
             var units = GetUnitsHitBySpell(spell,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                 SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral,

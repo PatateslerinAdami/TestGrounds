@@ -2342,9 +2342,17 @@ namespace LeagueSandbox.GameServer.API
         /// SpellCastInfo::AddTarget per hit, run from the AdjustCastInfoBuildingBlocks hook).
         /// Call from <c>OnSpellPreCast</c> — it runs BEFORE the CastSpellAns notify, exactly like
         /// Riot's hook — so the ANS announces the FULL hit list (replay-verified: instant
-        /// point-blank AoEs like Tantrum/RenektonCleave carry up to 19 targets in one ANS; the
-        /// client drives per-target hit confirmation from it). Returns the added units so the
-        /// script's damage loop can iterate the SAME list instead of re-querying.
+        /// point-blank AoEs carry the full list; KatarinaW 18/173 casts with 1-4 targets, the
+        /// empty rest = nobody in radius). What the CLIENT does with the list (decomp-verified):
+        /// (1) per-target hit/after FX ONLY for isAutoAttack || ApplyAttackEffect spells
+        /// (SpellDatabaseClient::CastSpell gate) — normal spells get NO client hit particle from
+        /// it, Riot sends those explicitly (FX_Create_Group, one instance per hit target:
+        /// katarina_w_tar.troy x4 on a 4-target W) → scripts KEEP their manual AddParticle loop;
+        /// (2) SomeUnitsAlive cast-frame abort — targeted spells only (targeting type);
+        /// (3) RevealToCastTargets — reveals the CASTER to each targeted enemy team, gated on
+        /// SpellData SpellRevealsChampion (KatarinaW has it = the W-from-brush reveal).
+        /// Returns the added units so the script's damage loop can iterate the SAME list
+        /// instead of re-querying.
         /// Null/duplicate/pre-existing entries are skipped; HitResult is HIT_Normal (spell hits
         /// don't crit — attack crits are baked at the attack pipeline).
         /// </summary>
@@ -3911,14 +3919,15 @@ namespace LeagueSandbox.GameServer.API
         /// Creates a DeathData variable for use with the AttackableUnit.Die() function.
         /// </summary>
         /// <param name="zombify">Whether or not the unit should become a zombie after death.</param>
-        /// <param name="deathType">Type of death. Values unknown.</param>
+        /// <param name="deathType">Type of death. Dead wire field (client ignores it) — pass
+        /// DieType.MINION_DIE (0), matching Riot's unconditional server value.</param>
         /// <param name="unit">Unit that died.</param>
         /// <param name="killer">Killer of the unit.</param>
         /// <param name="dmgType">Type of damage that caused the death.</param>
         /// <param name="dmgSource">Source of the damage that caused the death.</param>
         /// <param name="duration">Time until the death completes (fade-out?).</param>
         /// <returns></returns>
-        public static DeathData CreateDeathData(bool zombify, byte deathType, AttackableUnit unit,
+        public static DeathData CreateDeathData(bool zombify, DieType deathType, AttackableUnit unit,
             AttackableUnit killer, DamageType dmgType, DamageSource dmgSource, float duration)
         {
             return new DeathData
