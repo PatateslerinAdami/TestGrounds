@@ -3382,6 +3382,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public bool HandleNewOrder(OrderType order, AttackableUnit target, Vector2 pos)
         {
+            // A fresh order replaces the postponed move-to-cast. In Riot the pending cast IS the order —
+            // PostponeSpell does orders.setOrder(AI_TEMP_CASTSPELL) + PostponeOrder (AIBase.cpp:2392) —
+            // so any new setOrder overwrites it in the single order slot and ClearPostponedSpells
+            // (AIBase.cpp:2435) drops the stored SpellCastInfo. Our SpellToCast lives beside MoveOrder
+            // instead of inside the slot, so the replacement must be explicit, and it belongs HERE at
+            // the issue point (not in the packet handler): pet-hard orders route to the PET's
+            // HandleNewOrder and must not cancel the owner's pending cast. TempCastSpell is the
+            // postpone itself, never a replacement (defensive — no client order carries it).
+            if (order != OrderType.TempCastSpell && SpellToCast != null)
+            {
+                SetSpellToCast(null, Vector2.Zero);
+            }
+
             // setOrder(order, pos, obj) → records the saved tuple + PENDING. The command itself is the
             // MoveOrder the caller already set via UpdateMoveOrder; we only record pos/obj + the status.
             _savedOrderObj = target;
@@ -3447,7 +3460,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // order (InstantCast + walking → MoveTo, Spell.cs:1660-1666), so the gate failed every
             // tick and the unit walked to the cast point without ever casting (Jax: Q out of
             // range, then W mid-walk). Cancellation doesn't need the gate — every new player
-            // order clears SpellToCast in HandleMove, and the cast/finish paths clear their own.
+            // order clears SpellToCast in HandleNewOrder, and the cast/finish paths clear their own.
             if (GetCastSpell() != null)
             {
                 return true;

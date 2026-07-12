@@ -452,12 +452,6 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 }
             }
 
-            // TODO: Shouldn't be here.
-            if (champion.SpellToCast != null)
-            {
-                champion.SetSpellToCast(null, Vector2.Zero);
-            }
-
             return true;
         }
 
