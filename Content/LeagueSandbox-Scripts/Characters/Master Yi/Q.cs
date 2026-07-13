@@ -89,7 +89,7 @@ public class AlphaStrike : ISpellScript
         }
         _hitTargets.Clear();
 
-        RemoveBuff(_masterYi, "Alpha_Striking");
+        RemoveBuff(_masterYi, "AlphaStriking");
         if (!_target.IsDead)
         {
             SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
