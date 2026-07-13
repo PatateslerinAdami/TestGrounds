@@ -257,6 +257,10 @@ namespace LeagueSandbox.GameServer
             {
                 _game.PacketNotifier.NotifyWaypointGroup();
             }
+            using (Profiler.Scope("PacketNotifier.NotifyWaypointGroupWithSpeed", "network"))
+            {
+                _game.PacketNotifier.NotifyWaypointGroupWithSpeed();
+            }
             using (Profiler.Scope("PacketNotifier.NotifyFXCreateGroupBatch", "network"))
             {
                 _game.PacketNotifier.NotifyFXCreateGroupBatch();

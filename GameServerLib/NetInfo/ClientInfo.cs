@@ -29,6 +29,7 @@ namespace GameServerCore.NetInfo
         public string Name { get; private set; }
         public string Rank { get; private set; }
         public short Ribbon { get; private set; }
+        public short EnemyRibbon { get; private set; }
         public int Icon { get; private set; }
         public TeamId Team { get; private set; }
 
@@ -50,11 +51,13 @@ namespace GameServerCore.NetInfo
                           int skinNo,
                           string name,
                           string[] summonerSkills,
-                          long playerId)
+                          long playerId,
+                          short enemyRibbon = 0)
         {
             Rank = rank;
             Team = team;
             Ribbon = ribbon;
+            EnemyRibbon = enemyRibbon;
             Icon = icon;
             SkinNo = skinNo;
             IsMatchingVersion = true;

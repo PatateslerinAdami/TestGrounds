@@ -16,6 +16,7 @@ namespace Buffs;
 
 public class CamouflageStealth : IBuffGameScript {
     private ObjAIBase _teemo;
+    private Fade _fade;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.INVISIBILITY,
@@ -28,33 +29,13 @@ public class CamouflageStealth : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _teemo = buff.SourceUnit;
         SetStatus(_teemo, StatusFlags.Stealthed, true);
-        SetStatus(_teemo, StatusFlags.Ghosted,   true);
-        switch (_teemo.Team) {
-            case TeamId.TEAM_BLUE:
-                _teemo.SetVisibleByTeam(TeamId.TEAM_PURPLE, false);
-                break;
-            case TeamId.TEAM_PURPLE:
-                _teemo.SetVisibleByTeam(TeamId.TEAM_BLUE, false);
-                break;
-        }
-
-        _teemo.SetVisibleByTeam(TeamId.TEAM_NEUTRAL, false);
-        PushCharacterFade(_teemo, 0.2f, 0.2f);
+        FadeInColorFadeEffect(_teemo, 0, 0, 50, 0.25f, 0.2f);
+        _fade =PushCharacterFade(_teemo, 0.2f, 0.2f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _teemo.SetStatus(StatusFlags.Stealthed, false);
-        _teemo.SetStatus(StatusFlags.Ghosted,   false);
-        switch (_teemo.Team) {
-            case TeamId.TEAM_BLUE:
-                _teemo.SetVisibleByTeam(TeamId.TEAM_PURPLE, true);
-                break;
-            case TeamId.TEAM_PURPLE:
-                _teemo.SetVisibleByTeam(TeamId.TEAM_BLUE, true);
-                break;
-        }
-
-        _teemo.SetVisibleByTeam(TeamId.TEAM_NEUTRAL, true);
-        PushCharacterFade(_teemo, 1, 0.2f);
+        FadeOutColorFadeEffect(_teemo, 0.25f);
+        PopCharacterFade(_teemo, _fade);
     }
 }

@@ -427,7 +427,17 @@ public class PlayerConfig
     public short Skin { get; private set; }
     public string Summoner1 { get; private set; }
     public string Summoner2 { get; private set; }
+    /// <summary>
+    /// Honor crest shown on this player's loading-screen card to ALLIES (wire: PlayerLoadInfo.
+    /// AllyBadgeID; the client maps the id via its 4-slot badge atlas,
+    /// PlayerConnectionInfoBase::IndexFromBadgeID). Platform data at Riot — config-supplied here.
+    /// </summary>
     public short Ribbon { get; private set; }
+    /// <summary>
+    /// Honor crest shown to ENEMIES (wire: PlayerLoadInfo.EnemyBadgeID — the "Honorable
+    /// Opponent" side of the honor split). 0 = none.
+    /// </summary>
+    public short EnemyRibbon { get; private set; }
     public int Icon { get; private set; }
     public string BlowfishKey { get; private set; }
     public RuneCollection Runes { get; private set; }
@@ -471,6 +481,7 @@ public class PlayerConfig
         Summoner1 = (string)playerData.SelectToken("summoner1") ?? (IsBot ? "SummonerBoost" : "SummonerFlash");
         Summoner2 = (string)playerData.SelectToken("summoner2") ?? (IsBot ? "SummonerSmite" : "SummonerHeal");
         Ribbon = (short?)playerData.SelectToken("ribbon") ?? 0;
+        EnemyRibbon = (short?)playerData.SelectToken("enemyRibbon") ?? 0;
         Icon = (int?)playerData.SelectToken("icon") ?? (IsBot ? -1 : 0);
         BlowfishKey = (string)playerData.SelectToken("blowfishKey") ?? (IsBot ? BOT_BLOWFISH_KEY : null);
         AIScript = (string)playerData.SelectToken("aiScript") ?? "";

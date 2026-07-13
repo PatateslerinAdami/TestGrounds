@@ -162,10 +162,10 @@ namespace MapScripts.Map1
             // announcement). The Lua INITIAL_TIME_TO_SPAWN=90 constant is vestigial, but 90s is the
             // established value; the legacy 10s was an 80s desync (audit S2).
             MapScriptMetadata.FirstMinionSpawnTime = 90 * 1000;
-            AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            AddSurrender(1200f, 300f, 30f);
             // Team-balance vote: same timing as surrender; grant amounts are PLACEHOLDERS (the
             // server-side trigger/amounts aren't in the 4.20 client decomp — tune here, content-owned).
-            AddTeamBalance(1200000.0f, 300000.0f, 30.0f, 300.0f, 200, 0);
+            AddTeamBalance(1200f, 300f, 30f, 300.0f, 200, 0);
 
             // Replace the hardcoded MinionPaths with the client-side __NAV_<lane>NN
             // waypoints from the .sco.json scene files. Trailing-digit sort gives the correct

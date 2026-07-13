@@ -42,7 +42,7 @@ namespace Spells
         // The box reveals when it attacks (it arms hidden, then breaks stealth on the first swing).
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            owner.ExitStealth();
+            //owner.ExitStealth();
         }
 
         private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)

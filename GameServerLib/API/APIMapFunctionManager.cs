@@ -353,11 +353,11 @@ namespace LeagueSandbox.GameServer.API
         }
  
         /// <summary>
-        /// Sets up the surrender functionality
+        /// Sets up the surrender functionality. All timing params are in SECONDS.
         /// </summary>
-        /// <param name="time"></param>
-        /// <param name="restTime"></param>
-        /// <param name="length"></param>
+        /// <param name="time">Earliest time a surrender vote is allowed, in seconds.</param>
+        /// <param name="restTime">Cooldown between votes, in seconds.</param>
+        /// <param name="length">Vote duration, in seconds.</param>
         public static void AddSurrender(float time, float restTime, float length)
         {
             _map.Surrenders.Add(TeamId.TEAM_BLUE, new SurrenderHandler(_game, TeamId.TEAM_BLUE, time, restTime, length));
@@ -372,7 +372,7 @@ namespace LeagueSandbox.GameServer.API
 
         /// <summary>
         /// Sets up the team-balance vote (catch-up compensation for the disadvantaged team).
-        /// Timing params mirror AddSurrender (time/restTime in ms, length in seconds). The grant
+        /// Timing params mirror AddSurrender (time/restTime/length all in seconds). The grant
         /// amounts (gold/exp/towers) are content-owned and NOT 4.20-decomp-verified — tune per map.
         /// </summary>
         public static void AddTeamBalance(float time, float restTime, float length,

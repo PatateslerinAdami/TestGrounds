@@ -55,7 +55,7 @@ namespace Spells
                             newBox.SetIsTargetableToTeam(team, false);
                         }
                     }
-                    newBox.EnterStealth();
+                    //newBox.EnterStealth();
                 });
                 _activationTimers.Add(boxTimer);
             }

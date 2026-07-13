@@ -12,7 +12,6 @@ namespace PacketDefinitions420
     /// <summary>
     /// Class which contains all functions which are called when handling packets sent from clients to the server (C2S).
     /// </summary>
-    /// TODO: Remove all LeagueSandbox based PacketCmd usage and replace with LeaguePackets' GamePacketID enum.
     public class PacketReader
     {
         // this one only used in packet definitions, not exposed to the API currently, so no packet cmd assigned
@@ -305,6 +304,14 @@ namespace PacketDefinitions420
             var rq = new C2S_OnQuestEvent();
             rq.Read(data);
             return new QuestClickedRequest(rq.QuestID, (QuestEvent)rq.QuestEvent);
+        }
+
+        [PacketType(GamePacketID.C2S_UnitSendDrawPath)]
+        public static DrawPathRequest ReadDrawPathRequest(byte[] data)
+        {
+            var rq = new C2S_UnitSendDrawPath();
+            rq.Read(data);
+            return new DrawPathRequest(rq.TargetNetID, rq.DrawPathNodeType, rq.Point);
         }
 
         [PacketType(GamePacketID.C2S_SpellChargeUpdateReq)]

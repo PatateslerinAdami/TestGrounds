@@ -37,7 +37,8 @@ namespace LeagueSandbox.GameServer.Handlers
         public int ExperienceGranted { get; set; }
         public int TowersGranted { get; set; }
 
-        // First three timing params are in milliseconds, length is in seconds — mirrors SurrenderHandler.
+        // All three timing params are in SECONDS (minTime/restTime/length) — mirrors SurrenderHandler.
+        // Converted to ms internally at the GameTime comparisons below (GameTime is ms).
         public TeamBalanceHandler(Game g, TeamId team, float minTime, float restTime, float length,
             float goldGranted, int experienceGranted, int towersGranted)
         {
@@ -60,14 +61,14 @@ namespace LeagueSandbox.GameServer.Handlers
 
         public void HandleTeamBalanceVote(int userId, Champion who, bool vote)
         {
-            if (_game.GameTime < BalanceMinimumTime)
+            if (_game.GameTime < BalanceMinimumTime * 1000.0f)
             {
                 _game.PacketNotifier.NotifyTeamBalanceStatus(userId, who.Team, SurrenderReason.NotAllowedYet, 0, 0, GoldGranted, ExperienceGranted, TowersGranted);
                 return;
             }
 
             bool open = !IsBalanceActive;
-            if (!IsBalanceActive && _game.GameTime < LastBalanceTime + BalanceRestTime)
+            if (!IsBalanceActive && _game.GameTime < LastBalanceTime + BalanceRestTime * 1000.0f)
             {
                 _game.PacketNotifier.NotifyTeamBalanceStatus(userId, who.Team, SurrenderReason.DontSpamSurrender, 0, 0, GoldGranted, ExperienceGranted, TowersGranted);
                 return;

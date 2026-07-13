@@ -926,7 +926,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // breaks the hardcode-attack state. Champions are server-driven per swing, so the default
             // (non-forced) stop is correct for them.
             if ((reset || fullCancel) && !silent)
-                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, forceClient: this is Minion);
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, forceClient: this is Minion,
+                    // The cancelled swing's reserved missile id (Riot threads castInfo.missileNetworkID
+                    // through every ISA; ResetSpellCast above doesn't touch it).
+                    missileNetID: AutoAttackSpell.CastInfo.MissileNetID);
 
             if (wasWindingUp)
                 ApiEventManager.OnCancelAttack.Publish(this, reason);
@@ -3227,6 +3230,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         // IsAttacking branch above returns first — so this never interrupts a committed windup.)
                         if (this is Minion && HasMadeInitialAttack)
                         {
+                            // missileNetID stays 0: the client-autonomous minion AA loop has no
+                            // server-side cast, so there is no reserved missile id to name (the
+                            // rare zero class in Riot's own wire — 0.07%).
                             _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, isSummonerSpell: false,
                                 keepAnimating: false, destroyMissile: false, overrideVisibility: false, forceClient: true);
                             HasMadeInitialAttack = false;

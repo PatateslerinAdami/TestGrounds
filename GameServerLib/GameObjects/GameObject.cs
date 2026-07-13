@@ -37,7 +37,13 @@ namespace LeagueSandbox.GameServer.GameObjects
         private float _currentFadeStartOpacity = 0;
         private Fade _previousFade = null;
         private List<Fade> _fades = new List<Fade>();
-        private Dictionary<int, Fade> _lastFadeSeenByPlayer = new Dictionary<int, Fade>();
+        // Wire model (Riot BBPush/PopCharacterFade): every FadeOut broadcasts a Push with a
+        // running per-unit FadeId, every FadeIn broadcasts the matching Pop — the CLIENT owns the
+        // stack (mTargetFadeValues, keyed by id). The version counter + per-player snapshot drive
+        // the enter-vision catch-up in OnSync (pop what that client may still hold, replay the
+        // live stack), replacing the old value-snapshot pushes that grew the client stack forever.
+        private int _fadeStackVersion;
+        private Dictionary<int, KeyValuePair<int, short[]>> _lastFadeStackSeenByPlayer = new Dictionary<int, KeyValuePair<int, short[]>>();
 
         /// <summary>
         /// A set of players with vision of this GameObject.
@@ -348,29 +354,37 @@ namespace LeagueSandbox.GameServer.GameObjects
             
             if (forceSpawn)
             {
-                _lastFadeSeenByPlayer[userId] = _defaultFade;
+                // Fresh client object -> its fade stack is empty; forget what this player saw.
+                _lastFadeStackSeenByPlayer.Remove(userId);
             }
-            Fade lastSeenFade = _lastFadeSeenByPlayer.GetValueOrDefault(userId, _defaultFade);
-            float currentFadeTimeLeft = _currentFade.Duration - (_game.GameTime - _currentFade.StartTime);
-            float lastSeenFadeTimeLeft = lastSeenFade.Duration - (_game.GameTime - lastSeenFade.StartTime);
-            if (visible && !(
-                    lastSeenFade == _currentFade ||
-                    lastSeenFade.Opacity == _currentFade.Opacity &&
-                    lastSeenFadeTimeLeft <= 0 && currentFadeTimeLeft <= 0
-                ))
+            if (visible)
             {
-                if (currentFadeTimeLeft > 0)
+                var seen = _lastFadeStackSeenByPlayer.GetValueOrDefault(userId,
+                    new KeyValuePair<int, short[]>(-1, null));
+                if (seen.Key != _fadeStackVersion)
                 {
-                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, GetOpacity(), 0, userId);
-                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, _currentFade.Opacity, currentFadeTimeLeft,
-                        userId);
+                    // Clear whatever this client may still hold from before it lost vision —
+                    // a Pop for an id the client doesn't have is a no-op.
+                    if (seen.Value != null)
+                    {
+                        foreach (short id in seen.Value)
+                        {
+                            _game.PacketNotifier.NotifyS2C_SetFadeOut_Pop(this, id, userId);
+                        }
+                    }
+                    // Replay the live stack in order: finished entries as instant pushes, a
+                    // still-animating entry with its remaining time. An empty stack means the
+                    // pops above already reverted the client to the 1.0 default.
+                    var ids = new short[_fades.Count];
+                    for (int i = 0; i < _fades.Count; i++)
+                    {
+                        Fade f = _fades[i];
+                        float timeLeft = Math.Max(0, f.Duration - (_game.GameTime - f.StartTime));
+                        _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, (short)f.Id, timeLeft, f.Opacity, userId);
+                        ids[i] = (short)f.Id;
+                    }
+                    _lastFadeStackSeenByPlayer[userId] = new KeyValuePair<int, short[]>(_fadeStackVersion, ids);
                 }
-                else
-                {
-                    _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, GetOpacity(), 0, userId);
-                }
-
-                _lastFadeSeenByPlayer[userId] = _currentFade;
             }
         }
 
@@ -531,6 +545,12 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public float GetOpacity()
         {
+            // Instant fades (Duration 0) would make the division below 0/0 = NaN on the
+            // same-tick read — they are already at their target.
+            if (_currentFade.Duration <= 0)
+            {
+                return _currentFade.Opacity;
+            }
             float t = Math.Min(1, (_game.GameTime - _currentFade.StartTime) / _currentFade.Duration);
             return t * (_currentFade.Opacity - _currentFadeStartOpacity) + _currentFadeStartOpacity;
         }
@@ -548,14 +568,30 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             SetFade(opacity, duration);
             _fades.Add(_currentFade);
+
+            // Riot wire: one Push per fade instance, carrying its per-unit id — the client keeps
+            // the stack itself. Players without vision catch up via the OnSync stack replay.
+            _fadeStackVersion++;
+            _game.PacketNotifier.NotifyS2C_SetFadeOut_Push(this, (short)_currentFade.Id, duration, opacity);
             return _currentFade;
         }
-        
+
         public bool FadeIn(Fade fade, float duration = 1.0f)
         {
             duration *= 1000;
 
-            if (_fades.Remove(fade) && fade == _currentFade)
+            if (!_fades.Remove(fade))
+            {
+                return false;
+            }
+
+            // Riot wire: the matching Pop by id. The client mirrors our logic exactly (revert to
+            // the previous entry — or the 1.0 default — only when the popped entry was the top;
+            // a mid-stack pop just removes the entry with no visual change).
+            _fadeStackVersion++;
+            _game.PacketNotifier.NotifyS2C_SetFadeOut_Pop(this, (short)fade.Id);
+
+            if (fade == _currentFade)
             {
                 float opacity = 1;
                 if (_fades.Count > 0)
@@ -567,10 +603,8 @@ namespace LeagueSandbox.GameServer.GameObjects
                     opacity = lastFade.Opacity;
                 }
                 SetFade(opacity, duration);
-                return true;
             }
-
-            return false;
+            return true;
         }
     }
 }

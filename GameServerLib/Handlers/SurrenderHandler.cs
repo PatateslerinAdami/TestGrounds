@@ -10,7 +10,6 @@ using System.Linq;
 
 namespace LeagueSandbox.GameServer.Handlers
 {
-    // TODO: Make the surrender UI button become clickable upon hitting SurrenderMinimumTime
     public class SurrenderHandler : IUpdate
     {
         private Dictionary<Champion, bool> _votes = new Dictionary<Champion, bool>();
@@ -18,6 +17,10 @@ namespace LeagueSandbox.GameServer.Handlers
         private static ILog _logger = LoggerProvider.GetLogger();
         private bool toEnd = false;
         private float toEndTimer = 3000.0f;
+        // Whether we've already told the client the surrender button is clickable (sent once,
+        // when GameTime first crosses SurrenderMinimumTime). The client keeps the button disabled
+        // until it receives S2C_SetCanSurrender{true}.
+        private bool _canSurrenderNotified;
 
         public float SurrenderMinimumTime { get; set; }
         public float SurrenderRestTime { get; set; }
@@ -26,7 +29,9 @@ namespace LeagueSandbox.GameServer.Handlers
         public bool IsSurrenderActive { get; set; }
         public TeamId Team { get; set; }
 
-        // TODO: The first two parameters are in milliseconds, the third is seconds. QoL fix this?
+        // All three timing params are in SECONDS (minTime: earliest surrender, restTime: cooldown
+        // between votes, length: vote duration). Converted to ms internally at the GameTime
+        // comparisons below (GameTime is ms).
         public SurrenderHandler(Game g, TeamId team, float minTime, float restTime, float length)
         {
             _game = g;
@@ -45,14 +50,14 @@ namespace LeagueSandbox.GameServer.Handlers
 
         public void HandleSurrender(int userId, Champion who, bool vote)
         {
-            if (_game.GameTime < SurrenderMinimumTime)
+            if (_game.GameTime < SurrenderMinimumTime * 1000.0f)
             {
                 _game.PacketNotifier.NotifyTeamSurrenderStatus(userId, who.Team, SurrenderReason.NotAllowedYet, 0, 0);
                 return;
             }
             
             bool open = !IsSurrenderActive;
-            if (!IsSurrenderActive && _game.GameTime < LastSurrenderTime + SurrenderRestTime)
+            if (!IsSurrenderActive && _game.GameTime < LastSurrenderTime + SurrenderRestTime * 1000.0f)
             {
                 _game.PacketNotifier.NotifyTeamSurrenderStatus(userId, who.Team, SurrenderReason.DontSpamSurrender, 0, 0);
                 return;
@@ -89,6 +94,15 @@ namespace LeagueSandbox.GameServer.Handlers
 
         public void Update(float diff)
         {
+            // Enable the surrender button client-side the moment the game passes the minimum time.
+            // Sent once per team (BroadcastPacketTeam); the client keeps the button disabled until it
+            // arrives. HandleSurrender still enforces the same gate server-side (NotAllowedYet).
+            if (!_canSurrenderNotified && _game.GameTime >= SurrenderMinimumTime * 1000.0f)
+            {
+                _canSurrenderNotified = true;
+                _game.PacketNotifier.NotifySetCanSurrender(true, Team);
+            }
+
             if (IsSurrenderActive && _game.GameTime >= LastSurrenderTime + (SurrenderLength * 1000.0f))
             {
                 IsSurrenderActive = false;

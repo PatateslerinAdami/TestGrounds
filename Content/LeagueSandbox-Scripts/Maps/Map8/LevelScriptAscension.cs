@@ -79,7 +79,7 @@ namespace MapScripts.Map8
 
         public void Init(Dictionary<GameObjectTypes, List<MapObject>> mapObjects)
         {
-            AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            AddSurrender(1200f, 300f, 30f);
             CreateLevelProps.CreateProps();
             LevelScriptObjectsAscension.LoadObjects(mapObjects);
             GlobalData.ObjAIBaseVariables.StartingGold = 1300.0f;

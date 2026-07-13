@@ -88,7 +88,7 @@ namespace MapScripts.Map10
             // earlier than SR's 90s). See docs/LANE_MINION_ENGINE_INVERSION_PLAN.md.
             MapScriptMetadata.EngineDrivenMinionSpawn = true;
             MapScriptMetadata.FirstMinionSpawnTime = 75 * 1000;
-            AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            AddSurrender(1200f, 300f, 30f);
 
             LevelScriptObjects.LoadObjects(mapObjects);
             CreateLevelProps.CreateProps();

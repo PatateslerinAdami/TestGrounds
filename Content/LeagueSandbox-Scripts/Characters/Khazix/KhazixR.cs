@@ -9,6 +9,7 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using System.Collections.Generic;
+using GameServerLib.GameObjects;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Spells
 {
@@ -79,6 +80,8 @@ namespace Buffs
 {
     class KhazixRStealth : IBuffGameScript
     {
+        private ObjAIBase _khazix;
+        private Fade _fade;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.INVISIBILITY,
@@ -90,14 +93,18 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.EnterStealth();
+            _khazix.SetStatus(StatusFlags.Stealthed, true);
+            _fade = PushCharacterFade(_khazix, 0.2f, 0.5f);
+            FadeInColorFadeEffect(_khazix, 0, 0, 50, 0.25f, 0.2f);
             AddParticlePos(unit, "khazix_base_r_cas.troy", unit.Position, unit.Position, lifetime: 3f);
             StatsModifier.MoveSpeed.PercentBonus = 0.50f;
             unit.AddStatModifier(StatsModifier);
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.ExitStealth();
+            _khazix.SetStatus(StatusFlags.Stealthed, false);
+            PopCharacterFade(_khazix, _fade);
+            FadeOutColorFadeEffect(_khazix, 0.25f);
         }
     }
 }

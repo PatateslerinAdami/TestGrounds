@@ -1650,7 +1650,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="data">Data of the death.</param>
         public virtual void Die(DeathData data)
         {
-            ExitStealth();
             //_game.ObjectManager.RefreshUnitVision(this);
             _game.ObjectManager.StopTargeting(this);
             // Stop + clear the path on death (Riot DoDeath zeroes Velocity). Matters for zombies,
@@ -1839,6 +1838,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="enabled">Whether or not to enable the flag.</param>
         public void SetStatus(StatusFlags status, bool enabled)
         {
+            // Riot couples stealth engine-side (S1 server LuaSpellScriptHelper::SetStealthed — the
+            // body behind BBSetStatus(SetStealthed); the Lua never sees these side effects). On a
+            // REAL transition it (a) mirrors the new value into Ghosted — PROVEN for 4.20 on the
+            // wire (Shaco own-perspective replay 3f6b5739: STEALTHED bit 4 and IS_GHOSTED bit 12
+            // flip together in the SAME replication update at stealth start AND end) — and (b) on
+            // ENTRY only calls ClearTarget. The clear is S1-BINARY evidence only (not directly
+            // testable for 4.20 — server bodies are absent from the client decomp): that it means
+            // the unit's OWN attack target is corroborated by S1's death-teardown calling the same
+            // ClearTarget(&this->AIManagerOwnerI) beside AI_BaseTask=None + ResetSelectedSpell.
+            // Riot's ghost mirror is unconditional, so a stealth-exit stomps ghosting from other
+            // sources exactly like Riot's does.
+            if (status.HasFlag(StatusFlags.Stealthed) && Status.HasFlag(StatusFlags.Stealthed) != enabled)
+            {
+                _characterState.Set(StatusFlags.Ghosted, enabled);
+                if (enabled && this is ObjAIBase ai)
+                {
+                    ai.SetTargetUnit(null, true);
+                }
+            }
             // Capability bits (CanMove/Attack/Cast/MoveEver) are ref-counted disable-holds; all other bits
             // are plain set/clear. The CharacterState backing handles the per-bit dispatch + recompute; we
             // then re-derive the replicated ActionState. SetStatus(StatusFlags.None, true) sets zero bits →
@@ -4517,38 +4535,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     _scriptTimers.RemoveAt(i);
                 }
             }
-        }
-        public void EnterStealth(float fadeTime = 0f, float value = 0.3f, bool IsFadingIn = true, float FadeTime = 0.0f, float MaxWeight = 0.2f)
-        {
-            if (fadeTime == 0f)
-            {
-                SetStatus(StatusFlags.Stealthed, true);
-            }
-            else
-            {
-                RegisterTimer(new GameScriptTimer(fadeTime, () =>
-                {
-                    SetStatus(StatusFlags.Stealthed, true);
-                }));
-            }
-
-            _game.PacketNotifier.NotifyUnitInvis(fadeTime, value, this);
-            if (this is Champion champ)
-            {
-                var tilt = new LeaguePackets.Game.Common.Color { Red = 255, Green = 128, Blue = 64, Alpha = 200 };
-                _game.PacketNotifier.ColorRemapFx(champ, IsFadingIn, FadeTime, tilt, MaxWeight, false);
-            }
-        }
-        public void ExitStealth()
-        {
-            SetStatus(StatusFlags.Stealthed, false);
-            _game.PacketNotifier.NotifyUnitInvis(0, 1f, this);
-            if (this is Champion champ)
-            {
-                var tilt = new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 };
-                _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
-            }
-            _game.ObjectManager.RefreshUnitVision(this);
         }
 
         public ShieldValues GetCombinedShieldValues()

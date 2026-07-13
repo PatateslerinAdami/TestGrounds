@@ -30,7 +30,7 @@ namespace MapScripts.Map31
         public virtual void Init(Dictionary<GameObjectTypes, List<MapObject>> mapObjects)
         {
             MapScriptMetadata.MinionSpawnEnabled = IsMinionSpawnEnabled();
-            AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            AddSurrender(1200f, 300f, 30f);
             CreateLevelProps.CreateProps();
             LevelScriptObjects.LoadBuildings(mapObjects);
         }

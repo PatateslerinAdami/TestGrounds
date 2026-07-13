@@ -46,6 +46,7 @@ namespace PacketDefinitions420
         private readonly PacketHandlerManager _packetHandlerManager;
         private readonly NavigationGrid _navGrid;
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
+        private Dictionary<int, List<MovementDataWithSpeed>> _heldDashData = new Dictionary<int, List<MovementDataWithSpeed>>();
         private Dictionary<int, List<ReplicationData>> _heldReplicationData = new Dictionary<int, List<ReplicationData>>();
         // Per-recipient batching for FX_Create_Group, flushed once per tick alongside
         // NotifyWaypointGroup. Replay-verified: Riot bundles multiple particles spawned in
@@ -983,29 +984,54 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
         }
 
-        public void NotifyS2C_SetFadeOut_Push(GameObject o, float value, float time, int userId)
+        /// <summary>
+        /// Pushes a model-fade entry onto the unit's CLIENT-side fade stack (Riot's
+        /// BBPushCharacterFade wire; client obj_AI_Base_PImpl_Int keeps mTargetFadeValues keyed
+        /// by FadeId — the matching Pop removes BY ID and reverts only if it was the top).
+        /// Riot sends real push/pop pairs (15 replays: 3538×0xB2 / 1749×0x32) with a running
+        /// per-unit id; the separate S2C_SetFadeOut (0x12D) is sent 0× and must not be used.
+        /// userId &lt; 0 broadcasts to vision (live fade events); a specific userId unicasts
+        /// (enter-vision stack replay in GameObject.OnSync).
+        /// </summary>
+        public void NotifyS2C_SetFadeOut_Push(GameObject o, short fadeId, float timeMs, float value, int userId = -1)
         {
-            time /= 1000f;
-
             var packet = new SetFadeOut_Push
             {
                 SenderNetID = o.NetId,
-                FadeTime = time,
+                FadeId = fadeId,
+                FadeTime = timeMs / 1000f,
                 FadeTargetValue = value
             };
-            _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
         }
 
-        public void NotifyS2C_SetFadeOut_Pop(GameObject o, short buffId, float time, int userId)
+        /// <summary>
+        /// Removes the fade entry with the given id from the unit's client fade stack (see
+        /// <see cref="NotifyS2C_SetFadeOut_Push"/>). Popping an id the client doesn't hold is a
+        /// harmless no-op (the handler's search simply finds nothing).
+        /// </summary>
+        public void NotifyS2C_SetFadeOut_Pop(GameObject o, short fadeId, int userId = -1)
         {
-            time /= 1000f;
-
             var packet = new SetFadeOut_Pop
             {
                 SenderNetID = o.NetId,
-                StackID = buffId
+                StackID = fadeId
             };
-            _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(o, packet.GetBytes(), Channel.CHL_S2C);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+            }
         }
 
         /// <summary>
@@ -3132,9 +3158,9 @@ namespace PacketDefinitions420
             };
             _packetHandlerManager.BroadcastPacket(cd.GetBytes(), Channel.CHL_S2C);
 
-            NotifyNPC_Die_EventHistory(champ, killerNetID);
+            NotifyNPC_Die_EventHistory(champ, killerNetID, deathData.Killer);
         }
-        public void NotifyNPC_Die_EventHistory(Champion ch, uint killerNetID = 0)
+        public void NotifyNPC_Die_EventHistory(Champion ch, uint killerNetID = 0, AttackableUnit killer = null)
         {
             //For some reason when on team blue event history doesn't get shown, its ugly but for now it doesn't seem to have a problem for now, making a mental note.
             if (ch.Team == TeamId.TEAM_BLUE)
@@ -3152,7 +3178,20 @@ namespace PacketDefinitions420
                 float lastTimestamp = ch.EventHistory[ch.EventHistory.Count - 1].Timestamp;
                 history.Duration = lastTimestamp - firstTimestamp;
             }
-            history.EventSourceType = 0; //TODO: Confirm that it is always zero
+            // The KILLER's unit class for the death-recap header (client: HandleDeathRecapPimpl →
+            // DeathRecap::ProcessDeathRecapData consumes it as EventSystem::EventSourceType —
+            // HERO=0/MINION=1/TOWER=2/PET=3/CLONE=4/UNKNOWN=5, EventEnums.h:186). NOT always
+            // zero: replay histogram over 25 games = 154x 0 (champion killers), 1x 2 (a turret
+            // kill), 1x 113 (Riot's uninitialized-byte garbage class). Derived from the killer;
+            // CLONE (Shaco/LeBlanc/Wukong clones) is not distinguishable in our object model yet.
+            history.EventSourceType = killer switch
+            {
+                Champion => 0,          // EVENTSOURCETYPE_HERO
+                BaseTurret => 2,        // EVENTSOURCETYPE_TOWER
+                Pet => 3,               // EVENTSOURCETYPE_PET
+                Minion => 1,            // EVENTSOURCETYPE_MINION
+                _ => 5                  // EVENTSOURCETYPE_UNKNOWN
+            };
             history.Entries = ch.EventHistory;
 
             _packetHandlerManager.SendPacket(ch.ClientId, history.GetBytes(), Channel.CHL_S2C);
@@ -3177,7 +3216,15 @@ namespace PacketDefinitions420
         /// <param name="destroyMissile">Whether or not to destroy the missile which may have been created before stopping (client-side removal).</param>
         /// <param name="overrideVisibility">Whether or not stopping this auto attack overrides visibility checks.</param>
         /// <param name="forceClient">Whether or not this packet should be forcibly applied, regardless of if an auto attack is being performed client-side.</param>
-        /// <param name="missileNetID">NetId of the missile that may have been spawned by the spell. Replay shows 99.93% of InstantStop_Attack packets carry a real missile NetId; threading it through callers is a separate audit.</param>
+        /// <param name="missileNetID">The stopping cast's <c>CastInfo.MissileNetID</c> (the reserved
+        /// missile NetId, present even for casts that never spawn a missile). Client-side the field
+        /// is read ONLY when <paramref name="destroyMissile"/> is true — SpellInstanceClient::
+        /// ForceStop looks the missile up by this id and DestroyMissile()s it (plus a cooldown
+        /// refund if the cast frame already fired); with the replay-standard all-flags-false shape
+        /// it is inert. Riot still populates it in 99.93% of packets — the client's own internal
+        /// stop path (Spellbook::ForceStopSpellcastingObject) reads it from
+        /// GetSpellCastInfo().missileNetworkID, and the server mirrors that. Pass 0 only when no
+        /// server-side cast exists (client-autonomous minion AA loops).</param>
         public void NotifyNPC_InstantStop_Attack(AttackableUnit attacker, bool isSummonerSpell,
             bool keepAnimating = false,
             bool destroyMissile = false,
@@ -3188,7 +3235,11 @@ namespace PacketDefinitions420
             var stopAttack = new NPC_InstantStop_Attack
             {
                 SenderNetID = attacker.NetId,
-                MissileNetID = missileNetID, //TODO: Fix MissileNetID, currently it only works when it is 0
+                // "Only works when 0" was pre-2026-05-09 folklore: back then destroyMissile
+                // defaulted TRUE, so a real NetId force-destroyed the in-flight missile client-side
+                // (visible glitch) while 0 made the destroy a lookup-miss no-op. With the corrected
+                // flags-false defaults the id is a plain identifier, exactly like Riot's wire.
+                MissileNetID = missileNetID,
                 KeepAnimating = keepAnimating,
                 DestroyMissile = destroyMissile,
                 OverrideVisibility = overrideVisibility,
@@ -5263,9 +5314,16 @@ namespace PacketDefinitions420
                     TeamId = (uint)players[i].Team,
                     EloRanking = players[i].Rank,
                     ProfileIconId = players[i].Icon,
-                    // TODO: Unhardcode these two.
-                    AllyBadgeID = 0,
-                    EnemyBadgeID = 0
+                    // Honor crests on the loading-screen card (client: badge drawn from a 4-slot
+                    // atlas via PlayerConnectionInfoBase::IndexFromBadgeID; AllyBadgeID only
+                    // renders for same-team viewers, EnemyBadgeID for the other side — the honor
+                    // system's teamwork/honorable-opponent split). Replay: almost always 0, one
+                    // player carried AllyBadgeID=4; platform data at Riot, config-supplied here
+                    // ("ribbon"/"enemyRibbon" in GameInfo, plumbed through ClientInfo).
+                    // Live-verified on the 4.20 client: ids 1 and 4 render a crest; ids not in
+                    // the client's 4-slot badge map draw nothing (IndexFromBadgeID -1).
+                    AllyBadgeID = (byte)players[i].Ribbon,
+                    EnemyBadgeID = (byte)players[i].EnemyRibbon
                 };
 
                 // Bot slot wire model (4.20 co-op replay a5347e9d): botName/botSkinName = the raw
@@ -5282,11 +5340,22 @@ namespace PacketDefinitions420
                 syncVersion.PlayerInfo[i] = info;
             }
 
-            // TODO: syncVersion.Mutators
+            // Mutators (8x64-char strings + count): the game-mode modifier list (URF/Doom-Bots-
+            // class switches, client feeds them into mode logic). Riot sends ALL EMPTY + num=0 in
+            // every replayed 4.20 game (3 perspectives checked) — the default is already the
+            // faithful wire; a future alt-mode implementation would populate these.
 
-            // TODO: syncVersion.DisabledItems
+            // DisabledItems (64x u32): Riot's emergency item-disable list (hotfix kill-switch).
+            // All zero in every replay — no item was disabled in 4.20 captures; per-map item
+            // availability is data-driven elsewhere (Items.json), not via this field.
 
-            // TODO: syncVersion.EnabledDradisMessages
+            // EnabledDradisMessages: telemetry-category toggles for the client's Dradis reporting.
+            // Riot's wire is 18x true + last false (identical across all replays) — mirror it even
+            // though our empty Dradis addresses above make the reporting inert.
+            for (int i = 0; i < syncVersion.EnabledDradisMessages.Length - 1; i++)
+            {
+                syncVersion.EnabledDradisMessages[i] = true;
+            }
 
             _packetHandlerManager.SendPacket(userId, syncVersion.GetBytes(), Channel.CHL_S2C);
         }
@@ -5411,13 +5480,27 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing that their screen's tint is shifting to the specified color.
+        /// Fullscreen color tint (S2C_ColorRemapFX 0xDB). Client handler (GameClient.cpp) passes
+        /// Color+MaxWeight verbatim as a Gamma::ColorOverride { r3dColor, m_OverrideWeight } to
+        /// GammaManager::SetColorOverride: MaxWeight is the tint's target BLEND STRENGTH (0..1),
+        /// ramped from the current weight to this value over FadeTime — it is INDEPENDENT of the
+        /// color's alpha channel (the old-LS Alpha/255 derivation is replay-refuted: Riot sends
+        /// Alpha=255 with MaxWeight=0.15 on its green announce tint, and weight 0 on the
+        /// IsFadingIn=false clears). TeamID gates client-side: 0 = everyone, else only clients
+        /// whose champion is on that team apply it.
+        /// Riot's script API: BBFadeInColorFadeEffect { ColorRed/Green/Blue, FadeTime, MaxWeight,
+        /// SpecificToTeam } / BBFadeOutColorFadeEffect { FadeTime, SpecificToTeam } — 1:1 the
+        /// packet fields. Replay-identified users: NocturneParanoia (team-scoped dual tint, blue
+        /// 0,0,75 @ 0.3 own side + red 75,0,0 @ 0.3 enemy side, the only S1 Lua user), Kalista R
+        /// soulbond (green 0,155,55 @ 0.15 to the bound ally), and the stealth self-tint
+        /// (0,0,50 @ 0.2, unicast — scripts compose it via FadeInColorFadeEffect, Riot's BB form).
         /// </summary>
-        /// <param name="team">TeamID to apply the tint to.</param>
-        /// <param name="enable">Whether or not to fade in the tint.</param>
-        /// <param name="speed">Amount of time that should pass before tint is fully applied.</param>
+        /// <param name="team">TeamID to apply the tint to (client-side gate; 0/TEAM_UNKNOWN = all).</param>
+        /// <param name="enable">true = fade the tint in; false = clear it over <paramref name="speed"/>.</param>
+        /// <param name="speed">Fade duration in seconds.</param>
         /// <param name="color">Color of the tint.</param>
-        public void NotifyTint(TeamId team, bool enable, float speed, GameServerCore.Content.Color color)
+        /// <param name="maxWeight">Target blend strength 0..1 (Riot's announce tint uses 0.15).</param>
+        public void NotifyTint(TeamId team, bool enable, float speed, GameServerCore.Content.Color color, float maxWeight)
         {
             var c = new LeaguePackets.Game.Common.Color
             {
@@ -5432,17 +5515,20 @@ namespace PacketDefinitions420
                 FadeTime = speed,
                 TeamID = (uint)team,
                 Color = c,
-                MaxWeight = (c.Alpha / 255.0f) // TODO: Implement this correctly, current implementation taken from old LS packet
+                MaxWeight = maxWeight
             };
             _packetHandlerManager.BroadcastPacket(tint.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
-        /// Sends a packet to all players that the specified Champion has gained the specified amount of experience.
+        /// Tells the champion's TEAM that they gained experience. Replay-verified TEAM-scoped
+        /// across 3 perspectives (4d3ed764/1b3eb4f7/3f6b5739): every recorder sees UnitAddEXP for
+        /// exactly the five champions of its OWN team (recorder included) and ZERO packets for
+        /// enemies — so neither the old global broadcast (leaked enemy XP gains to everyone) nor
+        /// BroadcastPacketVision is the Riot shape.
         /// </summary>
         /// <param name="champion">Champion that gained the experience.</param>
         /// <param name="experience">Amount of experience gained.</param>
-        /// TODO: Verify if sending to all players is correct.
         public void NotifyUnitAddEXP(Champion champion, float experience)
         {
             var xp = new UnitAddEXP
@@ -5450,23 +5536,30 @@ namespace PacketDefinitions420
                 TargetNetID = champion.NetId,
                 ExpAmmount = experience
             };
-            // TODO: Verify if we should change to BroadcastPacketVision
-            _packetHandlerManager.BroadcastPacket(xp.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacketTeam(champion.Team, xp.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
-        /// Sends a packet to all players that the specified Champion has killed a specified player and received a specified amount of gold.
+        /// Tells the earning player their champion gained gold from a source unit (last-hit CS
+        /// gold and kill/assist gold alike). Replay-verified (306 packets, one perspective):
+        /// ALWAYS unicast to the earner — every packet targets the recorder's own champion, incl.
+        /// champion-kill gold (300-500) — and SenderNetID == TargetNetID == the champion (NOT the
+        /// dying unit). Client handler (GameClient.cpp case 0x22): hero source → combinable
+        /// "+gold" floating text from source to target; non-hero source → NotifySourceAboutGold
+        /// HUD callout; the actual gold STAT arrives via replication (ClientOnly mGold).
+        /// SELF-GOLD (SourceNetID == own champion): Riot sends ZERO such packets — passive/gp10/
+        /// self-granted gold is replication-only. The client would tolerate one (skips the FX and
+        /// falls into a local client-side gold add), but faithful behavior is to not send it —
+        /// Champion.AddGold's notify should stay off for self-sourced grants.
         /// </summary>
-        /// <param name="c">Champion that killed a unit.</param>
-        /// <param name="died">AttackableUnit that died to the Champion.</param>
-        /// <param name="gold">Amount of gold the Champion gained for the kill.</param>
-        /// TODO: Only use BroadcastPacket when the unit that died is a Champion.
+        /// <param name="c">Champion that earned the gold.</param>
+        /// <param name="died">Unit the gold came from (killed minion/champion).</param>
+        /// <param name="gold">Amount of gold earned.</param>
         public void NotifyUnitAddGold(Champion c, AttackableUnit died, float gold)
         {
-            // TODO: Verify if this handles self-gold properly.
             var ag = new UnitAddGold
             {
-                SenderNetID = died.NetId,
+                SenderNetID = c.NetId,
                 TargetNetID = c.NetId,
                 SourceNetID = died.NetId,
                 GoldAmmount = gold
@@ -5517,13 +5610,23 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to the specified player detailing that the specified target GameObject's (debug?) path drawing mode has been set to the specified mode.
+        /// Enables/disables path-DRAWING mode on a unit (decomp-verified, S4 client): the handler
+        /// calls obj_AI_Base::SetDrawPathMode(mode, updateRate) — stores CanDrawPathState and, when
+        /// the unit is the RECEIVING player's own champion, sets the HUD's click-repeat delay to
+        /// max(0.1, UpdateRate). While enabled on the local player, holding the draw input makes
+        /// the client STREAM the cursor path back as C2S_UnitSendDrawPath (0x106) packets
+        /// (HudInputLogic::SendDrawPlayerPathPacket: nodeType 0=start/1=mid/2=end + cursor world
+        /// pos, throttled by UpdateRate). A debug/tooling round-trip: Riot's 4.20 replays carry
+        /// ZERO 0x105/0x106, we have no C2S_UnitSendDrawPath handler, and this notifier has no
+        /// callers — latent, kept for protocol completeness. The DrawPathMode enum matches Riot's
+        /// obj_AI_Base header exactly (DRAW_PATH_DISABLED=0, DRAW_PATH_LINE=1; the client only
+        /// tests != 0). A BB param proxy for DrawPathMode exists client-side, so Riot's script
+        /// layer could drive it (no user in the S1 Lua corpus either).
         /// </summary>
-        /// <param name="userId">User to send the packet to(?).</param>
-        /// <param name="unit">Unit that has called for the packet.</param>
-        /// <param name="target">GameObject who's (debug?) draw path mode is being set.</param>
-        /// <param name="mode">Draw path mode to set. Refer to DrawPathMode enum.</param>
-        /// TODO: Verify the functionality of this packet (and its parameters) and create an enum for the mode.
+        /// <param name="userId">User to send the packet to (only their own champion wires the HUD side).</param>
+        /// <param name="unit">Unit the packet is sent as (SenderNetID).</param>
+        /// <param name="target">Unit whose draw-path mode is being set.</param>
+        /// <param name="mode">Draw path mode to set (Riot obj_AI_Base::DrawPathMode).</param>
         public void NotifyUnitSetDrawPathMode(int userId, AttackableUnit unit, GameObject target, DrawPathMode mode)
         {
             var drawPacket = new S2C_UnitSetDrawPathMode
@@ -5892,13 +5995,7 @@ namespace PacketDefinitions420
         public void HoldMovementDataUntilWaypointGroupNotification(AttackableUnit u, int userId, bool useTeleportID = false)
         {
             var data = PacketExtensions.CreateMovementDataNormal(u, _navGrid, useTeleportID);
-
-            List<MovementDataNormal> list = null;
-            if (!_heldMovementData.TryGetValue(userId, out list))
-            {
-                _heldMovementData[userId] = list = new List<MovementDataNormal>();
-            }
-            list.Add(data);
+            HoldMovementData(userId, data);
         }
 
         /// <summary>
@@ -5991,25 +6088,35 @@ namespace PacketDefinitions420
         /// <param name="useTeleportID">Whether or not to teleport the unit to its current position in its path.</param>
         public void NotifyWaypointGroup(AttackableUnit u, int userId = -1, bool useTeleportID = false)
         {
+            // Multiple movements = the per-tick per-receiver batch. Riot funnels ALL normal
+            // movement through one WaypointGroup per receiver per tick — replay: 30,396 0x61s,
+            // 50% carry 2-58 movementData entries. Everything already routes through
+            // _heldMovementData (the stream via OnSync, click answers via SetWaypoints →
+            // _movementUpdated); this event variant (cast-stop/resume paths in Spell.cs) was the
+            // last single-entry sender, so enqueue it too and let the ObjectManager.Update flush
+            // bundle it. Same tick + same channel as the old direct send (callers run inside the
+            // update phase, before the flush), so wire timing/order vs adjacent packets is
+            // unchanged; the flush's teleport check handles the RELIABLE upgrade per packet.
             var move = PacketExtensions.CreateMovementDataNormal(u, _navGrid, useTeleportID);
 
-            // TODO: Implement support for multiple movements.
-            var packet = new WaypointGroup
+            if (userId >= 0)
             {
-                SyncID = PacketExtensions.WireSyncID,
-                Movements = new List<MovementDataNormal>() { move }
-            };
+                HoldMovementData(userId, move);
+                return;
+            }
+            foreach (int pid in u.VisibleForPlayers)
+            {
+                HoldMovementData(pid, move);
+            }
+        }
 
-            // Unreliable stream, reliable teleports — see NotifyWaypointGroup() above.
-            var flag = useTeleportID ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED;
-            if (userId < 0)
+        private void HoldMovementData(int userId, MovementDataNormal move)
+        {
+            if (!_heldMovementData.TryGetValue(userId, out var list))
             {
-                _packetHandlerManager.BroadcastPacketVision(u, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
+                _heldMovementData[userId] = list = new List<MovementDataNormal>();
             }
-            else
-            {
-                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, flag);
-            }
+            list.Add(move);
         }
 
         /// <summary>
@@ -6018,20 +6125,53 @@ namespace PacketDefinitions420
         /// Functionally referred to as a dash in-game.
         /// </summary>
         /// <param name="u">Unit that is dashing.</param>
-        /// TODO: Implement ForceMovement class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void NotifyWaypointGroupWithSpeed(AttackableUnit u)
         {
-            // TODO: Implement Dash class and house a List of these with waypoints.
             var md = PacketExtensions.CreateMovementDataWithSpeed(u, _navGrid);
 
-            var speedWpGroup = new WaypointGroupWithSpeed
+            // Riot batches all dashes a receiver can see in the same tick into ONE packet —
+            // replay-verified up to 11 movementData entries (151/981 WaypointGroupWithSpeed carry
+            // 2–11). Each entry is an independent per-unit dash keyed by its own teleportNetId,
+            // so batching is per-RECEIVER: queue the entry for every player that currently sees
+            // the unit (the snapshot BroadcastPacketVision would use) and flush once per tick
+            // from ObjectManager.Update, exactly like the _heldMovementData WaypointGroup batch.
+            // A player gaining vision mid-dash is handled by the enter-vision sync, not this path.
+            foreach (int pid in u.VisibleForPlayers)
             {
-                SyncID = PacketExtensions.WireSyncID,
-                // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
-                Movements = new List<MovementDataWithSpeed> { md }
-            };
+                if (!_heldDashData.TryGetValue(pid, out var list))
+                {
+                    _heldDashData[pid] = list = new List<MovementDataWithSpeed>();
+                }
+                list.Add(md);
+            }
+        }
 
-            _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+        /// <summary>
+        /// Sends all dashes queued by <see cref="NotifyWaypointGroupWithSpeed(AttackableUnit)"/>
+        /// this tick — one WaypointGroupWithSpeed per receiving player (Riot's batch shape) — and
+        /// clears the queue. Dashes are discrete events the client must not miss, so unlike the
+        /// streamed WaypointGroup they stay RELIABLE on CHL_S2C (the pre-batching behavior).
+        /// </summary>
+        public void NotifyWaypointGroupWithSpeed()
+        {
+            foreach (var kv in _heldDashData)
+            {
+                int userId = kv.Key;
+                var list = kv.Value;
+
+                if (list.Count > 0)
+                {
+                    var speedWpGroup = new WaypointGroupWithSpeed
+                    {
+                        SyncID = PacketExtensions.WireSyncID,
+                        Movements = list
+                    };
+
+                    _packetHandlerManager.SendPacket(userId, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+
+                    list.Clear();
+                }
+            }
         }
 
         /// <summary>
@@ -6047,7 +6187,9 @@ namespace PacketDefinitions420
         /// <param name="followTargetMaxDistance">Optional maximum distance the unit will follow the Target before stopping the dash or reaching to the Target.</param>
         /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of (positive) / overshoot past (negative) the target.</param>
         /// <param name="travelTime">Optional total time the dash will follow the GameObject before stopping or reaching the Target.</param>
-        /// TODO: Implement ForceMovement class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
+        /// DEAD CODE: builds WaypointListHeroWithSpeed (0x83), which Riot sends 0× — all live dashes
+        /// go over NotifyWaypointGroupWithSpeed (0x64). Kept only until the packet is retired; has no
+        /// live callers. Params are already housed in ForceMovementParameters on the live path.
         public void NotifyWaypointListWithSpeed
         (
             AttackableUnit u,
@@ -6060,12 +6202,10 @@ namespace PacketDefinitions420
             float travelTime = 0
         )
         {
-            // TODO: Implement ForceMovement class/interface and house a List of these with waypoints.
             var speeds = new SpeedParams
             {
                 PathSpeedOverride = speed,
                 ParabolicGravity = gravity,
-                // TODO: Implement as parameter (ex: Aatrox Q).
                 ParabolicStartPoint = u.Position,
                 Facing = keepFacingLastDirection,
                 FollowNetID = 0,
@@ -6095,22 +6235,31 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to the specified player detailing that their request to view something with their camera has been acknowledged.
+        /// Acknowledges a client's World_SendCamera_Server request. Replay-verified (4.20):
+        /// a pure handshake — the server echoes the request's SyncID and sends no camera
+        /// data of its own (it doesn't act on the requested camera position). Camera-move
+        /// requests are a spectator/replay feature; the ack just closes the sync loop.
         /// </summary>
-        /// <param name="userId">User to send the packet to.</param>
+        /// <param name="client">Client whose camera request is being acknowledged.</param>
         /// <param name="request">ViewRequest housing information about the camera's view.</param>
-        /// TODO: Verify if this is the correct implementation.
         public void NotifyWorld_SendCamera_Server_Acknologment(ClientInfo client, ViewRequest request)
         {
             var answer = new World_SendCamera_Server_Acknologment
             {
-                //TODO: Check these values
-                SenderNetID = client.Champion.NetId,
+                // Replay-verified (4.20, 0x2C): SenderNetID is ALWAYS 0 — this is a
+                // server-originated ack, not bound to any unit (netId=0 on every capture).
+                // SyncID echoes the client's per-request counter (1,2,3,… incrementing) so
+                // the client can match the ack to its World_SendCamera_Server request.
+                SenderNetID = 0,
                 SyncID = request.SyncID,
             };
             _packetHandlerManager.SendPacket(client.ClientId, answer.GetBytes(), Channel.CHL_S2C, PacketFlags.NONE);
         }
 
+        /// DEAD WIRE: S2C_SetFadeOut (0x12D, a 4.18+ addition) is sent 0x by Riot across 15
+        /// replays — all live model fades go over the SetFadeOut_Push/Pop stack (0xB2/0x32).
+        /// No callers — model fades run over the FadeOut/FadeIn stack (scripts:
+        /// PushCharacterFade/PopCharacterFade); kept only for protocol completeness.
         public void NotifyUnitInvis(float fadeTime, float value, AttackableUnit au)
         {
             var fade = new S2C_SetFadeOut

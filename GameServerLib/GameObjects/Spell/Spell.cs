@@ -1641,7 +1641,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // Skip on TimeCompleted so natural completion stays silent on the wire.
                 if (reason != ChannelingStopSource.TimeCompleted)
                 {
-                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
                     // Route to charge-specific cancel for charge spells.
                     if (IsChargeSpell)
                     {
@@ -1963,7 +1963,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // SpellInstanceClient stays at mChannelingFinished=0 + mChannelingFinishTime=FLT_MAX so
             // IsChanneling() returns true forever and Spellbook refuses to re-cast Q. Same mechanism
             // as StopChanneling(Cancel, non-TimeCompleted) uses for stun/silence/etc cancels.
-            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
 
             // Publish CANCEL (not Fire) — script chooses policy: mana refund, auto-fire, etc.
             ApiEventManager.OnSpellChargeCancel.Publish(this, ChannelingStopSource.TimeCompleted);
@@ -2866,7 +2866,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // ends naturally on the client. Don't broadcast ISA here.
                 if (IsChannelLockCharge)
                 {
-                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
                 }
 
                 // For charge-channel spells (UseChargeChanneling=1, e.g. Varus Q) the client-driven

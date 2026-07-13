@@ -132,7 +132,7 @@ namespace MapScripts.Map8
         {
             //TODO: Implement Dynamic Minion spawn mechanics for Map8
             //SpawnEnabled = map.IsMinionSpawnEnabled();
-            AddSurrender(1200000.0f, 300000.0f, 30.0f);
+            AddSurrender(1200f, 300f, 30f);
 
             LevelScriptObjects.LoadObjects(mapObjects);
             CreateLevelProps.CreateProps(this);

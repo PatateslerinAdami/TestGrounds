@@ -262,6 +262,7 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<UnpauseRequest>(new HandleUnpauseReq(this).HandlePacket);
             RequestHandler.Register<UseObjectRequest>(new HandleUseObject(this).HandlePacket);
             RequestHandler.Register<ViewRequest>(new HandleView(this).HandlePacket);
+            RequestHandler.Register<DrawPathRequest>(new HandleDrawPath(this).HandlePacket);
         }
 
         public void TryFinishReconnectStart(int userId)

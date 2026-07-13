@@ -73,7 +73,9 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             color.G = g;
             color.B = b;
             color.A = (byte) (uint)(a*255.0f);
-            Game.PacketNotifier.NotifyTint(team, enable, speed, color);
+            // The command's alpha arg doubles as the tint blend strength (MaxWeight) — the two
+            // are independent on the wire, this is just the rainbow cheat's historical mapping.
+            Game.PacketNotifier.NotifyTint(team, enable, speed, color, a);
         }
     }
 }

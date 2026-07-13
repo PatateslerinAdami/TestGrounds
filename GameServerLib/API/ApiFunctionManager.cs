@@ -4505,9 +4505,87 @@ namespace LeagueSandbox.GameServer.API
         /// windup end for casts like Nami Q (78/93 casts, median +255ms = the FinishCasting tick);
         /// without it the client's cast frame sticks and silently eats the next spell press.
         /// </summary>
-        public static void NotifyInstantStopAttack(AttackableUnit unit, bool isSummonerSpell = false)
+        public static void NotifyInstantStopAttack(AttackableUnit unit, bool isSummonerSpell = false, Spell spell = null)
         {
-            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, isSummonerSpell);
+            // Pass the stopping spell so the ISA carries its reserved CastInfo.MissileNetID
+            // (Riot threads castInfo.missileNetworkID through every ISA; inert with the
+            // flags-false shape, but wire-faithful).
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(unit, isSummonerSpell,
+                missileNetID: spell?.CastInfo.MissileNetID ?? 0);
+        }
+
+        /// <summary>
+        /// Fades in a fullscreen color tint (port of Riot's <c>BBFadeInColorFadeEffect</c>:
+        /// ColorRed/Green/Blue + FadeTime + MaxWeight + SpecificToTeam — S2C_ColorRemapFX on the
+        /// wire, client Gamma::ColorOverride). <paramref name="maxWeight"/> is the tint's target
+        /// blend strength 0..1, independent of alpha (which Riot fixes at 255). Team-scoped
+        /// broadcast form — the NocturneParanoia.lua shape: blue (0,0,75) @ 0.3 to Nocturne's
+        /// team + red (75,0,0) @ 0.3 to the enemy team, fade 1.0. TEAM_UNKNOWN = every player.
+        /// For the per-player unicast form (stealth self-tint) use the Champion overload.
+        /// </summary>
+        /// <param name="colorRed">Red component of the tint (0-255).</param>
+        /// <param name="colorGreen">Green component of the tint (0-255).</param>
+        /// <param name="colorBlue">Blue component of the tint (0-255).</param>
+        /// <param name="fadeTime">Seconds to ramp the tint in.</param>
+        /// <param name="maxWeight">Target blend strength 0..1.</param>
+        /// <param name="specificToTeam">Team whose players apply the tint (TEAM_UNKNOWN = all).</param>
+        public static void FadeInColorFadeEffect(byte colorRed, byte colorGreen, byte colorBlue,
+            float fadeTime, float maxWeight, TeamId specificToTeam = TeamId.TEAM_UNKNOWN)
+        {
+            var color = new GameServerCore.Content.Color
+            {
+                R = colorRed, G = colorGreen, B = colorBlue, A = 255
+            };
+            _game.PacketNotifier.NotifyTint(specificToTeam, true, fadeTime, color, maxWeight);
+        }
+
+        /// <summary>
+        /// Unicast variant of <see cref="FadeInColorFadeEffect(byte,byte,byte,float,float,TeamId)"/>:
+        /// tints only the screen of the player controlling <paramref name="unit"/> — the stealth
+        /// self-tint form (replay: dark blue (0,0,50) @ 0.2 for TalonR/AkaliW/KhazixR/ShacoQ,
+        /// sent only to the stealther). Takes any unit like Riot's BBs (scripts pass "Owner");
+        /// the hero check lives HERE, engine-side (Riot's TypeInfo::objIsHero pattern) — a
+        /// non-champion unit has no client to tint, so this is a no-op for pets/clones/boxes.
+        /// </summary>
+        public static void FadeInColorFadeEffect(AttackableUnit unit, byte colorRed, byte colorGreen,
+            byte colorBlue, float fadeTime, float maxWeight)
+        {
+            if (unit is not Champion champion)
+            {
+                return;
+            }
+            var color = new LeaguePackets.Game.Common.Color
+            {
+                Red = colorRed, Green = colorGreen, Blue = colorBlue, Alpha = 255
+            };
+            _game.PacketNotifier.ColorRemapFx(champion, true, fadeTime, color, maxWeight, false);
+        }
+
+        /// <summary>
+        /// Fades a previously applied fullscreen tint back out (port of Riot's
+        /// <c>BBFadeOutColorFadeEffect</c>: FadeTime + SpecificToTeam).
+        /// </summary>
+        /// <param name="fadeTime">Seconds to ramp the tint out.</param>
+        /// <param name="specificToTeam">Team whose players clear the tint (TEAM_UNKNOWN = all).</param>
+        public static void FadeOutColorFadeEffect(float fadeTime, TeamId specificToTeam = TeamId.TEAM_UNKNOWN)
+        {
+            _game.PacketNotifier.NotifyTint(specificToTeam, false, fadeTime,
+                new GameServerCore.Content.Color { R = 0, G = 0, B = 0, A = 0 }, 0f);
+        }
+
+        /// <summary>
+        /// Unicast variant of <see cref="FadeOutColorFadeEffect(float,TeamId)"/> for the screen
+        /// of the player controlling <paramref name="unit"/> (stealth-end form). No-op for
+        /// non-champion units, mirroring the fade-in overload.
+        /// </summary>
+        public static void FadeOutColorFadeEffect(AttackableUnit unit, float fadeTime)
+        {
+            if (unit is not Champion champion)
+            {
+                return;
+            }
+            _game.PacketNotifier.ColorRemapFx(champion, false, fadeTime,
+                new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 }, 0f, false);
         }
 
         /// <summary>
