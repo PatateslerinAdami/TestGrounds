@@ -169,9 +169,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private Dictionary<string, Buff> ParentBuffs { get; }
         /// <summary>
-        /// List of all buffs applied to this AI. Used for easier indexing of buffs.
+        /// List of ALL buff instances on this unit (parents AND overlapping stack children). This is
+        /// Riot's canonical container: 4.17 Spell::Buff::BuffManager stores a flat
+        /// BuffInstanceVector spellBuffs (BuffManager.h, kMaxSpellBuffs = 64) with indexed access and
+        /// name lookup — the slot array is only the wire-facing view on top. Removing this in favor
+        /// of BuffSlots (an old TODO idea) would invert Riot's model and lose the stack-children,
+        /// which never occupy a slot (only the parent of each name does).
         /// </summary>
-        /// TODO: Verify if we can remove this in favor of BuffSlots while keeping the functions which allow for easy accessing of individual buff instances.
         private List<Buff> BuffList { get; }
 
         /// <summary>
