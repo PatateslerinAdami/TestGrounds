@@ -42,7 +42,6 @@ public class PantheonW : ISpellScript
     {
         
         AddBuff("Stun", 1f, 1, spell, target, _pantheon);
-        _pantheon.RemoveBuffsWithName("PantheonPassiveCounter");
         AddBuff("PantheonPassiveShield", 25000f, 1, spell, _pantheon, _pantheon, true);
         AddParticleTarget(_pantheon, target, "Pantheon_Base_W_tar", target, flags: FXFlags.SimulateWhileOffScreen);
         var ap = _pantheon.Stats.AbilityPower.Total * spell.SpellData.Coefficient;

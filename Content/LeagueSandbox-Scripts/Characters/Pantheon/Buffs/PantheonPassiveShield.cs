@@ -38,7 +38,7 @@ public class PantheonPassiveShield : IBuffGameScript
     {
         if(IsValidTarget(data.Target, data.Attacker,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectHeroes |
-            SpellDataFlags.AffectBuildings | SpellDataFlags.AffectMinions |SpellDataFlags.IgnoreLaneMinion)) return;
+            SpellDataFlags.AffectBuildings)) return;
         if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK) return;
         data.Damage = 0f;
         data.PostMitigationDamage = 0f;
@@ -52,5 +52,10 @@ public class PantheonPassiveShield : IBuffGameScript
     {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_p);
+        if (unit.GetBuffsWithName("PantheonPassiveCounter").Count == 4)
+        {
+            AddBuff("PantheonPassiveShield", 25000f, 1, ownerSpell, unit, buff.SourceUnit, true);
+            unit.RemoveBuffsWithName("PantheonPassiveCounter");
+        }
     }
 }

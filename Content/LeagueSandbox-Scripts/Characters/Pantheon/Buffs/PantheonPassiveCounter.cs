@@ -30,9 +30,9 @@ public class PantheonPassiveCounter : IBuffGameScript
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        if (buff.StackCount != 4) return;
+        if (unit.GetBuffsWithName("PantheonPassiveCounter").Count < 4 || unit.HasBuff("PantheonPassiveShield")) return;
         AddBuff("PantheonPassiveShield", 25000f, 1, ownerSpell, unit, buff.SourceUnit, true);
-        buff.SourceUnit.RemoveBuffsWithName("PantheonPassiveCounter");
+        unit.RemoveBuffsWithName("PantheonPassiveCounter");
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
