@@ -48,10 +48,13 @@ public class PantheonW : ISpellScript
         var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
         target.TakeDamage(_pantheon, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
 
-        if (target.Team != _pantheon.Team && !target.IsDead)
+        // Pantheon_LeapBash.lua: BBIf(Target IS_TYPE_HERO) -> BBIssueOrder(WhomToOrder=Owner,
+        // Order=AI_ATTACKTO, TargetOfOrder=victim) — after the hit Pantheon gets a real attack
+        // order on the victim (same pipeline as a player right-click), so he immediately starts
+        // basic-attacking out of the stun. Hero-gated like the lua.
+        if (target.Team != _pantheon.Team && !target.IsDead && target is Champion)
         {
-            _pantheon.SetTargetUnit(target, true);
-            //_pantheon.UpdateMoveOrder(OrderType.AttackTo); //TODO: Maybe add equivalent of BBIssueOrder
+            IssueOrder(_pantheon, OrderType.AttackTo, target);
         }
     }
 

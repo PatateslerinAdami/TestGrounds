@@ -34,17 +34,17 @@ public class WujuStyle : ISpellScript
     }
     
     private void OnLevelUpSpell(Spell spell) {
-        if (_masterYi.HasBuff("WujuStyleSuperCharged")) return;
-        AddBuff("WujuStyle", 25000f, 1, _spell, _masterYi, _masterYi, true);
+        if (_masterYi.HasBuff("WujuStyleSuperChargedVisual")) return;
+        AddBuff("WujuStyleVisual", 25000f, 1, _spell, _masterYi, _masterYi, true);
     }
 
     public void OnSpellCast(Spell spell)
     {
-        AddBuff("WujuStyleSuperCharged", 4f, 1, spell, _masterYi, _masterYi);
+        AddBuff("WujuStyleSuperChargedVisual", 4f, 1, spell, _masterYi, _masterYi);
     }
     
     private void OnSpellCooldownEnd(Spell spell) {
-        AddBuff("WujuStyle", 25000f, 1, _spell, _masterYi, _masterYi, true);
+        AddBuff("WujuStyleVisual", 25000f, 1, _spell, _masterYi, _masterYi, true);
     }
     
     private void OnUpdateStats(AttackableUnit owner, float diff) {

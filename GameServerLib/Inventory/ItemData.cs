@@ -105,7 +105,10 @@ namespace LeagueSandbox.GameServer.Inventory
             TenacityItem = file.GetFloat("Data", "PercentTenacityItemMod");
             SlowResistPercent = file.GetFloat("Data", "PercentSlowResistMod");
 
-            //itemInfo.SafeGetFloat("Data", "PercentEXPBonus"); // TODO
+            // Riot ItemData.cpp:276/750 (ITEMPARAM_PERCENT_EXPBONUS): additive percent-EXP bonus.
+            // Only rune 5368 (Quint of Experience, 0.02) carries it in 4.20 — runes apply through
+            // AddStatModifier(runeItem), so loading it here is all they need.
+            PercentEXPBonus.FlatBonus = file.GetFloat("Data", "PercentEXPBonus");
 
             return this;
         }

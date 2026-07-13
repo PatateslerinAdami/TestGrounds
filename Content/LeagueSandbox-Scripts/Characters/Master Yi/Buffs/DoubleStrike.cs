@@ -20,7 +20,7 @@ namespace Buffs
         private ObjAIBase _masterYi;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.DAMAGE,
+            BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.RENEW_EXISTING,
             MaxStacks = 1,
             IsNonDispellable = true
@@ -37,6 +37,7 @@ namespace Buffs
             DamageType damageType = buff.BuffVars.Get("damageType", DamageType.DAMAGE_TYPE_PHYSICAL);
             DamageResultType damageResultType = buff.BuffVars.Get("damageResultType", DamageResultType.RESULT_NORMAL);
             AttackableUnit target = buff.BuffVars.Get<AttackableUnit>("target");
+            SpellEffectCreate("MasterYi_Base_P_tar.troy",_masterYi, target, target, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
             if (!target.IsDead)
             {
                 target.TakeDamage(_masterYi, buff.BuffVars.GetFloat("damage", 0f) * 0.5f, damageType,

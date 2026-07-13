@@ -71,9 +71,16 @@ namespace LeagueSandbox.GameServer.GameObjects
         public IEnumerable<int> SpawnedForPlayers => _spawnedForPlayers;
 
         /// <summary>
-        /// Comparison variable for small distance movements.
+        /// Arrival snap slack for missile movement. NOT a Riot constant — Riot has no distance
+        /// epsilon: S1 obj_SpellLineMissile::CheckAtTargetPoint/CheckAtEndPoint are plane-crossing
+        /// tests (position + velocity·dt·2 projected onto the flight axis, then SNAP to the
+        /// endpoint — a 2-frame, speed-proportional lookahead), and unit arrival uses the target's
+        /// bounding radius as the offset (obj_SpellMissile::CheckCollide, offset = lastTargetSize).
+        /// Our deltaMovement &gt;= dist overstep check is the 1-frame equivalent; this fixed 5u is
+        /// only a float-creep guard that never fires above ~150 u/s missile speed (the overstep
+        /// snaps first), so it stays as-is.
         /// </summary>
-        public static readonly uint MOVEMENT_EPSILON = 5; //TODO: Verify if this should be changed
+        public static readonly uint MOVEMENT_EPSILON = 5;
 
         /// <summary>
         ///  Identifier unique to this game object.
@@ -513,14 +520,14 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Forces this GameObject to perform the given internally named animation.
         /// </summary>
         /// <param name="animName">Internal name of an animation to play.</param>
-        /// <param name="timeScale">How fast the animation should play. Default 1x speed.</param>
-        /// <param name="startTime">Time in the animation to start at.</param>
+        /// <param name="scaleTime">How fast the animation should play. Default 1x speed.</param>
+        /// <param name="startProgress">Time in the animation to start at.</param>
         /// TODO: Verify if this description is correct, if not, correct it.
-        /// <param name="speedScale">How much the speed of the GameObject should affect the animation.</param>
+        /// <param name="scaleSpeed">How much the speed of the GameObject should affect the animation.</param>
         /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
-        public void PlayAnimation(string animName, float timeScale = 1.0f, float startTime = 0, float speedScale = 0, AnimationFlags flags = 0)
+        public void PlayAnimation(string animName, float scaleTime = 1.0f, float startProgress = 0, float scaleSpeed = 0, AnimationFlags flags = 0)
         {
-            _game.PacketNotifier.NotifyS2C_PlayAnimation(this, animName, flags, timeScale, startTime, speedScale);
+            _game.PacketNotifier.NotifyS2C_PlayAnimation(this, animName, flags, scaleTime, startProgress, scaleSpeed);
         }
 
         /// <summary>

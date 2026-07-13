@@ -60,7 +60,9 @@ public class AlphaStrike : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        AddBuff("AlphaStriking", 3f, 1, spell, _masterYi, _masterYi);
+        SpellEffectCreate("MasterYi_Base_Q_Cas.troy", _masterYi, null, _masterYi, boneName: "C_Buffbone_Glb_Center_Loc",
+            flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
+        AddBuff("AlphaStrike", 3f, 1, spell, _masterYi, _masterYi);
     }
 
     private void OnChainEnd(Spell spell, SpellMissile missile)
@@ -83,13 +85,15 @@ public class AlphaStrike : ISpellScript
 
             bool isCrit = RollCrit(_masterYi, target);
             if (isCrit) dmg *= _masterYi.Stats.CriticalDamage.Total;
-            AddParticleTarget(_masterYi, target, "MasterYi_Base_Q_Tar.troy", target);
+            SpellEffectCreate("MasterYi_Base_Q_Tar.troy", _masterYi, target,  target, flags: FXFlags.UpdateOrientation, keywordObject: _masterYi);
             target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK,
                 isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL);
         }
         _hitTargets.Clear();
 
-        RemoveBuff(_masterYi, "AlphaStriking");
+        SpellEffectCreate("MasterYi_Base_Q_End.troy", _masterYi, _masterYi, _masterYi, boneName: "Root",
+            flags: FXFlags.SimulateWhileOffScreen);
+        RemoveBuff(_masterYi, "AlphaStrike");
         if (!_target.IsDead)
         {
             SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
@@ -164,10 +168,5 @@ public class AlphaStrikeTeleport : ISpellScript
         TeleportTo(_masterYi, _coords.X, _coords.Y, silent: true);
         NotifyTeleport(_masterYi, _coords);
         FaceDirection(_target.Position, _masterYi, true);
-    }
-
-    private static Vector2 CalcVector(in float distance, in Vector2 player, in Vector2 target)
-    {
-        return target - (player - target).Normalized() * (!IsWalkable(target.X, target.Y) ? -distance : distance);
     }
 }

@@ -33,20 +33,14 @@ namespace Buffs
         {
             _masterYi = buff.SourceUnit;
             _spell = ownerSpell;
-            _p1 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Buf.troy", _masterYi, buff.Duration); 
-            _p2 = AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Cas.troy", _masterYi); 
+            _p1 = SpellEffectCreate("MasterYi_Base_W_Buf.troy",_masterYi, _masterYi,  _masterYi, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen);
+            _p2 = SpellEffectCreate("MasterYi_Base_W_Cas.troy", _masterYi, _masterYi, _masterYi, flags: FXFlags.SimulateWhileOffScreen); 
             ApiEventManager.OnPreTakeDamage.AddListener(this, _masterYi, OnPreTakeDamage);
-            ApiEventManager.OnTakeDamage.AddListener(this, _masterYi, OnTakeDamage);
         }
 
         private void OnPreTakeDamage(DamageData data)
         {
             data.PostMitigationDamage -= data.PostMitigationDamage * (_spell.SpellData.EffectLevelAmount[3][_spell.CastInfo.SpellLevel]/100);
-        }
-
-        private void OnTakeDamage(DamageData data)
-        {
-            AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_W_Dmg.troy", _masterYi); 
         }
 
         public void OnUpdate(Buff buff, float diff)

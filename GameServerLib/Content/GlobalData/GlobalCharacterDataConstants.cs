@@ -39,13 +39,12 @@
         public float PercentGoldLostOnDeathModMinimum { get; set; } = -0.95f;
         /// <summary>
         /// The lowest EXPBonus Percent Mod penalty can go.
-        /// NOT APPLIED: AddExperience grants raw experience with no percent EXP-bonus mod stat to clamp.
-        /// Loaded for completeness; wire the clamp when an EXP-bonus modifier exists. See docs/CONSTANTS_VAR_AUDIT.md.
+        /// APPLIED (2026-07-13): Champion.AddExperience clamps Stats.PercentEXPBonus.Total with this
+        /// pair before multiplying (the stat now exists — fed by item/rune "PercentEXPBonus").
         /// </summary>
         public float PercentEXPBonusMinimum { get; set; } = -1.0f;
         /// <summary>
-        /// The highest EXPBonus Percent Mod bonus can go.
-        /// NOT APPLIED: see <see cref="PercentEXPBonusMinimum"/> — no EXP-bonus mod stat exists to cap.
+        /// The highest EXPBonus Percent Mod bonus can go. Applied — see <see cref="PercentEXPBonusMinimum"/>.
         /// </summary>
         public float PercentEXPBonusMaximum { get; set; } = 5.0f;
         /// <summary>

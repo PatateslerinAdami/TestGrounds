@@ -292,8 +292,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool HasMadeInitialAttack { get; set; }
         /// <summary>
         /// Variable housing all variables and functions related to this AI's Inventory, ex: Items.
+        /// Deliberately on ObjAIBase, matching Riot: HeroInventory mHeroInventory is an obj_AI_Base
+        /// member (4.17 decomp AIBase.h:210, offset 0xc50), as is the CloneInventory(obj_AI_Base*)
+        /// virtual (AIBase.h:386) — AttackableUnit carries no inventory. Items feeding stats does
+        /// not move ownership: stats live on AttackableUnit, the inventory is an AI concern.
         /// </summary>
-        /// TODO: Verify if we want to move this to AttackableUnit since items are related to stats.
         public InventoryManager Inventory { get; protected set; }
         /// <summary>
         /// Whether or not this AI is currently auto attacking.
@@ -330,9 +333,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public bool DodgePiercing { get; set; }
         /// <summary>
-        /// Current order this AI is performing.
+        /// Current order this AI is performing. The enum is COMPLETE — verified 1:1 against Riot's
+        /// orders_e (mac decomp AI/AIEnums.h, all 16 values, ORDERS_END_OF_LIST = 16); see the
+        /// OrderType header doc. NOTE (P5 chase-decouple): during an engine-engaged chase this may
+        /// be STALE — the chase lives on ChaseIntent/TargetUnit, order-independently.
         /// </summary>
-        /// TODO: Rework AI so this enum can be finished.
         public OrderType MoveOrder { get; set; }
         /// <summary>
         /// Unit this AI will auto attack or use a spell on when in range.
@@ -379,42 +384,33 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             CharacterDataStack.OverwriteBaseSilently(Model, (uint)SkinID);
             Inventory = InventoryManager.CreateInventory(game.PacketNotifier);
 
-            // TODO: Centralize this instead of letting it lay in the initialization.
-            if (collisionRadius > 0)
+            // Radius resolution, mirroring Riot's two-stage centralization (the old "centralize this"
+            // TODOs). Stage 1 lives in CharData load like CharacterData::Load: GameplayCollisionRadius
+            // defaults to 65 (GeneralCharacterData.ini has no override in 4.20 → code fallback,
+            // CharacterData.cpp:1179), PerceptionBubbleRadius to 1350 (GamePermanent.cfg [Vision],
+            // CharacterData.cpp:1049), PathfindingCollisionRadius to the -1 sentinel. Stage 2 below is
+            // obj_AI_Base::ReinitializeUnitRadius (AIBase.cpp:2055): trust the record verbatim (an
+            // explicit chardata 0 stays 0 — no invented 40/1100 floors), and resolve a missing
+            // pathfinding radius as 0.5 × SelectionRadius, where SelectionRadius falls back to
+            // GetBoundingRadius() (= the gameplay collision radius). The explicit ctor args remain
+            // caller overrides (Champion/Minion/BaseTurret pass their own values — auditing THOSE
+            // against Riot is a separate task; e.g. lane-minion chardata says PB 1200, Minion passes 1100).
+            CollisionRadius = collisionRadius > 0 ? collisionRadius : CharData.GameplayCollisionRadius;
+
+            float selectionRadius = CharData.SelectionRadius > 0f ? CharData.SelectionRadius : CollisionRadius;
+            PathfindingRadius = CharData.PathfindingCollisionRadius;
+            if (PathfindingRadius < 0f && selectionRadius != 0f)
             {
-                CollisionRadius = collisionRadius;
+                PathfindingRadius = 0.5f * selectionRadius;
             }
-            else if (CharData.GameplayCollisionRadius > 0)
+            if (PathfindingRadius < 0f)
             {
-                CollisionRadius = CharData.GameplayCollisionRadius;
-            }
-            else
-            {
-                CollisionRadius = 40;
+                // SelectionRadius == 0 leaves Riot's -1 sentinel in place (such units never register
+                // as pathing actors there; their NavMesh registration asserts radius >= 0). Clamp for us.
+                PathfindingRadius = 0f;
             }
 
-            if (CharData.PathfindingCollisionRadius > 0)
-            {
-                PathfindingRadius = CharData.PathfindingCollisionRadius;
-            }
-            else
-            {
-                PathfindingRadius = 40;
-            }
-
-            // TODO: Centralize this instead of letting it lay in the initialization.
-            if (visionRadius > 0)
-            {
-                VisionRadius = visionRadius;
-            }
-            else if (CharData.PerceptionBubbleRadius > 0)
-            {
-                VisionRadius = CharData.PerceptionBubbleRadius;
-            }
-            else
-            {
-                VisionRadius = 1100;
-            }
+            VisionRadius = visionRadius > 0 ? visionRadius : CharData.PerceptionBubbleRadius;
 
             Stats.CurrentMana = Stats.ManaPoints.Total;
             Stats.CurrentHealth = Stats.HealthPoints.Total;
@@ -776,9 +772,27 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 && (!IsAttacking || (IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp));
         }
 
+        /// <summary>
+        /// Riot Spell::SpellSlotCanBeUpgraded (4.17 Spellbook.cpp:763): a champion slot can take a
+        /// skill point when the champion's level reaches SpellsUpLevels[slot][currentSpellLevel]
+        /// (chardata "SpellsUpLevelsN"; transform champs ship their own tables — Jayce/Elise/
+        /// Nidalee/Karma R starts at 1 with 4 ranks) and the rank cap (chardata "MaxLevels",
+        /// default 5/5/5/3) isn't reached. Only the four champion spell slots are upgradable.
+        /// </summary>
         public bool CanLevelUpSpell(Spell s)
         {
-            return CharData.SpellsUpLevels[s.CastInfo.SpellSlot][s.CastInfo.SpellLevel] <= Stats.Level;
+            int slot = s.CastInfo.SpellSlot;
+            if (slot < 0 || slot > 3)
+            {
+                return false;
+            }
+            int level = s.CastInfo.SpellLevel;
+            if (level >= CharData.MaxLevels[slot])
+            {
+                return false;
+            }
+            var upLevels = CharData.SpellsUpLevels[slot];
+            return level < upLevels.Length && upLevels[level] <= Stats.Level;
         }
 
         public virtual bool LevelUp(bool force = true)
@@ -791,12 +805,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Classifies the given unit. Used for AI attack priority, such as turrets or minions. Known in League internally as "Call for help".
+        /// Classifies the given unit for AI attack priority (turrets, minions). Riot's system is the
+        /// server-side CallForHelp class: obj_AI_Base::GetCallForHelp() owns the priority logic and
+        /// GetCallForHelpTableType() selects the priority TABLE (4.17 decomp AIBase.cpp:4050 — base/
+        /// minion table 0; obj_AI_Turret and LevelPropAI override to table 1, i.e. turrets rank
+        /// targets on their own table — our TurretAI's turret-specific ordering mirrors that split).
+        /// The classify method's own Riot name is unrecoverable (CallForHelp internals are server-only,
+        /// absent from all client corpora), so the Sandbox name stays — renaming would be invented
+        /// precision. Kept on ObjAIBase deliberately: Riot anchors both virtuals on obj_AI_Base, NOT
+        /// AttackableUnit (which only has the HandleCallForHelp event handler).
         /// </summary>
         /// <param name="target">Unit to classify.</param>
+        /// <param name="victium">Optional victim the target is attacking — selects the contextual
+        /// "X attacking Y" priority rows (the CFH-distress half of the table).</param>
         /// <returns>Classification for the given unit.</returns>
-        /// TODO: Verify if we want to rename this to something which relates more to the internal League name "Call for Help".
-        /// TODO: Move to AttackableUnit.
         public ClassifyUnit ClassifyTarget(AttackableUnit target, AttackableUnit victium = null)
         {
             if (target is ObjAIBase ai && victium != null) // If an ally is in distress, target this unit. (Priority 1~5)
@@ -1030,6 +1052,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // (0x83) is sent 0× by Riot. The follow-target tracking is carried by the SpeedParams the
             // builder reads from MovementParameters (FollowNetID/FollowDistance/MoveBackBy/
             // FollowTravelTime), set above — so no params are lost by dropping the explicit-arg overload.
+            // POSITIVE follow samples (replay c7119e79, 2026-07-13 — first sighting of FollowNetID != 0):
+            // Vi R = 0x64 with FollowNetID = target hero, FollowDistance = 1500, 2 waypoints, RE-ISSUED
+            // mid-dash as the speed ramps (800 → 921 → 1050); Kalista R = oathsworn ally follows Kalista
+            // with FollowDistance = 0. MovementDriverReplication (0x3C) stays 0× even for these homing
+            // dashes — SpeedParams is the whole follow wire.
             _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
             // NOTE: do NOT send MovementDriverReplication (0x3C) here. A follow-target dash replicates
             // fully via the SpeedParams above (FollowNetID/FollowDistance/FollowTravelTime carry the
@@ -1040,7 +1067,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             SetForceMovementState(true);
 
             _movementUpdated = false;
-            // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
+            // (A switch to NotifyWaypointListWithSpeed/0x83 was once considered to save conversions —
+            // ruled out by the replay evidence above: Riot sends 0x83 exactly 0×; 0x64 is the dash wire.)
         }
 
         /// <summary>
@@ -1859,10 +1887,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             var s = Spells[slot];
 
+            // Gate re-enabled (was commented out over a "karma r" worry — unfounded: Karma's free
+            // Mantra ranks go through Champion.LevelUpSpell(slot, spendSkillPoint: false), which
+            // skips this gate; her chardata table {1,6,11,16} also allows rank 1 at level 1).
             if (s == null || !CanLevelUpSpell(s))
             {
-                //Don't know what problems it might cause in the future but making a mental note for now for karma r
-                //return null;
+                return null;
             }
 
             s.LevelUp();
@@ -3216,7 +3246,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                                 {
                                     HasAutoAttacked = false;
                                     IsAttacking = true;
-                                    // TODO: ApiEventManager.OnUnitPreAttack.Publish(this);
+                                    // No extra pre-attack event here: Riot's hook is OnPreAttack
+                                    // (BuffScript/CharScript, owner+target+hitres_e — decomp
+                                    // BuffScript.h:66) and ApiEventManager.OnPreAttack already
+                                    // publishes it from Spell.Cast at the attack-cast start, i.e.
+                                    // AFTER the _skipNextAutoAttack gate and only for casts that
+                                    // actually begin.
                                     if (!_skipNextAutoAttack)
                                     {
                                         AutoAttackSpell = IsAutoAttackOverridden

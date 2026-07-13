@@ -260,6 +260,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             var spell = Spells[slot];
             if (spell == null) return null;
 
+            // Player skill-ups obey Riot's Spell::SpellSlotCanBeUpgraded gate (per-rank champion-level
+            // thresholds + rank cap — see CanLevelUpSpell). Script-driven free ranks (spendSkillPoint:
+            // false, e.g. Karma's Mantra at spawn) bypass it deliberately.
+            if (spendSkillPoint && !CanLevelUpSpell(spell)) return null;
+
             spell.LevelUp();
             
             if (spell.CastInfo.SpellLevel == 1) {
@@ -395,6 +400,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (experience > 0)
             {
+                // Percent EXP bonus (Riot AIHero::GetPercentEXPBonus = CharInter.mPercentEXPBonus,
+                // fed additively by item/rune "PercentEXPBonus" — in 4.20 only Quint of Experience).
+                // Clamped by gcd_PercentEXPBonusMinimum/Maximum (Constants.var, GlobalCharacterData
+                // .cpp:50) — the server-side multiply point is not in the client corpora, so applying
+                // it at the grant with the gcd clamp is the evidenced-shape implementation.
+                float expBonus = Math.Clamp(Stats.PercentEXPBonus.Total,
+                    GlobalData.GlobalCharacterDataConstants.PercentEXPBonusMinimum,
+                    GlobalData.GlobalCharacterDataConstants.PercentEXPBonusMaximum);
+                if (expBonus != 0f)
+                {
+                    experience *= 1f + expBonus;
+                }
+
                 Stats.Experience += experience;
 
                 if (notify)

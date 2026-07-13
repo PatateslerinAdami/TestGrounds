@@ -23,7 +23,7 @@ internal class Highlander : IBuffGameScript {
     private Particle  _highlander;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType = BuffType.COMBAT_ENCHANCER,
+        BuffType = BuffType.HASTE,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1
     };
@@ -37,16 +37,16 @@ internal class Highlander : IBuffGameScript {
         //this is for fun
         var runAnim = Rng.Next(0, 2) == 0 ? "Run_HASTE" : "2013_run_haste";
        var particleName = ownerSpell.CastInfo.SpellLevel switch {
-            3 => "MasterYi_Base_R_Buf_Lvl3",
-            2 => "MasterYi_Base_R_Buf_Lvl2",
-            _ => "MasterYi_Base_R_Buf"
+            3 => "MasterYi_Base_R_Buf_Lvl3.troy",
+            2 => "MasterYi_Base_R_Buf_Lvl2.troy",
+            _ => "MasterYi_Base_R_Buf.troy"
         };
        
         _masterYi.SetAnimStates(new Dictionary<string, string> {
             { "Run", runAnim }
         });
         
-        _highlander = AddParticleTarget(_masterYi, unit, particleName, unit, -1f);
+        _highlander = SpellEffectCreate(particleName,_masterYi, unit,  unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
 
         StatsModifier.MoveSpeed.PercentBonus   = 0.25f + 0.1f * (ownerSpell.CastInfo.SpellLevel - 1);
         StatsModifier.AttackSpeed.PercentBonus = 0.3f + 0.25f * (ownerSpell.CastInfo.SpellLevel - 1);
@@ -66,7 +66,14 @@ internal class Highlander : IBuffGameScript {
 
     private void ExtendDuration()
     {
-        AddParticleTarget(_masterYi, _masterYi, "MasterYi_Base_R_OnBuffKill", _masterYi);
+        RemoveParticle(_highlander);
+        var particleName = _spell.CastInfo.SpellLevel switch {
+            3 => "MasterYi_Base_R_Buf_Lvl3.troy",
+            2 => "MasterYi_Base_R_Buf_Lvl2.troy",
+            _ => "MasterYi_Base_R_Buf.troy"
+        };
+        _highlander = SpellEffectCreate(particleName,_masterYi, _highlander,  _highlander, lifetime: _buff.Duration, flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
+        SpellEffectCreate("MasterYi_Base_R_OnBuffKill.troy",_masterYi, _masterYi,  _masterYi, boneName: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.SimulateWhileOffScreen);
         var duration = (_buff.Duration - _buff.TimeElapsed) + 4f;
         AddBuff("Highlander", duration, 1, _spell, _masterYi, _masterYi);
     }

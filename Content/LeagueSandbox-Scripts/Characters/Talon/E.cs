@@ -57,7 +57,11 @@ public class TalonCutthroat : ISpellScript {
         
         //dmg amp
         AddBuff("TalonDamageAmp", 3f, 1, spell, target, owner);
-        _talon.SetTargetUnit(target, true);
+
+        if (target is Champion)
+        {
+            IssueOrder(_talon, OrderType.AttackTo, target);
+        }
     }
 
     private static Vector2 CalcVector(in float distance, in Vector2 player, in Vector2 target) {

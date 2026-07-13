@@ -204,11 +204,15 @@ namespace LeagueSandbox.GameServer.Content
             JObject serializedConstants = JsonConvert.DeserializeObject<JObject>(_mapData["Constants"]);
             foreach (JProperty childToken in serializedConstants.Children())
             {
-                //TODO: Investigate if the strings in the file could be usefull for us (I doubt it)
+                // Numeric constants only — the string entries are all CLIENT-side audio identifiers
+                // and have no server consumer (verified against every map's Constants + the 4.17
+                // decomp): DeathFX_Ally/EnemyKillSound → Effects/Client/DeathEffectQueue.cpp (HUD
+                // kill callouts), aud_FMODAmbientEvent/ReverbPreset(+Tutorial) → Audio/Client/
+                // AudioLoadLevelData.cpp (FMOD level audio). The client reads them from its own
+                // copy of the file, so the server can skip them.
                 if (childToken.Value.Type == JTokenType.Float || childToken.Value.Type == JTokenType.Integer)
                 {
-                    float asdhua = childToken.Value.Value<float>();
-                    toReturnMapData.MapConstants.Add(childToken.Name, asdhua);
+                    toReturnMapData.MapConstants.Add(childToken.Name, childToken.Value.Value<float>());
                 }
             }
 

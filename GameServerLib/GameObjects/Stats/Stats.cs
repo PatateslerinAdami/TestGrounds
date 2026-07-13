@@ -43,6 +43,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat CriticalDamage { get; }
         public Stat DeathTimerReduction { get; }
         public Stat ExpGivenOnDeath { get; }
+        /// <summary>
+        /// Percent bonus experience this unit gains (Riot CharInter.mPercentEXPBonus, surfaced by
+        /// AIHero::GetPercentEXPBonus / the StatsExperience interface — hero-only consumer). Fed by
+        /// item/rune stat "PercentEXPBonus"; consumed in Champion.AddExperience with the
+        /// gcd_PercentEXPBonusMinimum/Maximum clamp.
+        /// </summary>
+        public Stat PercentEXPBonus { get; }
         public Stat GoldPerGoldTick { get; }
         public Stat GoldGivenOnDeath { get; }
         public Stat HealthPoints { get; }
@@ -214,6 +221,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CriticalDamage = new Stat();
             DeathTimerReduction = new Stat();
             ExpGivenOnDeath = new Stat();
+            PercentEXPBonus = new Stat();
             GoldPerGoldTick = new Stat();
             GoldGivenOnDeath = new Stat();
             HealthPoints = new Stat();
@@ -278,6 +286,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CriticalDamage.ApplyStatModifier(modifier.CriticalDamage);
             DeathTimerReduction.ApplyStatModifier(modifier.DeathTimerReduction);
             ExpGivenOnDeath.ApplyStatModifier(modifier.ExpGivenOnDeath);
+            PercentEXPBonus.ApplyStatModifier(modifier.PercentEXPBonus);
             GoldGivenOnDeath.ApplyStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.ApplyStatModifier(modifier.GoldPerSecond);
             HealthPoints.ApplyStatModifier(modifier.HealthPoints);
@@ -321,6 +330,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CriticalDamage.RemoveStatModifier(modifier.CriticalDamage);
             DeathTimerReduction.RemoveStatModifier(modifier.DeathTimerReduction);
             ExpGivenOnDeath.RemoveStatModifier(modifier.ExpGivenOnDeath);
+            PercentEXPBonus.RemoveStatModifier(modifier.PercentEXPBonus);
             GoldGivenOnDeath.RemoveStatModifier(modifier.GoldGivenOnDeath);
             GoldPerGoldTick.RemoveStatModifier(modifier.GoldPerSecond);
             HealthPoints.RemoveStatModifier(modifier.HealthPoints);

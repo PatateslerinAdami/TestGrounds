@@ -19,23 +19,8 @@ namespace CharScripts;
 
 public class CharScriptMasterYi : ICharScript
 {
-    private ObjAIBase _masterYi;
-    private int _hitCounter = 0;
-
-    public void OnActivate(ObjAIBase owner, Spell spell = null)
+    public void OnActivate(ObjAIBase owner, Spell spell)
     {
-        _masterYi = owner;
-        ApiEventManager.OnHitUnit.AddListener(this, _masterYi, OnHit);
-    }
-
-    private void OnHit(DamageData data)
-    {
-        // Count only genuine basic attacks — an on-hit spell like Alpha Strike deals
-        // DAMAGE_SOURCE_ATTACK (so it procs on-hit effects) but must NOT advance Double Strike.
-        if (!data.IsAutoAttack) return;
-        if (_masterYi.HasBuff("DoubleStrikeReady") || _masterYi.HasBuff("DoubleStrike"))return;
-        AddBuff("DoubleStrikeStacks", 4f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi);
-        if (_masterYi.GetBuffsWithName("DoubleStrikeStacks").Count != 3) return;
-        AddBuff("DoubleStrikeReady", 4f, 1, _masterYi.AutoAttackSpell, _masterYi, _masterYi);
+        AddBuff("MasterYiPassive", 25000f, 1, spell, owner, owner, true);
     }
 }

@@ -20,9 +20,10 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, UpgradeSpellReq req)
         {
-            // TODO: Check if can up skill
-            // TODO: Implement usage of req.IsEvolve
-
+            // Skill-up validation lives in Champion.LevelUpSpell → CanLevelUpSpell (Riot
+            // Spell::SpellSlotCanBeUpgraded: skill points + per-rank champion-level thresholds
+            // from chardata SpellsUpLevelsN + rank cap MaxLevels). Evolve validation (Khazix)
+            // is the EvolvePoints check below.
             var champion = _playerManager.GetPeerInfo(userId).Champion;
             if (req.IsEvolve)
             {

@@ -13,7 +13,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace Buffs
 {
-    internal class WujuStyle: IBuffGameScript
+    internal class WujuStyleVisual : IBuffGameScript
     {
 
         private ObjAIBase _masterYi;

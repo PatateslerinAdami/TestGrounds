@@ -376,9 +376,16 @@ namespace LeagueSandbox.GameServer
                     _missiles.Add(missile.NetId, missile);
                 }
 
-                // TODO: This is a hack-fix for units which have packets being sent before spawning (ex: AscWarp minion)
-                // Instead, we need a dedicated packet queue system which takes all packets which are not vision/spawn related,
-                // and queues them if the object is not spawned yet for clients.
+                // Synchronous spawn at creation — intentional, not a hack (this used to carry a
+                // "packet queue system" TODO from an old AscWarp ordering bug): spawning here means
+                // the spawn packet precedes every same-tick follow-up packet (buffs/FX from the
+                // creating script) that references the new NetID. Vision scoping still applies —
+                // Sync's forceSpawn path only spawns to a client when visible || !SpawnShouldBeHidden;
+                // hidden units spawn later via the vision pass (0xBA). Residual out-of-order arrivals
+                // are Riot's CLIENT's job, not a server queue: the 4.17 client holds FX whose bind
+                // object is unknown and retries DisplayParticle for ~1s (Spell::Effect::EffectHashMap
+                // mHoldForFrameParticles, SpellEffectPacketsClient.cpp). Champions are excluded
+                // because their spawn rides the connection handshake (SpawnObjects/HandleSpawn).
                 if (!(o is Champion))
                 {
                     SpawnObject(o);

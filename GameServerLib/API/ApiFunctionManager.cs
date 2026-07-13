@@ -3303,6 +3303,71 @@ namespace LeagueSandbox.GameServer.API
             unit.SetForceMovementState(false);
         }
 
+        /// <summary>
+        /// Issues an engine AI order to a unit — Riot's <c>BBIssueOrder</c> (params WhomToOrderVar /
+        /// Order / TargetOfOrderVar), which routes through the SAME order pipeline as player input
+        /// (<c>obj_AI_Base::IssueOrder</c>; HandleMove performs the identical calls for right-clicks).
+        /// The S1 block always orders onto a UNIT — corpus-wide the third param is TargetOfOrderVar,
+        /// there is no point variant — hence the unit-only signature. Canonical use: post-hit attack
+        /// orders (Pantheon W LeapBash, Lee Sin Q2, WW R, Talon Cutthroat all issue AI_ATTACKTO on
+        /// the victim after the spell connects, so the caster immediately starts basic-attacking).
+        /// </summary>
+        /// <param name="whom">Unit receiving the order (BBIssueOrder <c>WhomToOrderVar</c>).</param>
+        /// <param name="order">Order to issue. The values the S1 scripts use: AttackTo (AI_ATTACKTO),
+        /// MoveTo (AI_MOVETO — walks to the target unit's current position), Hold (AI_HOLD) and
+        /// OrderNone (AI_ORDER_NONE — clears target and order).</param>
+        /// <param name="targetOfOrder">Unit the order acts on (BBIssueOrder <c>TargetOfOrderVar</c>);
+        /// required for AttackTo/MoveTo, ignored for Hold/OrderNone.</param>
+        public static void IssueOrder(ObjAIBase whom, OrderType order, AttackableUnit targetOfOrder = null)
+        {
+            if (whom == null || whom.IsDead)
+            {
+                return;
+            }
+
+            switch (order)
+            {
+                case OrderType.AttackTo:
+                    if (targetOfOrder == null || targetOfOrder.IsDead)
+                    {
+                        return;
+                    }
+                    // Mirror of HandleMove's AttackTo case: order, target, then invalidate the
+                    // chase-repath throttle so the unit re-paths toward the target NOW instead of
+                    // finishing its previous path first.
+                    whom.UpdateMoveOrder(OrderType.AttackTo, true);
+                    whom.SetTargetUnit(targetOfOrder);
+                    whom.ForceChaseRepath();
+                    break;
+                case OrderType.MoveTo:
+                {
+                    if (targetOfOrder == null)
+                    {
+                        return;
+                    }
+                    var path = _game.Map.PathingHandler.GetPath(whom, targetOfOrder.Position);
+                    if (path == null)
+                    {
+                        return;
+                    }
+                    // Mirror of HandleMove's MoveTo case: order, waypoints, clear the attack target.
+                    whom.UpdateMoveOrder(OrderType.MoveTo, true);
+                    whom.SetWaypoints(path);
+                    whom.SetTargetUnit(null);
+                    break;
+                }
+                case OrderType.OrderNone:
+                    whom.SetTargetUnit(null, true);
+                    whom.UpdateMoveOrder(OrderType.OrderNone, true);
+                    break;
+                default:
+                    // Hold and anything else: state-only order, current target untouched
+                    // (HandleMove's Hold case keeps the target for attack-in-place).
+                    whom.UpdateMoveOrder(order, true);
+                    break;
+            }
+        }
+
         // ===================================================================================
         // Consolidated forced-movement verb set (docs/FORCED_MOVEMENT_REWRITE_PLAN.md P3/P4). Named after
         // Riot's building-blocks (BBMove / BBMoveAway / BBMoveToUnit) with a Force* prefix instead of BB*

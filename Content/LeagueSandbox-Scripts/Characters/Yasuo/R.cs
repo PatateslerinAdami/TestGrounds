@@ -38,7 +38,7 @@ namespace Spells
             TeleportTo(owner, mainTarget.Position.X + 75f, mainTarget.Position.Y);
             FaceDirection(mainTarget.Position, owner, true);
             
-            owner.PlayAnimation("Spell4", timeScale: 1.0f);
+            owner.PlayAnimation("Spell4", scaleTime: 1.0f);
 
             foreach (var t in targets)
             {

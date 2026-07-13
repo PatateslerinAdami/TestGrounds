@@ -28,6 +28,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public StatModifier MissChance { get; } = new StatModifier();
         public StatModifier Dodge { get; } = new StatModifier();
         public StatModifier MoveSpeed { get; } = new StatModifier();
+        /// <summary>
+        /// Percent bonus experience (Riot ItemData mPercentEXPBonus, key "PercentEXPBonus"; the only
+        /// 4.20 content carrying it is rune 5368, Greater Quintessence of Experience, +0.02). Applied
+        /// additively into the unit's EXP-bonus pool (Riot ItemData.cpp:582 CharInter.mPercentEXPBonus
+        /// += mPercentEXPBonus). Use FlatBonus.
+        /// </summary>
+        public StatModifier PercentEXPBonus { get; } = new StatModifier();
         public StatModifier Range { get; } = new StatModifier();
         public StatModifier Size { get; } = new StatModifier();
         public StatModifier SpellVamp { get; } = new StatModifier();

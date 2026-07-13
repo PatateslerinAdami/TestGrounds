@@ -129,7 +129,21 @@ namespace LeagueSandbox.GameServer.Content
         public float MpRegenPerLevel { get; private set; }
         public PrimaryAbilityResourceType ParType { get; private set; } = PrimaryAbilityResourceType.Mana;
         public float PathfindingCollisionRadius { get; private set; } = -1.0f;
-        public float PerceptionBubbleRadius { get; private set; } = 0.0f;
+        /// <summary>
+        /// Riot resolves the default at LOAD time (CharacterData.cpp:1049): per-char inibin value,
+        /// falling back to GamePermanent.cfg [Vision] PerceptionBubbleRadius — which is 1350 in the
+        /// 4.20 client (and 1350 is also the code fallback if the cfg key were absent). 355/410 of
+        /// our chardata files (incl. every champion) omit the key, so this default carries them.
+        /// (Previously 0, which made ObjAIBase invent an 1100 fallback — no Riot source for either.)
+        /// </summary>
+        public float PerceptionBubbleRadius { get; private set; } = 1350.0f;
+        /// <summary>
+        /// Riot "SelectionRadius" (CharacterData.cpp:1175 loads it as overrideCollisionRadius,
+        /// default -1). Consumed by obj_AI_Base::ReinitializeUnitRadius: SelectionRadius = this if
+        /// &gt; 0 else GetBoundingRadius(), then a missing PathfindingCollisionRadius (-1) resolves
+        /// to 0.5 × SelectionRadius. Needed for the faithful pathfinding-radius fallback.
+        /// </summary>
+        public float SelectionRadius { get; private set; } = -1.0f;
         public bool ShouldFaceTarget { get; private set; } = true;
         public float SpellBlock { get; private set; }
         public float SpellBlockPerLevel { get; private set; }
@@ -217,6 +231,7 @@ namespace LeagueSandbox.GameServer.Content
             MpPerLevel = file.GetFloat("Data", "MPPerLevel", MpPerLevel);
             PathfindingCollisionRadius = file.GetFloat("Data", "PathfindingCollisionRadius", PathfindingCollisionRadius);
             PerceptionBubbleRadius = file.GetFloat("Data", "PerceptionBubbleRadius", PerceptionBubbleRadius);
+            SelectionRadius = file.GetFloat("Data", "SelectionRadius", SelectionRadius);
             ShouldFaceTarget = file.GetBool("Data", "ShouldFaceTarget", ShouldFaceTarget);
             SpellBlock = file.GetFloat("Data", "SpellBlock", SpellBlock);
             SpellBlockPerLevel = file.GetFloat("Data", "SpellBlockPerLevel", SpellBlockPerLevel);

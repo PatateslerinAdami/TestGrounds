@@ -781,8 +781,15 @@ namespace PacketDefinitions420
                 // Self-cast missiles can't distinguish them; Talon W's remotely-launched return
                 // blades split them cleanly (owner at Talon, launch at the blade endpoint).
                 UnitPosition = m.CastInfo.Owner.GetPosition3D(),
-                // _timeSinceCreation accumulates in ms (same unit as Game.GameTime)
-                TimeFromCreation = m.GetTimeSinceCreation() / 1000f, // TODO: Unhardcode
+                // Seconds since the missile's logic spawn (_timeSinceCreation accumulates ms).
+                // Replay-verified 2026-07-13 (Diana/Ahri orb MISREPs): Riot's spawn broadcast
+                // carries 0.0 (or one tick, 0.034, when the packet goes out a tick after logic
+                // creation — our tick accumulation reproduces exactly that), and mid-flight
+                // vision-reacquire packets carry the full elapsed time. Consumer: the client
+                // fast-forwards missile lifetime from this field (SpellCircleMissileClient /
+                // SpellMissileClient, 4.17 decomp) so a late viewer sees the missile at the
+                // right point of its life instead of restarting it.
+                TimeFromCreation = m.GetTimeSinceCreation() / 1000f,
                 // CastType-2 chain missiles carry Speed = FLT_MAX on the wire while
                 // Velocity stays direction * real speed (replay ccca6cd9: ALL
                 // SivirWAttackBounce MISREPs Speed=3.403e38, |Velocity|=700 = the JSON
@@ -5728,7 +5735,10 @@ namespace PacketDefinitions420
             }
             else
             {
-                // todo: check if damage dealt by disconnected players cause anything bad
+                // Disconnected/bot attackers are safe here: SendPacket → EnqueueUnicast
+                // bounds-checks the ClientId, disconnects null the peer slot on both paths
+                // (NetworkSender.ClearPeer / OutboundClearPeer), and SendUnicast drops the
+                // command on a null peer — a silent no-op until a reconnect refills the slot.
                 if (damageData.Attacker is Champion attackerChamp)
                 {
                     _packetHandlerManager.SendPacket(attackerChamp.ClientId, damagePacket.GetBytes(), Channel.CHL_S2C);

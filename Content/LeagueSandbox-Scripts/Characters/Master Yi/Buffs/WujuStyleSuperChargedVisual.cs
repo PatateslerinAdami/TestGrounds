@@ -15,7 +15,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class WujuStyleSuperCharged : IBuffGameScript {
+internal class WujuStyleSuperChargedVisual : IBuffGameScript {
     private ObjAIBase _masterYi;
     private Spell     _spell;
     private Buff      _buff;
@@ -44,6 +44,6 @@ internal class WujuStyleSuperCharged : IBuffGameScript {
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         if (ownerSpell.CurrentCooldown <= 0) return;
-        RemoveBuff(_masterYi, "WujuStyle");
+        RemoveBuff(_masterYi, "WujuStyleVisual");
     }
 }

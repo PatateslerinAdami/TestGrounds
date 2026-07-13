@@ -19,7 +19,7 @@ namespace Buffs
         private ObjAIBase _masterYi;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.COUNTER,
+            BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.STACKS_AND_RENEWS,
             MaxStacks = 3,
             IsNonDispellable = true
