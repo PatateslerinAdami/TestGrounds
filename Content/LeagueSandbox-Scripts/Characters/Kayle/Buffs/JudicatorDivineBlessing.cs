@@ -12,10 +12,9 @@ namespace Buffs;
 
 internal class JudicatorDivineBlessing : IBuffGameScript {
     private ObjAIBase        _kayle;
-    private AttackableUnit   _unit;
-    private Particle _p1, _p2, _p3;
+    private Particle _p1, _p2;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.HEAL,
+        BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks   = 1
     };
@@ -24,27 +23,23 @@ internal class JudicatorDivineBlessing : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _kayle = buff.SourceUnit;
-        _unit  = unit;
 
         var ap        = _kayle.Stats.AbilityPower.Total / 100f * ownerSpell.SpellData.Coefficient2;
-        var moveSpeed = 0.18f + 0.03f * (ownerSpell.CastInfo.SpellLevel - 1) + ap;
+        var moveSpeed = ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel]/100 + ap;
 
         var healAp     = _kayle.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
-        var healAmount = 60f + 45 * (ownerSpell.CastInfo.SpellLevel - 1) + healAp;
+        var healAmount = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel] + healAp;
         
-        _p1 = AddParticleTarget(_kayle, unit, "InterventionHeal_buf",  unit, buff.Duration);
-        _p2 = AddParticleTarget(_kayle, unit, "Interventionspeed_buf", unit, buff.Duration);
-        _p3 = AddParticleTarget(_kayle, unit, "Intervention_tar", unit, buff.Duration);
+        _p1 = SpellEffectCreate("Intervention_tar.troy",_kayle, unit,  keywordObject: _kayle, flags: FXFlags.UpdateOrientation, orientTowards: _kayle.GetPosition3D());
         
         StatsModifier.MoveSpeed.PercentBonus = moveSpeed;
         unit.AddStatModifier(StatsModifier);
-        _unit.TakeHeal(_kayle, healAmount, unit == _kayle ? HealType.SelfHeal : HealType.OutgoingHeal);
+        unit.TakeHeal(_kayle, healAmount, unit == _kayle ? HealType.SelfHeal : HealType.OutgoingHeal);
         ApplyAssistMarker(unit, _kayle, 10.0f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         RemoveParticle(_p1);
         RemoveParticle(_p2);
-        RemoveParticle(_p3);
     }
 }

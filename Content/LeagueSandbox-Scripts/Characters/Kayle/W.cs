@@ -14,17 +14,15 @@ namespace Spells;
 
 public class JudicatorDivineBlessing : ISpellScript {
     private ObjAIBase      _kayle;
-    private Spell          _spell;
     private AttackableUnit _target;
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
+        NotSingleTargetSpell = false,
+        TriggersSpellCasts   = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _kayle = owner;
-        _spell = spell;
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
@@ -32,6 +30,7 @@ public class JudicatorDivineBlessing : ISpellScript {
     }
 
     public void OnSpellPostCast(Spell spell) {
-        AddBuff("JudicatorDivineBlessing", 3f, 1, _spell, _target, _kayle);
+        PlayAnimation(_kayle, "Spell2", 0,0, 1, AnimationFlags.NoBlend | AnimationFlags.Junk6 | AnimationFlags.Junk7);
+        AddBuff("JudicatorDivineBlessing", 3f, 1, spell, _target, _kayle);
     }
 }

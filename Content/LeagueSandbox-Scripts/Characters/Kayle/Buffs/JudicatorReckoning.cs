@@ -12,7 +12,6 @@ namespace Buffs;
 
 internal class JudicatorReckoning : IBuffGameScript {
     private ObjAIBase        _kayle;
-    private AttackableUnit   _unit;
     private Particle _slow;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SLOW,
@@ -24,12 +23,9 @@ internal class JudicatorReckoning : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _kayle = buff.SourceUnit;
-        _unit     = unit;
+        _slow  = SpellEffectCreate("reckoning_tar.troy",_kayle, unit,  null, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation, keywordObject: _kayle);
         
-        var slowPercentage  = 0.35f + 0.05f * (ownerSpell.CastInfo.SpellLevel - 1);
-        
-        _slow  = AddParticleTarget(_kayle, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
-        
+        var slowPercentage  = ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel]/100f;
         StatsModifier.MoveSpeed.PercentBonus -= slowPercentage;
         unit.AddStatModifier(StatsModifier);
         ApplyAssistMarker(unit, _kayle, 10.0f);

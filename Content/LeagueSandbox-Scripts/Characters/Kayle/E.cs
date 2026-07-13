@@ -17,8 +17,11 @@ public class JudicatorRighteousFury : ISpellScript {
     private Spell          _spell;
 
     public SpellScriptMetadata ScriptMetadata => new() {
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
         TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
+        CastingBreaksStealth = true,
+        IsDamagingSpell = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -34,12 +37,14 @@ public class JudicatorRighteousFury : ISpellScript {
 public class JudicatorRighteousFuryAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        IsDamagingSpell      = true
+        NotSingleTargetSpell = true,
+        TriggersSpellCasts = false,
     };
 }
 public class JudicatorRighteousFuryAttack2 : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        IsDamagingSpell      = true
+        NotSingleTargetSpell = true,
+        TriggersSpellCasts = false,
     };
 }

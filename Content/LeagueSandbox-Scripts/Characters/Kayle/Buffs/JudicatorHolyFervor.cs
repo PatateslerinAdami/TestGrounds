@@ -12,31 +12,38 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class JudicatorHolyFervor : IBuffGameScript {
+internal class JudicatorHolyFervor : IBuffGameScript
+{
     private ObjAIBase _kayle;
-    private Spell     _spell;
+    private Spell _spell;
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-            PersistsThroughDeath = true,
-        BuffType    = BuffType.AURA,
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks = 1,
+        IsHidden = true,
+        PersistsThroughDeath = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         _kayle = buff.SourceUnit;
         _spell = ownerSpell;
         ApiEventManager.OnHitUnit.AddListener(this, _kayle, OnHit);
     }
 
-    private void OnHit(DamageData data) {
+    private void OnHit(DamageData data)
+    {
         if (!IsValidTarget(_kayle, data.Target,
-                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                           SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
+                SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         AddBuff("JudicatorHolyFervorDebuff", 5f, 1, _spell, data.Target, _kayle);
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { }
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+    }
 }

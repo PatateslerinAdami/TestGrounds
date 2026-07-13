@@ -14,7 +14,6 @@ namespace Spells;
 
 public class JudicatorIntervention : ISpellScript {
     private ObjAIBase      _kayle;
-    private Spell          _spell;
     private AttackableUnit _target;
 
     public SpellScriptMetadata ScriptMetadata => new() {
@@ -24,15 +23,13 @@ public class JudicatorIntervention : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _kayle = owner;
-        _spell = spell;
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
     }
 
-    public void OnSpellPostCast(Spell spell) {
-        var duration = 2 + 0.5f * (spell.CastInfo.SpellLevel - 1);
-        AddBuff("JudicatorIntervention", duration, 1, _spell, _target, _kayle);
+    public void OnSpellPostCast(Spell spell) { ;
+        AddBuff("JudicatorIntervention", spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel], 1, spell, _target, _kayle);
     }
 }
