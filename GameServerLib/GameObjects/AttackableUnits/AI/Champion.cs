@@ -53,6 +53,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // reconnects) plus S2C_ChangeCharacterData(ReplaceCharacterPackage) to swap model+spells.
         // Stays true for the rest of the game so late spawns/reconnects take the same safe path.
         public bool SpawnAsChangeHero { get; set; }
+        /// <summary>
+        /// Zero-based spawn slot within the team (0-4), set at AddPlayer time. Goes on the wire
+        /// as S2C_CreateHero.SpawnPositionIndex — replay-verified: every champion carries a
+        /// team-unique 0-4 index (the fountain-platform formation slot).
+        /// </summary>
+        public int SpawnIndex { get; set; }
 
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
         public bool teamChanged = false;

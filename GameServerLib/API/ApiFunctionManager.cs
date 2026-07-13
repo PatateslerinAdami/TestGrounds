@@ -3326,14 +3326,15 @@ namespace LeagueSandbox.GameServer.API
         /// replay-verified as how SR knockbacks are wired, NOT the vestigial SetPosition-lerp). A negative
         /// <paramref name="distance"/> points back toward the source (a pull). <paramref name="gravity"/>
         /// &gt; 0 adds the small vertical arc most knockbacks carry (grav ~5–20 in replays);
-        /// <paramref name="resolve"/> = <c>FIRST_WALL_HIT</c> clamps to a wall (wall-stun, e.g. Vayne Condemn).
+        /// <paramref name="resolve"/> = <c>FIRST_COLLISION_HIT</c> clamps the push at a wall (wall-stun,
+        /// e.g. Vayne Condemn / Sion E; publishes OnCollisionTerrain when it clamps).
         /// </summary>
         /// <param name="target">Unit being knocked.</param>
         /// <param name="source">Point to move away from (Riot BBMoveAway <c>AwayFromVar</c> = the attacker).</param>
         /// <param name="distance">Units to travel away from source (negative = toward = pull).</param>
         /// <param name="speed">Force-move speed in units/second.</param>
         /// <param name="gravity">Arc gravity; 0 = flat.</param>
-        /// <param name="resolve">Destination-resolution mode (ForceMovementType) — FIRST_WALL_HIT for wall-stuns.</param>
+        /// <param name="resolve">Destination-resolution mode (ForceMovementType) — FIRST_COLLISION_HIT for wall-stuns.</param>
         /// <param name="facing">FACE_MOVEMENT_DIRECTION vs KEEP_CURRENT_FACING (Riot MovementOrdersFacing).</param>
         /// <param name="orders">What happens to the target's order when the knockback ends.</param>
         /// <param name="movementName">Identifier surfaced in OnMoveBegin/End events.</param>

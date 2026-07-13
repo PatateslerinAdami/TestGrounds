@@ -57,30 +57,75 @@ public class DianaOrbs : ISpellScript {
 
 public class DianaOrbsMissile : ISpellScript {
     private ObjAIBase _diana;
+    private Spell _spell;
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
-        IsDamagingSpell   = true,
+        IsDamagingSpell      = true,
+        NotSingleTargetSpell = true,
         MissileParameters = new MissileParameters {
             Type = MissileType.Circle,
-            CollisionRadius = 150,
         },
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _diana = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
+        _spell = spell;
+        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
     }
-    
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
-        if (!spell.SpellData.IsValidTarget(_diana, target)) return;
 
-        var spellLevel = Math.Clamp((int) spell.CastInfo.SpellLevel, 1, 5);
+    private void OnLaunchMissile(Spell spell, SpellMissile missile)
+    {
+        ApiEventManager.OnSpellMissileUpdate.AddListener(this, missile, OnUpdateMissile);
+    }
+
+    private void OnUpdateMissile(SpellMissile missile, float diff)
+    {
+        // Riot's orb model — no engine collision hit; the orb scans around its own position on each
+        // distance-paced script update (LuaOnMissileUpdateDistanceInterval = 75u, same as Ahri) and
+        // detonates script-side. Diana W is Riot's clone of Ahri W (DianaOrbsMissile.lua still
+        // carries BuffName = "AhriFoxFire"); S1 AhriFoxFireMissile.lua — the only unstripped version
+        // of this BB — is the reference for the update-hook shape.
+
+        // Arming gate (S1 Ahri: SpellVars.Ready += 1 per update, seek from the Nth update on).
+        // Replay-verified on 616 Diana + 862 Ahri detonations (spawn-MISREP → 0x5A destroy):
+        // detonation times comb at exact multiples of 75u of ACTUAL orbit travel (Diana 0.192s =
+        // 75/390 u/s, Ahri 0.25s = 75/300 u/s — confirming the engine's actual-distance pacing),
+        // and the first comb tooth sits at the 2nd update for Diana (~0.38s floor; Ahri: 3rd,
+        // 0.75s, matching her S1 Ready >= 3). So Diana arms one interval EARLIER than Ahri —
+        // Ready >= 2. An orb spawning inside an enemy therefore correctly waits ~0.38s.
+        var ready = missile.CastInfo.InstanceVars.GetInt("Ready") + 1;
+        missile.CastInfo.InstanceVars.Set("Ready", ready);
+        if (ready < 2) return;
+
+        // Two-phase acquisition mirrored from the S1 Ahri BB (nearest enemy HERO first, only then
+        // anything valid) — both scans use the BB iterator with EXPLICIT flags (never AlwaysSelf,
+        // so the owner is never a candidate). Range 150 = contact feel: unlike Ahri's 650 seek,
+        // Diana's orbs only pop on touch; 150 matches the orbit offset / the old CollisionRadius.
+        var targets = ForNClosestVisibleUnitsInTargetArea(_diana, missile.Position, 150f, 1,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
+        if (targets.Count == 0)
+        {
+            targets = ForNClosestVisibleUnitsInTargetArea(_diana, missile.Position, 150f, 1,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes);
+        }
+        if (targets.Count == 0) return;
+
+        Detonate(missile, targets[0]);
+    }
+
+    private void Detonate(SpellMissile missile, AttackableUnit target) {
+        // Unlike Ahri (separate ExtraSpell4 = AhriFoxFireMissileTwo damage missile), Diana lists NO
+        // damage sub-spell in her ExtraSpell slots — the detonation damage is applied directly here.
+        var spellLevel = Math.Clamp((int) missile.CastInfo.SpellLevel, 1, 5);
         var damage = 22.0f + 12.0f * (spellLevel - 1) + _diana.Stats.AbilityPower.Total * _diana.GetSpell("DianaOrbs").SpellData.Coefficient;
 
         AddParticleTarget(_diana, target, "Diana_Base_W_Tar.troy", target);
         target.TakeDamage(_diana, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                           DamageResultType.RESULT_NORMAL);
-        var unitsInRange = GetUnitsInRange(_diana, missile.Position, 175f, true,
+
+        // Detonation splash around the orb (radius kept from the previous port; unrecoverable from
+        // the stripped Lua). Non-visible BB variant — AoE damage is not fog-gated.
+        var unitsInRange = ForEachUnitInTargetArea(_diana, missile.Position, 175f,
             SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
             SpellDataFlags.AffectHeroes).Where(unit => unit != target);
 
@@ -91,7 +136,7 @@ public class DianaOrbsMissile : ISpellScript {
                 DamageResultType.RESULT_NORMAL);
         }
         AddParticlePos(_diana, "Diana_Base_W_Orb_End.troy", missile.Position, missile.Position);
-        
+
         var orbsBuff = _diana.GetBuffWithName("DianaOrbs");
         if (orbsBuff != null) {
             var consumed = orbsBuff.BuffVars.GetInt("orbsConsumed") + 1;
@@ -101,10 +146,11 @@ public class DianaOrbsMissile : ISpellScript {
                 if (oldShield != null) _diana.RemoveBuff(oldShield);
                 var refreshVars = new VariableTable();
                 refreshVars.Set("isRefresh", true);
-                AddBuff("DianaShield", 5f, 1, spell, _diana, _diana, variableTable: refreshVars);
+                AddBuff("DianaShield", 5f, 1, _spell, _diana, _diana, variableTable: refreshVars);
             }
         }
 
+        ApiEventManager.OnSpellMissileUpdate.RemoveListener(this, missile, OnUpdateMissile);
         missile.SetToRemove();
     }
 }

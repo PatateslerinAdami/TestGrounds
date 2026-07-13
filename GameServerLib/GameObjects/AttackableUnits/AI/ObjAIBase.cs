@@ -1753,6 +1753,44 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             spell.CastInfo.IsSecondAutoAttack = HasMadeInitialAttack;
+            NotifyAutocastForPreparedAttack(spell);
+        }
+
+        // Last NPC_SetAutocast announce on the wire for this unit; (-1,-1) = cleared. Drives the
+        // change-dedup so the pulse shape matches Riot's (one ON per empowerment, one OFF per
+        // consume/reset — never a re-send of the same pair).
+        private short _announcedAutocastSlot = -1;
+        private short _announcedAutocastCritSlot = -1;
+
+        /// <summary>
+        /// Riot announces EMPOWERED-attack overrides to all clients in vision via NPC_SetAutocast
+        /// (replay: Nasus Q slot 45 — 229 pulses ≈ his 223 Q casts, Kayle E 45, Caitlyn Headshot
+        /// 47, Viktor 49, monster specials 53; multi-variant overrides re-announce per pick,
+        /// e.g. 47/48 alternating with critSlot 46). The normal 64+ attack containers are NEVER
+        /// announced — that rotation stays client-side probability (BipedHelpers, mirrored by
+        /// GetNewAutoAttack). Since every attack-spell assignment funnels through
+        /// PrepareAutoAttackSpellForCast, this hook covers the Set*/Reset APIs AND the per-cycle
+        /// override pick with one change-dedup.
+        /// </summary>
+        private void NotifyAutocastForPreparedAttack(Spell spell)
+        {
+            if (spell.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
+            {
+                short slot = spell.CastInfo.SpellSlot;
+                short crit = (_autoAttackOverrideCritSpell ?? spell).CastInfo.SpellSlot;
+                if (slot != _announcedAutocastSlot || crit != _announcedAutocastCritSlot)
+                {
+                    _announcedAutocastSlot = slot;
+                    _announcedAutocastCritSlot = crit;
+                    _game.PacketNotifier.NotifyNPC_SetAutocast(this, spell, (byte)crit);
+                }
+            }
+            else if (_announcedAutocastSlot != -1)
+            {
+                _announcedAutocastSlot = -1;
+                _announcedAutocastCritSlot = -1;
+                _game.PacketNotifier.NotifyNPC_SetAutocastClear(this);
+            }
         }
 
         private float GetAutoAttackCooldownSeconds(Spell spell)

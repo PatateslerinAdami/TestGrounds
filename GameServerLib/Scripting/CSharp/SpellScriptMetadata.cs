@@ -78,6 +78,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         public bool CooldownIsAffectedByCDR { get; set; } = true;
         public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
         public bool DoesntBreakShields { get; set; } = false;
+        
         // TODO: Find a use for this.
         public bool IsDamagingSpell { get; set; } = false;
         public bool IsDeathRecapSource { get; set; } = false;

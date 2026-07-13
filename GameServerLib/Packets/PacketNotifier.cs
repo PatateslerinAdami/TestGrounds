@@ -102,12 +102,17 @@ namespace PacketDefinitions420
             var regionPacket = new AddRegion
             {
                 TeamID = (uint)region.Team,
-                // TODO: Find out what values this can be and make an enum for it (so far: -2 & -1 for turrets)
+                // Replay-decoded (17,532 packets/26 replays): -2 = Circle (ALL perception
+                // bubbles), -1 = Fountain (exactly the two permanent team fountains); 0 is never
+                // on the wire. See GameServerCore.Enums RegionType / project region-type memory.
                 RegionType = region.Type,
                 ClientID = region.OwnerClientID,
-                // TODO: Verify (usually 0 for vision only?)
+                // The ATTACHED unit: a unit-bound region follows this NetID client-side (free
+                // regions carry 0 and are moved via S2C_MoveRegion instead). Filled below.
                 UnitNetID = 0,
-                // TODO: Verify (is usually different from UnitNetID in packets, may also be a remnant or for internal use)
+                // The region's OWN identity on the client (the "perception bubble" NetID) —
+                // Remove/MoveRegion address the region by this id; naturally differs from the
+                // attached unit's id.
                 BubbleNetID = region.NetId,
                 VisionTargetNetID = 0,
                 Position = region.Position,
@@ -370,8 +375,6 @@ namespace PacketDefinitions420
             var targetHeight = _navGrid.GetHeightAtLocation(particle.StartPosition);
             var higherValue = Math.Max(targetHeight, particle.GetHeight());
 
-            // TODO: implement option for multiple particles instead of hardcoding one
-            //var customHeight = higherValue;
             if (particle.OverrideTargetHeight != 0f)
             {
                 higherValue = higherValue + particle.OverrideTargetHeight;
@@ -410,7 +413,11 @@ namespace PacketDefinitions420
                 BindNetID = bindNetID
             };
 
-            // TODO: Verify if there is more to this.
+            // Wire-complete: the 4.17 client (Spell::Effect::DisplayParticle) consumes TargetPositionY
+            // as a raw world-Y for the target end — there is no tilt-specific client logic, so the only
+            // server-side job is choosing WHICH height to send. Riot's wire carries a terrain-height
+            // TargetPositionY (below PositionY) on ~37% of FX; this flag opts an FX into that
+            // ground-anchored target end. ("FollowsGroundTilt" is our API name; not a decomp term.)
             if (particle.FollowsGroundTilt)
             {
                 fxData1.TargetPositionY = targetHeight;
@@ -432,7 +439,10 @@ namespace PacketDefinitions420
 
             fxDataList.Add(fxData1);
 
-            // TODO: implement option for multiple groups of particles instead of hardcoding one
+            // One group per particle by design: same-tick particles are merged into one multi-group
+            // packet (and same-header bursts into one multi-instance group) by the batching layer —
+            // NotifyFXCreateGroupBatch + CoalesceAdjacentFXGroups — which reproduces Riot's bundled
+            // wire shape, so this builder never needs to emit more than one group itself.
             var fxGroups = new List<FXCreateGroupData>();
 
             var fxGroupData1 = new FXCreateGroupData
@@ -452,13 +462,30 @@ namespace PacketDefinitions420
                 // supplies verbatim.
                 fxGroupData1.PackageHash = particle.PackageHashOverride.Value;
             }
-            else if (particle.Caster != null && particle.Caster is ObjAIBase o)
+            // PackageHash = the character package hosting the effect resource. Riot never sends 0:
+            // across 8 replays all 698 casterless FX still carry a real package ("[Character]SRU_Baron00"
+            // & co., SDBM-resolved), and 83% of those have a bind and/or target unit — so when there is
+            // no caster, fall back to the bind/target unit's package. GetObjHash lives on AttackableUnit,
+            // so non-ObjAIBase units (inhibitors/nexus) resolve too.
+            else if (particle.Caster is AttackableUnit casterUnit)
             {
-                fxGroupData1.PackageHash = o.GetObjHash();
+                fxGroupData1.PackageHash = casterUnit.GetObjHash();
+            }
+            else if (particle.BindObject is AttackableUnit bindUnit)
+            {
+                fxGroupData1.PackageHash = bindUnit.GetObjHash();
+            }
+            else if (particle.TargetObject is AttackableUnit targetUnit)
+            {
+                fxGroupData1.PackageHash = targetUnit.GetObjHash();
             }
             else
             {
-                fxGroupData1.PackageHash = 0; // TODO: Verify
+                // Fully positional FX with no unit at all. Riot would still stamp the package of
+                // whichever character owns the .troy, but without a unit we have nothing faithful to
+                // hash; 0 only costs per-package embedded resources (e.g. sound banks) on the client.
+                // Scripts that hit this and need sounds should pass PackageHashOverride.
+                fxGroupData1.PackageHash = 0;
             }
 
             fxGroups.Add(fxGroupData1);
@@ -474,9 +501,16 @@ namespace PacketDefinitions420
             {
                 SenderNetID = m.NetId,
                 ObjectID = m.NetId,
-                ObjectNodeID = 0x40, // TODO: check this
+                // NetNodeID.Spawned. Replay-verified: every 4.20 Barrack_SpawnUnit carries 0x40, and the
+                // client hands it straight to ObjectManager_AssignNetworkObject (Barracks.cpp
+                // DoBarrackSpawnUnit) — same node id family as SpawnMinionS2C.NetNodeID.
+                ObjectNodeID = (byte)NetNodeID.Spawned,
                 BarracksNetID = 0xFF000000 | Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(m.BarracksName)),
-                WaveCount = 1, // TODO: Unhardcode
+                // 1-based global wave number. Replay-verified (0007369d/0c35b26c against the 0xC1 game
+                // clock): WaveCount fits spawn = 90s + 30s*(WaveCount-1) with a +6..24s walk-to-vision
+                // delay; 0-based would put every packet BEFORE its wave spawned. The client only uses it
+                // for the object name "Minion_T%03dL%01dS%02dN%04d" (team/lane/wave/spawnNum).
+                WaveCount = (byte)(m.WaveNumber + 1),
                 // Per-MAP wire MinionType (Riot's minionTable index differs by map). LaneMinion.WireMinionType
                 // returns the replay-verified 1/2/4 only on Map11; every other map keeps the internal
                 // MinionSpawnType value (the global 1/2/4 mapping broke Map1). See docs/LANE_MINION_WIRE_VERIFICATION.md.
@@ -742,7 +776,10 @@ namespace PacketDefinitions420
                 Velocity = new Vector3(m.Direction.X * missileSpeed, velocityY, m.Direction.Z * missileSpeed),
                 StartPoint = m.CastInfo.SpellCastLaunchPosition,
                 EndPoint = new Vector3(m.CastInfo.TargetPositionEnd.X, endTerrainY + heightAugment, m.CastInfo.TargetPositionEnd.Z),
-                // TODO: Verify
+                // Verified together with CasterPosition (see above): UnitPosition carries the
+                // OWNING unit's live position, CasterPosition the LAUNCH point at ground level.
+                // Self-cast missiles can't distinguish them; Talon W's remotely-launched return
+                // blades split them cleanly (owner at Talon, launch at the blade endpoint).
                 UnitPosition = m.CastInfo.Owner.GetPosition3D(),
                 // _timeSinceCreation accumulates in ms (same unit as Game.GameTime)
                 TimeFromCreation = m.GetTimeSinceCreation() / 1000f, // TODO: Unhardcode
@@ -943,7 +980,12 @@ namespace PacketDefinitions420
         /// <param name="b">Blue hex color value.</param>
         public void NotifyAddDebugObject(int userId, AttackableUnit unit, uint objNetId, float lifetime, float radius, Vector3 pos1, Vector3 pos2, int objID = 0, byte type = 0x0, string name = "debugobj", byte r = 0xFF, byte g = 0x46, byte b = 0x0)
         {
-            //TODO: Implement a DebugObject class so this is cleaner
+                        // DEAD WIRE on retail clients: the 4.20 retail build STRIPS the whole debug-draw
+            // system (DrawDebugInfo is empty, the evt-draw events are absent from the EXE) —
+            // live-tested 2026-07-12: this packet is silently ignored, no crash. Kept for
+            // protocol completeness / potential internal-build use; MaxSize and Bitfield
+            // semantics are unknowable from the stripped client and irrelevant here (a
+            // DebugObject abstraction would wrap a packet nothing can render).
             var color = new LeaguePackets.Game.Common.Color
             {
                 Red = r,
@@ -962,8 +1004,8 @@ namespace PacketDefinitions420
                 Point1 = pos1,
                 Point2 = pos2,
                 Color = color,
-                MaxSize = 0, // TODO: Verify what this does
-                Bitfield = 0x0, // TODO: Verify what this does
+                MaxSize = 0,
+                Bitfield = 0x0,
                 StringBuffer = name
             };
             _packetHandlerManager.SendPacket(userId, debugObjPacket.GetBytes(), Channel.CHL_S2C);
@@ -1037,74 +1079,18 @@ namespace PacketDefinitions420
         /// <summary>
         /// Sends a packet to the specified team that a part of the map has changed. Known to be used in League for initializing turret vision and collision.
         /// </summary>
-        /// <param name="unitNetId">NetID of the unit owning the region.</param>
-        /// <param name="bubbleNetId">NetID of the unit which owns the vision for this region. Functionality unknown.</param>
-        /// <param name="team">Team to send the packet to.</param>
-        /// <param name="position">2D top-down position of the region.</param>
-        /// <param name="time">Amount of time the region lasts.</param>
-        /// <param name="radius">Radius of the region.</param>
-        /// <param name="regionType">Type of region, possible values unknown.</param>
-        /// <param name="clientInfo">Info about a client that might own (or be the target of) the region.</param>
-        /// <param name="obj">GameObject that might own (or be the target of) the region.</param>
-        /// <param name="collisionRadius">Collision radius for the region (only if it should have collision).</param>
-        /// <param name="grassRadius">Radius of the region's grass.</param>
-        /// <param name="sizemult">Multiplier that is applied to the radius of the region.</param>
-        /// <param name="addsize">Number of units to add to the region's radius.</param>
-        /// <param name="grantVis">Whether or not the region should give the region's team vision of enemy units.</param>
-        /// <param name="stealthVis">Whether or not invisible units should be visible in the region.</param>
-        /// TODO: Implement a Region class so we can easily grab these parameters instead of listing them all in the function.
-        public void NotifyAddRegion(uint unitNetId, uint bubbleNetId, TeamId team, Vector2 position, float time, float radius = 0, int regionType = 0, ClientInfo clientInfo = null, GameObject obj = null, float collisionRadius = 0, float grassRadius = 0, float sizemult = 1.0f, float addsize = 0, bool grantVis = true, bool stealthVis = false)
-        {
-            var regionPacket = new AddRegion
-            {
-                TeamID = (uint)team,
-                RegionType = regionType, // TODO: Find out what values this can be and make an enum for it (so far: -2 for turrets)
-                UnitNetID = unitNetId, // TODO: Verify (usually 0 for vision only?)
-                BubbleNetID = bubbleNetId, // TODO: Verify (is usually different from UnitNetID in packets, may also be a remnant or for internal use)
-                VisionTargetNetID = 0,
-                Position = position,
-                TimeToLive = time, // For turrets, usually 25000.0 is used
-                ColisionRadius = collisionRadius, // 88.4 for turrets
-                GrassRadius = grassRadius, // 130.0 for turrets
-                SizeMultiplier = sizemult,
-                SizeAdditive = addsize,
-
-                // Wire bit0 = Riot's RequiresLOS (vision-only regions require line-of-sight).
-                // The old code set this bit from collisionRadius > 0 (server HasCollision
-                // overload) — that conflated two unrelated concepts on the same wire bit.
-                RequiresLOS = true,
-                GrantVision = grantVis,
-                RevealStealth = stealthVis,
-
-                BaseRadius = radius // 800.0 for turrets
-            };
-
-            if (clientInfo != null)
-            {
-                if (clientInfo.Champion != null)
-                {
-                    regionPacket.VisionTargetNetID = clientInfo.Champion.NetId;
-                }
-                regionPacket.ClientID = clientInfo.ClientId;
-            }
-
-            if (obj != null)
-            {
-                regionPacket.VisionTargetNetID = obj.NetId;
-            }
-
-            _packetHandlerManager.BroadcastPacketTeam(team, regionPacket.GetBytes(), Channel.CHL_S2C);
-        }
-
-        /// <summary>
-        /// Sends a packet to the specified team that a part of the map has changed. Known to be used in League for initializing turret vision and collision.
-        /// </summary>
         /// <param name="region">Region to add.</param>
         public void NotifyAddRegion(Region region)
         {
             var regionPacket = ConstructAddRegionPacket(region);
 
-            // Verify if this should be vision or team regulated.
+            // Scoping (replay, one CHAOS perspective): 569 own-team + 86 enemy-team + 1
+            // neutral AddRegions — neither pure broadcast (would be ~symmetric) nor pure
+            // team-scope (would be 0 enemy). Riot appears to vision-gate ENEMY regions
+            // (discovered wards / known turret bubbles) while always sending own-team ones.
+            // Our blanket broadcast over-shares enemy bubble geometry — WATCH: refine to
+            // own-team-always + vision-gated-enemy if it ever matters (client team-gates
+            // rendering anyway, so this is wire-noise, not a visual bug).
             _packetHandlerManager.BroadcastPacket(regionPacket.GetBytes(), Channel.CHL_S2C);
         }
 
@@ -1141,7 +1127,12 @@ namespace PacketDefinitions420
                 targetPacket.TargetNetID = target.NetId;
             }
 
-            // TODO: Verify if we need to account for other cases.
+            // No other cases needed: Riot's replay senders for 0x6A/0xC0 are EXCLUSIVELY turrets
+            // (low structure NetIDs) and heroes — minions/monsters never announce their targets
+            // (our side matches: SetTargetUnit's networked flag is only passed true by TurretAI
+            // and the hero/player paths). Turrets broadcast unconditionally — their aggro warning
+            // must reach players without direct vision of the permanently-known structure; heroes
+            // stay vision-scoped.
             if (attacker is BaseTurret)
             {
                 _packetHandlerManager.BroadcastPacket(targetPacket.GetBytes(), Channel.CHL_S2C);
@@ -1255,7 +1246,11 @@ namespace PacketDefinitions420
             // ExtraTime: client decodes `(byte - 128) / 100.0` per S1 obj_ai_base_client.cpp:15689,
             // range [-1.28, +1.27] s. Negative `CurrentDelayTime` matches Riot's replay range
             // [-0.14, 0] s — non-zero on RefreshCurrentTarget mid-windup (target swap during AA).
-            // TODO: Remove attacker/target/futureProjNetId parameters and replace with CastInfo.
+            // Deliberately NOT folded into CastInfo: the cast-driven callers (Spell.cs) do pass
+            // CastInfo fields, but the target-REACQUIRE announce (ObjAIBase.SetTargetUnit, the
+            // blink/AA-reset path) fires with a freshly reserved missile NetID BEFORE any cast
+            // exists — its AutoAttackSpell.CastInfo is stale from the previous swing. The explicit
+            // parameters serve exactly that castless caller.
             var basicAttackData = new BasicAttackData
             {
                 TargetNetID = target.NetId,
@@ -1285,7 +1280,11 @@ namespace PacketDefinitions420
             var targetPos = MovementVector.ToCenteredScaledCoordinates(target.Position, _navGrid);
 
             // See NotifyBasic_Attack for ExtraTime encoding details.
-            // TODO: Remove attacker/target/futureProjNetId parameters and replace with CastInfo.
+            // Deliberately NOT folded into CastInfo: the cast-driven callers (Spell.cs) do pass
+            // CastInfo fields, but the target-REACQUIRE announce (ObjAIBase.SetTargetUnit, the
+            // blink/AA-reset path) fires with a freshly reserved missile NetID BEFORE any cast
+            // exists — its AutoAttackSpell.CastInfo is stale from the previous swing. The explicit
+            // parameters serve exactly that castless caller.
             var basicAttackData = new BasicAttackData
             {
                 TargetNetID = target.NetId,
@@ -1630,21 +1629,29 @@ namespace PacketDefinitions420
         /// <param name="currentCd">Amount of time the spell has already been on cooldown (if applicable).</param>
         /// <param name="totalCd">Maximum amount of time the spell's cooldown can be.</param>
         /// <param name="userId">UserId to send the packet to. If not specified or zero, the packet is broadcasted to all players that have vision of the specified unit.</param>
-        public void NotifyCHAR_SetCooldown(ObjAIBase u, byte slotId, float currentCd, float totalCd, int userId = -1)
+        public void NotifyCHAR_SetCooldown(ObjAIBase u, byte slotId, float currentCd, float totalCd, int userId = -1,
+            bool isSummonerSpell = false, bool playVOWhenCooldownReady = false)
         {
+            // Field shapes from 21,373 replay packets:
+            // - IsSummonerSpell does NOT mean "slot 4/5": Riot sends slots 4/5 ALWAYS with the
+            //   bit CLEAR (the old auto-set here was refuted). The bit means the Slot indexes
+            //   the separate SUMMONER spellbook (SpellbookRouter's alternate book) — observed
+            //   only as (slot 3, isSum) and (slot 12, isSum), e.g. the Voracity announces.
+            // - PlayVOWhenCooldownReady: rare and exclusively on summoner slots 4/5 (10 packets,
+            //   VO=1 + isSum=0) — the "spell ready" voice-line arm.
+            // - MaxCooldownForDisplay: -1 = "display from the client's own spell data" is the
+            //   dominant neutral (65%); real values (120/90/60...) only where the client can't
+            //   derive the total. NOT the place for totalCd — passing it would diverge from the
+            //   -1 shape (the Raw variant exists for explicit display overrides).
             var cdPacket = new CHAR_SetCooldown
             {
                 SenderNetID = u.NetId,
                 Slot = slotId,
-                PlayVOWhenCooldownReady = false, // TODO: Unhardcode
-                IsSummonerSpell = false, // TODO: Unhardcode
+                PlayVOWhenCooldownReady = playVOWhenCooldownReady,
+                IsSummonerSpell = isSummonerSpell,
                 Cooldown = currentCd,
-                MaxCooldownForDisplay = 0 // TODO: Verify (packet loses functionality otherwise)
+                MaxCooldownForDisplay = -1f
             };
-            if (u is Champion && (slotId == 4 || slotId == 5))
-            {
-                cdPacket.IsSummonerSpell = true; // TODO: Verify functionality
-            }
             if (userId < 0)
             {
                 _packetHandlerManager.BroadcastPacketVision(u, cdPacket.GetBytes(), Channel.CHL_S2C);
@@ -1994,7 +2001,13 @@ namespace PacketDefinitions420
         /// <param name="isChampion">Whether or not the GameObject entering vision is a Champion.</param>
         /// <param name="ignoreVision">Optionally ignore vision checks when sending this packet.</param>
         /// <param name="packets">Takes in a list of packets to send alongside this vision packet.</param>
-        /// TODO: Incomplete implementation.
+        /// The snapshot is COMPLETE against the wire packet: every 0xBA field is populated
+        /// (items, shields, the full CharacterDataStack layer list, per-buff BuffAdd2 resync
+        /// sub-packets, movement incl. dash/teleport, LookAt — replay-verified shapes, see
+        /// docs/LANE_MINION_WIRE_VERIFICATION.md D2/D3) plus the mid-windup cast catch-up ANS
+        /// from ObjAIBase.OnEnterVision. The only unset field is LookAtNetID, which only
+        /// unit-target LookAt types would read — spawn/vision-acquire is always Direction-type
+        /// on Riot's wire.
         public void NotifyEnterVisibilityClient(GameObject o, int userId = -1, bool isChampion = false, bool ignoreVision = false, List<GamePacket> packets = null)
         {
 
@@ -2335,7 +2348,11 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
         /// <param name="netId">NetId of the GameObject that left vision.</param>
-        /// TODO: Verify where this should be used.
+        /// Raw-netid unicast overload of the 0x35 LOCAL leave signal (see the GameObject overload
+        /// below for the wire evidence): this is the shape for the STANDALONE local-leave — an
+        /// object leaving one client's local visibility while keeping team visibility (nearsight,
+        /// per-player-scoped objects; Riot sends 435 standalone 0x35 in one game). Caller-less
+        /// today — the hook for a faithful nearsight/per-player-scoping implementation.
         public void NotifyLeaveLocalVisibilityClient(int userId, uint netId)
         {
             var leaveLocalVis = new OnLeaveLocalVisibilityClient
@@ -2352,7 +2369,11 @@ namespace PacketDefinitions420
         /// <param name="o">GameObject that left vision.</param>
         /// <param name="team">TeamId to send the packet to; BLUE/PURPLE/NEUTRAL.</param>
         /// <param name="userId">User to send the packet to.</param>
-        /// TODO: Verify where this should be used.
+        /// Usage (replay-verified): 0x35 is the LOCAL (per-client) leave-vision signal. It rides
+        /// along with every 0x51 team-leave (1751/1753 pairs, sent by the sibling below) AND
+        /// fires STANDALONE (435x in one game) when an object leaves only a client's local
+        /// visibility while keeping team visibility (nearsight/per-player-scoped objects) — the
+        /// standalone form is a documented gap: nothing sends it on our side yet.
         public void NotifyLeaveLocalVisibilityClient(GameObject o, TeamId team, int userId = -1)
         {
             var leaveLocalVis = new OnLeaveLocalVisibilityClient
@@ -2375,7 +2396,10 @@ namespace PacketDefinitions420
         /// <param name="o">GameObject that left vision.</param>
         /// <param name="team">TeamId to send the packet to; BLUE/PURPLE/NEUTRAL.</param>
         /// <param name="userId">User to send the packet to (if applicable).</param>
-        /// TODO: Verify where this should be used.
+        /// Usage (replay-verified): THE unit leave-vision wire — 0x51 + the 0x35 local signal as
+        /// a same-tick pair (1751/1753 in the corpus; enter-vision = 0xBA/0xAE, never 0xBB).
+        /// Called from the vision system's leave path (NotifyLeaveTeamVision dispatch for
+        /// AttackableUnits, driven by UpdateVisionSpawnAndSync when a team loses sight).
         public void NotifyLeaveVisibilityClient(GameObject o, TeamId team, int userId = -1)
         {
             var leaveVis = new OnLeaveVisibilityClient
@@ -2418,7 +2442,13 @@ namespace PacketDefinitions420
                     teamRoster.OrderMembers[orderSizeCurrent] = player.PlayerId;
                     orderSizeCurrent++;
                 }
-                // TODO: Verify if it is ok to allow neutral
+                // The else can only ever be PURPLE: a NEUTRAL player cannot exist — the config
+                // parser (PlayerConfig) maps "blue" to BLUE and EVERYTHING else to PURPLE, and
+                // the only caller (HandleJoinTeam) passes GetPlayers(false) = humans from that
+                // config. Neutral champion-LIKE units do exist (Ascension's AscXerath — his own
+                // character package in the 4.20 client, spawned as a TEAM_NEUTRAL jungle monster
+                // over SpawnMinion, see Map8 NeutralMinionSpawnAscension) but they are never
+                // lobby players and never reach this roster.
                 else
                 {
                     teamRoster.ChaosMembers[chaosSizeCurrent] = player.PlayerId;
@@ -2481,8 +2511,13 @@ namespace PacketDefinitions420
                     OverrideSpells = overrideSpells,
                     ModelOnly = modelOnly,
                     ReplaceCharacterPackage = replaceCharacterPackage
-                    // TODO: ID variable, acts like a character ID, used later on in PopCharacterData packet for unloading.
-                    // Changes over time, or perhaps as new objects are added, does not have large values like NetID.
+                    // ID stays 0 = the BASE layer. The "acts like a character ID, used later by
+                    // PopCharacterData" mystery is solved by CharacterDataStack: Push() assigns an
+                    // incrementing per-unit layer id, sends it here, and PopSpecific(id) →
+                    // S2C_PopCharacterData unloads exactly that layer. This legacy overload serves
+                    // only the ChangeHero BASE swap (Champion.OnSpawn/SpawnAsChangeHero), which
+                    // replaces the base layer — id 0, matching CharacterDataStack.SetBaseSkin.
+                    // Layered pushes (transforms, Elise/Nidalee) go through the stack overload below.
                 }
             };
 
@@ -2687,14 +2722,23 @@ namespace PacketDefinitions420
             var current = unit.GetPosition3D();
             var to = Vector3.Normalize(new Vector3(targetPos.X, _navGrid.GetHeightAtLocation(targetPos), targetPos.Y) - current);
 
+            // Field semantics from the client's HomingMovementDriver (4.17 decomp) — this whole
+            // packet is LATENT (Riot sends 0x3C zero times in 34 replays; dashes ride SpeedParams),
+            // so the values below are the driver's own NEUTRAL defaults:
+            // - TargetHeightModifier: Y offset added to the target position each update (aim above
+            //   the feet); driver ctor default 0.
+            // - Gravity: parabolic Y like missiles; 0 = flat.
+            // - RateOfTurn: radians/sec homing turn limit; NEGATIVE = snap instantly to the target
+            //   direction (the mRateOfTurn < 0 branch; ctor default -1). A positive value would
+            //   produce curved homing — the old 1.0f here was NOT neutral.
             var hd = new MovementDriverHomingData
             {
                 TargetNetID = unit.TargetUnit.NetId,
-                TargetHeightModifier = 0, // TODO: Verify
+                TargetHeightModifier = 0,
                 TargetPosition = unit.TargetUnit.GetPosition3D(),
                 Speed = unit.MovementParameters.PathSpeedOverride,
-                Gravity = 0, // TODO: Implement gravity for AttackableUnits.
-                RateOfTurn = 1.0f, // TODO: Implement TurnRate.
+                Gravity = 0,
+                RateOfTurn = -1.0f,
                 Duration = unit.MovementParameters.FollowTravelTime,
                 MovementPropertyFlags = 0 // Reserved/unused bitfield in 4.17 (decomp never reads it); always 0.
             };
@@ -2774,11 +2818,17 @@ namespace PacketDefinitions420
         /// <param name="duration">Total amount of time the group of buffs should be active.</param>
         public void NotifyNPC_BuffAddGroup(AttackableUnit target, List<Buff> buffs, BuffType buffType, string buffName, float runningTime, float duration)
         {
+            // PackageHash = the buff SOURCE's character package, NOT the target's — the package
+            // names where the client finds the buff's resources. Replay-proven via cross-unit
+            // groups: LeeSin's package hash (0x8be1e81f, matched against his CastSpellAns
+            // PackageHash) rides group-adds whose owners are MINIONS (his E slow on a wave),
+            // same for Leona's. Mirrors BuildBuffAdd2's (SourceUnit ?? TargetUnit) form.
+            var packageSource = (buffs.Count > 0 ? buffs[0].SourceUnit ?? buffs[0].TargetUnit : target) ?? target;
             var addGroupPacket = new NPC_BuffAddGroup
             {
                 BuffType = (byte)buffType,
                 BuffNameHash = HashFunctions.HashString(buffName),
-                PackageHash = target.GetObjHash(), // TODO: Verify
+                PackageHash = packageSource.GetObjHash(),
                 RunningTime = runningTime,
                 Duration = duration
             };
@@ -2814,7 +2864,13 @@ namespace PacketDefinitions420
         {
             var removePacket = new NPC_BuffRemove2
             {
-                SenderNetID = b.TargetUnit.NetId, //TODO: Verify if this should change depending on the removal source
+                // ALWAYS the buff HOLDER, never the removal source: the client's buff packets are
+                // per-object handlers (OnNetworkRegister<PKT_NPC_Buff*> on obj_AI_Base) — the
+                // packet routes to the unit with this NetID and removes from ITS BuffManager, so
+                // any other sender would land on the wrong unit. Replay-corroborated: 93.6% of
+                // 7130 removes match a prior BuffAdd2 on the same unit+slot (rest arrived via
+                // the group-add packets), senders are holders throughout.
+                SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
                 BuffNameHash = HashFunctions.HashString(b.Name),
                 // Riot sends (effectively) always 0 here: 2791/2814 removes in the Sion test
@@ -3264,8 +3320,7 @@ namespace PacketDefinitions420
 
             if (obj is Champion ch)
             {
-                // TODO: Typo >:(
-                levelUp.AveliablePoints = ch.SkillPoints;
+                levelUp.AvailablePoints = ch.SkillPoints;
             }
 
             _packetHandlerManager.BroadcastPacketVision(obj, levelUp.GetBytes(), Channel.CHL_S2C);
@@ -3293,12 +3348,16 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all users with vision of the given caster detailing that the given spell has been set to auto cast (as well as the spell in the critSlot) for the given caster.
+        /// Announces the unit's EMPOWERED-attack override to all clients with vision (Riot wire:
+        /// 30,074 packets — Nasus Q slot 45, Kayle E 45, Caitlyn Headshot 47, Viktor 49, monster
+        /// specials 53; only extra/spellbook slots, never the 64+ attack containers). The client
+        /// stores both slots via Spellbook::SetAutocastSpellLocal(slot, critSlot); critSlot is
+        /// the variant fired when the swing crits (wire shows 47/48 rotations with critSlot 46).
+        /// Cleared via <see cref="NotifyNPC_SetAutocastClear"/> = (255,255).
         /// </summary>
         /// <param name="caster">Unit responsible for the autocasting.</param>
         /// <param name="spell">Spell to auto cast.</param>
-        /// // TODO: Verify critSlot functionality
-        /// <param name="critSlot">Optional spell slot to cast when a crit is going to occur.</param>
+        /// <param name="critSlot">Spell slot to cast when the next attack crits (0 = same as slot).</param>
         public void NotifyNPC_SetAutocast(ObjAIBase caster, Spell spell, byte critSlot = 0)
         {
             var autoCast = new NPC_SetAutocast
@@ -3317,13 +3376,33 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
+        /// Clears the unit's empowered-attack announce — Riot's (255,255) = (-1,-1) shape (46% of
+        /// all SetAutocast packets: the OFF half of every empowered-attack pulse).
+        /// </summary>
+        public void NotifyNPC_SetAutocastClear(ObjAIBase caster)
+        {
+            var autoCast = new NPC_SetAutocast
+            {
+                SenderNetID = caster.NetId,
+                Slot = 255,
+                CritSlot = 255
+            };
+            _packetHandlerManager.BroadcastPacketVision(caster, autoCast.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
         /// Sends a packet to the given user detailing that the given spell has been set to auto cast (as well as the spell in the critSlot) for the given caster.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
         /// <param name="caster">Unit responsible for the autocasting.</param>
         /// <param name="spell">Spell to auto cast.</param>
-        /// // TODO: Verify critSlot functionality
-        /// <param name="critSlot">Optional spell slot to cast when a crit is going to occur.</param>
+        /// <param name="critSlot">Spell slot to cast when the next attack CRITS — verified: the
+        /// client stores both via Spellbook::SetAutocastSpellLocal(slot, critSlot), and Riot's
+        /// wire (30,074 packets) shows the split live: mostly critSlot == slot, but attack-variant
+        /// rotations diverge (e.g. slot 47/48 with critSlot 46 = the unit's crit-attack variant);
+        /// (255,255) = (-1,-1) clears the autocast. Riot drives per-attack VARIANT rotation over
+        /// this packet (attack slots 45-53 dominate) — a latent mechanism for our AA-variant
+        /// system. critSlot &lt;= 0 falls back to slot, Riot's dominant same-slot shape.</param>
         public void NotifyNPC_SetAutocast(int userId, ObjAIBase caster, Spell spell, byte critSlot = 0)
         {
             var autoCast = new NPC_SetAutocast
@@ -3342,12 +3421,16 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players with vision of the specified unit detailing that the specified unit's stats have been updated.
+        /// Immediate SINGLE-unit replication send — currently CALLER-LESS. Multi-unit replication
+        /// (the Riot wire: 90% of 18,381 replay 0xC4 packets bundle 2-31 units per receiver) is
+        /// already served by the per-tick held path — HoldReplicationDataUntilOnReplicationNotification
+        /// fills a per-player list from OnSync and the parameterless NotifyOnReplication() flushes
+        /// ONE packet per receiver per tick. Prefer that path; this variant remains only for
+        /// out-of-band single-unit pushes (none exist today).
         /// </summary>
         /// <param name="u">Unit who's stats have been updated.</param>
         /// <param name="userId">UserId to send the packet to. If not specified or zero, the packet is broadcasted to all players that have vision of the specified unit.</param>
         /// <param name="partial">Whether or not the packet should only include stats marked as changed.</param>
-        /// TODO: Replace with LeaguePackets and preferably move all uses of this function to a central EventHandler class (if one is fully implemented).
         public void NotifyOnReplication(AttackableUnit u, int userId = -1, bool partial = true)
         {
             if (u.Replication != null)
@@ -3360,7 +3443,6 @@ namespace PacketDefinitions420
                 var us = new OnReplication()
                 {
                     SyncID = (uint)PacketExtensions.WireSyncID,
-                    // TODO: Support multi-unit replication creation (perhaps via a separate function which takes in a list of units).
                     ReplicationData = new List<ReplicationData>(1){
                         u.Replication.GetData(partial, includeOwnerOnly)
                     }
@@ -3629,7 +3711,8 @@ namespace PacketDefinitions420
             {
                 SenderNetID = m.NetId,
                 TargetCount = m.CastInfo.Targets.Count,
-                // TODO: Verify
+                // Replay-verified (1b3eb4f7): SenderNetID carries the MISSILE, OwnerNetworkID the
+                // CASTER's champion NetID — exactly this shape.
                 OwnerNetworkID = m.CastInfo.Owner.NetId
             };
 
@@ -3730,13 +3813,15 @@ namespace PacketDefinitions420
                 NetID = champion.NetId,
                 ClientID = clientInfo.ClientId,
                 // NetNodeID,
-                // For bots (0 = Beginner, 1 = Intermediate)
-                SkillLevel = 0,
-                // TODO: Implement bots and unhardcode this.
+                // Bot difficulty (0 = Beginner, 1 = Intermediate). Replay: 0 for every slot —
+                // humans AND bots — in the Beginner co-op capture; config-supplied
+                // ("botDifficulty" in GameInfo) for bot slots, always 0 for humans.
+                SkillLevel = champion.IsBot ? (byte)clientInfo.BotDifficulty : (byte)0,
                 IsBot = champion.IsBot,
                 // BotRank, deprecated as of v4.18
-                // TODO: Unhardcode
-                SpawnPositionIndex = 0,
+                // The fountain-platform formation slot, 0-4 unique per team (replay-verified in
+                // all perspectives incl. the bot game). Assigned per-team in PlayerManager.
+                SpawnPositionIndex = (byte)champion.SpawnIndex,
                 SkinID = champion.SkinID,
                 Name = champion.Name,
                 Skin = champion.Model,
@@ -3981,14 +4066,21 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing the stats (CS, kills, deaths, etc) of the player who owns the specified Champion.
+        /// Sends the champion's stat block (CS, kills, deaths, ...) to the OWNING player only.
+        /// Replay-verified scoping: every 0x46 in a perspective replay carries exclusively the
+        /// recorder's own champion as sender (85/85 and 60/60 across two perspectives) — each
+        /// client receives just its own hero's stats, event-driven on stat changes; never a
+        /// broadcast (the old broadcast leaked every champion's block to everyone).
         /// </summary>
         /// <param name="champion">Champion owned by the player.</param>
         public void NotifyS2C_HeroStats(Champion champion)
         {
-            var response = new S2C_HeroStats { Data = champion.ChampStats.GetBytes() };
-            // TODO: research how to send the packet
-            _packetHandlerManager.BroadcastPacket(response.GetBytes(), Channel.CHL_S2C);
+            var response = new S2C_HeroStats
+            {
+                SenderNetID = champion.NetId,
+                Data = champion.ChampStats.GetBytes()
+            };
+            _packetHandlerManager.SendPacket(champion.ClientId, response.GetBytes(), Channel.CHL_S2C);
         }
 
         public void NotifyS2C_IncrementPlayerScore(ScoreData scoreData)
@@ -4062,8 +4154,11 @@ namespace PacketDefinitions420
             }
             else
             {
-                // TODO: Verify if this is correct. Usually 0.
-                // Fallback for backwards compatibility - broadcasts to everyone (not recommended)
+                // Sourceless fallback (SourceNetID stays 0): a rare-but-real Riot shape — 10 of
+                // 1962 pings across 15 replays carry source 0; the other 99.5% set the pinging
+                // champion's NetID (and the client uses it for the "who pinged" attribution), so
+                // callers should strongly prefer the ClientInfo/source overloads. This branch
+                // also broadcasts to EVERYONE instead of the team — keep it for tooling only.
                 var response = new S2C_MapPing
                 {
                     TargetNetID = targetNetId,
@@ -4094,9 +4189,11 @@ namespace PacketDefinitions420
                 TargetNetID = targetNetId,
                 PingCategory = (byte)type,
                 Position = pos,
-                //Unhardcode these bools later
                 SenderNetID = sourceNetId,
                 SourceNetID = sourceNetId,
+                // Replay-verified flag shape (1962 pings): the real bits are constant —
+                // PlayAudio|ShowChat|PlayVO set, PingThrottled clear (the wild bitfield values
+                // on the wire are Riot's uninitialized upper bits, the known garbage class).
                 PlayAudio = true,
                 ShowChat = true,
                 PingThrottled = false,
@@ -4338,7 +4435,11 @@ namespace PacketDefinitions420
 
             if (userId < 0)
             {
-                // TODO: Verify if we should use BroadcastPacketTeam instead.
+                // Full broadcast is the coherent scoping — exact mirror of the LEAVE variant
+                // (see NotifyS2C_OnLeaveTeamVisibility): the client handler does per-object
+                // bookkeeping, mTeamVisibleFlags |= (1 << packet.team), which EVERY client must
+                // apply; team-scoped sends would strand stale flags on the other side. Riot
+                // sends 0xE0 zero times across the corpus (unit vision = 0xBA/0xAE enter).
                 _packetHandlerManager.BroadcastPacket(enterTeamVis.GetBytes(), Channel.CHL_S2C);
             }
             else
@@ -5362,13 +5463,14 @@ namespace PacketDefinitions420
 
                 // Bot slot wire model (4.20 co-op replay a5347e9d): botName/botSkinName = the raw
                 // champion model, NO "Bot" suffix — the client renders "(Champion) Bot" itself.
-                // BotDifficulty is 0 on the wire even for real Riot bots.
+                // BotDifficulty: 0 on the wire in the (Beginner) co-op capture; config-supplied
+                // ("botDifficulty"), same source as S2C_CreateHero.SkillLevel.
                 if (isBot)
                 {
                     info.BotName = players[i].Champion.Model;
                     info.BotSkinName = players[i].Champion.Model;
                     info.BotSkinID = players[i].SkinNo;
-                    info.BotDifficulty = 0;
+                    info.BotDifficulty = players[i].BotDifficulty;
                 }
 
                 syncVersion.PlayerInfo[i] = info;

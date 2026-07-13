@@ -12,18 +12,18 @@ namespace LeaguePackets.Game
     {
         public override GamePacketID ID => GamePacketID.NPC_LevelUp;
         public byte Level { get; set; }
-        public byte AveliablePoints { get; set; }
+        public byte AvailablePoints { get; set; }
 
         protected override void ReadBody(ByteReader reader)
         {
 
             this.Level = reader.ReadByte();
-            this.AveliablePoints = reader.ReadByte();
+            this.AvailablePoints = reader.ReadByte();
         }
         protected override void WriteBody(ByteWriter writer)
         {
             writer.WriteByte(Level);
-            writer.WriteByte(AveliablePoints);
+            writer.WriteByte(AvailablePoints);
         }
     }
 }

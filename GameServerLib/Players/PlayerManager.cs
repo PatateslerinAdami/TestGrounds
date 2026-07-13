@@ -43,7 +43,8 @@ namespace LeagueSandbox.GameServer.Players
                 summonerSkills,
                 config.PlayerID,
                 config.EnemyRibbon,
-                config.SummonerLevel
+                config.SummonerLevel,
+                config.BotDifficulty
             );
 
             info.ClientId = _players.Count;
@@ -89,6 +90,9 @@ namespace LeagueSandbox.GameServer.Players
             }
 
             var pos = c.GetSpawnPosition(_userIdsPerTeam[teamId]);
+            // _userIdsPerTeam is the 1-based per-team count here (incremented above); the wire
+            // SpawnPositionIndex is 0-based (replay: 0-4, unique per team).
+            c.SpawnIndex = _userIdsPerTeam[teamId] - 1;
             c.SetPosition(pos, false);
             c.StopMovement();
             c.UpdateMoveOrder(OrderType.Stop);

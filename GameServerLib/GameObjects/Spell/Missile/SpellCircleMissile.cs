@@ -265,7 +265,18 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void CheckFlagsForUnit(AttackableUnit unit)
         {
-            if (unit == null || !HasDestination() || ObjectsHit.Contains(unit) || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit))
+            // Caster exclusion: Riot's circle missile has NO engine unit-hit sweep at all — S1
+            // obj_SpellCircleMissile::UpdateProjectile and 4.17 UpdateCircleMissile are motion +
+            // AreaTrigger-destruction only. Orb detonation is script-driven: S1 AhriFoxFireMissile.lua
+            // SpellOnMissileUpdateBuildingBlocks runs BBForNClosestVisibleUnitsInTargetArea around
+            // MissilePosition with EXPLICIT script flags ("AffectEnemies AffectHeroes ..." — never
+            // AlwaysSelf), then BBSpellCast + BBDestroyMissile on the found unit. The spell DATA
+            // flags carry AlwaysSelf only so the self-anchored sub-cast validates (orbs are CAST at
+            // the owner), and IsValidTarget faithfully early-accepts it (S4 ValidTargetCheck). Our
+            // swept collision reuses the data flags, so the owner — permanently inside the orbit
+            // (radius == collision radius) — must be skipped here or every orb detonates on its own
+            // caster the frame it spawns (Diana W / Ahri W).
+            if (unit == null || unit == CastInfo.Owner || !HasDestination() || ObjectsHit.Contains(unit) || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit))
             {
                 return;
             }

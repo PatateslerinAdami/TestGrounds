@@ -428,6 +428,11 @@ public class PlayerConfig
     public string Summoner1 { get; private set; }
     public string Summoner2 { get; private set; }
     /// <summary>
+    /// Bot difficulty for bot slots (0 = Beginner, 1 = Intermediate; wire:
+    /// S2C_CreateHero.SkillLevel). Riot's Beginner co-op replay carries 0 everywhere.
+    /// </summary>
+    public byte BotDifficulty { get; private set; }
+    /// <summary>
     /// Summoner level shown on the loading screen (wire: PlayerLoadInfo.SummonorLevel).
     /// Replay: humans carry their real level (30 in all captures), bots always 1.
     /// </summary>
@@ -488,6 +493,7 @@ public class PlayerConfig
         Ribbon = (short?)playerData.SelectToken("ribbon") ?? 0;
         EnemyRibbon = (short?)playerData.SelectToken("enemyRibbon") ?? 0;
         SummonerLevel = (ushort?)playerData.SelectToken("summonerLevel") ?? (ushort)(IsBot ? 1 : 30);
+        BotDifficulty = (byte?)playerData.SelectToken("botDifficulty") ?? 0;
         Icon = (int?)playerData.SelectToken("icon") ?? (IsBot ? -1 : 0);
         BlowfishKey = (string)playerData.SelectToken("blowfishKey") ?? (IsBot ? BOT_BLOWFISH_KEY : null);
         AIScript = (string)playerData.SelectToken("aiScript") ?? "";

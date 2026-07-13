@@ -38,8 +38,10 @@ public class VayneCondemn : ISpellScript {
 }
 
 public class VayneCondemnMissile : ISpellScript {
+    // Replay-derived (4.20 corpus, 57 victim pushes): full push = 475u, wire PathSpeedOverride
+    // = 2500 on 54/57 samples (was 2000 here — S1-era guess).
     private const float CondemnPushDistance     = 475.0f;
-    private const float CondemnPushSpeed        = 2000.0f;
+    private const float CondemnPushSpeed        = 2500.0f;
     private const float CondemnWallStunDuration = 1.5f;
 
     private ObjAIBase _vayne;
@@ -91,10 +93,13 @@ public class VayneCondemnMissile : ISpellScript {
         ApiEventManager.OnCollisionTerrain.AddListener(this, target, OnCondemnCollisionTerrain, true);
         ApiEventManager.OnMoveSuccess.AddListener(this, target, OnCondemnMoveSuccess, true);
         ApiEventManager.OnMoveFailure.AddListener(this, target, OnCondemnMoveFailure, true);
-        // BBMoveAway: push the target away from Vayne by CondemnPushDistance, clamped at the first wall
-        // (the wall-stun is detected by the OnCollisionTerrain listener above).
+        // BBMoveAway: push the target away from Vayne by CondemnPushDistance. FIRST_COLLISION_HIT
+        // = the replay-verified Condemn mode (S1 lua used it too): the push path is clamped by
+        // coarse ~cellsize sampling to the last walkable sample, so the victim stops 0..50u short
+        // of the wall (and flies over <50u slivers). The clamp publishes OnCollisionTerrain,
+        // which the listener above turns into the wall-stun.
         ForceMoveAway(target, _vayne, CondemnPushDistance, CondemnPushSpeed,
-             resolve: ForceMovementType.FIRST_WALL_HIT,
+             resolve: ForceMovementType.FIRST_COLLISION_HIT,
              facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
              orders: ForceMovementOrdersType.CANCEL_ORDER);
         //Particle for wall hit is this: "Vayne_WallHit_tar"

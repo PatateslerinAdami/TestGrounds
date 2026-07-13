@@ -442,24 +442,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <returns>Hashed string of this unit's model.</returns>
         public uint GetObjHash()
         {
-            var gobj = "[Character]" + Model;
-
-            // TODO: Account for any other units that have skins (requires skins to be implemented for those units)
-            if (this is Champion c)
-            {
-                var szSkin = "";
-                if (c.SkinID < 10)
-                {
-                    szSkin = "0" + c.SkinID;
-                }
-                else
-                {
-                    szSkin = c.SkinID.ToString();
-                }
-                gobj += szSkin;
-            }
-
-            return HashFunctions.HashStringNorm(gobj);
+            // Riot CharacterPackage::Load (4.17 decomp PackageCharacter.cpp): the package hash is
+            // SDBM("[Character]" + character + skinID as "%02d") for EVERY unit, not just champions.
+            // Replay-verified: 4.20 FX PackageHashes resolve to "[Character]SRU_Baron00",
+            // "[Character]SRU_Dragon00", "[Character]Jinx00", "[Character]JarvanIV06" etc. — no unit
+            // ever hashes without the two-digit skin suffix. (Previously only champions got the
+            // suffix, so every minion/monster/building package hash was wrong on the wire.)
+            int skinId = this is ObjAIBase ai ? ai.SkinID : 0;
+            return HashFunctions.HashStringNorm($"[Character]{Model}{skinId:D2}");
         }
 
         /// <summary>
@@ -4186,6 +4176,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
+
+        /// <summary>
+        /// How far a FIRST_WALL_HIT / GET_NEAREST_* endpoint may be snapped out of terrain before
+        /// the movement is refused instead. Replay-bracketed on Vayne Q / Riven E (4.20 corpus):
+        /// endpoints up to 66u from the nearest walkable cell center still moved (snapped),
+        /// endpoints 74u+ away collapsed to a zero-length dash — the cap lies in (66, 74).
+        /// </summary>
+        private const float NEAREST_SNAP_CAP = 70.0f;
         public void ServerForceLinePath(Vector2 endPos, float speed, float gravity = 0.0f, bool keepFacingLastDirection = true, bool lockActions = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, float idealDistance = 0.0f, float moveBackBy = 0.0f, float innerDistance = 0.0f)
         {
             // Displacement immunity: a unit flagged Imobile (Baron/Dragon) or an epic monster cannot be
@@ -4228,23 +4226,58 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // innerDistance floor below can re-extend along the SAME ray after terrain resolution shortens it.
             Vector2 intendedEnd = endPos;
 
-            // FIRST_WALL_HIT: clamp the destination to the last walkable cell along the ray so the
-            // unit stops at the wall instead of being teleported through it by GetClosestTerrainExit
-            // when the requested endPos lies inside terrain. Track whether a wall was actually hit
-            // so we can publish OnCollisionTerrain — clamping means the unit never physically
-            // collides with terrain, but scripts (e.g. Vayne E wall-stun) rely on that signal.
+            // Destination resolution by ForceMovementType. Semantics are REPLAY-DERIVED from the
+            // 4.20 corpus (method + numbers: docs/FORCEMOVEMENTTYPE_REPLAY_DERIVATION.md) — the
+            // native resolver (Actor::ServerGetLinePathDestination) is server-side C++ and absent
+            // from every decomp we have. Three behaviors exist on the wire, all resolved at SETUP
+            // time (the first 0x64 already carries the final path):
+            //  - FURTHEST_WITHIN_RANGE: fly the full intended vector; only the ENDPOINT is
+            //    validated (uncapped nearest-walkable snap). Walls BETWEEN start and end never
+            //    shorten the dash (Tristana/Corki W cross walls and land beside a wall they
+            //    aimed into; 0 refusals in 265 samples).
+            //  - FIRST_WALL_HIT / GET_NEAREST_*: endpoint snapped to the nearest walkable point
+            //    only within a small cap; a deeper-in-terrain endpoint REFUSES the movement — the
+            //    dash degenerates to a zero-length path at the current position (Vayne Q /
+            //    Riven E tumble-in-place into thick walls; the wire shows a real 0x64 with a
+            //    [pos,pos] path and the spell still casts).
+            //  - FIRST_COLLISION_HIT: the path itself is clamped by coarse cell-size sampling to
+            //    the last walkable sample (Vayne E Condemn stops 0..50u short of the wall and
+            //    steps over <50u slivers). The only mode where the RAY matters. Publishes
+            //    OnCollisionTerrain (wall-stun trigger) when it clamps.
             bool wallHit = false;
-            if (!ignoreTerrain && movementType == ForceMovementType.FIRST_WALL_HIT)
+            Vector2 newCoords;
+            if (ignoreTerrain)
             {
-                var clampedEnd = _game.Map.NavigationGrid.GetFirstWallHitPoint(Position, endPos);
-                if (clampedEnd != endPos)
+                newCoords = endPos;
+            }
+            else
+            {
+                switch (movementType)
                 {
-                    wallHit = true;
-                    endPos = clampedEnd;
+                    case ForceMovementType.FIRST_COLLISION_HIT:
+                    {
+                        var clampedEnd = _game.Map.NavigationGrid.GetLastWalkableSampledPoint(Position, endPos);
+                        if (clampedEnd != endPos)
+                        {
+                            wallHit = true;
+                            endPos = clampedEnd;
+                        }
+                        newCoords = _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
+                        break;
+                    }
+                    case ForceMovementType.FIRST_WALL_HIT:
+                    case ForceMovementType.GET_NEAREST_IN_RANGE:
+                    case ForceMovementType.GET_NEAREST_IN_RANGE_INCLUDE_UNITS:
+                    {
+                        var snapped = _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
+                        newCoords = Vector2.Distance(snapped, endPos) > NEAREST_SNAP_CAP ? Position : snapped;
+                        break;
+                    }
+                    default: // FURTHEST_WITHIN_RANGE
+                        newCoords = _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
+                        break;
                 }
             }
-
-            var newCoords = ignoreTerrain ? endPos : _game.Map.NavigationGrid.GetClosestTerrainExit(endPos, PathfindingRadius + 1.0f);
 
             // DistanceInner (Riot BBMoveAway): minimum displacement floor. If the wall/terrain resolution above
             // pulled the endpoint closer than innerDistance, push it back out to innerDistance along the dash

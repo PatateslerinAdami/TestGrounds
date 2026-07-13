@@ -54,7 +54,10 @@ namespace Buffs
             var dirVec = aim - start;
             var dir = dirVec.LengthSquared() > 0.001f ? Vector2.Normalize(dirVec) : new Vector2(1, 0);
             var flingTarget = start + dir * 1350f;
-            ForceMove(unit, flingTarget, 2100f, gravity: 0f, resolve: ForceMovementType.FIRST_WALL_HIT,
+            // FIRST_COLLISION_HIT: the fling path is clamped by coarse ~cellsize sampling to the
+            // last walkable sample before terrain — matching the observed early terrain stops
+            // (516/601/901/1006/1176 above) landing short of the wall rather than teleporting.
+            ForceMove(unit, flingTarget, 2100f, gravity: 0f, resolve: ForceMovementType.FIRST_COLLISION_HIT,
                 facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
                 orders: ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, movementName: "SionEMinion");
 

@@ -2666,6 +2666,52 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         }
 
         /// <summary>
+        /// Clamps a forced-movement path the way the 4.20 server resolves FIRST_COLLISION_HIT
+        /// (replay-derived, docs/FORCEMOVEMENTTYPE_REPLAY_DERIVATION.md): the segment is SAMPLED
+        /// every <see cref="CellSize"/> units of arc length (plus the exact destination) and the
+        /// movement ends at the last sample before the first non-walkable one. Coarse on purpose —
+        /// wall slivers thinner than one step land between samples and are flown over, and a stop
+        /// leaves the unit 0..CellSize short of the wall (both observed on the wire: Vayne Condemn
+        /// stops quantize to ~50u from the push start and step over &lt;50u nubs).
+        /// Returns destination unchanged when every sample is walkable.
+        /// </summary>
+        public Vector2 GetLastWalkableSampledPoint(Vector2 origin, Vector2 destination)
+        {
+            return SampleClampToWalkable(origin, destination, CellSize, p => IsWalkable(p));
+        }
+
+        /// <summary>
+        /// Core of <see cref="GetLastWalkableSampledPoint"/>, kept static and predicate-based so the
+        /// sampling behavior is unit-testable without a loaded grid. The origin itself is never
+        /// tested (a unit standing at a wall edge may quantize into the wall cell); it is the
+        /// fallback result when the very first step is already blocked.
+        /// </summary>
+        public static Vector2 SampleClampToWalkable(Vector2 origin, Vector2 destination, float step, Predicate<Vector2> isWalkable)
+        {
+            float length = Vector2.Distance(origin, destination);
+            if (length < 1e-3f || step <= 0f)
+            {
+                return destination;
+            }
+
+            Vector2 dir = (destination - origin) / length;
+            Vector2 lastGood = origin;
+            for (float t = step; ; t += step)
+            {
+                Vector2 sample = t < length ? origin + dir * t : destination;
+                if (!isWalkable(sample))
+                {
+                    return lastGood;
+                }
+                lastGood = sample;
+                if (t >= length)
+                {
+                    return destination;
+                }
+            }
+        }
+
+        /// <summary>
         /// Gets the closest pathable position to the given position. *NOTE*: Computationally heavy, use sparingly.
         /// </summary>
         /// <param name="location">Vector2 position to start the check at.</param>
