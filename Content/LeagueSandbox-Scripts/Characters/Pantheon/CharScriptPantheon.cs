@@ -28,6 +28,7 @@ public class CharScriptPantheon : ICharScript
 
     private void OnSpellsCast(Spell spell)
     {
+        if (_pantheon.HasBuff("PantheonPassiveShield") && _pantheon.GetBuffsWithName("PantheonPassiveCounter").Count == 3)return;
         AddBuff("PantheonPassiveCounter", 25000, 1, spell, _pantheon, _pantheon, true);
     }
 }
