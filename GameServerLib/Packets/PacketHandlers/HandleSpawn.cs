@@ -26,7 +26,17 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
         public override bool HandlePacket(int userId, SpawnRequest req)
         {
             _logger.Debug("Spawning map");
-            _game.PacketNotifier.NotifyS2C_StartSpawn(userId);
+            // Per-team bot counts on the wire (replay-verified — see NotifyS2C_StartSpawn).
+            byte botsOrder = 0, botsChaos = 0;
+            foreach (var kv in _playerManager.GetPlayers(includeBots: true))
+            {
+                if (kv.Champion?.IsBot ?? false)
+                {
+                    if (kv.Team == GameServerCore.Enums.TeamId.TEAM_BLUE) botsOrder++;
+                    else if (kv.Team == GameServerCore.Enums.TeamId.TEAM_PURPLE) botsChaos++;
+                }
+            }
+            _game.PacketNotifier.NotifyS2C_StartSpawn(userId, botsOrder, botsChaos);
 
             var userInfo = _playerManager.GetPeerInfo(userId);
             var om = _game.ObjectManager as ObjectManager;

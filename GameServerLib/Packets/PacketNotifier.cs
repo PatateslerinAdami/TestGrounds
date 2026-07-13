@@ -4410,7 +4410,13 @@ namespace PacketDefinitions420
 
             if (userId < 0)
             {
-                // TODO: Verify if we should use BroadcastPacketTeam instead.
+                // Full broadcast is the coherent scoping: the client handler
+                // (NetVisibilityObjectPimpl, 4.17 decomp) does per-object bookkeeping —
+                // mTeamVisibleFlags &= ~(1 << packet.team) — i.e. EVERY client must learn which
+                // team lost vision of the object; a team-scoped send would leave the other
+                // team's clients with stale flags. Corpus note: Riot sends 0xE1 zero times in
+                // 34+ replays (unit vision runs over 0x51/0x35 enter/leave) — this path only
+                // serves our exotic non-unit/non-particle objects.
                 _packetHandlerManager.BroadcastPacket(leaveTeamVis.GetBytes(), Channel.CHL_S2C);
             }
             else
@@ -4651,13 +4657,16 @@ namespace PacketDefinitions420
         /// Sends a packet to the specified player detailing that the game has started the spawning GameObjects that occurs at the start of the game.
         /// </summary>
         /// <param name="userId">User to send the packet to.</param>
-        public void NotifyS2C_StartSpawn(int userId = -1)
+        /// <param name="botCountOrder">Number of BOT champions on ORDER (blue). Replay-verified
+        /// (4.20 co-op a5347e9d, 1 human + 9 bots): Riot sends the per-team bot counts here
+        /// (Order=4, Chaos=5); all-human games carry 0/0.</param>
+        /// <param name="botCountChaos">Number of BOT champions on CHAOS (purple).</param>
+        public void NotifyS2C_StartSpawn(int userId = -1, byte botCountOrder = 0, byte botCountChaos = 0)
         {
             var start = new S2C_StartSpawn
             {
-                // TODO: Set these values when bots are implemented.
-                BotCountOrder = 0,
-                BotCountChaos = 0
+                BotCountOrder = botCountOrder,
+                BotCountChaos = botCountChaos
             };
             if (userId < 0)
             {
@@ -4855,8 +4864,10 @@ namespace PacketDefinitions420
         {
             var dm = new S2C_SystemMessage
             {
+                // Misnamed wire field: NOT a NetID — the console message-type handed verbatim to
+                // ChatConsole::ShowClientSideMessage(msg, type); 0 = plain system line, the only
+                // value Riot's server ever sends (38/38 replay packets). See the overloads below.
                 SourceNetID = 0,
-                //TODO: Ivestigate the cases where SenderNetID is used
                 Message = htmlDebugMessage
             };
             _packetHandlerManager.BroadcastPacket(dm.GetBytes(), Channel.CHL_S2C);
@@ -4871,8 +4882,13 @@ namespace PacketDefinitions420
         {
             var dm = new S2C_SystemMessage
             {
+                // Misnamed wire field: NOT a NetID — it's the console message-type the client
+                // hands verbatim to ChatConsole::ShowClientSideMessage(msg, type). The client's
+                // own internal callers use 1 (smart-ping line) and 2 (hidden-message line); the
+                // SERVER only ever sends 0 = plain system line (38/38 packets across the replay
+                // corpus — all of them Riot-internal debug leakage like "Taunty" and
+                // "DataLogging category ...: Expired Category").
                 SourceNetID = 0,
-                //TODO: Ivestigate the cases where SenderNetID is used
                 Message = message
             };
             _packetHandlerManager.SendPacket(userId, dm.GetBytes(), Channel.CHL_S2C);
@@ -4887,8 +4903,13 @@ namespace PacketDefinitions420
         {
             var dm = new S2C_SystemMessage
             {
+                // Misnamed wire field: NOT a NetID — it's the console message-type the client
+                // hands verbatim to ChatConsole::ShowClientSideMessage(msg, type). The client's
+                // own internal callers use 1 (smart-ping line) and 2 (hidden-message line); the
+                // SERVER only ever sends 0 = plain system line (38/38 packets across the replay
+                // corpus — all of them Riot-internal debug leakage like "Taunty" and
+                // "DataLogging category ...: Expired Category").
                 SourceNetID = 0,
-                //TODO: Ivestigate the cases where SenderNetID is used
                 Message = message
             };
             _packetHandlerManager.BroadcastPacketTeam(team, dm.GetBytes(), Channel.CHL_S2C);
@@ -4994,7 +5015,10 @@ namespace PacketDefinitions420
             {
                 SenderNetID = unit.NetId,
                 UnitNetID = unit.NetId,
-                TeamID = (uint)unit.Team // TODO: Verify if TeamID is actually supposed to be a uint
+                // 4-byte team on the wire is verified: the client handler (GameClient.cpp 0xD7)
+                // reads *(int*)(p+9) and passes it to SetTeam(team_e) — team_e is a 32-bit enum
+                // (100/200/300), so uint vs int is representation-identical here.
+                TeamID = (uint)unit.Team
             };
             _packetHandlerManager.BroadcastPacket(p.GetBytes(), Channel.CHL_S2C);
         }
@@ -5285,13 +5309,22 @@ namespace PacketDefinitions420
                 DradisTestResource = "",
                 // 80
                 DradisTestPort = 0,
-                // TODO: Create a new TipConfig class and use it here (basically, unhardcode this).
+                // Startup loading-screen tip (Tips::Config — TipID/ColorID/DurationID are int8
+                // indices into the CLIENT's tip database, Flags = TipFlags bitfield). Riot's
+                // live games rotate a tip: (TipID 20/25/35, Color 2-3, Duration 1, Flags 11 =
+                // Enabled|Report|InGame); the no-tip shape below is ALSO Riot-observed verbatim
+                // in one capture (0,0,0,3). Platform-chosen cosmetics — no server data to
+                // derive them from, so the no-tip shape is our faithful default.
+                // Live-tested 2026-07-13: replaying Riot's live tip shape (20,3,1, Enabled|
+                // Report|InGame) renders NOTHING on our 4.20 client — the tip display likely
+                // needs platform-side state we don't emulate, so the (also Riot-observed)
+                // no-tip shape stays the default.
                 TipConfig = new TipConfig
                 {
                     TipID = 0,
                     ColorID = 0,
                     DurationID = 0,
-                    Flags = 3
+                    Flags = (sbyte)(TipFlags.Enabled | TipFlags.Report)
                 },
                 // Riot FeaturesConfig client bitfield captured from a real 4.20 game
                 // (= 662166610); named bits in RiotGameFeatures.Default420.
@@ -5305,8 +5338,9 @@ namespace PacketDefinitions420
                 var info = new PlayerLoadInfo
                 {
                     PlayerID = players[i].PlayerId,
-                    // TODO: Change to players[i].Item2.SummonerLevel
-                    SummonorLevel = (ushort)(isBot ? 1 : 30),
+                    // Replay: humans carry their real summoner level (30 in all captures), bots
+                    // always 1. Config-supplied ("summonerLevel" in GameInfo, default 30/bot 1).
+                    SummonorLevel = isBot ? (ushort)1 : players[i].SummonerLevel,
                     SummonorSpell1 = HashString(players[i].SummonerSkills[0]),
                     SummonorSpell2 = HashString(players[i].SummonerSkills[1]),
                     IsBot = isBot,

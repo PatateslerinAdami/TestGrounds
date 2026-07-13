@@ -4291,7 +4291,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // False because we don't want this to be networked as a normal movement.
             SetWaypoints(new List<Vector2> { Position, newCoords }, true);
 
-            // TODO: Take into account the rest of the arguments
+            // Every argument of this overload IS consumed (endpoint resolution above handles
+            // movementType/idealDistance/moveBackBy/innerDistance/ignoreTerrain). The zeros
+            // below are deliberate for a POSITION dash: the Follow* fields belong to the
+            // follow-target overload (ObjAIBase's follow dash sets them), and MoveBackBy stays 0
+            // on the WIRE because the server already folded it into newCoords — sending it in
+            // SpeedParams too would make the client apply the pull-back a second time.
             MovementParameters = new ForceMovementParameters
             {
                 PostponedMoveDestination = postponedMoveDest,
@@ -4317,9 +4322,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             SetForceMovementState(true, MoveStopReason.ForceMovement);
 
-            // Movement is networked this way instead.
-            // TODO: Verify if we want to use NotifyWaypointListWithSpeed instead as it does not require conversions.
-            //_game.PacketNotifier.NotifyWaypointListWithSpeed(this, speed, gravity, keepFacingLastDirection, null, 0, 0, 20000.0f);
+            // Movement is networked this way instead — WaypointGroupWithSpeed (0x64) is Riot's
+            // ONLY dash wire (13849x across 38 replays; WaypointListHeroWithSpeed 0x83 is sent 0x).
             _game.PacketNotifier.NotifyWaypointGroupWithSpeed(this);
             _movementUpdated = false;
 

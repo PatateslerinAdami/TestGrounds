@@ -30,6 +30,7 @@ namespace GameServerCore.NetInfo
         public string Rank { get; private set; }
         public short Ribbon { get; private set; }
         public short EnemyRibbon { get; private set; }
+        public ushort SummonerLevel { get; private set; }
         public int Icon { get; private set; }
         public TeamId Team { get; private set; }
 
@@ -52,12 +53,14 @@ namespace GameServerCore.NetInfo
                           string name,
                           string[] summonerSkills,
                           long playerId,
-                          short enemyRibbon = 0)
+                          short enemyRibbon = 0,
+                          ushort summonerLevel = 30)
         {
             Rank = rank;
             Team = team;
             Ribbon = ribbon;
             EnemyRibbon = enemyRibbon;
+            SummonerLevel = summonerLevel;
             Icon = icon;
             SkinNo = skinNo;
             IsMatchingVersion = true;

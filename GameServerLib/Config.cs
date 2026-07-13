@@ -428,6 +428,11 @@ public class PlayerConfig
     public string Summoner1 { get; private set; }
     public string Summoner2 { get; private set; }
     /// <summary>
+    /// Summoner level shown on the loading screen (wire: PlayerLoadInfo.SummonorLevel).
+    /// Replay: humans carry their real level (30 in all captures), bots always 1.
+    /// </summary>
+    public ushort SummonerLevel { get; private set; }
+    /// <summary>
     /// Honor crest shown on this player's loading-screen card to ALLIES (wire: PlayerLoadInfo.
     /// AllyBadgeID; the client maps the id via its 4-slot badge atlas,
     /// PlayerConnectionInfoBase::IndexFromBadgeID). Platform data at Riot — config-supplied here.
@@ -482,6 +487,7 @@ public class PlayerConfig
         Summoner2 = (string)playerData.SelectToken("summoner2") ?? (IsBot ? "SummonerSmite" : "SummonerHeal");
         Ribbon = (short?)playerData.SelectToken("ribbon") ?? 0;
         EnemyRibbon = (short?)playerData.SelectToken("enemyRibbon") ?? 0;
+        SummonerLevel = (ushort?)playerData.SelectToken("summonerLevel") ?? (ushort)(IsBot ? 1 : 30);
         Icon = (int?)playerData.SelectToken("icon") ?? (IsBot ? -1 : 0);
         BlowfishKey = (string)playerData.SelectToken("blowfishKey") ?? (IsBot ? BOT_BLOWFISH_KEY : null);
         AIScript = (string)playerData.SelectToken("aiScript") ?? "";

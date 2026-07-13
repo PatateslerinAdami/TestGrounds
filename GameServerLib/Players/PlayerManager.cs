@@ -42,7 +42,8 @@ namespace LeagueSandbox.GameServer.Players
                 config.Name,
                 summonerSkills,
                 config.PlayerID,
-                config.EnemyRibbon
+                config.EnemyRibbon,
+                config.SummonerLevel
             );
 
             info.ClientId = _players.Count;
