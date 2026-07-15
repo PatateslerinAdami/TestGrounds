@@ -185,7 +185,18 @@ namespace LeagueSandbox.GameServer.Handlers
                 var nearest = GetNearestObjects(obj);
                 foreach (var obj2 in nearest)
                 {
-                    // TODO: Implement interpolation (or hull tracing) to account for fast moving gameobjects that may go past other gameobjects within one tick, which bypasses collision.
+                    // Point-in-time overlap check ON PURPOSE — no hull tracing (an old concern was
+                    // about fast movers tunneling past collision in one tick). Riot has no generic
+                    // sweep here either; tunneling is solved per domain, exactly as we do:
+                    // - MISSILES (the fast movers where a missed overlap is a gameplay bug) sweep
+                    //   their own movement segment every update — our CheckSweptCollision, Riot's
+                    //   obj_SpellMissile::CheckCollide plane-crossing test over the tick's segment.
+                    // - UNIT-unit collision is soft separation only: a one-tick miss is one missed
+                    //   push impulse and self-corrects next tick (no gameplay event depends on it;
+                    //   capped move speeds ≈ 83u/tick vs 35-65u radii make it rare, dashes don't
+                    //   body-block at all).
+                    // - TERRAIN can't be tunneled: walking follows A* paths that never cross walls,
+                    //   and dash endpoints are wall-clamped at cast.
                     if (obj != obj2 && !obj2.IsToRemove() && obj.IsCollidingWith(obj2))
                     {
                         obj.OnCollision(obj2);

@@ -16,8 +16,6 @@ using System.Numerics;
 
 namespace LeagueSandbox.GameServer
 {
-    // TODO: refactor this class
-
     /// <summary>
     /// Class that manages addition, removal, and updating of all GameObjects, their visibility, and buffs.
     /// </summary>
@@ -73,13 +71,6 @@ namespace LeagueSandbox.GameServer
         // drifts on the client until SetWaypoints/Stop/teleport/DriftResync fires.
         private float _timeSinceFullSync;
         private const float FULL_SYNC_INTERVAL_MS = 5000f;
-
-        // Locks for each dictionary. Depricated since #1302.
-        //private object _objectsLock = new object();
-        //private object _turretsLock = new object();
-        //private object _inhibitorsLock = new object();
-        //private object _championsLock = new object();
-        //private object _visionLock = new object();
 
         /// <summary>
         /// List of all possible teams in League of Legends. Normally there are only three.
@@ -897,10 +888,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="team">The team that GameObject can provide vision to.</param>
         public void AddVisionProvider(GameObject obj, TeamId team)
         {
-            //lock (_visionLock)
-            {
-                _visionProviders[team].Add(obj);
-            }
+            _visionProviders[team].Add(obj);
         }
 
         /// <summary>
@@ -910,10 +898,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="team">The team that GameObject provided vision to.</param>
         public void RemoveVisionProvider(GameObject obj, TeamId team)
         {
-            //lock (_visionLock)
-            {
-                _visionProviders[team].Remove(obj);
-            }
+            _visionProviders[team].Remove(obj);
         }
 
         /// <summary>

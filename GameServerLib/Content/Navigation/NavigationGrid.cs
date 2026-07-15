@@ -65,9 +65,13 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// </summary>
         public uint SampledHeightsCountY { get; private set; }
         /// <summary>
-        /// Multiple used to convert from normal coordinates to an index format used to get sampled heights from the Navigation Grid.
+        /// Sample spacing of the height grid (world units between adjacent sampled heights per
+        /// axis), read verbatim from the .aimesh — Riot's own baked field, per-map constant, not
+        /// runtime-"volatile" as an old concern suspected. The consumer it feeds
+        /// (<see cref="GetHeightAtLocation(Vector2)"/>) was reworked 2026-06-01 to the S4-exact
+        /// bilinear interpolation (NavGrid::GetHeightForPosition, NavigationGrid.cpp:1148-1199),
+        /// which resolved the rest of that.
         /// </summary>
-        /// TODO: Seems to be volatile. If there ever comes a time when Navigation Grid editing becomes easy, that'd be the perfect time to rework the methods for getting sampled heights.
         public Vector2 SampledHeightsDistance { get; private set; }
         /// <summary>
         /// Array of sampled heights where each index represents a cell's index (depends on SampledHeightsCountX/Y).

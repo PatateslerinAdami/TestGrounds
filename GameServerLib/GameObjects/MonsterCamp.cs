@@ -74,8 +74,13 @@ namespace GameServerLib.GameObjects
             (
                 (forceSpawn && isAliveForPlayer) // Reconnect
                 || (isAliveForPlayer != isAliveForTeam
-                    // TODO: Handle based on vision radius, not status (also handle null peer info)
-                    && !_game.PlayerManager.GetPeerInfo(userId).Champion.Status.HasFlag(StatusFlags.NearSighted))
+                    // NearSighted STATUS is the correct gate here: nearsight cuts the player off from SHARED team
+                    // vision knowledge, which is exactly what the camp alive/dead minimap state is.
+                    // ObjectManager.UpdateVisionSpawnAndSync branches per-player visibility on the
+                    // same flag. A transition missed while nearsighted self-heals: the next per-tick
+                    // Sync sees isAliveForPlayer != isAliveForTeam and catches up. Null peer info
+                    // (invalid userId) counts as not-nearsighted.
+                    && _game.PlayerManager.GetPeerInfo(userId)?.Champion?.Status.HasFlag(StatusFlags.NearSighted) != true)
             )
             {
                 if(_isAliveForPlayer[userId] = isAliveForTeam)

@@ -38,7 +38,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <summary>
         /// Region assigned to this turret for vision and collision.
         /// </summary>
-        public Region BubbleRegion { get; private set; }
 
         public override bool IsAffectedByFoW => false;
 
@@ -151,18 +150,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 _game.Map.NavigationGrid.MarkSeeThroughInRadius(Position, 140f);
             }
 
-            // TODO: Handle this via map script for LaneTurret and via CharScript for AzirTurret.
-            BubbleRegion = new Region
-            (
-                _game, Team, Position,
-                RegionType.Circle,
-                collisionUnit: this,
-                visionTarget: null,
-                visionRadius: 800f,
-                revealStealth: true,
-                collisionRadius: PathfindingRadius,
-                lifetime: 25000.0f
-            );
+            // Perception bubble (vision 800 + true sight) moved to the turret CHAR SCRIPTS
+            // (Content/Characters/Turrets/TurretCharScripts.cs) — Riot's model: the S1/4.20 turret
+            // char scripts create it (BubbleSize = 800 in CharOnActivate), not the engine. An
+            // eventual AzirTurret implementation gets its bubble the same way via its own script.
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)

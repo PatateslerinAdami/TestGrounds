@@ -254,7 +254,7 @@ namespace PacketDefinitions420
                     ParabolicGravity = unit.MovementParameters.ParabolicGravity,
                     // Parameterized via ServerForceLinePath(parabolicStartPoint:) — default = the
                     // unit's position at dash start, which every current dash (incl. Aatrox Q's
-                    // ascend, the TODO's old example) uses. Raw coords on the wire (SpeedParams is
+                    // ascend) uses. Raw coords on the wire (SpeedParams is
                     // not centered-half encoded).
                     ParabolicStartPoint = unit.MovementParameters.ParabolicStartPoint,
                     Facing = unit.MovementParameters.KeepFacingDirection,

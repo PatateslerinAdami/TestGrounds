@@ -42,16 +42,14 @@ namespace PacketDefinitions420
         private readonly Game _game;
 
         private readonly NetworkHandler<ICoreRequest> _netReq;
-        private readonly NetworkHandler<ICoreRequest> _netResp;
 
-        internal PacketHandlerManager(NetworkSender sender, NetworkBridge bridge, Game game, NetworkHandler<ICoreRequest> netReq, NetworkHandler<ICoreRequest> netResp)
+        internal PacketHandlerManager(NetworkSender sender, NetworkBridge bridge, Game game, NetworkHandler<ICoreRequest> netReq)
         {
             _sender = sender;
             _bridge = bridge;
             _game = game;
             _playerManager = _game.PlayerManager;
             _netReq = netReq;
-            _netResp = netResp;
             // Opt-in outbound packet capture (replay-comparable JSON-lines). Set the env var
             // PACKET_LOG to a path (or "1" for ./packetlog.jsonl) to record every packet we send.
             PacketLogger.Enable(Environment.GetEnvironmentVariable("PACKET_LOG"));

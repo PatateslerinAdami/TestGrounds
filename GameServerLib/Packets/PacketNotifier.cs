@@ -5704,7 +5704,10 @@ namespace PacketDefinitions420
             {
                 SenderNetID = c.NetId,
                 TargetNetID = c.NetId,
-                SourceNetID = died.NetId,
+                // null source -> SourceNetID 0. Replay-verified on turret deaths: the GLOBAL gold
+                // grant arrives with SourceNetID = 0 (only the local proximity share is sourced by
+                // the turret itself).
+                SourceNetID = died?.NetId ?? 0,
                 GoldAmmount = gold
             };
             _packetHandlerManager.SendPacket(c.ClientId, ag.GetBytes(), Channel.CHL_S2C);

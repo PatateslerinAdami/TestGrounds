@@ -79,7 +79,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             : base(game, model, clientInfo.Name, 30, new Vector2(), 1200, clientInfo.SkinNo, netId, team, stats,
                 string.IsNullOrEmpty(AIScript) ? "HeroAI" : AIScript)
         {
-            //TODO: Champion.ClientInfo?
+            // Deliberately only the raw client id, NOT a ClientInfo reference (old "Champion.
+            // ClientInfo?" TODO): Riot keeps the same split — GetClientID() lives on AttackableUnit
+            // (AIAttackableUnit.h:252) while player/connection metadata (PlayerConnectionInfoBase/
+            // PlayerLiteInfo) is a separate client-id-keyed system, never a hero member. Callers
+            // needing the metadata go through PlayerManager (GetPeerInfo/GetClientInfoByChampion),
+            // matching Riot's lookup direction; ClientInfo.Champion stays the single ownership link.
             ClientId = clientInfo.ClientId;
             RuneList = runeList;
 
@@ -90,7 +95,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Stats.GoldPerGoldTick.BaseValue = GlobalData.ChampionVariables.AmbientGoldAmount;
             Stats.IsGeneratingGold = false;
 
-            //TODO: automaticaly rise spell levels with CharData.SpellLevelsUp
+            // No engine auto-ranking from CharData.SpellsUpLevels (an old TODO idea): the tables
+            // only GATE skill-ups (CanLevelUpSpell) — no data marker distinguishes auto-ranking
+            // ults (Jayce/Elise/Nidalee/Karma, Up4 = {1,6,11,16} + MaxLevels 4) from player-skilled
+            // ones with the same table shape (Udyr's R starts at 1 too but takes points). Free
+            // ranks are therefore per-champion CHAR SCRIPT logic, Riot-style — see
+            // CharScriptKarma.GrantFreeMantraRanks for the pattern (spawn + OnLevelUp grants
+            // driven by the same chardata table).
 
             Spells[(int)SpellSlotType.SummonerSpellSlots] = new Spell(game, this, clientInfo.SummonerSkills[0], (int)SpellSlotType.SummonerSpellSlots);
             Spells[(int)SpellSlotType.SummonerSpellSlots].LevelUp();
@@ -117,8 +128,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public void AddGold(AttackableUnit source, float gold, bool notify = true)
         {
             Stats.Gold += gold;
-            if (notify && source != null)
+            if (notify)
             {
+                // source == null still notifies, with wire SourceNetID = 0 — Riot's shape for
+                // sourceless grants (replay: turret GLOBAL gold arrives with SourceNetID 0).
                 _game.PacketNotifier.NotifyUnitAddGold(this, source, gold);
             }
         }
@@ -244,13 +257,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 return _game.Map.PlayerSpawnPoints[Team][1][1];
             }
-            //TODO: wrap in try {} catch
+            // Deliberately NOT wrapped in try/catch: GetFountainPosition can only throw
+            // (FountainList[team] KeyNotFound) when the map's fountain objects are missing for a
+            // player team — broken map content. Every playable map defines both fountains; a catch
+            // here would silently spawn champions at (0,0) inside terrain and mask the data bug.
             return _game.Map.MapScript.GetFountainPosition(Team);
         }
 
         public Vector2 GetRespawnPosition()
         {
-            //TODO: wrap in try {} catch
+            // No try/catch — see GetSpawnPosition: a missing fountain is broken map data and must
+            // fail loudly, not respawn the champion at (0,0).
             return _game.Map.MapScript.GetFountainPosition(Team);
         }
 
@@ -355,11 +372,36 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _zombieDeath = null;
             var spawnPos = GetRespawnPosition();
             SetPosition(spawnPos);
-            float parToRestore = 0;
-            // TODO: Find a better way to do this, perhaps through scripts. Otherwise, make sure all types are accounted for.
-            if (Stats.ParType == PrimaryAbilityResourceType.Mana || Stats.ParType == PrimaryAbilityResourceType.Energy || Stats.ParType == PrimaryAbilityResourceType.Wind)
+            // Respawn PAR values, replay-verified per PAR type (HeroReincarnateAlive 0x2F PARValue
+            // across all 4.20 replays, cross-referenced with each champion's chardata PARType):
+            //   full   — Mana, Energy (=200), Wind (Yasuo flow, level-scaled max)
+            //   1.0    — Battlefury (Tryndamere, 42/42 samples) and Rage (Renekton, 6/6): Riot's
+            //            odd flat fury seed, NOT 0 — not in any chardata key, replay-derived
+            //   keep   — chardata PARDisplayThroughDeath (only Shyvana/ShyvanaDragon in 4.20; her
+            //            wire values 0/11.3/18/100 = current fury persists through death)
+            //   0      — everything else (None, Heat, Gnarfury, Ferocity, BloodWell)
+            float parToRestore;
+            if (CharData.PARDisplayThroughDeath)
             {
-                parToRestore = Stats.ManaPoints.Total;
+                parToRestore = Stats.CurrentMana;
+            }
+            else
+            {
+                switch (Stats.ParType)
+                {
+                    case PrimaryAbilityResourceType.Mana:
+                    case PrimaryAbilityResourceType.Energy:
+                    case PrimaryAbilityResourceType.Wind:
+                        parToRestore = Stats.ManaPoints.Total;
+                        break;
+                    case PrimaryAbilityResourceType.Battlefury:
+                    case PrimaryAbilityResourceType.Rage:
+                        parToRestore = 1.0f;
+                        break;
+                    default:
+                        parToRestore = 0;
+                        break;
+                }
             }
             Stats.CurrentMana = parToRestore;
             _game.PacketNotifier.NotifyHeroReincarnateAlive(this, parToRestore);
@@ -587,7 +629,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             var entry = new EventHistoryEntry();
             entry.Timestamp = _game.GameTime / 1000f; // ?
-            entry.Count = 1; //TODO: stack?
+            // Count = 1 is Riot's wire behavior (replay: 53/54 die-history first entries carry 1) —
+            // the server does NOT pre-aggregate repeated hits; the CLIENT's death recap sums counts
+            // per (source, scriptNameHash) itself (DeathRecap.cpp:270, abilityInfo->mCount += count).
+            entry.Count = 1;
             entry.Source = source.NetId;
             var e = new T();
             entry.Event = (IEvent)e;
@@ -673,7 +718,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     e.TrueDamage = damageData.PostMitigationDamage;
                 }
-                //TODO: handle mixed damage?
+                // No DAMAGE_TYPE_MIXED case needed: the value exists in Riot's enum (DamageEnums.h
+                // MIXED_DAMAGE = 3) but has NO producer — mixed-damage abilities deal separate typed
+                // instances (which land here as separate events), our pipeline throws on MIXED in
+                // Stats.GetPostMitigationDamage so it can never reach this point, and the Riot client
+                // corpus has no MIXED consumer either. Riot's ParamsDamage carries all three fields
+                // per event (EventScriptPackets.h:52-54), so the shape could represent it if a
+                // producer ever appeared.
             }
         }
 
@@ -690,8 +741,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (notifyText)
             {
-                //TODO: Figure out what "Params" is exactly
-                _game.PacketNotifier.NotifyDisplayFloatingText(new FloatingTextData(this, $"+{(int)points} Points", FloatTextType.Score, 1073741833), Team);
+                // Param semantics (4.17 decomp Tooltip::FloatingText::FillInAndReplace, Tooltip.cpp
+                // :1615): the wire Param is substituted for the "IntParam1" token in the (localized)
+                // floating-text template — for score texts that's the point amount. Riot sends a
+                // localization KEY as Message + the value as Param; we send pre-baked literal text,
+                // so the client never substitutes and Param is inert — but pass the points anyway
+                // for semantic correctness. (The previous magic 1073741833 = 0x40000009 looked like
+                // a NetID copied from a replay sample and meant nothing.)
+                _game.PacketNotifier.NotifyDisplayFloatingText(new FloatingTextData(this, $"+{(int)points} Points", FloatTextType.Score, (int)points), Team);
             }
 
             ApiEventManager.OnIncrementChampionScore.Publish(scoreData.Owner, scoreData);

@@ -445,16 +445,26 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CalculateTrueMoveSpeed();
         }
 
-        public void Update(AttackableUnit? owner, float diff)
+        /// <summary>
+        /// Length of one regen window in ms. The regen tick in AttackableUnit.Update accumulates
+        /// frame time and calls <see cref="Update"/> once per elapsed window; Update applies exactly
+        /// one window's worth of HP/mana regeneration (single shared constant so the loop cadence
+        /// and the regen math can't drift apart).
+        /// </summary>
+        public const float RegenTickMs = 500f;
+
+        public void Update(AttackableUnit? owner)
         {
+            const float seconds = RegenTickMs * 0.001f;
+
             if (owner != null && TotalHealthRegen > 0 && CurrentHealth < HealthPoints.Total && CurrentHealth > 0)
-                owner.TakeHeal(owner, TotalHealthRegen * diff * 0.001f, HealType.HealthRegeneration);
+                owner.TakeHeal(owner, TotalHealthRegen * seconds, HealType.HealthRegeneration);
 
             if ((byte)ParType > 1) return;
 
             if (ManaRegeneration.Total > 0 && CurrentMana < ManaPoints.Total)
             {
-                var regenAmount = ManaRegeneration.Total * diff * 0.001f;
+                var regenAmount = ManaRegeneration.Total * seconds;
                 if (owner != null)
                 {
                     owner.IncreasePAR(owner, regenAmount);

@@ -65,7 +65,7 @@ namespace LeagueSandbox.GameServer
             _logger.Debug($"Bloodwell {_serverVersion}");
             _logger.Info($"Game started on port: {_serverPort}");
 
-            packetServer.InitServer(_serverPort, _blowfishKeys, _game, _game.RequestHandler, _game.ResponseHandler);
+            packetServer.InitServer(_serverPort, _blowfishKeys, _game, _game.RequestHandler);
             _game.Initialize(_config, packetServer);
 
             // Coordinator handshake. Done AFTER InitServer so by the time the

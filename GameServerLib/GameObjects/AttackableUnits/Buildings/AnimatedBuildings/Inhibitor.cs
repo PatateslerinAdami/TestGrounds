@@ -60,13 +60,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
         {
             base.Die(data);
 
+            // Rewards stay engine-side (Riot's level scripts contain no reward logic); the dampener
+            // STATE TRANSITION deliberately does NOT happen here anymore — Riot's map level script
+            // owns the structure state machine (Map1 LevelScript.lua HandleDestroyedObject:
+            // SetDampenerState + SetInvulnerable(true) + SetTargetable(false) + the HQ-tower
+            // unlock), so each map's OnInhibitorDeath handler drives SetState/NotifyState now.
             if (data.Killer is Champion c)
             {
                 c.AddGold(this, GOLD_WORTH);
             }
-
-            SetState(DampenerState.RegenerationState);
-            NotifyState(data);
         }
 
         private void BakeFootprint()
@@ -90,7 +92,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.Animate
             }
         }
 
-        //TODO: Investigate if we want the switch of states to be handled by each script
+        // Riot-verified (Map1 LevelScript.lua HandleDestroyedObject, lua-unluac-420 LEVELS/Map1):
+        // the map LEVEL SCRIPT owns the whole structure state machine — dampener death transition,
+        // invulnerability, barracks disable and the lane/HQ unlock chain all run script-side there;
+        // this method is just the engine primitive the script calls (Riot's SetDampenerState).
+        // Both transitions live in the map scripts now (OnInhibitorDeath = death side, the
+        // DeadInhibitors respawn loop = respawn side).
         public void SetState(DampenerState state)
         {
             if (state == DampenerState.RespawningState)

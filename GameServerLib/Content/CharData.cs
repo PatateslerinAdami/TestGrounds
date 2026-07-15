@@ -128,6 +128,15 @@ namespace LeagueSandbox.GameServer.Content
         public float MpPerLevel { get; private set; } = 10.0f;
         public float MpRegenPerLevel { get; private set; }
         public PrimaryAbilityResourceType ParType { get; private set; } = PrimaryAbilityResourceType.Mana;
+        /// <summary>
+        /// Chardata "PARDisplayThroughDeath" — in the whole 4.20 content set ONLY Shyvana(Dragon)
+        /// carries it, and she is exactly the champion whose PAR survives death on the wire
+        /// (HeroReincarnateAlive echoes her CURRENT fury instead of a reset value). Nominally an
+        /// HUD flag (keep drawing the PAR bar while dead), which only works if the value persists —
+        /// so it doubles as the data-driven "keep PAR through death" marker used by
+        /// Champion.Respawn.
+        /// </summary>
+        public bool PARDisplayThroughDeath { get; private set; } = false;
         public float PathfindingCollisionRadius { get; private set; } = -1.0f;
         /// <summary>
         /// Riot resolves the default at LOAD time (CharacterData.cpp:1049): per-char inibin value,
@@ -255,6 +264,7 @@ namespace LeagueSandbox.GameServer.Content
                 UnitTags |= unitTag;
             }
 
+            PARDisplayThroughDeath = file.GetBool("Data", "PARDisplayThroughDeath", PARDisplayThroughDeath);
             Enum.TryParse<PrimaryAbilityResourceType>(file.GetString("Data", "PARType", ParType.ToString()),
                 out var tempPar);
             ParType = tempPar;

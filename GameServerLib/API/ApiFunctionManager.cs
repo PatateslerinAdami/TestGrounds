@@ -3678,15 +3678,13 @@ namespace LeagueSandbox.GameServer.API
             unit.RemoveAnimStates(source);
         }
 
-        /// <summary>
-        /// Toggles the visual auto cast indicator for the given spell.
-        /// </summary>
-        /// <param name="spell">Spell to auto cast.</param>
-        /// TODO: Verify if this works.
-        public static void SetAutocast(Spell spell)
-        {
-            spell.SetAutocast();
-        }
+        // REMOVED: SetAutocast(spell) script verb. Verified misconception — NPC_SetAutocast is not a
+        // script-facing "auto cast indicator" toggle; it's the engine's empowered-attack-override
+        // announce (slot + critSlot, clear = 255/255) that the client HUD consumes via
+        // Spellbook::SetAutocastSpellLocal. No Riot script ever calls anything like it (zero hits in
+        // the S1 Lua and 4.20 Lua corpora), and the engine already announces automatically with
+        // dedup + clear handling in ObjAIBase.NotifyAutocastForPreparedAttack; a raw script call
+        // would bypass and desync that state tracking.
 
         /// <summary>
         /// Sets the state of the given status for the given unit.

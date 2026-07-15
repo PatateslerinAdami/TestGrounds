@@ -1121,44 +1121,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Forces this AI unit to perform a lunge which follows the specified AttackableUnit.
-        /// Compatibility wrapper for scripts that distinguish lunges from regular dashes.
-        /// </summary>
-        /// <param name="target">Unit to follow.</param>
-        /// <param name="speed">Constant speed that the unit will have during the lunge.</param>
-        /// <param name="gravity">How much gravity the unit will experience when above the ground while lunging.</param>
-        /// <param name="keepFacingLastDirection">Whether or not the unit should maintain the direction they were facing before lunging.</param>
-        /// <param name="followTargetMaxDistance">Maximum distance the unit will follow the target before stopping or reaching the target.</param>
-        /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of (positive) / overshoot past (negative) the target.</param>
-        /// <param name="travelTime">Total time (in seconds) the lunge may follow the target before stopping.</param>
-        /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
-        /// <param name="movementType">Force movement type. Included for API compatibility.</param>
-        public void LungeToTarget
-        (
-            AttackableUnit target,
-            float speed,
-            float gravity = 0,
-            bool keepFacingLastDirection = true,
-            float followTargetMaxDistance = 0,
-            float moveBackBy = 0,
-            float travelTime = 0,
-            bool lockActions = false,
-            ForceMovementType movementType = ForceMovementType.FURTHEST_WITHIN_RANGE
-        )
-        {
-            ServerForceFollowUnitPath(
-                target,
-                speed,
-                gravity,
-                keepFacingLastDirection,
-                followTargetMaxDistance,
-                moveBackBy,
-                travelTime,
-                lockActions
-            );
-        }
-
-        /// <summary>
         /// Function which refreshes this AI's waypoints if they have a target.
         /// </summary>
         /// <summary>
@@ -3205,7 +3167,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // tick; otherwise fall through to normal combat.
             if (!TryToExecutePostponedOrders())
             {
-                // TODO: Verify if there are any other cases we want to avoid.
+                // This gate only needs to cover what nothing else already does: an ALLIED TargetUnit
+                // (follow orders track allies through the same field) and an active CastSpell order
+                // (no attack-engage while a cast executes). Every other avoid-case is handled
+                // elsewhere: dead/untargetable/invisible targets + own death are cleared upstream in
+                // this method (with TargetLostReason), postponed casts (TempCastSpell) returned true
+                // from TryToExecutePostponedOrders above, and the engage below independently checks
+                // MovementParameters == null (dashing), CanAttack() (CC / mid-cast / channeling) and
+                // AutoAttackTogglePermits() (script auto-fire toggle). Taunted units pass — correct,
+                // a taunt forces attacking its enemy TargetUnit.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
                 {
                     // ChasingAttackRangePercent (4.20 stats.json field, NOT in the 4.17 decomp — inferred

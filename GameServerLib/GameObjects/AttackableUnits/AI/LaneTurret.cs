@@ -35,57 +35,49 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
         }
 
-        //TODO: Decide wether we want MapScrits to handle this with Events or leave this here
+        // Riot-verified answer to the old "map-script events or leave here?"
+        // Riot's Map1 LevelScript.lua HandleDestroyedObject (lua-unluac-420) contains ZERO reward
+        // logic for structure deaths — it only drives the state machine (invulnerability chain,
+        // barracks disable, ceremony). The gold/exp values come from chardata
+        // (Local/GlobalGoldGivenOnDeath, exactly what this method reads) and their distribution is
+        // server-engine-side, matching this placement.
         public override void Die(DeathData data)
         {
             float localGold = CharData.LocalGoldGivenOnDeath;
             float globalGold = CharData.GlobalGoldGivenOnDeath;
             float globalEXP = CharData.GlobalExpGivenOnDeath;
 
-            //TODO: change this to assists
+            // Wire-verified turret gold (replay UnitAddGold forensics, e.g. outer turret
+            // Local=150/Global=100, inner Local=100/Global=125 — exactly the chardata values):
+            // - LOCAL gold is a PROXIMITY share: LocalGoldGivenOnDeath / nearbyEnemyCount, sent
+            //   with SourceNetID = the TURRET. 
+            //   ( for 4.20: assist markers only drive the OnTurretDie announce; the wire shares are
+            //   clean divisions of the local value.)
+            // - GLOBAL gold goes to every enemy player with SourceNetID = 0 (null source).
+            // The divisor counts ENEMY champions only (the old code divided by BOTH teams' nearby
+            // champions, silently losing gold whenever the turret's own team stood in range).
             var championsInRange = _game.ObjectManager.GetChampionsInRange(Position, Stats.Range.Total * 1.5f, true);
+            var enemiesInRange = championsInRange.FindAll(c => c.Team != Team);
 
-            if (localGold > 0 && championsInRange.Count > 0)
+            if (localGold > 0 && enemiesInRange.Count > 0)
             {
-                foreach (var champion in championsInRange)
+                float goldShare = localGold / enemiesInRange.Count;
+                foreach (var champion in enemiesInRange)
                 {
-                    if (champion.Team == Team)
-                    {
-                        continue;
-                    }
-
-                    float gold = CharData.LocalGoldGivenOnDeath / championsInRange.Count;
-                    champion.AddGold(champion, gold);
-                    champion.AddGold(this, globalGold);
-                }
-
-                foreach (var player in _game.PlayerManager.GetPlayers(true))
-                {
-                    var champion = player.Champion;
-                    if (player.Team != Team)
-                    {
-                        if (!championsInRange.Contains(champion))
-                        {
-                            champion.AddGold(champion, globalGold);
-                        }
-                        champion.AddExperience(globalEXP);
-                    }
+                    champion.AddGold(this, goldShare);
                 }
             }
-            else
+
+            foreach (var player in _game.PlayerManager.GetPlayers(true))
             {
-                foreach (var player in _game.PlayerManager.GetPlayers(true))
+                var champion = player.Champion;
+                if (player.Team != Team)
                 {
-                    var champion = player.Champion;
-                    if (player.Team != Team)
-                    {
-                        {
-                            champion.AddGold(champion, globalGold);
-                            champion.AddExperience(globalEXP);
-                        }
-                    }
+                    champion.AddGold(null, globalGold);
+                    champion.AddExperience(globalEXP);
                 }
             }
+
             base.Die(data);
         }
 

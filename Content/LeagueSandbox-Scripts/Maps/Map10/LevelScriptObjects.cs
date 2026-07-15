@@ -214,6 +214,11 @@ namespace MapScripts.Map10
         {
             var inhibitor = deathData.Unit as Inhibitor;
 
+            // Death-side dampener transition — moved out of Inhibitor.Die (the map script owns the
+            // structure state machine now, matching Riot's per-map LevelScript.lua model).
+            inhibitor.SetState(DampenerState.RegenerationState);
+            inhibitor.NotifyState(deathData);
+
             DeadInhibitors[inhibitor.Team].Add(inhibitor, inhibitor.RespawnTime * 1000);
 
             if (DeadInhibitors[inhibitor.Team].Count == InhibitorList[inhibitor.Team].Count)

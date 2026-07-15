@@ -1,6 +1,7 @@
 ﻿using GameServerCore.Enums;
 using LeagueSandbox.GameServer.API;
 using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using System.Collections.Generic;
 using GameServerCore.Domain;
@@ -185,6 +186,11 @@ namespace MapScripts.Map12
         {
             var inhibitor = deathData.Unit as Inhibitor;
 
+            // Death-side dampener transition — moved out of Inhibitor.Die (the map script owns the
+            // structure state machine now, matching Riot's per-map LevelScript.lua model).
+            inhibitor.SetState(DampenerState.RegenerationState);
+            inhibitor.NotifyState(deathData);
+
             DeadInhibitors[inhibitor.Team].Add(inhibitor, inhibitor.RespawnTime * 1000);
         }
 
@@ -286,6 +292,11 @@ namespace MapScripts.Map12
                     var fountainTurret = CreateLaneTurret(turretObj.Name + "_A", TowerModels[teamId][TurretType.FOUNTAIN_TURRET], position, teamId, TurretType.FOUNTAIN_TURRET, Lane.LANE_Unknown, LaneTurretAI, turretObj);
                     TurretList[teamId][lane].Add(fountainTurret);
                     AddObject(fountainTurret);
+                    // Turret perception bubble (vision 800 + true sight). Used to come from a
+                    // hardcoded Region in BaseTurret.OnAdded (removed — Riot creates it script-side);
+                    // ARAM has no per-model turret char scripts, so the map script provides it,
+                    // mirroring Map11.
+                    AddUnitPerceptionBubble(fountainTurret, 800.0f, 25000.0f, teamId, true, collisionArea: fountainTurret.PathfindingRadius);
                     continue;
                 }
 
@@ -294,6 +305,8 @@ namespace MapScripts.Map12
                 var turret = CreateLaneTurret(turretObj.Name + "_A", TowerModels[teamId][turretType], position, teamId, turretType, Lane.LANE_C, LaneTurretAI, turretObj);
                 TurretList[teamId][Lane.LANE_C].Add(turret);
                 AddObject(turret);
+                // See fountain-turret note above — script-side turret bubble (was BaseTurret hardcode).
+                AddUnitPerceptionBubble(turret, 800.0f, 25000.0f, teamId, true, collisionArea: turret.PathfindingRadius);
             }
         }
 

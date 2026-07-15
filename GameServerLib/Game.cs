@@ -85,10 +85,6 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public NetworkHandler<ICoreRequest> RequestHandler { get; }
         /// <summary>
-        /// Handler for response packets sent by the server to game clients.
-        /// </summary>
-        public NetworkHandler<ICoreRequest> ResponseHandler { get; }
-        /// <summary>
         /// Interface containing all function related packets (except handshake) which are sent by the server to game clients.
         /// </summary>
         public PacketNotifier PacketNotifier { get; private set; }
@@ -153,7 +149,6 @@ namespace LeagueSandbox.GameServer
             PlayerManager = new PlayerManager(this);
             ScriptEngine = new CSharpScriptEngine();
             RequestHandler = new NetworkHandler<ICoreRequest>();
-            ResponseHandler = new NetworkHandler<ICoreRequest>();
             QuestManager = new QuestManager(this);
         }
 
@@ -182,9 +177,13 @@ namespace LeagueSandbox.GameServer
 
             Map = new MapScriptHandler(this);
 
-            // TODO: GameApp should send the Response/Request handlers
             _packetServer = server;
-            // TODO: switch the notifier with ResponseHandler
+            // The concrete PacketNotifier is a deliberate architecture choice (two old TODOs wanted
+            // it replaced by a generic "ResponseHandler" event bus + launcher-injected handlers —
+            // LeagueSandbox's abstract-engine ambition): for a faithful 4.20 reimplementation the
+            // typed notifier IS the product — every builder carries its wire/decomp evidence. The
+            // never-consumed ResponseHandler plumbing was removed with the TODOs; RequestHandler
+            // stays (it actively dispatches all C2S handlers registered below).
             PacketNotifier = new PacketNotifier(_packetServer.PacketHandlerManager, Map.NavigationGrid);
 
             ObjectManager = new ObjectManager(this);
@@ -456,15 +455,16 @@ namespace LeagueSandbox.GameServer
                         PauseTimeLeft--;
                         if (PauseTimeLeft <= 0)
                         {
-                            //TODO: fix these
-                            //PacketNotifier.NotifyUnpauseGame();
-
-                            // Pure water framing
-                            var players = PlayerManager.GetPlayers();
-                            var unpauser = players[0].Champion;
-                            foreach (var player in players)
+                            // Pause budget exhausted: forced resume. Unpauser = null → the resume
+                            // packet carries SenderNetID 0 (nobody gets the "X resumed the game"
+                            // credit — previously a random player, players[0], was credited, and
+                            // GetPlayers() even included bots). Immediate (Delayed=false) resume:
+                            // the pause HUD already showed this exact countdown via the PausePacket's
+                            // PauseTimeLeft, so no extra 5s resume window like the player-initiated
+                            // HandleUnpauseReq flow.
+                            foreach (var player in PlayerManager.GetPlayers(false))
                             {
-                                PacketNotifier.NotifyResumePacket(unpauser, player, false);
+                                PacketNotifier.NotifyResumePacket(null, player, false);
                             }
                             Unpause();
                         }
@@ -624,7 +624,12 @@ namespace LeagueSandbox.GameServer
             {
                 AreaTriggerManager.Update(diff);
             }
-            // Protection (TODO: Move this into ObjectManager).
+            // TODO: LEGACY structure-protection poller (sandbox invention, no Riot equivalent — Riot drives
+            // structure invulnerability event-based from the map Lua's DeactivateCorrectStructure /
+            // HandleDestroyedObject chain, which Map1 now ports faithfully in its LevelScriptObjects).
+            // Kept only for the not-yet-ported maps (10/11/12/16/31 still register AddProtection
+            // dependency graphs) and the AFK fountain protection; dies entirely once those migrate.
+            // Do NOT move it into ObjectManager — the faithful home is the map script.
             using (Profiler.Scope("ProtectionManager.Update"))
             {
                 ProtectionManager.Update(diff);

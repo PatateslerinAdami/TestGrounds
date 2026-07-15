@@ -5,6 +5,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 {
     public class ReplicationHero : Replication
     {
+        // NOTE: no derived field for the champion — the base Replication ctor calls the virtual
+        // Update() BEFORE this class's ctor body would run, so a field assigned here is still null
+        // during that first Update (crashed at startup). Owner IS set before the base's Update call,
+        // so Update casts Owner instead.
         public ReplicationHero(Champion owner) : base(owner)
         {
         }
@@ -91,7 +95,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             UpdateFloat(Stats.Size.Total, ReplicationBucket.Map, 11); //mSkinScaleCoef(mistyped as mCrit)
             // UpdateFloat(Stats.FlatPathfindingRadiusMod, ReplicationBucket.Map, 12); //mPathfindingRadiusMod
             UpdateUint(Stats.Level, ReplicationBucket.Map, 13); //mLevelRef
-            UpdateUint((uint)Owner.MinionCounter, ReplicationBucket.Map, 14); //mNumNeutralMinionsKilled
+            // Riot mReplicatedNeutralKills (AIHero.cpp:664, MAP_REP_DATA "mNumNeutralMinionsKilled") —
+            // the jungle-CS counter. Previously read the never-incremented AttackableUnit.MinionCounter
+            // stub (always replicated 0); the live counter is ChampionStats.NeutralMinionsKilled.
+            UpdateUint((uint)((Champion)Owner).ChampStats.NeutralMinionsKilled, ReplicationBucket.Map, 14); //mNumNeutralMinionsKilled
             UpdateBool(Stats.IsTargetable, ReplicationBucket.Map, 15); //mIsTargetable
             UpdateUint((uint)Stats.IsTargetableToTeam, ReplicationBucket.Map, 16); //mIsTargetableToTeamFlags
         }

@@ -2655,14 +2655,6 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         }
 
         /// <summary>
-        /// Toggles the auto cast state for this spell.
-        /// </summary>
-        public void SetAutocast()
-        {
-            _game.PacketNotifier.NotifyNPC_SetAutocast(CastInfo.Owner, this);
-        }
-
-        /// <summary>
         /// Changes a property of this spell (icon index, name, range, targeting type and etc.) on the
         /// owning player's client/HUD.
         /// </summary>

@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Linq;
 using LeagueSandbox.GameServer.GameObjects;
 using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.Content;
@@ -23,6 +24,8 @@ namespace MapScripts.Map1
         public static Dictionary<TeamId, bool> AllInhibitorsAreDead = new Dictionary<TeamId, bool> { { TeamId.TEAM_BLUE, false }, { TeamId.TEAM_PURPLE, false } };
         static Dictionary<TeamId, Dictionary<Inhibitor, float>> DeadInhibitors = new Dictionary<TeamId, Dictionary<Inhibitor, float>> { { TeamId.TEAM_BLUE, new Dictionary<Inhibitor, float>() }, { TeamId.TEAM_PURPLE, new Dictionary<Inhibitor, float>() } };
         static List<Nexus> NexusList = new List<Nexus>();
+        // One-shot for Riot's InitTimer("AllowDamageOnBuildings", 10, false) — see OnUpdate.
+        static bool _allowDamageOnBuildingsFired = false;
         public static string LaneTurretAI = "TurretAI";
 
         public static Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>> TurretList = new Dictionary<TeamId, Dictionary<Lane, List<LaneTurret>>>
@@ -106,10 +109,114 @@ namespace MapScripts.Map1
             _mapObjects = mapObjects;
 
             CreateBuildings();
-            LoadProtection();
 
             LoadSpawnBarracks();
             LoadFountains();
+        }
+
+        static TeamId EnemyTeam(TeamId team)
+        {
+            return team == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+        }
+
+        /// <summary>
+        /// Structure protection (Riot Map1 LevelScript.lua): SetInvulnerable(true) +
+        /// SetNotTargetableToTeam(true, enemy) — the locked state every structure spawns in and
+        /// deeper chain members keep until the structure in front of them falls. Enemy-untargetable
+        /// (not globally) so friendly systems still see it; minions/champions of the enemy can
+        /// neither target nor damage it.
+        /// </summary>
+        static void LockStructure(AttackableUnit unit)
+        {
+            unit.SetStatus(StatusFlags.Invulnerable, true);
+            unit.SetIsTargetableToTeam(EnemyTeam(unit.Team), false);
+        }
+
+        /// <summary>
+        /// Riot's chain unlock: SetInvulnerable(false) + SetTargetable(true)
+        /// (DeactivateCorrectStructure / HandleDestroyedObject / BarrackReactiveEvent).
+        /// </summary>
+        static void UnlockStructure(AttackableUnit unit)
+        {
+            unit.SetStatus(StatusFlags.Invulnerable, false);
+            unit.SetStatus(StatusFlags.Targetable, true);
+            unit.SetIsTargetableToTeam(EnemyTeam(unit.Team), true);
+        }
+
+        static IEnumerable<LaneTurret> GetNexusTurrets(TeamId team)
+        {
+            return TurretList[team].Values.SelectMany(l => l).Where(t => t.Type == TurretType.NEXUS_TURRET);
+        }
+
+        static void UnlockNextInLane(TeamId team, Lane lane, TurretType type)
+        {
+            var next = TurretList[team][lane].Find(t => t.Type == type && !t.IsDead);
+            if (next != null)
+            {
+                UnlockStructure(next);
+            }
+        }
+
+        /// <summary>
+        /// 1:1 port of Riot's DeactivateCorrectStructure (Map1 LevelScript.lua): each turret death
+        /// unlocks the next structure down its lane — outer -> inner -> inhibitor turret ->
+        /// inhibitor; a nexus turret death opens the nexus once BOTH nexus turrets are down.
+        /// </summary>
+        public static void OnTurretDeath(DeathData deathData)
+        {
+            if (deathData.Unit is not LaneTurret turret)
+            {
+                return;
+            }
+
+            switch (turret.Type)
+            {
+                case TurretType.OUTER_TURRET:
+                    UnlockNextInLane(turret.Team, turret.Lane, TurretType.INNER_TURRET);
+                    break;
+                case TurretType.INNER_TURRET:
+                    UnlockNextInLane(turret.Team, turret.Lane, TurretType.INHIBITOR_TURRET);
+                    break;
+                case TurretType.INHIBITOR_TURRET:
+                    var inhibitor = InhibitorList[turret.Team].GetValueOrDefault(turret.Lane);
+                    if (inhibitor != null && !inhibitor.IsDead)
+                    {
+                        UnlockStructure(inhibitor);
+                    }
+                    break;
+                case TurretType.NEXUS_TURRET:
+                    // HQ_TOWER1/2 branch: only when the OTHER nexus turret is already down.
+                    if (GetNexusTurrets(turret.Team).All(t => t.IsDead))
+                    {
+                        var nexus = NexusList.Find(n => n.Team == turret.Team);
+                        if (nexus != null)
+                        {
+                            UnlockStructure(nexus);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Riot AllowDamageOnBuildings (fired by InitTimer 10s after level init): opens the FRONT
+        /// tower of every lane; everything deeper stays locked until the chain unlocks it.
+        /// </summary>
+        static void AllowDamageOnBuildings()
+        {
+            foreach (var team in TurretList.Keys)
+            {
+                foreach (var lane in TurretList[team].Keys)
+                {
+                    foreach (var turret in TurretList[team][lane])
+                    {
+                        if (turret.Type == TurretType.OUTER_TURRET)
+                        {
+                            UnlockStructure(turret);
+                        }
+                    }
+                }
+            }
         }
 
         public static void OnMatchStart()
@@ -169,6 +276,14 @@ namespace MapScripts.Map1
         {
             var gameTime = GameTime();
 
+            // Riot InitTimer("AllowDamageOnBuildings", 10, false): 10s after init the front towers
+            // open up; every structure spawned locked (see LockStructure calls at creation).
+            if (!_allowDamageOnBuildingsFired && gameTime >= 10.0f * 1000)
+            {
+                _allowDamageOnBuildingsFired = true;
+                AllowDamageOnBuildings();
+            }
+
             if (gameTime >= timeCheck && timesApplied < 30)
             {
                 UpdateTowerStats();
@@ -197,9 +312,25 @@ namespace MapScripts.Map1
                         // not-yet-respawned inhibitor as a target (IsDead=false + the global
                         // StatusFlags.Targetable still set) and bunch up "stuck" in front of it.
                         inhibitor.SetState(DampenerState.RespawningState);
+                        // Riot BarrackReactiveEvent: SetInvulnerable(false) + SetTargetable(true)
+                        // on the respawned dampener (it stays attackable — its turret never respawns).
+                        inhibitor.SetStatus(StatusFlags.Invulnerable, false);
                         inhibitor.Stats.CurrentHealth = inhibitor.Stats.HealthPoints.Total;
                         inhibitor.NotifyState();
                         DeadInhibitors[inhibitor.Team].Remove(inhibitor);
+                        // Riot ApplyBarracksRespawnReductions: once ALL of the team's barracks are
+                        // restored, the (still alive) nexus towers become invulnerable + enemy-
+                        // untargetable again.
+                        if (DeadInhibitors[inhibitor.Team].Count == 0)
+                        {
+                            foreach (var nexusTurret in GetNexusTurrets(inhibitor.Team))
+                            {
+                                if (!nexusTurret.IsDead)
+                                {
+                                    LockStructure(nexusTurret);
+                                }
+                            }
+                        }
                         // A respawned inhibitor means the team is no longer fully down — recompute the
                         // gate that drives DoubleSuperMinionWave. Without this it stays true forever once
                         // all inhibitors were simultaneously dead, spawning double-supers permanently
@@ -221,11 +352,38 @@ namespace MapScripts.Map1
         {
             var inhibitor = deathData.Unit as Inhibitor;
 
+            // Riot HandleDestroyedObject dampener branch (Map1 LevelScript.lua): the LEVEL SCRIPT
+            // drives the state machine — SetDampenerState(RegenerationState) + SetInvulnerable(true)
+            // + SetTargetable(false) (NotifyState handles the enemy-targetability off Regeneration).
+            inhibitor.SetState(DampenerState.RegenerationState);
+            inhibitor.SetStatus(StatusFlags.Invulnerable, true);
+            inhibitor.NotifyState(deathData);
+
             DeadInhibitors[inhibitor.Team].Add(inhibitor, inhibitor.RespawnTime * 1000);
 
             if (DeadInhibitors[inhibitor.Team].Count == InhibitorList[inhibitor.Team].Count)
             {
                 AllInhibitorsAreDead[inhibitor.Team] = true;
+            }
+
+            // Any fallen dampener opens BOTH of its team's nexus towers; if both are already gone,
+            // the nexus itself opens (Riot's GetTurret(...) == Nil fallback in the same branch).
+            bool anyNexusTurretAlive = false;
+            foreach (var nexusTurret in GetNexusTurrets(inhibitor.Team))
+            {
+                if (!nexusTurret.IsDead)
+                {
+                    UnlockStructure(nexusTurret);
+                    anyNexusTurretAlive = true;
+                }
+            }
+            if (!anyNexusTurretAlive)
+            {
+                var nexus = NexusList.Find(n => n.Team == inhibitor.Team);
+                if (nexus != null)
+                {
+                    UnlockStructure(nexus);
+                }
             }
         }
 
@@ -367,6 +525,9 @@ namespace MapScripts.Map1
                 var nexus = CreateNexus(nexusObj.Name, NexusModels[teamId], position, teamId, 319, 1350, nexusStats, 353);
 
                 ApiEventManager.OnDeath.AddListener(nexus, nexus, OnNexusDeath, true);
+                // Spawns locked (Riot: HQ opens only once both nexus towers are down —
+                // DeactivateCorrectStructure HQ_TOWER1/2, or the dampener-death fallback).
+                LockStructure(nexus);
                 NexusList.Add(nexus);
                 AddObject(nexus);
             }
@@ -401,6 +562,10 @@ namespace MapScripts.Map1
                 // auto-vision via ObjBuilding; no RevealStealth.
                 var inhibitor = CreateInhibitor(inhibitorObj.Name, InhibitorModels[teamId], position, teamId, lane, inhibCollisionRadius, 1350, inhibitorStats, inhibFootprint);
                 ApiEventManager.OnDeath.AddListener(inhibitor, inhibitor, OnInhibitorDeath, false);
+                // Spawns locked (Riot: engine-intrinsic — obj_Barracks::OnNetworkIDAssigned sets
+                // SetIsTargetable(false) + mIsInvulnerable=1, Barracks.cpp; the back turret's death
+                // unlocks it via DeactivateCorrectStructure).
+                LockStructure(inhibitor);
                 inhibitor.RespawnTime = 240.0f;
                 InhibitorList[teamId][lane] = inhibitor;
                 AddObject(inhibitor);
@@ -445,6 +610,11 @@ namespace MapScripts.Map1
                 }
 
                 var turret = CreateLaneTurret(turretObj.Name + "_A", TowerModels[teamId][turretType], position, teamId, turretType, lane, LaneTurretAI, turretObj);
+                // Structure protection chain (Riot Map1 LevelScript.lua): every turret spawns
+                // locked; AllowDamageOnBuildings (t=10s) opens the front towers, and each death
+                // unlocks the next structure via OnTurretDeath (= DeactivateCorrectStructure).
+                LockStructure(turret);
+                ApiEventManager.OnDeath.AddListener(turret, turret, OnTurretDeath, true);
                 TurretList[teamId][lane].Add(turret);
                 AddObject(turret);
             }
@@ -483,55 +653,9 @@ namespace MapScripts.Map1
             return returnType;
         }
 
-        static void LoadProtection()
-        {
-            //I can't help but feel there's a better way to do this
-            Dictionary<TeamId, List<Inhibitor>> TeamInhibitors = new Dictionary<TeamId, List<Inhibitor>> { { TeamId.TEAM_BLUE, new List<Inhibitor>() }, { TeamId.TEAM_PURPLE, new List<Inhibitor>() } };
-            foreach (var teams in InhibitorList.Keys)
-            {
-                foreach (var lane in InhibitorList[teams].Keys)
-                {
-                    TeamInhibitors[teams].Add(InhibitorList[teams][lane]);
-                }
-            }
-
-            foreach (var nexus in NexusList)
-            {
-                // Adds Protection to Nexus
-                AddProtection(nexus, TurretList[nexus.Team][Lane.LANE_C].FindAll(turret => turret.Type == TurretType.NEXUS_TURRET).ToArray(), TeamInhibitors[nexus.Team].ToArray());
-            }
-
-            foreach (var InhibTeam in TeamInhibitors.Keys)
-            {
-                foreach (var inhibitor in TeamInhibitors[InhibTeam])
-                {
-                    var inhibitorTurret = TurretList[inhibitor.Team][inhibitor.Lane].First(turret => turret.Type == TurretType.INHIBITOR_TURRET);
-
-                    // Adds Protection to Inhibitors
-                    if (inhibitorTurret != null)
-                    {
-                        // Depends on the first available inhibitor turret.
-                        AddProtection(inhibitor, false, inhibitorTurret);
-                    }
-
-                    // Adds Protection to Turrets
-                    foreach (var turret in TurretList[inhibitor.Team][inhibitor.Lane])
-                    {
-                        if (turret.Type == TurretType.NEXUS_TURRET)
-                        {
-                            AddProtection(turret, false, TeamInhibitors[inhibitor.Team].ToArray());
-                        }
-                        else if (turret.Type == TurretType.INHIBITOR_TURRET)
-                        {
-                            AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.INNER_TURRET));
-                        }
-                        else if (turret.Type == TurretType.INNER_TURRET)
-                        {
-                            AddProtection(turret, false, TurretList[inhibitor.Team][inhibitor.Lane].First(dependTurret => dependTurret.Type == TurretType.OUTER_TURRET));
-                        }
-                    }
-                }
-            }
-        }
+        // NOTE: the old ProtectionManager LoadProtection() (dependency-graph targetability poller)
+        // was removed here — it duplicated the faithful event-driven chain above (LockStructure at
+        // creation, AllowDamageOnBuildings at 10s, OnTurretDeath/OnInhibitorDeath unlocks, respawn
+        // re-lock), which is the 1:1 port of Riot's Map1 LevelScript.lua state machine.
     }
 }

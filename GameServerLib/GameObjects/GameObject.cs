@@ -295,16 +295,24 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
 
         /// <summary>
-        /// Called by ObjectManager when the object is ontop of another object or when the object is inside terrain.
+        /// Called by ObjectManager when the object is ontop of another object or when the object is
+        /// inside terrain. No API events fire HERE by design: the script-facing
+        /// collision events are published by the overrides that own the real handling —
+        /// AttackableUnit.OnCollision publishes OnCollisionTerrain AND OnCollision, missiles publish
+        /// OnCollisionTerrain and route unit hits through CheckFlagsForUnit (OnSpellHit). No override
+        /// calls base, so this body only ever runs for passive objects (particles/markers/props),
+        /// which no script listens to — it just keeps their terrain-escape snap.
+        /// Riot layers it the same way: GameObject has NO collision handler at all — the callbacks
+        /// are obj_AI_Base functors registered on the movement actor (Actor_Common::fnOnCollision,
+        /// AIBase.cpp:543-549, per-class OnActorCollision virtuals), and the script hooks are
+        /// unit-/buff-scoped (S1 Lua OnCollisionEnemy/OnCollisionOther in the minion AI scripts,
+        /// BuffOnCollisionTerrainBuildingBlocks) — never generic object-level.
         /// </summary>
         public virtual void OnCollision(GameObject collider, bool isTerrain = false)
         {
-            // TODO: Verify if we should trigger events here.
-
             if (isTerrain)
             {
-                // Escape functionality should be moved to GameObject.OnCollision.
-                // only time we would collide with terrain is if we are inside of it, so we should teleport out of it.
+                // Only time we would collide with terrain is if we are inside of it, so teleport out.
                 Vector2 exit = _game.Map.NavigationGrid.GetClosestTerrainExit(Position, PathfindingRadius + 1.0f);
                 SetPosition(exit);
             }
@@ -511,20 +519,36 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             SetPosition(position);
 
-            // TODO: Find a suitable function for this. Maybe modify NotifyWaypointGroup to accept simple objects.
+            // Legacy position resync for NON-UNIT objects only (the "suitable function"
+            // exists now: AttackableUnit overrides this and runs the real teleport wire —
+            // TeleportID++ + the batched WaypointGroup MovementData with HasTeleportID, which the
+            // client hard-snaps to). Plain GameObjects have no movement wire at all, so a full
+            // enter-visibility resync is the only way to move one client-side; nothing teleports
+            // particles/props in practice, this is a cheat-command fallback.
             _game.PacketNotifier.NotifyEnterVisibilityClient(this);
             _movementUpdated = false;
         }
 
         /// <summary>
-        /// Forces this GameObject to perform the given internally named animation.
+        /// Forces this GameObject to perform the given internally named animation. Semantics are
+        /// decomp-verified against the client handler (obj_AI_Base_PImpl_Int::OnNetworkPacket
+        /// (PKT_S2C_PlayAnimation_s), AIBaseClient.cpp:1536); note the client DROPS the packet
+        /// entirely while the unit's animation is locked (IsAnimationLocked).
         /// </summary>
         /// <param name="animName">Internal name of an animation to play.</param>
-        /// <param name="scaleTime">How fast the animation should play. Default 1x speed.</param>
-        /// <param name="startProgress">Time in the animation to start at.</param>
-        /// TODO: Verify if this description is correct, if not, correct it.
-        /// <param name="scaleSpeed">How much the speed of the GameObject should affect the animation.</param>
-        /// <param name="flags">Animation flags. Refer to AnimationFlags enum.</param>
+        /// <param name="scaleTime">Target TOTAL play time in seconds — the client stretches/squeezes
+        /// the animation to exactly this duration (SetAnimationScaledPlayTime; only applied when
+        /// &gt; 0). This is how Riot fits cast animations to cast times (S1 BBPlayAnimation
+        /// ScaleTime = 0.71). NOT a speed factor — the old description ("1x speed") was wrong, and
+        /// note the API default 1.0f therefore means "scale to one second", not "natural speed"
+        /// (callers wanting natural timing should pass 0).</param>
+        /// <param name="startProgress">Playback progress to start the animation at
+        /// (client SetAnimProgress; only applied when &gt; 0).</param>
+        /// <param name="scaleSpeed">Playback speed ratio, fed straight into the client's
+        /// AnimationComponent::PlayAnimation as speedRatio — unrelated to the GameObject's movement
+        /// speed (the old description was wrong).</param>
+        /// <param name="flags">Animation flags. Refer to AnimationFlags enum (bit 4 additionally
+        /// selects the client's KeepEmoteType).</param>
         public void PlayAnimation(string animName, float scaleTime = 1.0f, float startProgress = 0, float scaleSpeed = 0, AnimationFlags flags = 0)
         {
             _game.PacketNotifier.NotifyS2C_PlayAnimation(this, animName, flags, scaleTime, startProgress, scaleSpeed);

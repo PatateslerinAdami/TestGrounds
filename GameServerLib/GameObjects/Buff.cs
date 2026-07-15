@@ -131,7 +131,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         }
 
         public BuffAddType BuffAddType { get; }
-        public BuffType BuffType { get; } /// TODO: Add comments to BuffType enum.
+        public BuffType BuffType { get; }
         public float Duration { get; }
         public bool Hidden { get; set; }
         public bool IsHidden => Hidden;

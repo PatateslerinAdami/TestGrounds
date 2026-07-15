@@ -35,7 +35,7 @@ namespace PacketDefinitions420
 
         private Thread _netThread;
 
-        public void InitServer(ushort port, string[] blowfishKeys, Game game, NetworkHandler<ICoreRequest> netReq, NetworkHandler<ICoreRequest> netResp)
+        public void InitServer(ushort port, string[] blowfishKeys, Game game, NetworkHandler<ICoreRequest> netReq)
         {
             _game = game;
             _server = new Host(Version.Patch420, new Address(_serverHost, port), 32, 32, 0, 0);
@@ -55,7 +55,7 @@ namespace PacketDefinitions420
             _sender = new NetworkSender(peers, blowfishes, _server);
             Bridge = new NetworkBridge();
 
-            PacketHandlerManager = new PacketHandlerManager(_sender, Bridge, game, netReq, netResp);
+            PacketHandlerManager = new PacketHandlerManager(_sender, Bridge, game, netReq);
         }
 
         // Spawns the dedicated I/O thread. The game thread continues into

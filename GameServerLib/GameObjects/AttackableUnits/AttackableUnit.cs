@@ -36,9 +36,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private DeathData _death;
         private static ILog _logger = LoggerProvider.GetLogger();
 
-        //TODO: Find out where this variable came from and if it can be unhardcoded
-        internal const float DETECT_RANGE = 475.0f;
-
         // Assist bookkeeping (Riot obj_AI_Base::m{Allied,Enemy}AssistMarkers, hoisted from
         // ObjAIBase to AttackableUnit: the 4.20 wire carries assist lists for turret AND
         // dampener deaths, and dampeners are plain AttackableUnits). Only hero sources leave
@@ -121,11 +118,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public float LastTookDamageTime { get; protected set; }
         /// <summary>
-        /// Number of minions this Unit has killed. Unused besides in replication which is used for packets, refer to NotifyOnReplication in PacketNotifier.
-        /// </summary>
-        /// TODO: Verify if we want to move this to ObjAIBase since AttackableUnits cannot attack or kill anything.
-        public int MinionCounter { get; protected set; }
-        /// <summary>
         /// This Unit's current internally named model.
         /// </summary>
         public string Model { get; protected set; }
@@ -173,7 +165,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Riot's canonical container: 4.17 Spell::Buff::BuffManager stores a flat
         /// BuffInstanceVector spellBuffs (BuffManager.h, kMaxSpellBuffs = 64) with indexed access and
         /// name lookup — the slot array is only the wire-facing view on top. Removing this in favor
-        /// of BuffSlots (an old TODO idea) would invert Riot's model and lose the stack-children,
+        /// of BuffSlots would invert Riot's model and lose the stack-children,
         /// which never occupy a slot (only the parent of each name does).
         /// </summary>
         private List<Buff> BuffList { get; }
@@ -338,9 +330,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public bool IsForceMoved => MovementParameters != null;
         /// <summary>
-        /// Information about this object's icon on the minimap.
+        /// Information about this object's icon on the minimap. Deliberately on AttackableUnit,
+        /// NOT GameObject: the client resolves
+        /// PKT_S2C_UnitSetMinimapIcon strictly through the AttackableUnits manager and drops the
+        /// packet for anything else (GameClient.cpp:4457, setter =
+        /// AttackableUnitSetMinimapIconOverride) — non-unit objects can never receive an icon
+        /// override. Non-unit minimap markers (jungle camps) travel via their own packets
+        /// (S2C_CreateMinionCamp, sent by MonsterCamp itself).
         /// </summary>
-        /// TODO: Move this to GameObject.
         public IconInfo IconInfo { get; protected set; }
         /// <summary>
         /// When true, this unit ignores fog-of-war: permanently visible to and spawned for both teams,
@@ -466,8 +463,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Position = vec;
             _movementUpdated = true;
             UpdateGrassState();
-            // TODO: Verify how dashes are affected by teleports.
-            //       Typically follow dashes are unaffected, but there may be edge cases e.g. LeeSin
+            // Teleport during a dash cancels the dash — the safe default: the
+            // dash's path/remaining distance are computed from its start position, so continuing
+            // after a position warp would rubber-band toward a stale endpoint. The case is nearly
+            // unreachable in normal play anyway (recalls/blinks can't be cast mid-dash, respawn
+            // implies death, and the terrain-collision snap skips dashing units) — this guards
+            // script-driven teleports.
+            // The real worry — a follow-dash TARGET teleporting away (Vi R / Lee Sin Q2 vs
+            // Flash) — is handled by construction and needs nothing here: UpdateForceMovement's
+            // FollowNetID branch reads unitToFollow.Position LIVE every tick, so the dash re-aims
+            // at the post-teleport position next tick and keeps following (Riot's famous
+            // "Vi follows Flash"; their equivalent is Actor_Common::TrackTargetUnit re-deriving
+            // velocity from the current target position each tick, Actor.cpp:2256).
             if (MovementParameters != null)
             {
                 SetForceMovementState(false, MoveStopReason.ForceMovement);
@@ -778,15 +785,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 UpdateAssistMarkers();
             }
 
-            // TODO: Rework stat management.
+            // Regen tick: HP/mana regeneration applies in fixed windows of Stats.RegenTickMs (the
+            // old "rework stat management" TODO hid a real bug here — Stats.Update was fed the full
+            // ACCUMULATED timer while only one window was subtracted, double-applying the remainder:
+            // up to ~6% over-regen at 30fps). Stats.Update now applies exactly one window's worth
+            // internally (no duration parameter — it was always this constant), the leftover stays
+            // queued for the next window, and OnUpdateStats carries the window length
+            // (elapsed-per-event; every current consumer ignores it and just recomputes tooltips).
             _statUpdateTimer += diff;
-            while (_statUpdateTimer >= 500)
+            while (_statUpdateTimer >= StatsNS.Stats.RegenTickMs)
             {
                 using var _statsScope = Profiler.Scope("AttackableUnit.StatsTick");
-                // update Stats (hpregen, manaregen) every 0.5 seconds
-                Stats.Update(this, _statUpdateTimer);
-                _statUpdateTimer -= 500;
-                API.ApiEventManager.OnUpdateStats.Publish(this, diff);
+                Stats.Update(this);
+                _statUpdateTimer -= StatsNS.Stats.RegenTickMs;
+                API.ApiEventManager.OnUpdateStats.Publish(this, StatsNS.Stats.RegenTickMs);
             }
 
             using (Profiler.Scope("AttackableUnit.Replication"))
@@ -1354,7 +1366,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="damageText">Type of damage the damage text should be.</param>
         public DamageData TakeDamage(AttackableUnit attacker, float damage, DamageType type, DamageSource source, DamageResultType damageText, IEventSource sourceScript = null, AttackableUnit callForHelpAttacker = null)
         {
-            //TODO: Make all TakeDamage functions return DamageData
+            // Return-shape note (resolves an old "make all TakeDamage return DamageData" TODO): the
+            // two parameter-based overloads return the DamageData they construct (this one and the
+            // isCrit wrapper) — that's where the caller doesn't have it yet. The DamageData-taking
+            // overloads stay void ON PURPOSE: their caller already owns the instance, and the central
+            // sink mutates it in place (PostMitigationDamage & co.), so a return would be redundant
+            // and imply a fresh object.
             DamageData damageData = new DamageData
             {
                 // BB CallForHelpAttackerVar (Riot cfhAttackerID) — split allied aggro credit from the
@@ -1628,15 +1645,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
         }
 
-        /// <summary>
-        /// Whether or not this unit is currently calling for help. Unimplemented.
-        /// </summary>
-        /// <returns>True/False.</returns>
-        /// TODO: Implement this.
-        public virtual bool IsInDistress()
-        {
-            return false; //return DistressCause;
-        }
+        // (A stub "IsInDistress()" lived here — deleted: zero callers, no Riot counterpart in any
+        // corpus (4.17 decomp, S1 server, S1 Lua). Riot models "ally in distress" event-driven, not
+        // as unit state: HandleCallForHelp fires per damage event, and our port does the same —
+        // the TakeDamage CFH broadcast + ClassifyTarget(target, victim)'s contextual
+        // "X attacking Y" rows ARE the distress handling.)
 
         /// <summary>
         /// Function called when this unit's health drops to 0 or less.
@@ -1871,10 +1884,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Stats.SetActionState(ActionState.CHARMED, Status.HasFlag(StatusFlags.Charmed));
             // DisableAmbientGold
 
-            bool feared = Status.HasFlag(StatusFlags.Feared);
-            Stats.SetActionState(ActionState.FEARED, feared);
-            // TODO: Verify
-            Stats.SetActionState(ActionState.IS_FLEEING, feared);
+            // FEARED (bit 7) / IS_FLEEING (bit 8) are NEVER set on Riot's 4.20 wire — replay-verified
+            // across the whole corpus (statusdump over every replay: 0 transitions of either bit,
+            // while e.g. Taunted flips 264×), including a game where Fiddlesticks feared heroes 28×
+            // (buff "Flee", BuffType FLEE — 4.20 fears ship as FLEE-type buffs; FEAR-type adds: 0).
+            // The CC is conveyed by the buff packet + the forced movement itself; CharacterState has
+            // SetFeared/SetFleeing but the 4.20 server never drives them (vestigial, like
+            // CAN_NOT_ATTACK below). StatusFlags.Feared stays purely server-internal (AI flee logic).
+            Stats.SetActionState(ActionState.FEARED, false);
+            Stats.SetActionState(ActionState.IS_FLEEING, false);
 
             Stats.SetActionState(ActionState.FORCE_RENDER_PARTICLES, Status.HasFlag(StatusFlags.ForceRenderParticles));
             // GhostProof
@@ -1896,7 +1914,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             bool targetable = Status.HasFlag(StatusFlags.Targetable);
             Stats.IsTargetable = targetable;
-            // TODO: Refactor this.
+            // USEABLE units are deliberately excluded from this mirror. Bit 23 is Riot's mSelectable
+            // (CharacterState.h CompressedStates — our enum name TARGETABLE is a misnomer): it
+            // gates MOUSE-PICKING, and the client's use-cursor branch checks IsUseable() on the
+            // picked selection WITHOUT any IsTargetable test (HudCursorTargetLogic.cpp:908,
+            // kCursorModeCaptureUse), unlike the attack/select branches. So click-to-use units
+            // (ThreshLantern, Dominion capture points/OdinNeutralGuardian, KalistaAltar,
+            // AzirTowerClicker — the only 6 IsUseable chardatas in 4.20) must keep the bit while
+            // attack-untargetable, or the lantern/capture click dies. NON-useable touch pickups
+            // (TT/HA health relics, IsUseable=false) correctly take the mirror: Targetable=false
+            // clears their Selectable bit — they are not clickable, only walk-over. Client
+            // IsUseable() itself is !dead && a REPLICATED useable value (AIAttackableUnit.cpp:1439,
+            // Replicate&lt;int&gt;), consistent with ValidTargetCheck's team-blind useable escape.
             if (!CharData.IsUseable)
             {
                 Stats.SetActionState(ActionState.TARGETABLE, targetable);
@@ -2043,6 +2072,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
 
         /// <summary>
+        /// Routes the base GameObject.TeleportTo virtual into the real unit teleport. Without this
+        /// override the 4-param sibling only SHADOWED the base — a GameObject-typed reference
+        /// (e.g. the !tp-by-netID cheat resolving via GetObjectById) fell into the base's legacy
+        /// enter-visibility resync instead of the proper TeleportID movement wire.
+        /// </summary>
+        public override void TeleportTo(float x, float y)
+        {
+            TeleportTo(x, y, repath: false, silent: false);
+        }
+
+        /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>
         public void TeleportTo(Vector2 position, bool repath = false, bool silent = false)
@@ -2180,9 +2220,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         /// <summary>
         /// Moves this unit to its specified waypoints, updating its position along the way.
+        /// Deliberately NO interpolation: Riot's 4.x model has none on
+        /// either side — the server's Actor_Common steps paths discretely at speed × dt exactly
+        /// like this method, and the client RE-SIMULATES the path locally (ClientFollowServerPath)
+        /// instead of interpolating between server states (champion-pathing audit 2026-07: the
+        /// client smooths nothing; corrections arrive as hard Waypoint[0] snaps folded into the
+        /// periodic movement rebroadcasts). Sync is held by rebroadcast cadence, not interpolation —
+        /// adding it would diverge from the wire-verified movement model.
         /// </summary>
-        /// <param name="diff">The amount of milliseconds the unit is supposed to move</param>
-        /// TODO: Implement interpolation (assuming all other desync related issues are already fixed).
+        /// <param name="delta">The amount of milliseconds the unit is supposed to move</param>
         public virtual bool Move(float delta)
         {
             Vector2 originalPos = Position;
@@ -3422,7 +3468,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private static bool BuffIsReplicated(Buff b) => true;
 
         /// <param name="b">Buff instance to add.</param>
-        /// TODO: Probably needs a refactor to lessen thread usage. Make sure to stick very closely to the current method; just optimize it.
         public virtual bool AddBuff(Buff b)
         {
             if (ApiEventManager.OnAllowAddBuff.Publish(this, (b.SourceUnit, b)))
@@ -4177,9 +4222,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// resolution pulls the endpoint closer than this, push it back out to innerDistance along the dash
         /// direction — but only to a walkable point, never into terrain. Guarantees a minimum travel (e.g.
         /// SweepingBlow's [550, 600] band). 0 = no floor (fully clampable, e.g. Headbutt).</param>
-        /// TODO: Find a good way to grab these variables from spell data.
-        /// TODO: Verify if we should count Dashing as a form of Crowd Control.
-        /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
+        /// (Three pre-rewrite TODOs resolved: dash values do NOT come from spell data — Riot passes
+        /// them as BBMove/BBMoveAway/BBMoveToUnit SCRIPT parameters (e.g. Pulverize's literal
+        /// Speed=10/Gravity=20), which is why the params above are named after those BB fields and
+        /// scripts supply them; dashing is NOT crowd control — the displacement convention gives
+        /// knockup/knockback their own CC buff while dashes carry none; and no "Dash class" —
+        /// the forced-movement rewrite settled the shape as ForceMovementParameters, mirroring
+        /// Riot's params-on-the-NavigationPath.)
 
         /// <summary>
         /// How far a FIRST_WALL_HIT / GET_NEAREST_* endpoint may be snapped out of terrain before
