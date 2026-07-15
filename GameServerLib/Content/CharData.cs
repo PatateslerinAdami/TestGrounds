@@ -49,19 +49,17 @@ namespace LeagueSandbox.GameServer.Content
         public float AttackSpeedPerLevel { get; private set; }
         public float AttackTotalTime { get; private set; } = 0.0f;
         /// <summary>
-        /// JSON field present in many stats files. NOT in the 4.17 decomp (literal "Chasing" appears
-        /// nowhere; `CharacterData::FillCharacterRecordFromIniFromMyMembers` reads every field by
-        /// literal ReadCFG string — none match), so it is a 4.20 addition the 4.17 engine predates.
-        /// WIRED 2026-06-21 (ObjAIBase auto-attack/RefreshWaypoints): while chasing, the unit commits
-        /// to within attackRange × this percent before it stops + engages (anti-kite). Default 0.95
-        /// (≈ engage near full range); units whose stats omit it fall back to 0.95. Inferred semantics
-        /// — verify in-game. See memory `project_chardata_chasing_postattack_loaded.md`.
-        /// </summary>
-        public float ChasingAttackRangePercent { get; private set; } = 0.95f;
+        // REMOVED: ChasingAttackRangePercent. The JSON field exists in stats files (even back to
+        // the S1 .ini data), but it has ZERO code consumers in every corpus (S4 mac decomp field
+        // reads are all literal ReadCFG strings — none match; Ghidra S4, herowars S1 server and
+        // both Lua corpora: 0 hits; SDBM hash not present as an immediate) → vestigial data. An
+        // inferred wiring into the auto-attack engage range (2026-06-21) was FALSIFIED in-game
+        // (2026-07-15): Master Yi's 0.3 shrank the engage gate below a turret's navgrid footprint
+        // → walked up and never swung. See memory project_chardata_chasing_postattack_loaded.
         /// <summary>
         /// JSON field present in many character stats files but VERIFIED 2026-05-10 to be
-        /// unread by the S4 client (same verification trail as <see cref="ChasingAttackRangePercent"/>).
-        /// Loaded for forward-compat, NOT wired into gameplay.
+        /// unread by the S4 client (same verification trail as the removed ChasingAttackRangePercent
+        /// — see the note above). Loaded for forward-compat, NOT wired into gameplay.
         /// </summary>
         public float PostAttackMoveDelay { get; private set; } = 0.0f;
         // S4 default 1.0 (CharacterData.cpp:966) the slot 0 catches the whole roll unless
@@ -203,7 +201,6 @@ namespace LeagueSandbox.GameServer.Content
             AttackRange = file.GetFloat("Data", "AttackRange", AttackRange);
             AttackSpeedPerLevel = file.GetFloat("Data", "AttackSpeedPerLevel", AttackSpeedPerLevel);
             AttackTotalTime = file.GetFloat("Data", "AttackTotalTime", AttackTotalTime);
-            ChasingAttackRangePercent = file.GetFloat("Data", "ChasingAttackRangePercent", ChasingAttackRangePercent);
             PostAttackMoveDelay = file.GetFloat("Data", "PostAttackMoveDelay", PostAttackMoveDelay);
 
             BaseAttackProbability = file.GetFloat("Data", "BaseAttack_Probability", BaseAttackProbability);

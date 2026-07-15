@@ -3015,6 +3015,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return _autoAttackEnabled && _autoAttackEnabledTarget == TargetUnit;
         }
 
+
         /// <summary>
         /// Riot IsTargetLost: this unit has a remembered "lost" target — a unit that left vision while the
         /// unit was hard-engaged (TargetLostReason.LostVisibility). It walks to that target's last-known
@@ -3178,22 +3179,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // a taunt forces attacking its enemy TargetUnit.
                 if (TargetUnit != null && TargetUnit.Team != Team && MoveOrder != OrderType.CastSpell)
                 {
-                    // ChasingAttackRangePercent (4.20 stats.json field, NOT in the 4.17 decomp — inferred
-                    // semantics, verify in-game): while CHASING, a unit commits to within attackRange ×
-                    // percent before it stops + engages, instead of attacking at the very edge of range
-                    // (anti-kite "stick closer"; e.g. Garen 0.5 closes deep, Velkoz 0.8 less). Applied to
-                    // the ENGAGE range only — it scales the start-attack gate (below) AND the chase/stop
-                    // in RefreshWaypoints (which receives this idealRange), so engage and stop stay
-                    // consistent (no attack-while-moving). The DISENGAGE stays at full range: the
-                    // IsAttacking cancel uses Stats.Range.Total + buffer. This engage(idealRange) <
-                    // disengage(full range + StopAttackRangeModifier) gap IS the anti-churn hysteresis
-                    // (a unit that engaged keeps attacking until the target leaves full range), so the
-                    // former explicit ATTACK_SETTLE_HYSTERESIS hold-band was redundant and was removed
-                    // (it created a dead-zone where a unit held OUT of attack range, not attacking).
-                    // Default 0.95 (CharData) ≈ no-op; units whose stats omit the field fall back to
-                    // 0.95. Clamped to a sane floor.
-                    float chasePct = System.Math.Clamp(CharData?.ChasingAttackRangePercent ?? 0.95f, 0.1f, 1f);
-                    idealRange = Stats.Range.Total * chasePct + TargetUnit.CollisionRadius + CollisionRadius;
+                    // Engage/stop gate = FULL edge-to-edge attack range. An experiment (2026-06-21) had
+                    // scaled this by the ChasingAttackRangePercent stats.json field; that was FALSIFIED
+                    // in-game (2026-07-15, Master Yi 0.3 vs turret: the turret's navgrid-baked footprint
+                    // holds a melee at ~182u from center while the scaled gate demanded ≤156u —
+                    // permanent standoff, walks up and never swings) and the field is verified vestigial
+                    // (zero consumers in the S4 mac decomp, Ghidra S4, herowars S1 and both Lua corpora —
+                    // see project_chardata_chasing_postattack_loaded). The approach inset toward the
+                    // stand point stays the evidenced generic STAND_INSET 0.95 inside
+                    // GetAttackStandPosition (S4:4275). DISENGAGE stays full range +
+                    // StopAttackRangeModifier — that gap is the anti-churn hysteresis.
+                    idealRange = Stats.Range.Total + TargetUnit.CollisionRadius + CollisionRadius;
 
                     if (Vector2.DistanceSquared(Position, TargetUnit.Position) <= idealRange * idealRange && MovementParameters == null)
                     {
