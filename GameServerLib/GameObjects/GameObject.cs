@@ -192,6 +192,15 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Called by ObjectManager every tick.
         /// </summary>
         /// <param name="diff">Number of milliseconds that passed before this tick occurred.</param>
+        /// <summary>
+        /// Whether this object is included in ObjectManager's per-tick Update() pass — Riot's
+        /// obj-flag <c>0x100</c> gate on <c>m_ObjectsToUpdate</c>. Defaults to true (tick). Static
+        /// objects whose Update() chain is a genuine no-op override this to false to opt out; the
+        /// object is still fully networked/visioned, just not ticked. Read once when the object
+        /// enters ObjectManager, so it must be constant for the object's lifetime.
+        /// </summary>
+        public virtual bool ReceivesUpdate => true;
+
         public virtual void Update(float diff)
         {
         }

@@ -4,6 +4,10 @@ namespace LeagueSandbox.GameServer.GameObjects
 {
     public class LevelProp : GameObject
     {
+        // A level prop is static decoration with no per-tick logic (no Update override) — opt out of
+        // ObjectManager's update pass, mirroring Riot's obj-flag 0x100. Still networked/visioned.
+        public override bool ReceivesUpdate => false;
+
         public byte NetNodeID { get; set; }
         public int SkinID { get; set; }
         public float Height { get; set; }

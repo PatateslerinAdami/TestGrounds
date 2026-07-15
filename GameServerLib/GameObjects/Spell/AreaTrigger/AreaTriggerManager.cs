@@ -90,9 +90,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.AreaTriggers
             // Snapshot living attackable units once per tick. Team filtering is intentionally NOT done here
             // (Riot fires for all units; the script callback decides team) — see plan.
             var units = new List<AttackableUnit>();
-            foreach (var kv in _game.ObjectManager.GetObjects())
+            foreach (var obj in _game.ObjectManager.GetAllObjects())
             {
-                if (kv.Value is AttackableUnit u && !u.IsDead)
+                if (obj is AttackableUnit u && !u.IsDead)
                 {
                     units.Add(u);
                 }

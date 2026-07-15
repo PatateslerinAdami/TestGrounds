@@ -92,7 +92,9 @@ namespace LeagueSandbox.GameServer.API
 
         public static GameObject CreateShop(string name, Vector2 position, TeamId team)
         {
-            var shop = new GameObject(_game, position, team: team, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000);
+            // ShopObject (Riot obj_Shop) so ObjectManager tracks it in _shops. Return type stays
+            // GameObject to keep external map-script callers unaffected (ShopObject : GameObject).
+            var shop = new ShopObject(_game, position, netId: Crc32Algorithm.Compute(Encoding.UTF8.GetBytes(name)) | 0xFF000000, team: team);
             //_game.ObjectManager.SpawnObject(shop);
             _game.ObjectManager.AddObject(shop);
             return shop;
@@ -202,7 +204,7 @@ namespace LeagueSandbox.GameServer.API
         public static int CountAllLaneMinions()
         {
             int count = 0;
-            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            foreach (var obj in _game.ObjectManager.GetAllMinions())
             {
                 if (obj is LaneMinion minion && !minion.IsDead)
                 {

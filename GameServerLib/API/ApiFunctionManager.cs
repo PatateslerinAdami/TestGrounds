@@ -1629,6 +1629,25 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Creates a <see cref="FollowerObject"/> attached to <paramref name="master"/> (Riot
+        /// <c>FollowerObject::Create</c>) and spawns it via S2C_CreateFollowerObject. The follower
+        /// snaps to the master's position each tick, inherits its team, is untargetable, and removes
+        /// itself (broadcasting a detach) once the master dies or leaves. Replay-verified 4.20 user:
+        /// Syndra's orbs (<c>internalName = characterName = "SyndraOrbs"</c>).
+        /// </summary>
+        public static FollowerObject AddFollowerObject(ObjAIBase master, string internalName, string characterName, int skinId = 0, string spawnAnimation = null)
+        {
+            var follower = new FollowerObject(_game, internalName, characterName, skinId, master);
+            _game.ObjectManager.AddObject(follower);
+            // Optional spawn animation (replay: SyndraOrbs plays "Orbs"/"Backup_Idle" at creation).
+            if (!string.IsNullOrEmpty(spawnAnimation))
+            {
+                follower.PlayAnimation(spawnAnimation);
+            }
+            return follower;
+        }
+
+        /// <summary>
         /// Creates a stationary perception bubble at the given location.
         /// </summary>
         /// <param name="position">Position to spawn the perception bubble at.</param>
@@ -2388,7 +2407,7 @@ namespace LeagueSandbox.GameServer.API
         public static List<LaneMinion> GetMinions(TeamId team, Lane? lane = null)
         {
             var result = new List<LaneMinion>();
-            foreach (var obj in _game.ObjectManager.GetObjects().Values)
+            foreach (var obj in _game.ObjectManager.GetAllMinions())
             {
                 if (obj is LaneMinion minion && minion.Team == team && !minion.IsDead
                     && (lane == null || minion.Lane == lane.Value))

@@ -887,6 +887,42 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacket(pkt.GetBytes(), Channel.CHL_S2C);
         }
 
+        /// <summary>
+        /// Spawns a FollowerObject on a client via S2C_CreateFollowerObject (0xF1). The header
+        /// SenderNetID is the MASTER (replay-verified: sender = the followed unit), the body carries the
+        /// follower's own NetID + NetNodeID + skin + internal/character name so the client builds it
+        /// attached to the master. Sent per-player (from FollowerObject.OnSpawn).
+        /// </summary>
+        public void NotifyS2C_CreateFollowerObject(FollowerObject follower, int userId)
+        {
+            var pkt = new S2C_CreateFollowerObject
+            {
+                SenderNetID = follower.Master?.NetId ?? 0,
+                NetID = follower.NetId,
+                NetNodeID = follower.NetNodeID,
+                SkinID = follower.SkinID,
+                InternalName = follower.InternalName,
+                CharacterName = follower.Model,
+            };
+            _packetHandlerManager.SendPacket(userId, pkt.GetBytes(), Channel.CHL_S2C);
+        }
+
+        /// <summary>
+        /// Reparents (or, with newOwnerNetId = 0, detaches) a FollowerObject via
+        /// S2C_ReattachFollowerObject (0xF2). Header SenderNetID = the follower; body = the new owner's
+        /// NetID (0 ⇒ detach, after which the client's follower deactivates). Broadcast, matching the
+        /// replays (every observed Reattach used NewOwnerId = 0).
+        /// </summary>
+        public void NotifyS2C_ReattachFollowerObject(FollowerObject follower, uint newOwnerNetId)
+        {
+            var pkt = new S2C_ReattachFollowerObject
+            {
+                SenderNetID = follower.NetId,
+                NewOwnerId = newOwnerNetId,
+            };
+            _packetHandlerManager.BroadcastPacket(pkt.GetBytes(), Channel.CHL_S2C);
+        }
+
         GamePacket ConstructSpawnPacket(GameObject o, TeamId viewingTeam, float gameTime = 0)
         {
             switch (o)

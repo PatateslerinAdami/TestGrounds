@@ -7,9 +7,8 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using log4net;
+using LeagueSandbox.GameServer.Util;
 using System;
-using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -24,44 +23,59 @@ namespace LeagueSandbox.GameServer
         // Crucial Vars
         private Game _game;
 
-        // Dictionaries of GameObjects.
-        private Dictionary<uint, GameObject> _objects;
+        // All GameObjects, keyed by NetId. Uses the Riot-faithful ManagerTemplate (paired hash-map +
+        // insertion-ORDERED list) so iteration order is deterministic and add dedups by id instead of
+        // throwing on a duplicate NetId (mirrors Riot's push_back_unique). See ManagerTemplate<T>.
+        private ManagerTemplate<GameObject> _objects;
         private List<GameObject> _objectsToAdd = new List<GameObject>();
 
         private List<GameObject> _objectsToRemove = new List<GameObject>();
 
-        // For the initial spawning (networking) of newly added objects.
-        private Dictionary<uint, Champion> _champions;
-        private Dictionary<uint, BaseTurret> _turrets;
-        private Dictionary<uint, Inhibitor> _inhibitors;
-        private Dictionary<uint, SpellMissile> _missiles;
-        private FrozenDictionary<TeamId, HashSet<GameObject>> _visionProviders;
+        // Objects eligible for the per-tick Update() pass (Riot's m_ObjectsToUpdate). A strict subset of
+        // _objects: everything except those that opt out via GameObject.ReceivesUpdate = false (static
+        // objects with a no-op Update — shops, level props). Membership is maintained in lockstep with
+        // _objects (same add/remove points + deferral), so the Update loop iterates a stable set.
+        private ManagerTemplate<GameObject> _objectsToUpdate;
 
-        // Per-team uniform spatial index of vision providers, rebuilt once per tick in
-        // RebuildVisionProviderIndex. Replaces the O(objects × providers) full scan that
-        // TeamHasVisionOn used to do (the #1 server hotspot at ~0.5 ms/tick). Allocation-free
-        // across ticks: the bucket lists are cleared and refilled, never reallocated. A query
-        // only visits providers in the cells overlapping the tested object's max-vision-radius
-        // box; UnitHasVisionOn then does the exact distance + LOS test, so decisions are identical.
-        private static readonly ILog _logger = LoggerProvider.GetLogger();
-        private Dictionary<TeamId, List<GameObject>[]> _providerCells;
-        private Dictionary<TeamId, float> _providerMaxRadius;
-        private bool _providerIndexValid;
-        private int _gridCols, _gridRows;
-        private float _gridMinX, _gridMinY;
-        private const float GRID_CELL_SIZE = 1000f;
+        // Per-type registries (Riot's per-type ManagerTemplate model: AIHero/obj_AI_Turret/obj_Building/
+        // SpellMissile ... each a paired hash-map + insertion-ordered list). Used for the initial spawning
+        // (networking) of newly added objects and for typed lookups/iteration without scanning _objects.
+        private ManagerTemplate<Champion> _champions;
+        private ManagerTemplate<BaseTurret> _turrets;
+        private ManagerTemplate<Inhibitor> _inhibitors;
+        private ManagerTemplate<SpellMissile> _missiles;
+        // All AttackableUnits (champions/minions/turrets/buildings) — the subset of _objects that every
+        // range/targeting scan actually cares about. Mirrors Riot's AttackableUnit ManagerTemplate and lets
+        // GetUnitsInRange / RebuildUnitGrid / StopTargeting / CountUnitsAttackingUnit iterate units only
+        // (no particles/regions/missiles), instead of filtering the full _objects set. Routed centrally in
+        // AddObject/RemoveObject.
+        private ManagerTemplate<AttackableUnit> _attackableUnits;
+        // All Minions (lane minions, pets, ...) — mirrors Riot's obj_AI_Minion manager. A Minion is also
+        // in _attackableUnits (it's an ObjAIBase); this registry lets the recurring minion queries
+        // (GetAllMinions / CountAllLaneMinions, called from the level script's MAX_MINIONS throttle)
+        // iterate minions only instead of copying + scanning the whole _objects set.
+        private ManagerTemplate<Minion> _minions;
+        // All Markers — mirrors Riot's obj_AI_Marker manager. A Marker is a bare GameObject (NOT an
+        // AttackableUnit), so it lives only here + _objects. No hot consumer scans markers yet; this
+        // registry is kept for Riot structural fidelity and gives GetAllMarkers() O(1) typed iteration
+        // for whenever marker logic (e.g. Azir soldiers) needs it.
+        private ManagerTemplate<Marker> _markers;
+        // All LevelProps — mirrors Riot's ManagedLevelProp manager. A LevelProp is a bare GameObject
+        // (NOT an AttackableUnit). No hot consumer scans props yet (only per-object collision-exclusion
+        // checks in CollisionHandler); kept for Riot structural fidelity + GetAllLevelProps().
+        private ManagerTemplate<LevelProp> _props;
+        // All ShopObjects — mirrors Riot's obj_Shop manager. A ShopObject is a bare GameObject (NOT an
+        // AttackableUnit — a shop is never a valid attack target). Fidelity registry + GetAllShops().
+        private ManagerTemplate<ShopObject> _shops;
+        // All FollowerObjects (master-attached, master-following objects; Riot's FollowerObject
+        // manager). A FollowerObject is an ObjAIBase, so it is ALSO in _attackableUnits — but it's
+        // untargetable (IsTargetableByUnit=false), so range/targeting scans skip it. e.g. SyndraOrbs.
+        private ManagerTemplate<FollowerObject> _followers;
 
-        // General per-tick spatial index of ALL AttackableUnits (same grid dims as the provider
-        // index), rebuilt once at the start of Update. Backs QueryUnitsInRange so per-tick mass
-        // range queries (e.g. the turret/control-ward RevealStealth scan) cost O(local) instead of
-        // GetUnitsInRange's O(N) full scan. Allocation-free across ticks (buckets cleared+refilled).
-        private List<AttackableUnit>[] _unitGridCells;
-        private bool _unitGridValid;
-        // Flip to true to cross-check every QueryUnitsInRange against a full scan (count) and log.
-        private const bool UNITGRID_PARALLEL_ASSERT = false;
-        // Flip to true to cross-check every grid query against the legacy full scan and log any
-        // divergence. Leave false in normal runs (the assert doubles vision work).
-        private const bool VISION_PARALLEL_ASSERT = false;
+        // Fog-of-War / vision authority + the per-tick spatial grids (provider grid for vision, unit
+        // grid for range queries). Extracted from this class so ObjectManager is just the object
+        // registry; ObjectManager keeps the vision-to-object/networking orchestration + public facades.
+        private VisionManager _vision;
 
         private bool _currentlyInUpdate = false;
 
@@ -88,12 +102,19 @@ namespace LeagueSandbox.GameServer
             Teams = Enum.GetValues(typeof(TeamId)).Cast<TeamId>().ToList();
 
             _game = game;
-            _objects = new Dictionary<uint, GameObject>();
-            _turrets = new Dictionary<uint, BaseTurret>();
-            _inhibitors = new Dictionary<uint, Inhibitor>();
-            _champions = new Dictionary<uint, Champion>();
-            _missiles = new Dictionary<uint, SpellMissile>();
-            _visionProviders = Teams.ToDictionary(team => team, _ => new HashSet<GameObject>()).ToFrozenDictionary();
+            _objects = new ManagerTemplate<GameObject>();
+            _objectsToUpdate = new ManagerTemplate<GameObject>();
+            _turrets = new ManagerTemplate<BaseTurret>();
+            _inhibitors = new ManagerTemplate<Inhibitor>();
+            _champions = new ManagerTemplate<Champion>();
+            _missiles = new ManagerTemplate<SpellMissile>();
+            _attackableUnits = new ManagerTemplate<AttackableUnit>();
+            _minions = new ManagerTemplate<Minion>();
+            _markers = new ManagerTemplate<Marker>();
+            _props = new ManagerTemplate<LevelProp>();
+            _shops = new ManagerTemplate<ShopObject>();
+            _followers = new ManagerTemplate<FollowerObject>();
+            _vision = new VisionManager(_game, Teams, _attackableUnits);
         }
 
         /// <summary>
@@ -106,13 +127,13 @@ namespace LeagueSandbox.GameServer
             // The provider index is rebuilt below in VisionAndLateUpdate. Any TeamHasVisionOn
             // call before that (e.g. out-of-band SpawnObject during scripts) falls back to the
             // legacy scan via this flag, so it never reads a stale index.
-            _providerIndexValid = false;
+            _vision.InvalidateProviderIndex();
 
             _timeSinceFullSync += diff;
             if (_timeSinceFullSync >= FULL_SYNC_INTERVAL_MS)
             {
                 _timeSinceFullSync = 0f;
-                foreach (var obj in _objects.Values)
+                foreach (var obj in _objects)
                 {
                     if (obj is AttackableUnit u)
                     {
@@ -127,13 +148,15 @@ namespace LeagueSandbox.GameServer
             // against a 1-cell-margin candidate set, so results stay exact despite mid-tick movement.
             using (Profiler.Scope("Objects.RebuildUnitGrid"))
             {
-                RebuildUnitGrid();
+                _vision.RebuildUnitGrid();
             }
 
-            // For all existing objects
+            // Per-tick Update pass over the update-eligible set only (Riot's m_ObjectsToUpdate); static
+            // objects (ReceivesUpdate=false) are excluded. Vision/LateUpdate/sync below still cover ALL
+            // _objects.
             using (Profiler.Scope("Objects.Update"))
             {
-                foreach (var obj in _objects.Values)
+                foreach (var obj in _objectsToUpdate)
                 {
                     using var _objScope = Profiler.Scope($"Update:{obj.GetType().Name}");
                     obj.Update(diff);
@@ -145,7 +168,7 @@ namespace LeagueSandbox.GameServer
             {
                 // It is now safe to call RemoveObject at any time,
                 // but compatibility with the older remove method remains.
-                foreach (var obj in _objects.Values)
+                foreach (var obj in _objects)
                 {
                     if (obj.IsToRemove())
                     {
@@ -155,7 +178,8 @@ namespace LeagueSandbox.GameServer
 
                 foreach (var obj in _objectsToRemove)
                 {
-                    _objects.Remove(obj.NetId);
+                    _objects.Erase(obj, obj.NetId);
+                    _objectsToUpdate.Erase(obj, obj.NetId); // no-op if it had opted out
                 }
 
                 _objectsToRemove.Clear();
@@ -174,7 +198,11 @@ namespace LeagueSandbox.GameServer
 
                 foreach (var obj in justAdded)
                 {
-                    _objects.Add(obj.NetId, obj);
+                    _objects.PushBackUnique(obj, obj.NetId);
+                    if (obj.ReceivesUpdate)
+                    {
+                        _objectsToUpdate.PushBackUnique(obj, obj.NetId);
+                    }
                 }
 
                 // Missiles spawned mid-update (windup-end ForceCreateMissile / spawn
@@ -198,13 +226,13 @@ namespace LeagueSandbox.GameServer
 
             using (Profiler.Scope("vision:RebuildIndex"))
             {
-                RebuildVisionProviderIndex();
+                _vision.RebuildVisionProviderIndex();
             }
 
             using (Profiler.Scope("Objects.VisionAndLateUpdate"))
             {
                 int i = 0;
-                foreach (GameObject obj in _objects.Values)
+                foreach (GameObject obj in _objects)
                 {
                     // Phase split so a trace shows where the per-object cost goes:
                     // TeamsVision = team visibility recompute (loops vision providers, may raycast),
@@ -284,7 +312,7 @@ namespace LeagueSandbox.GameServer
             // destroy anything still marked = stale/ghost objects the client kept across the disconnect.
             // NotifySpawn is an immediate per-client send, so MARK -> spawns -> SWEEP stay FIFO-ordered.
             _game.PacketNotifier.NotifyS2C_MarkOrSweepForSoftReconnect(userId, SoftReconnectStage.MarkAllUnits);
-            foreach (GameObject obj in _objects.Values)
+            foreach (GameObject obj in _objects)
             {
                 obj.OnReconnect(userId, team);
             }
@@ -293,7 +321,7 @@ namespace LeagueSandbox.GameServer
 
         public void SpawnObjects(ClientInfo clientInfo)
         {
-            foreach (GameObject obj in _objects.Values)
+            foreach (GameObject obj in _objects)
             {
                 UpdateVisionSpawnAndSync(obj, clientInfo, forceSpawn: true);
             }
@@ -329,7 +357,7 @@ namespace LeagueSandbox.GameServer
             {
                 bool nearSighted = champion.Status.HasFlag(StatusFlags.NearSighted);
                 shouldBeVisibleForPlayer = IsServerFoWDisabled || !obj.IsAffectedByFoW || (
-                    nearSighted ? UnitHasVisionOn(champion, obj, nearSighted) : obj.IsVisibleByTeam(champion.Team)
+                    nearSighted ? _vision.UnitHasVisionOn(champion, obj, nearSighted) : obj.IsVisibleByTeam(champion.Team)
                 );
 
                 // SpecificUnitToExclude: hide from the excluded recipient even if FoW would show it.
@@ -359,12 +387,50 @@ namespace LeagueSandbox.GameServer
                 }
                 else
                 {
-                    _objects.Add(o.NetId, o);
+                    _objects.PushBackUnique(o, o.NetId);
+                    if (o.ReceivesUpdate)
+                    {
+                        _objectsToUpdate.PushBackUnique(o, o.NetId);
+                    }
                 }
 
                 if (o is SpellMissile missile)
                 {
-                    _missiles.Add(missile.NetId, missile);
+                    _missiles.PushBackUnique(missile, missile.NetId);
+                }
+
+                // Central per-type routing (Riot adds each object to its typed manager in AddObject).
+                // Registered immediately (not via the deferred _objectsToAdd path) so typed lookups see
+                // the unit the same tick it is created — matching _missiles above and the OnAdded-based
+                // AddChampion/AddTurret/AddInhibitor self-registration below.
+                if (o is AttackableUnit unit)
+                {
+                    _attackableUnits.PushBackUnique(unit, unit.NetId);
+                }
+
+                if (o is Minion addedMinion)
+                {
+                    _minions.PushBackUnique(addedMinion, addedMinion.NetId);
+                }
+
+                if (o is Marker addedMarker)
+                {
+                    _markers.PushBackUnique(addedMarker, addedMarker.NetId);
+                }
+
+                if (o is LevelProp addedProp)
+                {
+                    _props.PushBackUnique(addedProp, addedProp.NetId);
+                }
+
+                if (o is ShopObject addedShop)
+                {
+                    _shops.PushBackUnique(addedShop, addedShop.NetId);
+                }
+
+                if (o is FollowerObject addedFollower)
+                {
+                    _followers.PushBackUnique(addedFollower, addedFollower.NetId);
                 }
 
                 // Synchronous spawn at creation — intentional, not a hack (this used to carry a
@@ -402,12 +468,43 @@ namespace LeagueSandbox.GameServer
                 }
                 else
                 {
-                    _objects.Remove(o.NetId);
+                    _objects.Erase(o, o.NetId);
+                    _objectsToUpdate.Erase(o, o.NetId); // no-op if it had opted out
                 }
 
                 if (o is SpellMissile missile)
                 {
-                    _missiles.Remove(missile.NetId);
+                    _missiles.Erase(missile, missile.NetId);
+                }
+
+                if (o is AttackableUnit unit)
+                {
+                    _attackableUnits.Erase(unit, unit.NetId);
+                }
+
+                if (o is Minion removedMinion)
+                {
+                    _minions.Erase(removedMinion, removedMinion.NetId);
+                }
+
+                if (o is Marker removedMarker)
+                {
+                    _markers.Erase(removedMarker, removedMarker.NetId);
+                }
+
+                if (o is LevelProp removedProp)
+                {
+                    _props.Erase(removedProp, removedProp.NetId);
+                }
+
+                if (o is ShopObject removedShop)
+                {
+                    _shops.Erase(removedShop, removedShop.NetId);
+                }
+
+                if (o is FollowerObject removedFollower)
+                {
+                    _followers.Erase(removedFollower, removedFollower.NetId);
                 }
 
                 o.OnRemoved();
@@ -423,10 +520,21 @@ namespace LeagueSandbox.GameServer
             var ret = new Dictionary<uint, GameObject>();
             foreach (var obj in _objects)
             {
-                ret.Add(obj.Key, obj.Value);
+                ret.Add(obj.NetId, obj);
             }
 
             return ret;
+        }
+
+        /// <summary>
+        /// Copy-free, insertion-ordered read-only view of ALL GameObjects. Prefer this over
+        /// <see cref="GetObjects"/> when you only need to iterate (no NetId keying): GetObjects()
+        /// allocates a fresh Dictionary on every call, which is wasteful on per-tick/per-event paths.
+        /// Do not mutate the manager while iterating this.
+        /// </summary>
+        public IReadOnlyList<GameObject> GetAllObjects()
+        {
+            return _objects.GetArray();
         }
 
         /// <summary>
@@ -440,7 +548,7 @@ namespace LeagueSandbox.GameServer
 
             if (obj == null)
             {
-                obj = _objects.GetValueOrDefault(id, null);
+                obj = _objects.Find(id);
             }
 
             return obj;
@@ -454,263 +562,7 @@ namespace LeagueSandbox.GameServer
         /// <returns>true/false; networked or not.</returns>
         public bool TeamHasVisionOn(TeamId team, GameObject o)
         {
-            if (o == null)
-            {
-                return false;
-            }
-
-            if (!o.IsAffectedByFoW)
-            {
-                return true;
-            }
-
-            // Globally-revealed units (e.g. Jinx W's RevealSpecificUnit) are visible regardless of
-            // which vision providers happen to be nearby. This test depends only on the tested unit,
-            // not on any provider, so it must live here — the grid path only visits spatially-near
-            // providers and would otherwise miss a revealed unit with no provider in range (e.g. a
-            // long-range Jinx W hit far from the caster). UnitHasVisionOn keeps the same check for
-            // the direct (nearSighted) call path.
-            if (o is AttackableUnit revealedUnit
-                && revealedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit))
-            {
-                return true;
-            }
-
-            bool useGrid = _providerIndexValid && _providerCells != null;
-            bool result = useGrid ? TeamHasVisionOnGrid(team, o) : TeamHasVisionOnLegacy(team, o);
-
-            if (VISION_PARALLEL_ASSERT && useGrid)
-            {
-                bool legacy = TeamHasVisionOnLegacy(team, o);
-                if (legacy != result)
-                {
-                    _logger.Warn($"[VISION-ASSERT] grid={result} legacy={legacy} team={team} netId={o.NetId} type={o.GetType().Name}");
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Spatial-index path: only visits providers in the grid cells overlapping the tested
-        /// object's max-vision-radius box. The cell box is a superset of every provider within
-        /// maxRadius (a provider can only see <paramref name="o"/> if it is within its own
-        /// VisionRadius, which is &lt;= maxRadius), so UnitHasVisionOn still makes the exact call.
-        /// </summary>
-        bool TeamHasVisionOnGrid(TeamId team, GameObject o)
-        {
-            float maxR = _providerMaxRadius[team];
-            if (maxR <= 0f)
-            {
-                return false;
-            }
-
-            var cells = _providerCells[team];
-            Vector2 pos = o.Position;
-            int c0 = ColOf(pos.X - maxR), c1 = ColOf(pos.X + maxR);
-            int r0 = RowOf(pos.Y - maxR), r1 = RowOf(pos.Y + maxR);
-
-            for (int r = r0; r <= r1; r++)
-            {
-                int rowBase = r * _gridCols;
-                for (int c = c0; c <= c1; c++)
-                {
-                    var bucket = cells[rowBase + c];
-                    for (int k = 0; k < bucket.Count; k++)
-                    {
-                        var p = bucket[k];
-                        if (!IsViableVisionProvider(p, team))
-                        {
-                            continue;
-                        }
-
-                        if (UnitHasVisionOn(p, o))
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Original full-scan path. Kept as the correctness reference for VISION_PARALLEL_ASSERT
-        /// and as the fallback used whenever the per-tick index is not yet valid.
-        /// </summary>
-        bool TeamHasVisionOnLegacy(TeamId team, GameObject o)
-        {
-            foreach (var p in _visionProviders[team])
-            {
-                if (!IsViableVisionProvider(p, team))
-                {
-                    continue;
-                }
-
-                if (UnitHasVisionOn(p, o))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Per-provider gating shared by the grid and legacy paths so they make identical
-        /// decisions. Does NOT include the distance / line-of-sight test — that stays in
-        /// <see cref="UnitHasVisionOn"/>.
-        /// </summary>
-        static bool IsViableVisionProvider(GameObject p, TeamId team)
-        {
-            if (p == null || p.IsToRemove())
-            {
-                return false;
-            }
-
-            // Dead units should never provide vision. (Zombies have IsDead=false under Model B, so
-            // they remain live vision providers until their real death — no special-casing needed.)
-            if (p is AttackableUnit observerUnit && observerUnit.IsDead)
-            {
-                return false;
-            }
-
-            // Regions bound to dead units should not provide vision either.
-            if (p is Region providerRegion
-                && providerRegion.CollisionUnit is AttackableUnit regionOwner
-                && regionOwner.IsDead)
-            {
-                return false;
-            }
-
-            // Enemy turrets should not provide vision for your team.
-            if (p is BaseTurret && p.Team != team)
-            {
-                return false;
-            }
-
-            // Enemy lane minions should not provide vision for your team.
-            if (p is Minion laneMinion
-                && laneMinion.Team != team
-                && laneMinion.Team != TeamId.TEAM_NEUTRAL)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Lazily sizes the per-team provider grid from the map bounds (the NavigationGrid is
-        /// loaded by the time the first tick runs).
-        /// </summary>
-        void EnsureVisionProviderIndex()
-        {
-            if (_providerCells != null)
-            {
-                return;
-            }
-
-            var nav = _game.Map.NavigationGrid;
-            _gridMinX = nav.MinGridPosition.X;
-            _gridMinY = nav.MinGridPosition.Z;
-            _gridCols = Math.Max(1, (int)Math.Ceiling(nav.MapWidth / GRID_CELL_SIZE));
-            _gridRows = Math.Max(1, (int)Math.Ceiling(nav.MapHeight / GRID_CELL_SIZE));
-
-            _providerCells = new Dictionary<TeamId, List<GameObject>[]>();
-            _providerMaxRadius = new Dictionary<TeamId, float>();
-            foreach (var team in Teams)
-            {
-                var cells = new List<GameObject>[_gridCols * _gridRows];
-                for (int i = 0; i < cells.Length; i++)
-                {
-                    cells[i] = new List<GameObject>();
-                }
-
-                _providerCells[team] = cells;
-                _providerMaxRadius[team] = 0f;
-            }
-        }
-
-        int ColOf(float x) => Math.Clamp((int)((x - _gridMinX) / GRID_CELL_SIZE), 0, _gridCols - 1);
-        int RowOf(float y) => Math.Clamp((int)((y - _gridMinY) / GRID_CELL_SIZE), 0, _gridRows - 1);
-
-        /// <summary>
-        /// Rebuilds the per-team provider index for this tick. Clears and refills the bucket
-        /// lists (no reallocation) and recomputes the per-team max vision radius used to size
-        /// queries. Cheap: O(total providers) ~ a few hundred inserts per tick.
-        /// </summary>
-        void RebuildVisionProviderIndex()
-        {
-            EnsureVisionProviderIndex();
-
-            foreach (var team in Teams)
-            {
-                var cells = _providerCells[team];
-                for (int i = 0; i < cells.Length; i++)
-                {
-                    cells[i].Clear();
-                }
-
-                float maxR = 0f;
-                foreach (var p in _visionProviders[team])
-                {
-                    if (p == null)
-                    {
-                        continue;
-                    }
-
-                    Vector2 pos = p.Position;
-                    cells[RowOf(pos.Y) * _gridCols + ColOf(pos.X)].Add(p);
-                    // Effective (scaled) radius so the provider-grid query box still covers a unit
-                    // whose vision radius is buff-extended (GetEffectiveVisionRadius); == VisionRadius
-                    // when no vision-scale is applied.
-                    float effR = p.GetEffectiveVisionRadius();
-                    if (effR > maxR)
-                    {
-                        maxR = effR;
-                    }
-                }
-
-                _providerMaxRadius[team] = maxR;
-            }
-
-            _providerIndexValid = true;
-        }
-
-        /// <summary>
-        /// Rebuilds the per-tick spatial index of all AttackableUnits (shares the provider grid's
-        /// cell dimensions). Cheap: O(units), buckets cleared and refilled (no reallocation).
-        /// </summary>
-        void RebuildUnitGrid()
-        {
-            EnsureVisionProviderIndex(); // sizes the shared grid dims from the map
-
-            if (_unitGridCells == null)
-            {
-                _unitGridCells = new List<AttackableUnit>[_gridCols * _gridRows];
-                for (int i = 0; i < _unitGridCells.Length; i++)
-                {
-                    _unitGridCells[i] = new List<AttackableUnit>();
-                }
-            }
-
-            for (int i = 0; i < _unitGridCells.Length; i++)
-            {
-                _unitGridCells[i].Clear();
-            }
-
-            foreach (var obj in _objects.Values)
-            {
-                if (obj is AttackableUnit u)
-                {
-                    Vector2 pos = u.Position;
-                    _unitGridCells[RowOf(pos.Y) * _gridCols + ColOf(pos.X)].Add(u);
-                }
-            }
-
-            _unitGridValid = true;
+            return _vision.TeamHasVisionOn(team, o);
         }
 
         /// <summary>
@@ -723,162 +575,7 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public void QueryUnitsInRange(Vector2 checkPos, float range, bool onlyAlive, List<AttackableUnit> result)
         {
-            result.Clear();
-            float r2 = range * range;
-
-            if (!_unitGridValid || _unitGridCells == null)
-            {
-                // Index not built yet this tick (rare/out-of-band) — fall back to a full scan.
-                foreach (var kv in _objects)
-                {
-                    if (kv.Value is AttackableUnit u
-                        && (!onlyAlive || !u.IsDead)
-                        && Vector2.DistanceSquared(checkPos, u.Position) <= r2)
-                    {
-                        result.Add(u);
-                    }
-                }
-                return;
-            }
-
-            int c0 = Math.Max(0, ColOf(checkPos.X - range) - 1);
-            int c1 = Math.Min(_gridCols - 1, ColOf(checkPos.X + range) + 1);
-            int r0 = Math.Max(0, RowOf(checkPos.Y - range) - 1);
-            int r1 = Math.Min(_gridRows - 1, RowOf(checkPos.Y + range) + 1);
-
-            for (int r = r0; r <= r1; r++)
-            {
-                int rowBase = r * _gridCols;
-                for (int c = c0; c <= c1; c++)
-                {
-                    var bucket = _unitGridCells[rowBase + c];
-                    for (int k = 0; k < bucket.Count; k++)
-                    {
-                        var u = bucket[k];
-                        if (onlyAlive && u.IsDead)
-                        {
-                            continue;
-                        }
-
-                        if (Vector2.DistanceSquared(checkPos, u.Position) <= r2)
-                        {
-                            result.Add(u);
-                        }
-                    }
-                }
-            }
-
-            if (UNITGRID_PARALLEL_ASSERT)
-            {
-                int scan = 0;
-                foreach (var kv in _objects)
-                {
-                    if (kv.Value is AttackableUnit u
-                        && (!onlyAlive || !u.IsDead)
-                        && Vector2.DistanceSquared(checkPos, u.Position) <= r2)
-                    {
-                        scan++;
-                    }
-                }
-
-                if (scan != result.Count)
-                {
-                    _logger.Warn($"[UNITGRID-ASSERT] grid={result.Count} scan={scan} pos={checkPos} range={range}");
-                }
-            }
-        }
-
-        bool UnitHasVisionOn(GameObject observer, GameObject tested, bool nearSighted = false)
-        {
-            if (!tested.IsAffectedByFoW)
-            {
-                return true;
-            }
-
-            if (observer == null || observer.IsToRemove())
-            {
-                return false;
-            }
-
-            if (observer is AttackableUnit observerUnit && observerUnit.IsDead)
-            {
-                return false;
-            }
-
-            if (observer is Region observerRegion
-                && observerRegion.CollisionUnit is AttackableUnit regionOwner
-                && regionOwner.IsDead)
-            {
-                return false;
-            }
-
-            if (tested is AttackableUnit testedUnit
-                && testedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit))
-            {
-                return true;
-            }
-
-            if (tested is AttackableUnit stealthedUnit
-                && stealthedUnit.Status.HasFlag(StatusFlags.Stealthed)
-                && !stealthedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit)
-                && stealthedUnit.Team != observer.Team)
-            {
-                return false;
-            }
-
-            if (observer is Region regionObserver
-                && regionObserver.OnlyShowTarget
-                && regionObserver.VisionTarget != null
-                && regionObserver.VisionTarget != tested)
-            {
-                return false;
-            }
-
-            if (tested is Particle particle)
-            {
-                if (!particle.IsAudienceVisibleToTeam(observer.Team))
-                {
-                    return false;
-                }
-
-                if (particle.ShouldAutoRevealForObserverTeam(observer.Team))
-                {
-                    return true;
-                }
-            }
-
-            if (tested.Team == observer.Team && !nearSighted)
-            {
-                return true;
-            }
-
-            // Effective vision radius (S4 CircleRegion::GetActualRadius = base * mult + add via
-            // GetVisionScale) so vision-range buffs/items extend sight; == VisionRadius by default.
-            float visionR = observer.GetEffectiveVisionRadius();
-            if (Vector2.DistanceSquared(observer.Position, tested.Position) >= visionR * visionR)
-            {
-                return false;
-            }
-
-            if (observer is Region region && region.IgnoresLineOfSight)
-            {
-                return true;
-            }
-
-            bool isSelfCheck = observer is Region r && r.VisionTarget == tested;
-            if (isSelfCheck)
-            {
-                return true;
-            }
-
-            // Scoped on its own: this LOS raycast is the suspected vision hotspot. In a trace,
-            // sum("vision:raycast") = total time in LOS raycasts; the parent vision scope minus
-            // this is the provider-iteration + distance-cull overhead. Constant name (no string
-            // interpolation) so the per-call cost stays negligible even at hundreds of calls/tick.
-            using (Profiler.Scope("vision:raycast"))
-            {
-                return !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);
-            }
+            _vision.QueryUnitsInRange(checkPos, range, onlyAlive, result);
         }
 
         /// <summary>
@@ -888,7 +585,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="team">The team that GameObject can provide vision to.</param>
         public void AddVisionProvider(GameObject obj, TeamId team)
         {
-            _visionProviders[team].Add(obj);
+            _vision.AddVisionProvider(obj, team);
         }
 
         /// <summary>
@@ -898,7 +595,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="team">The team that GameObject provided vision to.</param>
         public void RemoveVisionProvider(GameObject obj, TeamId team)
         {
-            _visionProviders[team].Remove(obj);
+            _vision.RemoveVisionProvider(obj, team);
         }
 
         /// <summary>
@@ -911,9 +608,9 @@ namespace LeagueSandbox.GameServer
         public List<AttackableUnit> GetUnitsInRange(Vector2 checkPos, float range, bool onlyAlive = false)
         {
             var units = new List<AttackableUnit>();
-            foreach (var kv in _objects)
+            foreach (var u in _attackableUnits)
             {
-                if (kv.Value is AttackableUnit u && Vector2.DistanceSquared(checkPos, u.Position) <= range * range &&
+                if (Vector2.DistanceSquared(checkPos, u.Position) <= range * range &&
                     (onlyAlive && !u.IsDead || !onlyAlive))
                 {
                     units.Add(u);
@@ -930,13 +627,20 @@ namespace LeagueSandbox.GameServer
         /// <returns>Number of units attacking target.</returns>
         public int CountUnitsAttackingUnit(AttackableUnit target)
         {
-            return GetObjects().Count(x =>
-                x.Value is ObjAIBase aiBase &&
-                aiBase.Team == target.Team.GetEnemyTeam() &&
-                !aiBase.IsDead &&
-                aiBase.TargetUnit != null &&
-                aiBase.TargetUnit == target
-            );
+            int count = 0;
+            foreach (var u in _attackableUnits)
+            {
+                if (u is ObjAIBase aiBase &&
+                    aiBase.Team == target.Team.GetEnemyTeam() &&
+                    !aiBase.IsDead &&
+                    aiBase.TargetUnit != null &&
+                    aiBase.TargetUnit == target)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         /// <summary>
@@ -945,16 +649,9 @@ namespace LeagueSandbox.GameServer
         /// <param name="target">AttackableUnit that should be untargeted.</param>
         public void StopTargeting(AttackableUnit target)
         {
-            foreach (var kv in _objects)
+            foreach (var u in _attackableUnits)
             {
-                var u = kv.Value as AttackableUnit;
-                if (u == null)
-                {
-                    continue;
-                }
-
-                var ai = u as ObjAIBase;
-                if (ai != null)
+                if (u is ObjAIBase ai)
                 {
                     ai.Untarget(target);
                 }
@@ -967,7 +664,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="turret">BaseTurret to add.</param>
         public void AddTurret(BaseTurret turret)
         {
-            _turrets.Add(turret.NetId, turret);
+            _turrets.PushBackUnique(turret, turret.NetId);
         }
 
         /// <summary>
@@ -978,12 +675,7 @@ namespace LeagueSandbox.GameServer
         /// <returns>BaseTurret instance identified by the specified NetID.</returns>
         public BaseTurret GetTurretById(uint netId)
         {
-            if (!_turrets.ContainsKey(netId))
-            {
-                return null;
-            }
-
-            return _turrets[netId];
+            return _turrets.Find(netId);
         }
 
         /// <summary>
@@ -993,7 +685,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="turret">BaseTurret to remove.</param>
         public void RemoveTurret(BaseTurret turret)
         {
-            _turrets.Remove(turret.NetId);
+            _turrets.Erase(turret, turret.NetId);
         }
 
         /// <summary>
@@ -1008,7 +700,7 @@ namespace LeagueSandbox.GameServer
         public int GetTurretsDestroyedForTeam(TeamId team, Lane lane)
         {
             int destroyed = 0;
-            foreach (var turret in _turrets.Values)
+            foreach (var turret in _turrets)
             {
                 if (turret.Team == team && turret.Lane == lane && turret.IsDead)
                 {
@@ -1025,7 +717,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="inhib">Inhibitor to add.</param>
         public void AddInhibitor(Inhibitor inhib)
         {
-            _inhibitors.Add(inhib.NetId, inhib);
+            _inhibitors.PushBackUnique(inhib, inhib.NetId);
         }
 
         /// <summary>
@@ -1035,12 +727,7 @@ namespace LeagueSandbox.GameServer
         /// <returns>Inhibitor instance identified by the specified NetID.</returns>
         public Inhibitor GetInhibitorById(uint id)
         {
-            if (!_inhibitors.ContainsKey(id))
-            {
-                return null;
-            }
-
-            return _inhibitors[id];
+            return _inhibitors.Find(id);
         }
 
         /// <summary>
@@ -1049,7 +736,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="inhib">Inhibitor to remove.</param>
         public void RemoveInhibitor(Inhibitor inhib)
         {
-            _inhibitors.Remove(inhib.NetId);
+            _inhibitors.Erase(inhib, inhib.NetId);
         }
 
         /// <summary>
@@ -1059,7 +746,7 @@ namespace LeagueSandbox.GameServer
         /// <returns>true/false; destroyed or not</returns>
         public bool AllInhibitorsDestroyedFromTeam(TeamId team)
         {
-            foreach (var inhibitor in _inhibitors.Values)
+            foreach (var inhibitor in _inhibitors)
             {
                 if (inhibitor.Team == team && inhibitor.InhibitorState == DampenerState.RespawningState)
                 {
@@ -1076,7 +763,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="champion">Champion to add.</param>
         public void AddChampion(Champion champion)
         {
-            _champions.Add(champion.NetId, champion);
+            _champions.PushBackUnique(champion, champion.NetId);
             PacketLogger.TagChampion(champion.NetId);
         }
 
@@ -1086,7 +773,7 @@ namespace LeagueSandbox.GameServer
         /// <param name="champion">Champion to remove.</param>
         public void RemoveChampion(Champion champion)
         {
-            _champions.Remove(champion.NetId);
+            _champions.Erase(champion, champion.NetId);
         }
 
         /// <summary>
@@ -1096,9 +783,8 @@ namespace LeagueSandbox.GameServer
         public List<Champion> GetAllChampions()
         {
             var champs = new List<Champion>();
-            foreach (var kv in _champions)
+            foreach (var c in _champions)
             {
-                var c = kv.Value;
                 if (c != null)
                 {
                     champs.Add(c);
@@ -1116,9 +802,8 @@ namespace LeagueSandbox.GameServer
         public List<Champion> GetAllChampionsFromTeam(TeamId team)
         {
             var champs = new List<Champion>();
-            foreach (var kv in _champions)
+            foreach (var c in _champions)
             {
-                var c = kv.Value;
                 if (c.Team == team)
                 {
                     champs.Add(c);
@@ -1138,9 +823,8 @@ namespace LeagueSandbox.GameServer
         public List<Champion> GetChampionsInRange(Vector2 checkPos, float range, bool onlyAlive = false)
         {
             var champs = new List<Champion>();
-            foreach (var kv in _champions)
+            foreach (var c in _champions)
             {
-                var c = kv.Value;
                 if (Vector2.DistanceSquared(checkPos, c.Position) <= range * range)
                     if (onlyAlive && !c.IsDead || !onlyAlive)
                         champs.Add(c);
@@ -1175,9 +859,8 @@ namespace LeagueSandbox.GameServer
             bool onlyAlive = false)
         {
             var champs = new List<Champion>();
-            foreach (var kv in _champions)
+            foreach (var c in _champions)
             {
-                var c = kv.Value;
                 if (Vector2.DistanceSquared(checkPos, c.Position) <= range * range)
                     if (c.Team == team && (onlyAlive && !c.IsDead || !onlyAlive))
                         champs.Add(c);
@@ -1209,9 +892,8 @@ namespace LeagueSandbox.GameServer
 
         public bool CheckChampionsInRangeFromTeam(Vector2 checkPos, float range, TeamId team, bool onlyAlive = false)
         {
-            foreach (var kv in _champions)
+            foreach (var c in _champions)
             {
-                var c = kv.Value;
                 if (Vector2.DistanceSquared(checkPos, c.Position) <= range * range)
                     if (c.Team == team && (onlyAlive && !c.IsDead || !onlyAlive))
                         return true;
@@ -1238,7 +920,49 @@ namespace LeagueSandbox.GameServer
         /// </summary>
         public List<SpellMissile> GetAllMissiles()
         {
-            return _missiles.Values.ToList();
+            return _missiles.ToList();
+        }
+
+        /// <summary>
+        /// Copy-free read-only view of all Minions (lane minions, pets, ...) in insertion order.
+        /// Iterate this instead of scanning GetObjects() when you only care about minions.
+        /// </summary>
+        public IReadOnlyList<Minion> GetAllMinions()
+        {
+            return _minions.GetArray();
+        }
+
+        /// <summary>
+        /// Copy-free read-only view of all Markers in insertion order (Riot: obj_AI_Marker manager).
+        /// </summary>
+        public IReadOnlyList<Marker> GetAllMarkers()
+        {
+            return _markers.GetArray();
+        }
+
+        /// <summary>
+        /// Copy-free read-only view of all LevelProps in insertion order (Riot: ManagedLevelProp manager).
+        /// </summary>
+        public IReadOnlyList<LevelProp> GetAllLevelProps()
+        {
+            return _props.GetArray();
+        }
+
+        /// <summary>
+        /// Copy-free read-only view of all ShopObjects in insertion order (Riot: obj_Shop manager).
+        /// </summary>
+        public IReadOnlyList<ShopObject> GetAllShops()
+        {
+            return _shops.GetArray();
+        }
+
+        /// <summary>
+        /// Copy-free read-only view of all FollowerObjects in insertion order (Riot: FollowerObject
+        /// manager). e.g. Syndra's orbs.
+        /// </summary>
+        public IReadOnlyList<FollowerObject> GetAllFollowers()
+        {
+            return _followers.GetArray();
         }
     }
 }

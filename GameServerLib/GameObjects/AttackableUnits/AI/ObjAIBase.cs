@@ -2786,9 +2786,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             if (damageData.ForceCallForHelp || (attacker is Champion && this is Champion))
             {
                 float importantHearSq = cfh.Radius * cfh.Radius;
-                foreach (var it in _game.ObjectManager.GetObjects())
+                foreach (var it in _game.ObjectManager.GetAllObjects())
                 {
-                    if (it.Value is not BaseTurret turret
+                    if (it is not BaseTurret turret
                         || turret.IsDead
                         || turret.Team != Team
                         || !turret.AIScript.AIScriptMetaData.HandlesCallsForHelp)
@@ -2936,9 +2936,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             float range = GetAcquisitionRange();
             AttackableUnit best = null;
             float bestDistSq = range * range;
-            foreach (var it in _game.ObjectManager.GetObjects())
+            foreach (var it in _game.ObjectManager.GetAllObjects())
             {
-                if (!(it.Value is AttackableUnit u) || u.IsDead || u.Team == Team
+                if (!(it is AttackableUnit u) || u.IsDead || u.Team == Team
                     || !u.IsTargetableByUnit(this))
                 {
                     continue;
