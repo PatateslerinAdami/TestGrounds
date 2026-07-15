@@ -66,8 +66,8 @@ namespace AIScripts
 
             // Firing is driven by the shared AutoAttackComponent (in attack range → on, past cancel range
             // → off), not by the engine auto-firing on "target set". This script keeps SELECTION + chase
-            // intent only. The engine's idealRange swing gate (ChasingAttackRangePercent) is unchanged, so
-            // WHERE it fires is identical.
+            // intent only. The engine's idealRange swing gate (full edge-to-edge attack range) is
+            // unchanged, so WHERE it fires is identical.
 
             InitTimer("TimerFindEnemies", DELAY_FIND_ENEMIES, true, TimerFindEnemies);
             InitTimer("TimerMoveForward", 0f, true, TimerMoveForward);

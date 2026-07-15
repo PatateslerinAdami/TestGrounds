@@ -308,14 +308,11 @@ namespace LeagueSandbox.GameServer.Handlers
                 return attackerPos;
             }
             Vector2 dir = toAttacker / MathF.Sqrt(distSq);
-            // 0.95 inset matches S4:4275 generic-inset mirror.
-            // Note: the JSON field `ChasingAttackRangePercent` is loaded into `CharData` for
-            // forward-compat but NOT wired here — verified 2026-05-10 that the S4 client
-            // doesn't read this field (literal "Chasing" doesn't appear anywhere in S4 decomp,
-            // and `CharacterData::FillCharacterRecordFromIniFromMyMembers` uses literal-string
-            // ReadCFG_S/I/B which would surface any consumed field). Wiring it would create a
-            // server-side behavior the client doesn't model. See memory
-            // `project_chardata_chasing_postattack_loaded.md` for the verification trail.
+            // 0.95 inset matches S4:4275 generic-inset mirror. (The JSON field
+            // `ChasingAttackRangePercent` is NOT a substitute for this constant: verified
+            // vestigial — no consumer in any decomp/Lua corpus — and a trial wiring into the
+            // engage range was falsified in-game 2026-07-15 (Yi-vs-turret standoff). See memory
+            // `project_chardata_chasing_postattack_loaded.md`.)
             const float STAND_INSET = 0.95f;
             return targetPos + dir * (effectiveRange * STAND_INSET);
         }
