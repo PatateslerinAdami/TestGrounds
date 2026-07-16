@@ -68,7 +68,7 @@ internal class AatroxR : IBuffGameScript {
         StatsModifier.Range.FlatBonus          = 175f;
         unit.AddStatModifier(StatsModifier);
 
-        _aatrox.SetAutoAttackSpells(false, AutoAttack4, AutoAttack5);
+        OverrideAutoAttacks(_aatrox, false, AutoAttack4, AutoAttack5);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
@@ -97,6 +97,6 @@ internal class AatroxR : IBuffGameScript {
             { "Spell3", "" }
         });
         PlayAnimation(_aatrox, "Spell4End");
-        _aatrox.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_aatrox);
     }
 }

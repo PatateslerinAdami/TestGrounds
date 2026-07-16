@@ -33,7 +33,7 @@ public class ToxicShot : IBuffGameScript
         _spell = ownerSpell;
         SealSpellSlot(_teemo, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
         ownerSpell.SetSpellToggle(true);
-        _teemo.SetAutoAttackSpell("ToxicShotAttack", false);
+        OverrideAutoAttack(_teemo, "ToxicShotAttack", false);
         ApiEventManager.OnHitUnit.AddListener(this, _teemo, TargetExecute);
     }
 
@@ -51,6 +51,6 @@ public class ToxicShot : IBuffGameScript
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _teemo.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_teemo);
     }
 }

@@ -39,7 +39,7 @@ internal class TrundleTrollSmash : IBuffGameScript {
         ownerSpell.SetSpellToggle(true);
         
         // Q empowers the next basic attack spell variant (ExtraSpell1), not the cast spell itself.
-        _trundle.SetAutoAttackSpell("TrundleQ", true);
+        OverrideAutoAttack(_trundle, "TrundleQ", true);
 
         // Hook damage and hit events to apply bonus damage and splash behavior.
         ApiEventManager.OnHitUnit.AddListener(this, _trundle, OnHit);
@@ -50,7 +50,7 @@ internal class TrundleTrollSmash : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _trundle.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_trundle);
         ApiEventManager.RemoveAllListenersForOwner(this);
         ownerSpell.SetCooldown(ownerSpell.CastInfo.Cooldown, false);
         SealSpellSlot(_trundle, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);

@@ -34,7 +34,7 @@ namespace Buffs
         {
             RemoveParticle(p1);
             unit.IconInfo.ResetBorder();
-            TeleportTo(buff.SourceUnit, unit.Position.X, unit.Position.Y);
+            TeleportToPosition(buff.SourceUnit, unit.Position.X, unit.Position.Y);
             if (buff.SourceUnit is Champion ch)
             {
                 TeleportCamera(ch, new Vector3(unit.Position.X, unit.GetHeight(), unit.Position.Y));

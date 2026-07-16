@@ -36,8 +36,8 @@ internal class JudicatorRighteousFury : IBuffGameScript
         _spell = ownerSpell;
         switch (_kayle.SkinID)
         {
-            case 6: _kayle.SetAutoAttackSpells(true, AttackSpell1, AttackSpell2); break;
-            default: _kayle.SetAutoAttackSpell(AttackSpell1, true); break;
+            case 6: OverrideAutoAttacks(_kayle, true, AttackSpell1, AttackSpell2); break;
+            default: OverrideAutoAttack(_kayle, AttackSpell1, true); break;
         }
 
         _p1 = SpellEffectCreate("RighteousFuryHalo_buf.troy", _kayle, _kayle, _kayle, lifetime: buff.Duration,
@@ -78,6 +78,6 @@ internal class JudicatorRighteousFury : IBuffGameScript
     {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_p1);
-        _kayle.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_kayle);
     }
 }

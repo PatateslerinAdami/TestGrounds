@@ -29,9 +29,9 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         ///
         /// <para>Required for blink-style spells (e.g. KatarinaE) where Riot's wire shows
         /// <c>CastSpellAns.targetPosition = landing</c> (the replay-empirical match). Note this is
-        /// purely a wire-shape concern; the actual post-blink position-sync runs through a separate
-        /// <c>WaypointGroup</c> with <c>HasTeleportID=true</c> packet (= server-side
-        /// <c>NotifyTeleport</c>, broadcast to all teammates with vision).
+        /// purely a wire-shape concern; the actual post-blink position-sync is the teleport-flagged
+        /// (<c>HasTeleportID=true</c>) movement entry the engine emits in the tick's batched
+        /// <c>WaypointGroup</c> when the script calls <c>TeleportToPosition</c>.
         /// Both are needed for full fidelity.</para>
         /// </summary>
         /// TODO: Move this somewhere else

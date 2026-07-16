@@ -31,7 +31,7 @@ internal class VayneInquisition : IBuffGameScript {
             { "Attack1", "Attack_Ult" },
             { "Attack2", "Attack_Ult" }
         });
-        _vayne.SetAutoAttackSpell("VayneUltAttack", false);
+        OverrideAutoAttack(_vayne, "VayneUltAttack", false);
         
         var spellLevel = ownerSpell.CastInfo.SpellLevel;
         StatsModifier.AttackDamage.FlatBonus = spellLevel switch {
@@ -52,6 +52,6 @@ internal class VayneInquisition : IBuffGameScript {
             { "Attack1", "" },
             { "Attack2", "" }
         }); 
-        _vayne.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_vayne);
     }
 }

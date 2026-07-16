@@ -36,7 +36,7 @@ internal class JinxQIcon : IBuffGameScript {
         // Return to Pow-Pow autos and clear the full rocket-form slot swap (mirrors the set
         // in JinxQ.OnActivate — empty value removes the override). Belt-and-suspenders with
         // JinxQ.OnDeactivate so the minigun form never strands an R_ animation.
-        _jinx.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_jinx);
         _jinx.SetAnimStates(new Dictionary<string, string> {
             { "RUN", "" }, { "RUN2", "" }, { "RUN_FAST", "" },
             { "IDLE1", "" }, { "IDLE2", "" }, { "IDLE3", "" },

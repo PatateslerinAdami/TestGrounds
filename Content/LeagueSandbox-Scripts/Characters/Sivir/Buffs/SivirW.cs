@@ -32,7 +32,7 @@ internal class SivirW : IBuffGameScript {
         _spell = ownerSpell;
         _buff = buff;
         _hitCount = 0;
-        _sivir.SetAutoAttackSpell("SivirWAttack", true);
+        OverrideAutoAttack(_sivir, "SivirWAttack", true);
         ApiEventManager.OnLaunchAttack.AddListener(this, _sivir, OnLaunchAttack);
     }
 
@@ -45,6 +45,6 @@ internal class SivirW : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_p1);
-        _sivir.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_sivir);
     }
 }

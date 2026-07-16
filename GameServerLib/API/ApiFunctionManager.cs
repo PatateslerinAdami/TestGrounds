@@ -359,7 +359,7 @@ namespace LeagueSandbox.GameServer.API
         /// ObjAIBase is the correct scope — Riot's script teleport is obj_AI_Base-typed in both
         /// eras (LuaSpellScriptHelper::TeleportToPositionR3dPoint(obj_AI_Base*, r3dPoint3D), S1
         /// server + 4.17 client decomp), so this should NOT be widened to GameObject. Riot snaps
-        /// the target to the nearest passable cell (our GetClosestTerrainExit inside TeleportTo)
+        /// the target to the nearest passable cell (our GetClosestTerrainExit inside TeleportToPosition)
         /// and refuses the teleport when the snapped target lies outside the unit's active
         /// circular movement restriction (IsGoalPosRestricted checks mMovementRestrictionCenter/
         /// Radius). We only have the wire side of that feature (S2C_SetCircularMovementRestriction),
@@ -368,16 +368,19 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="unit">AI unit to teleport.</param>
         /// <param name="x">X coordinate.</param>
         /// <param name="y">Y coordinate.</param>
-        /// <param name="silent">Passed through to AttackableUnit.TeleportTo: no movement-update
-        /// flag and no networked StopMovement (for blink spells with their own position sync).</param>
-        public static void TeleportTo(ObjAIBase unit, float x, float y, bool silent = false)
+        // No notify/silent knob — Riot's BBTeleportToPosition is a single call and the wire
+        // (teleport-flagged 0x61 entry in the tick's ch4 movement batch) is emitted by the
+        // engine's movement sync automatically. The former silent+NotifyTeleport script pair
+        // was removed 2026-07-15 (it double-tracked the engine and shipped the teleport on the
+        // wrong channel — the Yi Alpha-Strike slide bug).
+        public static void TeleportToPosition(ObjAIBase unit, float x, float y)
         {
             if (unit.MovementParameters != null)
             {
                 CancelForceMovement(unit);
             }
 
-            unit.TeleportTo(x, y, silent: silent);
+            unit.TeleportTo(x, y);
         }
 
         public static void FaceDirection(Vector2 location, GameObject target, bool isInstant = false,
@@ -3323,6 +3326,159 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Cancels the unit's current basic attack — Riot's <c>BBCancelAutoAttack</c>
+        /// (params TargetVar / Reset). Corpus survey (S1 Lua, 38 uses):
+        /// <para><c>reset = true</c> is Riot's AUTO-ATTACK-RESET primitive — the whole classic
+        /// reset roster calls exactly this (Vayne Tumble, Nasus SiphoningStrike, Renekton
+        /// PreExecute, Poppy DevastatingBlow, Leona ShieldOfDaybreak, Jax EmpowerTwo, Blitzcrank
+        /// PowerFist, Talon NoxianDiplomacy, Fizz Q, Volibear Q/R, Shyvana/MonkeyKing
+        /// DoubleAttack, Trundle TrollSmash, XinZhao Combo, Mordekaiser Q, Yorick W, Nidalee
+        /// Takedown …): cancel any in-flight windup AND zero the attack timer so the next swing
+        /// starts immediately. Works between swings too (timer reset is the point).</para>
+        /// <para><c>reset = false</c> is the INTERRUPT form (Exhaust, Blind, Sona PowerChord,
+        /// Rumble Overheat, Kayle RighteousFury, Riven TriCleave first casts): break the current
+        /// windup, attack timer untouched.</para>
+        /// <para>Wire: NPC_InstantStop_Attack goes out only when a windup was actually live
+        /// (replay-empirical — Riot's ISA fires on the with-windup subset only, e.g. ~27% of
+        /// Katarina E casts); a between-swings reset emits nothing.</para>
+        /// <para>NOTE for ports: most empowered-attack resets are TWO-step — the buff installs the
+        /// override via <c>BBOverrideAutoAttack(CancelAttack=false)</c> (our OverrideAutoAttack)
+        /// and the override SPELL itself then fires <c>BBCancelAutoAttack(Reset=true)</c> (this
+        /// function). Canonical example Jax W (Empower.lua + EmpowerTwo.lua); check the champion's
+        /// Lua before choosing the path.</para>
+        /// </summary>
+        /// <param name="unit">Unit whose attack to cancel (BBCancelAutoAttack <c>TargetVar</c>).</param>
+        /// <param name="reset">Riot's <c>Reset</c> param: true = AA reset (also zeroes the attack
+        /// timer, bypasses the windup lock like Riot's ForceStop), false = interrupt only
+        /// (honours CantCancelWhileWindingUp).</param>
+        public static void CancelAutoAttack(ObjAIBase unit, bool reset)
+        {
+            if (unit == null)
+            {
+                return;
+            }
+
+            if (unit.IsAttacking)
+            {
+                // In-flight swing: cancel it (ISA broadcast flows from CancelAutoAttack, so the
+                // packet is naturally gated on "a windup existed"). Resets bypass the windup lock
+                // (Riot ForceStop); interrupts honour it.
+                unit.CancelAutoAttack(reset: reset, fullCancel: true, respectWindupLock: !reset);
+            }
+            else if (reset)
+            {
+                // Between swings: pure timer reset, nothing to cancel → no wire packet.
+                unit.CancelAutoAttack(reset: true, fullCancel: true, silent: true);
+            }
+        }
+
+        /// <summary>
+        /// Installs an auto-attack override — Riot's <c>BBOverrideAutoAttack</c> (params OwnerVar /
+        /// SpellSlot / SlotType / AutoAttackSpellLevel / CancelAttack; corpus: 48 uses, CancelAttack
+        /// 27×false / 21×true). The unit's next basic attacks cast the given slot's spell instead of
+        /// the chardata attack rotation, until <see cref="RemoveOverrideAutoAttack"/>. Most
+        /// empowered-attack setups install with <c>cancelAttack=false</c> and let the override SPELL
+        /// itself do the AA reset via <see cref="CancelAutoAttack"/>(reset: true) — the Jax-W
+        /// two-step (Empower.lua installs, EmpowerTwo.lua resets).
+        /// </summary>
+        /// <param name="owner">Unit whose auto attack to override (BB <c>OwnerVar</c>).</param>
+        /// <param name="spellSlot">Slot of the override spell (BB <c>SpellSlot</c>).</param>
+        /// <param name="slotType">Slot type (BB <c>SlotType</c>, corpus-wide ExtraSlots).</param>
+        /// <param name="autoAttackSpellLevel">BB <c>AutoAttackSpellLevel</c>: level the override
+        /// attack casts at (same force-level mechanism as BBSpellCast's OverrideForceLevel);
+        /// negative = keep the spell's current level.</param>
+        /// <param name="cancelAttack">BB <c>CancelAttack</c>: also cancel/reset the in-flight swing
+        /// while installing.</param>
+        public static Spell OverrideAutoAttack(ObjAIBase owner, int spellSlot, SpellSlotType slotType,
+            int autoAttackSpellLevel, bool cancelAttack)
+        {
+            if (owner == null)
+            {
+                return null;
+            }
+
+            int slot = ConvertAPISlot(slotType, spellSlot);
+            Spell spell = owner.Spells[(short)slot];
+            if (spell == null)
+            {
+                return null;
+            }
+
+            if (autoAttackSpellLevel >= 0)
+            {
+                spell.CastInfo.SpellLevel = (byte)autoAttackSpellLevel;
+            }
+
+            owner.OverrideAutoAttack(spell, cancelAttack);
+            return spell;
+        }
+
+        /// <summary>
+        /// Name-based convenience overload of <see cref="OverrideAutoAttack(ObjAIBase, int,
+        /// SpellSlotType, int, bool)"/> for overrides addressed by spell name instead of slot.
+        /// </summary>
+        public static Spell OverrideAutoAttack(ObjAIBase owner, string name, bool cancelAttack)
+        {
+            return owner?.OverrideAutoAttack(name, cancelAttack);
+        }
+
+        /// <summary>
+        /// Multi-variant override — OUR extension (no BB equivalent; Riot's attack-rotation
+        /// variance lives in chardata BasicAttacks). Installs a pool the engine picks from per
+        /// swing (optionally weighted).
+        /// </summary>
+        public static Spell OverrideAutoAttacks(ObjAIBase owner, bool cancelAttack, params string[] names)
+        {
+            return owner?.OverrideAutoAttacks(cancelAttack, names);
+        }
+
+        public static Spell OverrideAutoAttacks(ObjAIBase owner, bool cancelAttack,
+            params (string name, float weight)[] weightedNames)
+        {
+            return owner?.OverrideAutoAttacks(cancelAttack, weightedNames);
+        }
+
+        /// <summary>
+        /// Crit-aware override — OUR extension (no BB equivalent): separate spell for crit swings
+        /// (client-side crit anims ride the crit slot, see the AA-crit HitResult work).
+        /// </summary>
+        public static Spell OverrideCritAutoAttack(ObjAIBase owner, string normalName, string critName, bool cancelAttack)
+        {
+            return owner?.OverrideCritAutoAttack(normalName, critName, cancelAttack);
+        }
+
+        public static Spell OverrideCritAutoAttacks(ObjAIBase owner, bool cancelAttack, string critName, params string[] names)
+        {
+            return owner?.OverrideCritAutoAttacks(cancelAttack, critName, names);
+        }
+
+        public static Spell OverrideCritAutoAttacks(ObjAIBase owner, bool cancelAttack, string critName,
+            params (string name, float weight)[] weightedNames)
+        {
+            return owner?.OverrideCritAutoAttacks(cancelAttack, critName, weightedNames);
+        }
+
+        /// <summary>
+        /// Removes the auto-attack override, restoring the chardata attack rotation — Riot's
+        /// <c>BBRemoveOverrideAutoAttack</c> (params OwnerVar / CancelAttack; corpus: 42 uses,
+        /// CancelAttack 17×true / 17×false).
+        /// </summary>
+        public static void RemoveOverrideAutoAttack(ObjAIBase owner, bool cancelAttack = false)
+        {
+            owner?.RemoveOverrideAutoAttack(cancelAttack);
+        }
+
+        /// <summary>
+        /// The unit's next started basic attack is skipped (consumed without a cast) — Riot's
+        /// <c>BBSkipNextAutoAttack</c> (params TargetVar; corpus: 8 uses, e.g. GarenSlash3,
+        /// RenektonPreExecute — swallow the AA that would race the empowered cast).
+        /// </summary>
+        public static void SkipNextAutoAttack(ObjAIBase owner)
+        {
+            owner?.SkipNextAutoAttack();
+        }
+
+        /// <summary>
         /// Issues an engine AI order to a unit — Riot's <c>BBIssueOrder</c> (params WhomToOrderVar /
         /// Order / TargetOfOrderVar), which routes through the SAME order pipeline as player input
         /// (<c>obj_AI_Base::IssueOrder</c>; HandleMove performs the identical calls for right-clicks).
@@ -3385,6 +3541,20 @@ namespace LeagueSandbox.GameServer.API
                     whom.UpdateMoveOrder(order, true);
                     break;
             }
+
+            // "Routes through the SAME order pipeline as player input" must include HandleMove's
+            // OTHER two steps, not just the path/target case-work above:
+            //  (1) the IssueOrder→OnOrder script channel — HeroAI.OnOrder(AttackTo) enters
+            //      AI_HARDATTACK, which the auto-attack state gate (AutoAttackStatePermits) requires
+            //      before the AutoAttackComponent may toggle the swing on. Without this, a script-
+            //      issued AttackTo set the target and chased but NEVER attacked (Katarina-E bug
+            //      2026-07-15: post-blink re-engage stood in range without swinging whenever the
+            //      champion wasn't already in an attack state).
+            //  (2) HandleNewOrder — Riot's order-status machine (PENDING→EXECUTED), the single
+            //      issue point for order status, same as HandleMove.
+            var orderPos = targetOfOrder?.Position ?? whom.Position;
+            whom.IssueOrder(order, targetOfOrder, orderPos);
+            whom.HandleNewOrder(order, targetOfOrder, orderPos);
         }
 
         // ===================================================================================
@@ -4368,16 +4538,12 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyWaypointGroup(unit);
         }
 
-        /// <summary>
-        /// Sends a single-waypoint WaypointGroup with HasTeleportID=true on CHL_S2C — used
-        /// for blink-style spells (Katarina E) where the post-blink position must reach the
-        /// client same-tick to match Riot's wire timing. The unit's TeleportID is read after
-        /// this call returns, so increment it (e.g. via TeleportTo) before invoking.
-        /// </summary>
-        public static void NotifyTeleport(AttackableUnit unit, Vector2 position)
-        {
-            _game.PacketNotifier.NotifyTeleport(unit, position);
-        }
+        // REMOVED: NotifyTeleport(unit, position) script verb (2026-07-15). Riot's script API is
+        // just BBTeleportToPosition — the teleport wire (teleport-flagged 0x61 entry in the tick's
+        // ch4 movement batch) is emitted by the engine's movement sync; no Riot Lua ever pairs the
+        // teleport with a manual notify (AlphaStrikeTeleport.lua evidence). The old immediate
+        // packet also rode CHL_S2C, where the client never applied it (Yi Alpha-Strike slide bug).
+        // Scripts just call TeleportToPosition(unit, x, y).
 
         /// <summary>
         /// Changes a property of the spell in the given slot (icon index, name, range, targeting type and etc.)

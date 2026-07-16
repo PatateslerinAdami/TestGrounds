@@ -56,7 +56,7 @@ namespace Spells
             {
                 teleportPos = targetPos;
             }
-            TeleportTo(owner, teleportPos.X, teleportPos.Y);
+            TeleportToPosition(owner, teleportPos.X, teleportPos.Y);
             AddBuff("Crowstorm", 5f, 1, spell, owner, owner);
         }
         

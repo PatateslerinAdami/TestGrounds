@@ -193,7 +193,7 @@ namespace AIScripts
             // Too far → teleport back to the owner and idle.
             if (distToOwner > TeleportDistance)
             {
-                TeleportTo(Owner, owner.Position.X, owner.Position.Y);
+                TeleportToPosition(Owner, owner.Position.X, owner.Position.Y);
                 Stand(AIState.AI_PET_IDLE);
                 return;
             }

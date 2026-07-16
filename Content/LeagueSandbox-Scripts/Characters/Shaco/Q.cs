@@ -35,8 +35,7 @@ namespace Spells
                 : _end;
             AddParticle(_owner, null, "JackintheboxPoof2", _owner.Position, lifetime: 2f);
             AddBuff("Deceive", 5f, 1, spell, _owner, _owner);
-            _owner.TeleportTo(result.X, result.Y, false);
-            
+            TeleportToPosition(_owner, result.X, result.Y);
         }
         
     }

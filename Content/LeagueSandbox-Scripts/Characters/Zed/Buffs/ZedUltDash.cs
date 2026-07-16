@@ -196,7 +196,7 @@ internal class ZedUltDash : IBuffGameScript {
 
         if (_cancelledBeforeDash) {
             _zed.SetStatus(StatusFlags.Ghosted, false);
-            TeleportTo(_zed, _castPosition.X, _castPosition.Y);
+            TeleportToPosition(_zed, _castPosition.X, _castPosition.Y);
             RemoveRShadow();
         } else {
             if (_target == null) {

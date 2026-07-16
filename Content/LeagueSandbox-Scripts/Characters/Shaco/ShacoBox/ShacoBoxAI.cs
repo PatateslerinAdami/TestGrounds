@@ -1,6 +1,7 @@
 using System.Numerics;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace AIScripts
 {
@@ -9,7 +10,7 @@ namespace AIScripts
     // Spell1, ShacoBoxSpell — which is literally tooltipped "JackintheBoxBasicAttack" (the box's basic
     // attack IS that spell, Attack1 animation, ApplyAttackDamage 0 → its TargetExecute/OnSpellHit applies
     // the magic damage). So we DON'T script a spell cast: we point the box's auto-attack at ShacoBoxSpell
-    // (SetAutoAttackSpells) and let the shared AutoAttackComponent fire it in place at the box's attack
+    // (OverrideAutoAttacks) and let the shared AutoAttackComponent fire it in place at the box's attack
     // speed. The box is spawned Rooted, so it attacks where it stands and never chases.
     //
     // The fear pulse, the hidden/arming stealth + invulnerability, and the mana/lifetime death are owned by
@@ -31,7 +32,7 @@ namespace AIScripts
             // The box's auto-attack IS ShacoBoxSpell (its Spell1, tooltipped "JackintheBoxBasicAttack"):
             // override the engine's basic attack so every swing fires that spell, whose OnSpellHit applies
             // the magic damage. Matches S1, where the box auto-attacks with this spell and has no AI.
-            Owner.SetAutoAttackSpells(true, "ShacoBoxSpell");
+            OverrideAutoAttacks(Owner, true, "ShacoBoxSpell");
             InitTimer("TimerAcquire", SCAN_INTERVAL, true, TimerAcquire);
         }
 

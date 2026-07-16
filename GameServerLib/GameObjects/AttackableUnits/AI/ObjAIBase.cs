@@ -1911,53 +1911,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Spells[slot] = previous;
         }
 
-        /// <summary>
-        /// Switches this AI's attack target to <paramref name="target"/> AND fully resets the
-        /// auto-attack pipeline so the next Update tick starts a fresh AA on the new target with
-        /// proper damage application. Sends the wire-side target-switch pair Riot uses
-        /// (<c>Basic_Attack_Pos</c> + <c>NPC_InstantStop_Attack</c>, replay-verified KatarinaE
-        /// id=18097 + id=18102, t=303818).
-        ///
-        /// <para><b>Why the pipeline reset matters</b>: a stale <c>IsAttacking=true</c> from a
-        /// pre-blink AA windup makes <c>UpdateTarget</c> skip the new-target acquisition path
-        /// (line 1963 — the <c>else if (IsAttacking)</c> branch continues the OLD windup), so the
-        /// post-blink AA fires through a degenerate code path and applies no damage. Calling
-        /// <see cref="CancelAutoAttack"/> with <c>reset+fullCancel</c> clears
-        /// <c>AutoAttackSpell.State</c>, <c>_autoAttackCurrentCooldown</c>, <c>IsAttacking</c>, and
-        /// <c>HasMadeInitialAttack</c> so the unit is treated as fresh.</para>
-        ///
-        /// <para><b>Wire pattern</b>: Riot does NOT send <c>AI_TargetS2C</c> for these switches
-        /// (0 occurrences in the reference Katarina replay). The target-switch on the wire IS the
-        /// BAP+ISA pair. We pass <c>networked: false</c> to <see cref="SetTargetUnit"/> to skip the
-        /// AI_TargetS2C broadcast and emit BAP/ISA manually.</para>
-        /// </summary>
-        /// <param name="target">Unit to retarget to. Must be non-null and a valid AA target.</param>
-        /// <param name="emitInstantStop">Whether to broadcast the <c>NPC_InstantStop_Attack</c> packet.
-        /// Replay-empirical (Kat-perspective, 79 E casts): Riot only fires this packet on ~27% of E
-        /// casts — apparently only when there's an active AA-windup to cancel. Pass
-        /// <c>this.IsAttacking</c> at the call site to match Riot's wire pattern. The server-side
-        /// pipeline reset still happens regardless — only the wire packet is gated.</param>
-        public void RetargetAttackToWithHandoff(AttackableUnit target, bool emitInstantStop = true)
-        {
-            if (target == null) return;
-
-            // Pipeline reset (always): mirrors a full AA-reset (e.g. Yi Q reset, Riven Q3 reset).
-            // `silent: !emitInstantStop` suppresses the ISA broadcast embedded in CancelAutoAttack
-            // when the caller has decided no in-flight AA exists to cancel client-side.
-            CancelAutoAttack(reset: true, fullCancel: true, silent: !emitInstantStop);
-
-            // Server-state retarget (no AI_TargetS2C broadcast — that's empirically not used for
-            // blink-target-switches; the BAP packet is the wire signal).
-            SetTargetUnit(target, networked: false);
-
-            var futureProjNetId = _game.NetworkIdManager.GetNewNetId();
-            _game.PacketNotifier.NotifyBasic_Attack_Pos(this, target, futureProjNetId, IsNextAutoCrit);
-        }
+        // REMOVED: RetargetAttackToWithHandoff (2026-07-15). It bundled windup-cancel + retarget +
+        // a MANUAL Basic_Attack_Pos with a reserved future missile id — but Riot's script layer has
+        // no such composite: the S1 Lua model is explicit BBCancelAutoAttack (only when the design
+        // wants the cancel) + BBIssueOrder(AI_ATTACKTO) (AlphaStrikeTeleport.lua), and the wire
+        // artifacts flow ORGANICALLY from the attack pipeline (Yi replay c7119e79, 59 Alpha
+        // Strikes: 86× Basic_Attack_Pos / 129× InstantStop at variable post-cast times; the manual
+        // +0ms BAP also risked a double announce with a mismatched missile id once the real attack
+        // started). Scripts now call CancelAutoAttackIfWindingUp() (= BBCancelAutoAttack shape, ISA
+        // only when a windup was live — Riot's ~27% Kat-E pattern) + ApiFunctionManager.IssueOrder
+        // (AttackTo). SetTargetUnit's networked default (false) keeps the no-AI_TargetS2C wire.
 
         /// <summary>
-        /// Sets this AI's current auto attack to their base auto attack.
+        /// Sets this AI's current auto attack to their base auto attack — Riot's
+        /// <c>BBRemoveOverrideAutoAttack</c> (params OwnerVar / CancelAttack; corpus: CancelAttack
+        /// 17×true / 17×false). The Override/Remove/Cancel family is Riot's AA-reset architecture,
+        /// canonical example Jax W: Empower.lua installs the override with
+        /// <c>BBOverrideAutoAttack(CancelAttack=false)</c> (in-flight swing untouched), the
+        /// empowered-attack spell itself (EmpowerTwo.lua) then fires
+        /// <c>BBCancelAutoAttack(Reset=true)</c> — the actual AA reset — so the empowered swing
+        /// starts immediately; the W-end removes the override. All three converge on
+        /// <see cref="CancelAutoAttack"/> engine-side.
         /// </summary>
-        public void ResetAutoAttackSpell()
+        /// <param name="cancelAttack">Riot's <c>CancelAttack</c>: also cancel/reset the current
+        /// swing while removing the override (same cancel the install-side isReset performs).</param>
+        public void RemoveOverrideAutoAttack(bool cancelAttack = false)
         {
             _autoAttackOverrideSpells.Clear();
             _autoAttackOverrideWeights.Clear();
@@ -1966,6 +1944,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             IsAutoAttackOverridden = false;
             AutoAttackSpell = GetNewAutoAttack();
             PrepareAutoAttackSpellForCast(AutoAttackSpell);
+            if (cancelAttack)
+            {
+                CancelAutoAttack(true);
+            }
         }
 
         /// <summary>
@@ -1973,7 +1955,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         /// <param name="spell">Spell instance to set.</param>
         /// <param name="isReset">Whether or not setting this spell causes auto attacks to be reset (cooldown).</param>
-        public void SetAutoAttackSpell(Spell spell, bool isReset)
+        public void OverrideAutoAttack(Spell spell, bool isReset)
         {
             if (spell == null)
             {
@@ -1996,12 +1978,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Sets this unit's auto attack spell that they will use when in range of their target (unless they are going to cast a spell first).
+        /// Sets this unit's auto attack spell that they will use when in range of their target
+        /// (unless they are going to cast a spell first) — Riot's <c>BBOverrideAutoAttack</c>
+        /// (params SpellSlot / SlotType / AutoAttackSpellLevel / CancelAttack; corpus: CancelAttack
+        /// 27×false / 21×true). <paramref name="isReset"/> ≙ Riot's <c>CancelAttack</c>: whether
+        /// installing the override also cancels/resets the current swing. Most empowered-attack
+        /// setups install with false and let the override SPELL itself do the AA reset via
+        /// BBCancelAutoAttack(Reset=true) — see <see cref="RemoveOverrideAutoAttack"/> for the full
+        /// Jax-W pattern.
         /// </summary>
         /// <param name="name">Internal name of the spell to set.</param>
-        /// <param name="isReset">Whether or not setting this spell causes auto attacks to be reset (cooldown).</param>
+        /// <param name="isReset">Whether or not setting this spell causes auto attacks to be reset (cooldown) — Riot's CancelAttack.</param>
         /// <returns>Spell set.</returns>
-        public Spell SetAutoAttackSpell(string name, bool isReset)
+        public Spell OverrideAutoAttack(string name, bool isReset)
         {
             AutoAttackSpell = GetAutoAttackSpell(name) ?? GetSpell(name);
             if (AutoAttackSpell == null)
@@ -2024,7 +2013,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return AutoAttackSpell;
         }
 
-        public Spell SetAutoAttackSpells(bool isReset, params string[] names)
+        public Spell OverrideAutoAttacks(bool isReset, params string[] names)
         {
             _autoAttackOverrideSpells.Clear();
             _autoAttackOverrideWeights.Clear();
@@ -2068,7 +2057,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return AutoAttackSpell;
         }
 
-        public Spell SetAutoAttackSpells(bool isReset, params (string name, float weight)[] weightedNames)
+        public Spell OverrideAutoAttacks(bool isReset, params (string name, float weight)[] weightedNames)
         {
             _autoAttackOverrideSpells.Clear();
             _autoAttackOverrideWeights.Clear();
@@ -2113,9 +2102,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return AutoAttackSpell;
         }
 
-        public Spell SetAutoAttackSpellWithCrit(string normalName, string critName, bool isReset)
+        public Spell OverrideCritAutoAttack(string normalName, string critName, bool isReset)
         {
-            var selected = SetAutoAttackSpell(normalName, isReset);
+            var selected = OverrideAutoAttack(normalName, isReset);
             if (selected == null)
             {
                 return null;
@@ -2125,9 +2114,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return selected;
         }
 
-        public Spell SetAutoAttackSpellsWithCrit(bool isReset, string critName, params string[] names)
+        public Spell OverrideCritAutoAttacks(bool isReset, string critName, params string[] names)
         {
-            var selected = SetAutoAttackSpells(isReset, names);
+            var selected = OverrideAutoAttacks(isReset, names);
             if (selected == null)
             {
                 return null;
@@ -2137,9 +2126,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return selected;
         }
 
-        public Spell SetAutoAttackSpellsWithCrit(bool isReset, string critName, params (string name, float weight)[] weightedNames)
+        public Spell OverrideCritAutoAttacks(bool isReset, string critName, params (string name, float weight)[] weightedNames)
         {
-            var selected = SetAutoAttackSpells(isReset, weightedNames);
+            var selected = OverrideAutoAttacks(isReset, weightedNames);
             if (selected == null)
             {
                 return null;

@@ -33,14 +33,14 @@ public class AatroxWONHLifeBuff : IBuffGameScript {
         _buff   = buff;
         _aatrox = buff.SourceUnit;
         _spell  = ownerspell;
-        _aatrox.SetAutoAttackSpell("AatroxWONHAttackLife", false);
+        OverrideAutoAttack(_aatrox, "AatroxWONHAttackLife", false);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
         if (_aatrox.HasBuff("AatroxR")) {
-            _aatrox.SetAutoAttackSpells(false,             AutoAttack4, AutoAttack5);
+            OverrideAutoAttacks(_aatrox, false,             AutoAttack4, AutoAttack5);
         } else {
-            _aatrox.ResetAutoAttackSpell(); 
+            RemoveOverrideAutoAttack(_aatrox); 
         }
     }
 }

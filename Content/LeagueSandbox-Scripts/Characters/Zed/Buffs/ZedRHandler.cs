@@ -60,8 +60,8 @@ internal class ZedRHandler : IBuffGameScript {
 
     public void Swap() {
         var zedPosition = _zed.Position;
-        TeleportTo(_zed, _shadow.Position.X, _shadow.Position.Y);
-        TeleportTo(_shadow, zedPosition.X, zedPosition.Y);
+        TeleportToPosition(_zed, _shadow.Position.X, _shadow.Position.Y);
+        TeleportToPosition(_shadow, zedPosition.X, zedPosition.Y);
         AddParticleTarget(_zed, null, "Zed_CloneSwap.troy", _shadow);
         AddParticleTarget(_zed, null, "Zed_CloneSwap.troy", _zed);
         SetSpellShadowDash();

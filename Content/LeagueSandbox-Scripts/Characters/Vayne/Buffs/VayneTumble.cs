@@ -53,7 +53,7 @@ internal class VayneTumbleBonus : IBuffGameScript {
                 { "Attack1", "Attack_TumbleUlt" },
                 { "Attack2", "Attack_TumbleUlt" }
             });
-            _vayne.SetAutoAttackSpell("VayneTumbleUltAttack", true);
+            OverrideAutoAttack(_vayne, "VayneTumbleUltAttack", true);
         } else {
             _vayne.SetAnimStates(new Dictionary<string, string> {
                 { "Idle1", "Idle_Tumble" },
@@ -64,7 +64,7 @@ internal class VayneTumbleBonus : IBuffGameScript {
                 { "Attack1", "Attack_Tumble" },
                 { "Attack2", "Attack_Tumble" }
             });
-            _vayne.SetAutoAttackSpell("VayneTumbleAttack", true);
+            OverrideAutoAttack(_vayne, "VayneTumbleAttack", true);
         }
         ApiEventManager.OnHitUnit.AddListener(this, _vayne, OnHit);
     }
@@ -109,7 +109,7 @@ internal class VayneTumbleBonus : IBuffGameScript {
                 { "Attack1", "Attack_Ult" },
                 { "Attack2", "Attack_Ult" }
             });
-            _vayne.SetAutoAttackSpell("VayneUltAttack", false);
+            OverrideAutoAttack(_vayne, "VayneUltAttack", false);
         } else {
             _vayne.SetAnimStates(new Dictionary<string, string> {
                 { "Idle1", "" },
@@ -120,7 +120,7 @@ internal class VayneTumbleBonus : IBuffGameScript {
                 { "Attack1", "" },
                 { "Attack2", "" }
             });
-            _vayne.ResetAutoAttackSpell();
+            RemoveOverrideAutoAttack(_vayne);
         }
         ApiEventManager.RemoveAllListenersForOwner(this);
         SealSpellSlot(_vayne, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_CHAMPION, false);

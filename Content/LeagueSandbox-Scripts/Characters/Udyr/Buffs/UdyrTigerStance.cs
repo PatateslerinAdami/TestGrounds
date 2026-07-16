@@ -31,7 +31,7 @@ public class UdyrTigerStance : IBuffGameScript {
         _udyr  = buff.SourceUnit;
         _spell = ownerSpell;
         _udyr.ChangeModel("UdyrTiger");
-        _udyr.SetAutoAttackSpell("UdyrTigerAttack", false);
+        OverrideAutoAttack(_udyr, "UdyrTigerAttack", false);
         ApiEventManager.OnHitUnit.AddListener(this, _udyr, OnHit);
         ApiEventManager.OnPreDealDamage.AddListener(this, _udyr, OnPreDealDamage);
         _particle1 = AddParticleTarget(_udyr,_udyr,"tigerpelt",_udyr, bone: "head", lifetime: buff.Duration);
@@ -53,7 +53,7 @@ public class UdyrTigerStance : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _udyr.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_udyr);
         RemoveParticle(_particle1);
         RemoveParticle(_particle2);
         RemoveParticle(_particle3);

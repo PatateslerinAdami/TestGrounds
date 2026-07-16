@@ -36,7 +36,7 @@ internal class ObduracyBuff : IBuffGameScript {
         _enrageParticle = AddParticleTarget(_malphite, _malphite, "Malphite_Enrage_glow", _malphite, buff.Duration, default, "root");
         _enrageParticleL = AddParticleTarget(_malphite, unit, "Malphite_Enrage_buf", unit, buff.Duration, default, "L_finger_b");
         _enrageParticleR = AddParticleTarget(_malphite, unit, "Malphite_Enrage_buf", unit, buff.Duration, default, "R_thumb_b");
-        _malphite.SetAutoAttackSpell("ObduracyAttack", true);
+        OverrideAutoAttack(_malphite, "ObduracyAttack", true);
 
     }
 
@@ -44,6 +44,6 @@ internal class ObduracyBuff : IBuffGameScript {
         RemoveParticle(_enrageParticle);
         RemoveParticle(_enrageParticleL);
         RemoveParticle(_enrageParticleR);
-        _malphite.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_malphite);
     }
 }

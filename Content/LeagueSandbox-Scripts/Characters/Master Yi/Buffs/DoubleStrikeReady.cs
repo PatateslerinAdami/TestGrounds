@@ -30,7 +30,7 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _masterYi = buff.SourceUnit;
-            _masterYi.SetAutoAttackSpell("MasterYiDoubleStrike", false);
+            OverrideAutoAttack(_masterYi, "MasterYiDoubleStrike", false);
             ApiEventManager.OnHitUnit.AddListener(this, _masterYi, OnHit);
         }
 

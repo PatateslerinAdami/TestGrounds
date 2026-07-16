@@ -42,7 +42,7 @@ namespace Spells
             AddParticle(owner, null, "global_ss_flash", owner.Position);
             AddParticleTarget(owner, owner, "global_ss_flash_02", owner);
 
-            TeleportTo(owner, start.X, start.Y);
+            TeleportToPosition(owner, start.X, start.Y);
         }
     }
 }

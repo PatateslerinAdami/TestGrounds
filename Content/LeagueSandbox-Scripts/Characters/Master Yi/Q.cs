@@ -165,8 +165,20 @@ public class AlphaStrikeTeleport : ISpellScript
         spell.CastInfo.TargetPositionEnd = landing3D;
 
         FaceDirection(_target.Position, _masterYi, true);
-        TeleportTo(_masterYi, _coords.X, _coords.Y, silent: true);
-        NotifyTeleport(_masterYi, _coords);
+        // Riot's script side is just BBTeleportToPosition (AlphaStrikeTeleport.lua) — the wire
+        // (teleport-flagged 0x61 in the tick's movement batch) is the ENGINE's job, no manual
+        // notify. Replay c7119e79 (59 Alpha Strikes): teleport entry rides the regular ch4
+        // WaypointGroup, merged with any same-tick follow-up path.
+        TeleportToPosition(_masterYi, _coords.X, _coords.Y);
+        // AlphaStrikeTeleport.lua: BBIf(Unit CO_IS_TYPE_HERO) → BBIssueOrder(Owner, AI_ATTACKTO,
+        // Unit) — after landing, Yi immediately re-engages a HERO target with basic attacks
+        // (minions/monsters are not auto-engaged). Basic_Attack_Pos/InstantStop then flow
+        // organically from the attack pipeline (replay: 86× BAP / 129× ISA around the 59 casts,
+        // at variable post-cast times — no script-side wire packets).
+        if (_target is Champion)
+        {
+            IssueOrder(_masterYi, OrderType.AttackTo, _target);
+        }
         FaceDirection(_target.Position, _masterYi, true);
     }
 }

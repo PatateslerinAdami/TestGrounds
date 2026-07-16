@@ -45,7 +45,7 @@ public class TalonCutthroat : ISpellScript {
 
         //blink 
         var coords = CalcVector(180.0F, owner.Position, target.Position);
-        TeleportTo(owner, coords.X, coords.Y);
+        TeleportToPosition(owner, coords.X, coords.Y);
         FaceDirection(target.Position, owner, true);
 
         //slow

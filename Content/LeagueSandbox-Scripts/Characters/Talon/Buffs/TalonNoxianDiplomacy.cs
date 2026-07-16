@@ -32,7 +32,7 @@ internal class TalonNoxianDiplomacyBuff : IBuffGameScript {
         _buff  = buff;
         _p1    = AddParticleTarget(_talon, _talon, "talon_Q_on_hit_ready_01", _talon, buff.Duration, bone:"L_Hand");
         _p2    = AddParticleTarget(_talon, _talon, "talon_Q_on_hit_ready_01", _talon, buff.Duration, bone:"R_Hand");
-        _talon.SetAutoAttackSpell("TalonNoxianDiplomacyAttack", true);
+        OverrideAutoAttack(_talon, "TalonNoxianDiplomacyAttack", true);
         ApiEventManager.OnHitUnit.AddListener(this, _talon, OnHit);
     }
 
@@ -57,6 +57,6 @@ internal class TalonNoxianDiplomacyBuff : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         RemoveParticle(_p1);
         RemoveParticle(_p2);
-        _talon.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_talon);
     }
 }

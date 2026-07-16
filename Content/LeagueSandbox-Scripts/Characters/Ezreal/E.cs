@@ -46,7 +46,7 @@ namespace Spells
             }
 
             AddParticle(owner, null, "ezreal_arcaneshift_cas", owner.Position);
-            TeleportTo(owner, teleportPos.X, teleportPos.Y);
+            TeleportToPosition(owner, teleportPos.X, teleportPos.Y);
             AddParticleTarget(owner, owner, "ezreal_arcaneshift_flash", owner);
 
             float missileRange = 750.0f;

@@ -33,7 +33,7 @@ public class UdyrBearStance : IBuffGameScript {
         _udyr  = buff.SourceUnit;
         _spell = ownerSpell;
         _udyr.ChangeModel("Udyr");
-        _udyr.SetAutoAttackSpell("UdyrBearAttack", false);
+        OverrideAutoAttack(_udyr, "UdyrBearAttack", false);
         ApiEventManager.OnPreAttack.AddListener(this, _udyr, OnPreAttack, true);
         ApiEventManager.OnHitUnit.AddListener(this, _udyr, OnHit);
     }
@@ -58,7 +58,7 @@ public class UdyrBearStance : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _udyr.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_udyr);
         ApiEventManager.RemoveAllListenersForOwner(this);
     }
 }

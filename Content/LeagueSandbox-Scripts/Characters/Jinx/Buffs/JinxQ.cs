@@ -40,8 +40,8 @@ internal class JinxQ : IBuffGameScript {
         // Switch the Q HUD icon to Fishbones (IconIndex 0 = InventoryIcon / Jinx_Q1.dds;
         _spell.ChangeSpellData(ChangeSlotSpellDataType.IconIndex, newIconIndex: 0);
         
-        // SetAutoAttackSpells with Crit and BasicAttack variants
-        _jinx.SetAutoAttackSpellsWithCrit(true, CritAttackSpell, AttackSpell1, AttackSpell2);
+        // OverrideAutoAttacks with Crit and BasicAttack variants
+        OverrideCritAutoAttacks(_jinx, true, CritAttackSpell, AttackSpell1, AttackSpell2);
         
         // Set correct animation states for Jinx with Fishbones
         _jinx.SetAnimStates(new Dictionary<string, string> {

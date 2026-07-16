@@ -5628,35 +5628,15 @@ namespace PacketDefinitions420
             _packetHandlerManager.BroadcastPacketTeam(starter.Team, balance.GetBytes(), Channel.CHL_S2C);
         }
 
-        /// <summary>
-        /// Sends a packet to all players with vision of the given unit detailing that it has teleported to the given position.
-        /// </summary>
-        /// <param name="unit">Unit that has teleported.</param>
-        /// <param name="position">Position the unit teleported to.</param>
-        public void NotifyTeleport(AttackableUnit unit, Vector2 position)
-        {
-            var md = new MovementDataNormal()
-            {
-                SyncID = PacketExtensions.WireSyncID,
-                TeleportNetID = unit.NetId,
-                HasTeleportID = true,
-                TeleportID = unit.TeleportID,
-                Waypoints = new List<CompressedWaypoint> { PacketExtensions.Vector2ToWaypoint(PacketExtensions.TranslateToCenteredCoordinates(position, _navGrid)) },
-            };
-
-            var wpGroup = new WaypointGroup()
-            {
-                SyncID = PacketExtensions.WireSyncID,
-                Movements = new List<MovementDataNormal> { md }
-            };
-
-            // CHL_S2C (high priority) so a blink position-sync arrives same-instant as the
-            // accompanying CastSpellAns / Basic_Attack_Pos. CHL_LOW_PRIORITY (the routine-
-            // movement channel) gets queued behind end-of-tick batches and feels visibly
-            // slower to the player. Empirical: KatarinaE ally cast was perceptibly slower
-            // than enemy cast (which uses CHL_S2C via Basic_Attack_Pos) until this swap.
-            _packetHandlerManager.BroadcastPacketVision(unit, wpGroup.GetBytes(), Channel.CHL_S2C);
-        }
+        // REMOVED: NotifyTeleport(unit, position) — the immediate one-shot teleport WaypointGroup
+        // (2026-07-15). Teleports have NO dedicated packet: AttackableUnit.TeleportToPosition sets
+        // _movementUpdated + _teleportedDuringThisFrame and the tick's batched WaypointGroup emits
+        // the teleport-flagged (HasTeleportID + incremented TeleportID) movement entry on
+        // CHL_LOW_PRIORITY, merging with any path set later the same tick — exactly Riot's wire
+        // (replay-verified: full corpus 0x61 strictly on channel 4 with 20573 teleport-flagged
+        // entries; Yi Alpha Strike reference c7119e79, 59 casts: teleport rides the regular batch,
+        // n=1 or merged n≥2, TeleportID increments). The old immediate packet also rode CHL_S2C,
+        // where the client never applied it — the Yi "slides instead of teleporting" bug.
 
         /// <summary>
         /// Fullscreen color tint (S2C_ColorRemapFX 0xDB). Client handler (GameClient.cpp) passes

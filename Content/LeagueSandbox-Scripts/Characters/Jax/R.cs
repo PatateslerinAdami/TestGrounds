@@ -49,7 +49,7 @@ public class JaxRelentlessAssault : ISpellScript
             {
                 if (!_jax.HasBuff("JaxEmpowerTwo"))
                 {
-                    _jax.SetAutoAttackSpell("JaxRelentlessAttack", false);
+                    OverrideAutoAttack(_jax, "JaxRelentlessAttack", false);
                 }
 
                 break;
@@ -71,7 +71,7 @@ public class JaxRelentlessAssault : ISpellScript
                     DamageResultType.RESULT_NORMAL);
                 if (!_jax.HasBuff("JaxEmpowerTwo"))
                 {
-                    _jax.ResetAutoAttackSpell();
+                    RemoveOverrideAutoAttack(_jax);
                 }
 
                 _hitCount = 0;

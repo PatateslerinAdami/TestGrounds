@@ -35,10 +35,8 @@ public class KatarinaE : ISpellScript {
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
         _previousPos = _katarina.Position;
-      
-        const float visualBuffer = 50f;
-        var overshoot = _katarina.CollisionRadius + _target.CollisionRadius + visualBuffer;
-        _coords = CalcVector(overshoot, _katarina.Position, _target.Position);
+        
+        _coords = GetMovePositionByCollisionOffset(_katarina, target, 50f, true);
         // Replay-verified: CastSpellAns.targetPosition is the landing pos, not the click
         // target's center. Sets up the wire packet that Spell.Cast will broadcast next.
         var landing3D = new Vector3(_coords.X, GetHeightAtLocation(_coords), _coords.Y);
@@ -51,17 +49,19 @@ public class KatarinaE : ISpellScript {
         PlayAnimation(_katarina, "spell3", scaleTime: 0f, scaleSpeed: 1f,
                       flags: AnimationFlags.NoBlend); // replay value also had junk bit 7 (unread client-side)
 
-        // silent:true skips the batched _movementUpdated broadcast. NotifyTeleport always
-        // fires the S4 client's Basic_Attack_Pos handler (obj_AI_Base_PImpl_Int.cpp:3848)
-        // ONLY snaps the unit position when delta > 400u (= sqrt(160000)); short-range blinks
-        // (auto-attack range ~125u + 180u overshoot ≈ 280u total) stay under that threshold,
-        // so the client lerps from old to new position.
-        var canDoSilentHandoff = IsValidTarget(_katarina, _target,
+        // Plain engine teleport — Riot's script side is just BBTeleportToPosition; the wire
+        // (teleport-flagged 0x61 entry in the tick's ch4 movement batch, client snaps at >50u
+        // per axis via MovementHelper::SetPath) is the engine's job. The old silent:true +
+        // manual NotifyTeleport pair was a sandbox crutch and shipped the teleport on CHL_S2C,
+        // where the client never applied it (the Yi Alpha-Strike slide bug; the old "client
+        // lerps short blinks under 400u" note here was that dropped packet, misattributed).
+        // Enemy-vs-ally split: attackable (enemy/neutral) blink targets get the post-blink
+        // attack re-engage below; ally/ward targets get the teleport only (replay: ally-E has
+        // no Basic_Attack_Pos). Checked BEFORE the mark-damage below can kill the target.
+        var isAttackableTarget = IsValidTarget(_katarina, _target,
                                                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
                                                SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-        TeleportTo(_katarina, _coords.X, _coords.Y, silent: true);
-        NotifyTeleport(_katarina, _coords);
-        FaceDirection(_target.Position, _katarina, true);
+        TeleportToPosition(_katarina, _coords.X, _coords.Y);
 
         switch (_katarina.SkinID) {
             case 9: AddParticlePos(_katarina, "Katarina_Skin09_E_return", _previousPos, _previousPos); break;
@@ -73,15 +73,30 @@ public class KatarinaE : ISpellScript {
             default: AddParticlePos(_katarina, "katarina_shadowStep_return",      _previousPos, _previousPos); break;
         }
 
-        // Enemy-only: Basic_Attack_Pos carries the post-blink position to the client and
-        // InstantStop_Attack cancels any prior in-progress AA. Falls through to the
-        // NotifyTeleport path above if an ally killed the target between click and now also
-        // IsValidTarget rejects dead targets.
-        // Replay-empirical (Kat-perspective, 79 E casts): InstantStop_Attack only fires on
-        // ~27% apparently only when there's an active AA-windup to cancel. Gate the broadcast
-        // on `IsAttacking` so we match Riot's wire pattern instead of always emitting.
-        if (canDoSilentHandoff) {
-            _katarina.RetargetAttackToWithHandoff(_target, emitInstantStop: _katarina.IsAttacking);
+        // Enemy-only: Riot's script shape (S1 Lua model) — explicit windup-cancel + attack order;
+        // the wire artifacts arise organically from the pipeline: InstantStop_Attack from the
+        // cancel ONLY when a windup was live (replay-empirical, Kat-perspective, 79 E casts: ISA
+        // on ~27% = exactly the with-windup subset — BBCancelAutoAttack's shape), and
+        // Basic_Attack_Pos with the post-blink position when the fresh attack starts (in melee
+        // range post-blink = same tick, matching the replay's +0ms). Falls through to the
+        // engine's batched teleport above for ally/ward targets (IsValidTarget also rejects
+        // dead targets).
+        if (isAttackableTarget) {
+            // Deliberately CancelAutoAttackIfWindingUp, NOT the BB-shaped CancelAutoAttack(unit,
+            // reset) — replay 4d3ed764 (79 E casts) shows: an in-windup E cancels the swing AND
+            // refunds its attack cooldown (instant re-attack: prevAA→E→nextAA gaps of 70/238ms),
+            // a between-swings E leaves the running timer untouched (next AA on schedule — E is
+            // NOT an AA reset in 4.20), and the ISA rate (~27%) ≈ the windup share of the attack
+            // cycle, i.e. EVERY live windup is cancelled + announced. Attribution — three
+            // mechanisms RULED OUT: the instacast itself (instacasts don't cancel windups,
+            // wiki-confirmed), the teleport (byte-matched Actor_Common::SetPosition, which
+            // BBTeleportToPosition calls, is pure position mechanics — no attack touch), and
+            // the attack order below (same-target orders early-return, target-switch cancels
+            // are silent — neither matches the ISA wire). Riot's actual server-side trigger is
+            // unknown (server binaries unavailable); this line reproduces the wire-proven
+            // BEHAVIOR regardless of which internal path Riot used.
+            _katarina.CancelAutoAttackIfWindingUp();
+            IssueOrder(_katarina, OrderType.AttackTo, _target);
 
             switch (_katarina.SkinID) {
                 case 9:
@@ -116,9 +131,8 @@ public class KatarinaE : ISpellScript {
         AddBuff("KatarinaEReduction", 1.5f, 1, spell, _katarina, _katarina);
     }
 
-    public void OnSpellPostCast(Spell spell) { }
-
-    private static Vector2 CalcVector(in float distance, in Vector2 player, in Vector2 target) {
-        return target - (player - target).Normalized() * (!IsWalkable(target.X, target.Y) ? -distance : distance);
+    public void OnSpellPostCast(Spell spell)
+    {
+        FaceDirection(_target.Position, _katarina, true);
     }
 }

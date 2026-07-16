@@ -123,7 +123,7 @@ internal class ZedWHandler : IBuffGameScript {
         var facingPoint = position + direction * 200f;
         if (swappedOnSpawn) {
             var previousZedPosition = _zed.Position;
-            TeleportTo(_zed, position.X, position.Y);
+            TeleportToPosition(_zed, position.X, position.Y);
             position = previousZedPosition;
             _swapOnSpawn          = false;
             _currentShadowSwapped = true;
@@ -200,8 +200,8 @@ internal class ZedWHandler : IBuffGameScript {
 
         _swapOnSpawn = false;
         var zedPosition = _zed.Position;
-        TeleportTo(_zed, _shadow.Position.X, _shadow.Position.Y);
-        TeleportTo(_shadow, zedPosition.X, zedPosition.Y);
+        TeleportToPosition(_zed, _shadow.Position.X, _shadow.Position.Y);
+        TeleportToPosition(_shadow, zedPosition.X, zedPosition.Y);
         AddParticleTarget(_zed, null, "Zed_CloneSwap.troy", _shadow);
         AddParticleTarget(_zed, null, "Zed_CloneSwap.troy", _zed);
         SetSpellShadowDash();

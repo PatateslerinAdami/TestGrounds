@@ -29,7 +29,7 @@ public class FrostShot : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _ashe  = buff.SourceUnit;
         _spell = ownerSpell;
-        _ashe.SetAutoAttackSpell("FrostArrow",      true);
+        OverrideAutoAttack(_ashe, "FrostArrow",      true);
         ApiEventManager.OnHitUnit.AddListener(this, _ashe, OnHit);
     }
 
@@ -40,6 +40,6 @@ public class FrostShot : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _ashe.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_ashe);
     }
 }

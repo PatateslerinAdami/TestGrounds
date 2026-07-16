@@ -98,7 +98,7 @@ namespace Spells
         {
             if (!(unit is ObjAIBase owner)) return;
 
-            _owner.SkipNextAutoAttack();
+            SkipNextAutoAttack(_owner);
 
             float radius = (_currentQStage == 3) ? 300f : 260f;
             string detonateParticle = $"exile_Q_0{_currentQStage}_detonate.troy";

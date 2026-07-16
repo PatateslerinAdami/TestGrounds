@@ -2063,36 +2063,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="x">X coordinate to teleport to.</param>
         /// <param name="y">Y coordinate to teleport to.</param>
         /// <param name="repath">Whether or not to repath from the new position.</param>
-        /// <param name="silent">If true, position changes silently e.g. no `_movementUpdated`
-        /// flag, no networked StopMovement. Use with `PacketNotifier.NotifyTeleport` for blink
-        /// spells that need an immediate same-tick position-sync without batching.</param>
-        public void TeleportTo(float x, float y, bool repath = false, bool silent = false)
+        public void TeleportTo(float x, float y, bool repath = false)
         {
-            TeleportTo(new Vector2(x, y), repath, silent);
+            TeleportTo(new Vector2(x, y), repath);
         }
 
         /// <summary>
-        /// Routes the base GameObject.TeleportTo virtual into the real unit teleport. Without this
+        /// Routes the base GameObject.TeleportToPosition virtual into the real unit teleport. Without this
         /// override the 4-param sibling only SHADOWED the base — a GameObject-typed reference
         /// (e.g. the !tp-by-netID cheat resolving via GetObjectById) fell into the base's legacy
         /// enter-visibility resync instead of the proper TeleportID movement wire.
         /// </summary>
         public override void TeleportTo(float x, float y)
         {
-            TeleportTo(x, y, repath: false, silent: false);
+            TeleportTo(x, y, repath: false);
         }
 
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
+        /// The wire side is fully engine-driven (Riot BBTeleportToPosition shape): the teleport
+        /// rides the tick's batched WaypointGroup as a teleport-flagged (HasTeleportID +
+        /// incremented TeleportID) movement entry on CHL_LOW_PRIORITY, merging with any path set
+        /// later this tick — replay-verified against Yi Alpha Strike (c7119e79, 59 casts). The
+        /// former `silent` + manual NotifyTeleport script pattern is removed.
         /// </summary>
-        public void TeleportTo(Vector2 position, bool repath = false, bool silent = false)
+        public void TeleportTo(Vector2 position, bool repath = false)
         {
             TeleportID++;
-            if (!silent)
-            {
-                _movementUpdated = true;
-                _teleportedDuringThisFrame = true;
-            }
+            _movementUpdated = true;
+            _teleportedDuringThisFrame = true;
 
             position = _game.Map.NavigationGrid.GetClosestTerrainExit(position, PathfindingRadius + 1.0f);
 
@@ -2103,7 +2102,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             else
             {
                 Position = position;
-                StopMovement(networked: !silent);
+                StopMovement(networked: true);
             }
         }
 

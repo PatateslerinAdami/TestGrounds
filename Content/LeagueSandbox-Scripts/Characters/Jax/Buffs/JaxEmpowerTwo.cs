@@ -36,7 +36,7 @@ public class JaxEmpowerTwo  : IBuffGameScript {
         _p1 = SpellEffectCreate("armsmaster_empower_buf.troy",_jax, _jax,  _jax, lifetime: -1f, boneName: "Buffbone_Cstm_Weapon_1", flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
         _p2 = SpellEffectCreate("armsmaster_empower_self_01.troy",_jax, _jax,  _jax, lifetime: -1f, boneName: "Buffbone_Cstm_Weapon_1", flags: FXFlags.SimulateWhileOffScreen, targetBoneName: "weapon", fowVisibilityRadius: 10f);
         ApiEventManager.OnHitUnit.AddListener(this, _jax, OnHit);
-        _jax.SetAutoAttackSpell("JaxEmpowerAttack", true);
+        OverrideAutoAttack(_jax, "JaxEmpowerAttack", true);
     }
 
     private void OnHit(DamageData data) {
@@ -51,7 +51,7 @@ public class JaxEmpowerTwo  : IBuffGameScript {
     
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) {
         ApiEventManager.OnHitUnit.RemoveListener(this, _jax, OnHit);
-        _jax.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_jax);
         RemoveParticle(_p1);
         RemoveParticle(_p2);
         SealSpellSlot(_jax, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);

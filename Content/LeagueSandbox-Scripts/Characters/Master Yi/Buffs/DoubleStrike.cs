@@ -43,7 +43,7 @@ namespace Buffs
                 target.TakeDamage(_masterYi, buff.BuffVars.GetFloat("damage", 0f) * 0.5f, damageType,
                     DamageSource.DAMAGE_SOURCE_ATTACK, damageResultType);
             }
-            _masterYi.ResetAutoAttackSpell();
+            RemoveOverrideAutoAttack(_masterYi);
         }
     }
 }

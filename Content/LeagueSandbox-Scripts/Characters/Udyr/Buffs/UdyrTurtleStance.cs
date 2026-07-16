@@ -33,14 +33,14 @@ public class UdyrTurtleStance : IBuffGameScript {
         _spell = ownerSpell;
         _buff = buff;
         _udyr.ChangeModel("UdyrTurtle");
-        _udyr.SetAutoAttackSpell("UdyrTurtleAttack", false);
+        OverrideAutoAttack(_udyr, "UdyrTurtleAttack", false);
         _particle1 = AddParticleTarget(_udyr,_udyr,"turtlepelt",_udyr, bone: "head", lifetime: buff.Duration);
         StatsModifier.LifeSteal.FlatBonus = 0.1f + 0.02f * (_spell.CastInfo.SpellLevel - 1); 
         _udyr.AddStatModifier(StatsModifier);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _udyr.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_udyr);
         RemoveParticle(_particle1);
     }
 }

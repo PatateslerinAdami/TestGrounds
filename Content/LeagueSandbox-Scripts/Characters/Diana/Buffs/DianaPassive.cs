@@ -33,7 +33,7 @@ public class DianaPassive : IBuffGameScript
         _diana = buff.SourceUnit;
         _buff = buff;
         ApiEventManager.OnHitUnit.AddListener(this, _diana, OnHit);
-        _diana.SetAutoAttackSpell("DianaBasicAttack3", false);
+        OverrideAutoAttack(_diana, "DianaBasicAttack3", false);
     }
 
     private void OnHit(DamageData data)
@@ -53,6 +53,6 @@ public class DianaPassive : IBuffGameScript
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        _diana.ResetAutoAttackSpell();
+        RemoveOverrideAutoAttack(_diana);
     }
 }

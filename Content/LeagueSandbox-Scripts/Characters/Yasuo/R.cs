@@ -35,7 +35,7 @@ namespace Spells
 
             owner.Stats.CurrentMana = owner.Stats.ManaPoints.Total;
             var mainTarget = targets[0];
-            TeleportTo(owner, mainTarget.Position.X + 75f, mainTarget.Position.Y);
+            TeleportToPosition(owner, mainTarget.Position.X + 75f, mainTarget.Position.Y);
             FaceDirection(mainTarget.Position, owner, true);
             
             owner.PlayAnimation("Spell4", scaleTime: 1.0f);
