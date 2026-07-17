@@ -17,6 +17,7 @@ namespace Buffs
     internal class ColossalStrength : IBuffGameScript
     {
         private ObjAIBase _alistar;
+        private Buff _buff;
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
@@ -31,10 +32,22 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _alistar = buff.SourceUnit;
+            _buff = buff;
+            ApiEventManager.OnUpdateStats.AddListener(this, _alistar, OnUpdateStats);
             for (short i = 0; i < 4; i++)
             {
                 ApiEventManager.OnSpellPostCast.AddListener(this, _alistar.Spells[i], OnSpellPostCast);
             }
+        }
+
+        private void OnUpdateStats(AttackableUnit unit, float diff)
+        {
+            var baseDmg = 7f + 1f * (_alistar.Stats.Level - 1);
+            var ap = _alistar.Stats.AbilityPower.Total * 0.1f;
+            var dmg = baseDmg + ap;
+            SetBuffToolTipVar(_buff, 0, dmg);
+            SetBuffToolTipVar(_buff, 1, baseDmg);
+            SetBuffToolTipVar(_buff, 2, ap);
         }
 
         private void OnSpellPostCast(Spell spell)
