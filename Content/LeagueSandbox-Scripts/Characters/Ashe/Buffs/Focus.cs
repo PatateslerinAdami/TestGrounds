@@ -45,6 +45,7 @@ public class Focus : IBuffGameScript {
         _ashe  = buff.SourceUnit;
         _spell = ownerSpell;
         _buff  = buff;
+        ApiEventManager.OnUpdateStats.AddListener(this, _ashe, OnUpdateStats);
         ApiEventManager.OnLaunchAttack.AddListener(this, _ashe, OnLaunchAttack);
         // Ashe spawns with Focus fully charged, so her first basic attack is a guaranteed crit.
         _buff.SetStacks(MaxFocus, false);
@@ -52,6 +53,19 @@ public class Focus : IBuffGameScript {
             AddBuff("AsheCritChanceReady", 25000f, 1, _spell, _ashe, _ashe, true);
         }
         UpdateDisplay();
+    }
+
+    private void OnUpdateStats(AttackableUnit unit, float diff)
+    {
+        var level = _ashe.Stats.Level switch
+        {
+            >= 17 => 8,
+            >= 13 => 7,
+            >= 9 => 6,
+            >= 5 => 5,
+            _ => 4,
+        };
+        SetBuffToolTipVar(_buff, 0, level);
     }
 
     // Any auto attack puts Ashe "in combat": the ramp pauses for CombatWindowMs. Focus is NOT
