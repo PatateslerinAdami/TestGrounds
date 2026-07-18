@@ -21,7 +21,6 @@ namespace GameServerCore.Enums
         CHARMED = 1 << 15,
         NO_RENDER = 1 << 16,
         FORCE_RENDER_PARTICLES = 1 << 17,
-
         TARGETABLE = 1 << 23
     }
 }

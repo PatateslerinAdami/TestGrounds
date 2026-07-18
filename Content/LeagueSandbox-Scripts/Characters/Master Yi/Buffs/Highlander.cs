@@ -16,7 +16,6 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class Highlander : IBuffGameScript {
-    private static readonly Random Rng = new();
     private ObjAIBase _masterYi;
     private Buff      _buff;
     private Spell       _spell;
@@ -34,18 +33,17 @@ internal class Highlander : IBuffGameScript {
         _masterYi   = buff.SourceUnit;
         _buff       = buff;
         _spell = ownerSpell;
-        //this is for fun
-        var runAnim = Rng.Next(0, 2) == 0 ? "Run_HASTE" : "2013_run_haste";
+
+        _masterYi.SetAnimStates(new Dictionary<string, string> {
+            { "Run", "Run_HASTE" }
+        });
+        
        var particleName = ownerSpell.CastInfo.SpellLevel switch {
             3 => "MasterYi_Base_R_Buf_Lvl3.troy",
             2 => "MasterYi_Base_R_Buf_Lvl2.troy",
             _ => "MasterYi_Base_R_Buf.troy"
         };
        
-        _masterYi.SetAnimStates(new Dictionary<string, string> {
-            { "Run", runAnim }
-        });
-        
         _highlander = SpellEffectCreate(particleName,_masterYi, unit,  unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
 
         StatsModifier.MoveSpeed.PercentBonus   = 0.25f + 0.1f * (ownerSpell.CastInfo.SpellLevel - 1);

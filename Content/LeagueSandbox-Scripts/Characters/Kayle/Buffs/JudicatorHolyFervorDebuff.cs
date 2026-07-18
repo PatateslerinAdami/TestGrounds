@@ -26,8 +26,4 @@ internal class JudicatorHolyFervorDebuff : IBuffGameScript {
         StatsModifier.MagicResist.BaseBonus -= unit.Stats.MagicResist.Total * 0.03f;
         unit.AddStatModifier(StatsModifier);
     }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        
-    }
 }

@@ -40,8 +40,17 @@ namespace Buffs
             SpellEffectCreate("MasterYi_Base_P_tar.troy",_masterYi, target, target, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
             if (!target.IsDead)
             {
-                target.TakeDamage(_masterYi, buff.BuffVars.GetFloat("damage", 0f) * 0.5f, damageType,
-                    DamageSource.DAMAGE_SOURCE_ATTACK, damageResultType);
+                DamageData damageData = new DamageData
+                {
+                    IsAutoAttack = true,
+                    Attacker = _masterYi,
+                    Target = target,
+                    Damage = buff.BuffVars.GetFloat("damage", 0f) * 0.5f,
+                    DamageSource = DamageSource.DAMAGE_SOURCE_ATTACK,
+                    DamageType = damageType,
+                    DamageResultType = damageResultType
+                };
+                target.TakeDamage(damageData, damageResultType == DamageResultType.RESULT_CRITICAL);
             }
             RemoveOverrideAutoAttack(_masterYi);
         }

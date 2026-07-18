@@ -22,7 +22,9 @@ public class DarkBindingMissile: ISpellScript {
         MissileParameters = new MissileParameters() {
             Type = MissileType.Arc
         },
-        TriggersSpellCasts   = true
+        NotSingleTargetSpell = false,
+        TriggersSpellCasts   = true,
+        IsDamagingSpell      = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -30,46 +32,13 @@ public class DarkBindingMissile: ISpellScript {
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-    }
-
-    public void OnSpellCast(Spell spell) {
-        
-    }
-
-    public void OnSpellPostCast(Spell spell) {
-        
-    }
-
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (!IsValidTarget(_morgana, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
-
-        var dmg = 80f + 55f * (spell.CastInfo.SpellLevel - 1) + _morgana.Stats.AbilityPower.Total * 0.9f;
+        var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + _morgana.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         target.TakeDamage(_morgana, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                           DamageResultType.RESULT_NORMAL);
-        var duration = 2f + 0.25f * (spell.CastInfo.SpellLevel - 1);
-        SpellCast(_morgana, 0, SpellSlotType.ExtraSlots, true, target, Vector2.Zero);
-        AddBuff("DarkBinding", duration, 1, spell, target, _morgana);
+        var duration = spell.SpellData.EffectLevelAmount[2][spell.CastInfo.SpellLevel];
+        AddBuff("DarkBindingMissile", duration, 1, spell, target, _morgana);
         missile.SetToRemove();
-    }
-}
-
-public class DarkBinding: ISpellScript {
-    
-    private ObjAIBase      _morgana;
-    private AttackableUnit _target;
-
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _morgana = owner;
-    }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        _target = target; 
-        var duration = 2f + 0.25f * (_morgana.GetSpell("DarkBindingMissile").CastInfo.SpellLevel - 1);
-        AddBuff("DarkBindingMissile", duration, 1, spell, _target, _morgana);
     }
 }

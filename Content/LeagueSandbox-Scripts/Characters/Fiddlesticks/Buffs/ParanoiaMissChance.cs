@@ -14,21 +14,30 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-public class ParanoiaMissChance : IBuffGameScript { 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.SHRED,
+public class ParanoiaMissChance : IBuffGameScript
+{
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.SHRED,
         BuffAddType = BuffAddType.RENEW_EXISTING,
-        MaxStacks   = 1,
+        MaxStacks = 1,
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        if (CanSeeTarget(unit, buff.SourceUnit))
+        {
+            SpellEffectCreate("Fiddlesticks_DreadWarning_tar.troy", buff.SourceUnit, unit, unit,
+                flags: FXFlags.SimulateWhileOffScreen);
+        }
+
         StatsModifier.MagicResist.FlatBonus -= 10f;
         unit.AddStatModifier(StatsModifier);
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-       
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
     }
 }

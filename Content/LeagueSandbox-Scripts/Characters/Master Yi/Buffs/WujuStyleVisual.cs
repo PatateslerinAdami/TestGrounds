@@ -1,4 +1,5 @@
-﻿using GameServerCore.Enums;
+﻿using System.Collections.Generic;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -29,6 +30,14 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             _masterYi = buff.SourceUnit;
+
+            unit.SetAnimStates(new Dictionary<string, string> {
+                {"_WUJUBASE","_WUJU"},
+                { "_WUJUBASE2", "_WUJU2"},
+                { "_WUJUBASECRIT", "_WUJUCRIT"},
+                { "_WUJUBASEPASSIVE", "_WUJUPASSIVE"}
+            });
+            
             var bonusAd = _masterYi.Stats.AttackDamage.Total * ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]/100;
             StatsModifier.AttackDamage.FlatBonus += bonusAd;
             // Actually apply the bonus AD to the unit (was never applied before).
@@ -36,6 +45,12 @@ namespace Buffs
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            unit.SetAnimStates(new Dictionary<string, string> {
+                {"_WUJUBASE",""},
+                { "_WUJUBASE2", ""},
+                { "_WUJUBASECRIT", ""},
+                { "_WUJUBASEPASSIVE", ""}
+            });
         }
     }
 }

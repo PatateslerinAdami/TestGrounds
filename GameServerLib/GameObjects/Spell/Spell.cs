@@ -3097,6 +3097,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                         if (CurrentCooldown < 0)
                         {
                             State = SpellState.STATE_READY;
+                            // Natural per-tick cooldown expiry. SetCooldown() fires this for manual
+                            // resets/refunds; the tick-down path must fire it too, otherwise the
+                            // "off-cooldown" event only ever reached listeners on a CDR proc, never
+                            // on a normal cooldown finishing (Master Yi E refresh never re-armed).
+                            ApiEventManager.OnSpellCooldownEnd.Publish(this);
                         }
                         break;
                     }

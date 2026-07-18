@@ -18,7 +18,6 @@ namespace Buffs;
 internal class WujuStyleSuperChargedVisual : IBuffGameScript {
     private ObjAIBase _masterYi;
     private Spell     _spell;
-    private Buff      _buff;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType = BuffType.COMBAT_ENCHANCER,
@@ -31,7 +30,12 @@ internal class WujuStyleSuperChargedVisual : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _masterYi = buff.SourceUnit;
         _spell    = ownerSpell;
-        _buff     = buff;
+        unit.SetAnimStates(new Dictionary<string, string> {
+            {"_WUJUBASE","_WUJUSUPERCHARGED"},
+            { "_WUJUBASE2", "_WUJUSUPERCHARGED2"},
+            { "_WUJUBASECRIT", "_WUJUSUPERCHARGEDCRIT"},
+            { "_WUJUBASEPASSIVE", "_WUJUSUPERCHARGEDPASSIVE"}
+        });
         ApiEventManager.OnHitUnit.AddListener(this, _masterYi, OnHit);
     }
 
@@ -43,7 +47,11 @@ internal class WujuStyleSuperChargedVisual : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        if (ownerSpell.CurrentCooldown <= 0) return;
-        RemoveBuff(_masterYi, "WujuStyleVisual");
+        unit.SetAnimStates(new Dictionary<string, string> {
+            {"_WUJUBASE",""},
+            { "_WUJUBASE2", ""},
+            { "_WUJUBASECRIT", ""},
+            { "_WUJUBASEPASSIVE", ""}
+        });
     }
 }

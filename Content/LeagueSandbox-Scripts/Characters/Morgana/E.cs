@@ -29,7 +29,6 @@ public class BlackShield : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
         _target = target;
-        //PlayAnimation(_morgana, "Spell3");
     }
 
     public void OnSpellPostCast(Spell spell) {

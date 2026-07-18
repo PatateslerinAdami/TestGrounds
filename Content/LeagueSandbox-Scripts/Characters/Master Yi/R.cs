@@ -27,7 +27,6 @@ public class Highlander : ISpellScript {
         if (spell.CastInfo.SpellLevel != 1) return;
         ApiEventManager.OnKill.AddListener(this, _masterYi, OnKill);
         ApiEventManager.OnAssist.AddListener(this, _masterYi, OnAssist);
-        ApiEventManager.OnLevelUpSpell.RemoveListener(this);
     }
 
     private void OnKill(DeathData data) {

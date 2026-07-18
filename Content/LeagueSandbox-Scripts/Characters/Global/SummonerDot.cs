@@ -17,10 +17,9 @@ namespace Spells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            if (target != null)
-            {
-                AddBuff("SummonerDot", 5.0f, 1, spell, target, owner);
-            }
+            if (target == null) return;
+            AddBuff("SummonerDot", 5.0f, 1, spell, target, owner);
+            AddBuff("GrievousWound", 5.0f, 1, spell, target, owner);
         }
     }
 }

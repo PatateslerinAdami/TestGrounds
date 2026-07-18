@@ -21,6 +21,7 @@ internal class BlackShield : IBuffGameScript
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
+        //Internal handeling
         BuffType = BuffType.SPELL_IMMUNITY,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
@@ -31,10 +32,16 @@ internal class BlackShield : IBuffGameScript
     {
         _morgana = buff.SourceUnit;
         _buff = buff;
-        _blackShieldParticle = AddParticleTarget(_morgana, unit, "Morgana_Base_E_Tar", unit, buff.Duration,
-            bone: "C_BUFFBONE_GLB_CENTER_LOC");
+        var particleName = _morgana.SkinID switch
+        {
+            4 => "Morgana_Blackthorn_Blackshield.troy",
+            6 => "Morgana_Skin06_E_Tar.troy",
+            _ => "Morgana_Base_E_Tar.troy"
+        };
+        _blackShieldParticle = SpellEffectCreate(particleName, _morgana, unit, unit, lifetime: buff.Duration,
+            boneName: "C_Buffbone_Glb_Center_Loc");
         ApiEventManager.OnAllowAddBuff.AddListener(this, unit, OnAllowAddBuff);
-        var shieldHealth = 70f + 70f * (ownerSpell.CastInfo.SpellLevel - 1) + _morgana.Stats.AbilityPower.Total * 0.7f;
+        var shieldHealth = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel] + _morgana.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
         _blackShield = new Shield(_morgana, _morgana, false, true, shieldHealth, buff);
         _morgana.AddShield(_blackShield);
         ApiEventManager.OnShieldBreak.AddListener(this, _blackShield, OnShieldBreak);

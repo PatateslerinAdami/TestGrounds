@@ -31,10 +31,12 @@ public class Meditate : ISpellScript
 
     public void OnSpellPostCast(Spell spell)
     {
+        
     }
 
     public void OnSpellChannel(Spell spell)
     {
+        CancelAutoAttack(_masterYi, true);
         AddBuff("Meditate", 4f, 1, spell, _masterYi, _masterYi);
     }
 

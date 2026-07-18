@@ -4120,9 +4120,9 @@ namespace PacketDefinitions420
         {
             var response = new S2C_HeroStats
             {
-                SenderNetID = champion.NetId,
-                Data = champion.ChampStats.GetBytes()
+                SenderNetID = champion.NetId
             };
+            response.WriteData(champion.ChampStats.ToHeroStats());
             _packetHandlerManager.SendPacket(champion.ClientId, response.GetBytes(), Channel.CHL_S2C);
         }
 

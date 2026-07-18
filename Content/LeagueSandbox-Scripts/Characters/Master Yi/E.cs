@@ -21,37 +21,41 @@ public class WujuStyle : ISpellScript
     {
         NotSingleTargetSpell = true,
         TriggersSpellCasts = true,
-        ChannelDuration = 4,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _masterYi = owner;
         _spell = spell;
-        //ApiEventManager.OnUpdateStats.AddListener(this, _masterYi, OnUpdateStats);
+        ApiEventManager.OnUpdateStats.AddListener(this, _masterYi, OnUpdateStats);
         ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
         ApiEventManager.OnSpellCooldownEnd.AddListener(this, spell, OnSpellCooldownEnd);
     }
-    
-    private void OnLevelUpSpell(Spell spell) {
-        if (_masterYi.HasBuff("WujuStyleSuperChargedVisual")) return;
+
+    private void OnLevelUpSpell(Spell spell)
+    {
+        if (spell.CastInfo.SpellLevel != 1) return;
         AddBuff("WujuStyleVisual", 25000f, 1, _spell, _masterYi, _masterYi, true);
     }
 
-    public void OnSpellCast(Spell spell)
+    public void OnSpellPostCast(Spell spell)
     {
+        RemoveBuff(_masterYi, "WujuStyleVisual");
         AddBuff("WujuStyleSuperChargedVisual", 4f, 1, spell, _masterYi, _masterYi);
     }
-    
-    private void OnSpellCooldownEnd(Spell spell) {
+
+    private void OnSpellCooldownEnd(Spell spell)
+    {
+        LogDebug("Cooldown ended");
         AddBuff("WujuStyleVisual", 25000f, 1, _spell, _masterYi, _masterYi, true);
     }
-    
-    private void OnUpdateStats(AttackableUnit owner, float diff) {
-        var bonusAd = _masterYi.Stats.AttackDamage.Total * _spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel]/100;
+
+    private void OnUpdateStats(AttackableUnit owner, float diff)
+    {
+        var bonusAd = _masterYi.Stats.AttackDamage.Total *
+            _spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] / 100;
         var ad = _masterYi.Stats.AttackDamage.Total * 0.1f + 0.025f * (_spell.CastInfo.SpellLevel - 1);
         SetSpellToolTipVar(_masterYi, 0, bonusAd, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
         SetSpellToolTipVar(_masterYi, 1, ad, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
     }
-
 }

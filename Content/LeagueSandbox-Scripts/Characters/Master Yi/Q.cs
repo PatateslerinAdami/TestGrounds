@@ -3,6 +3,7 @@ using System.Numerics;
 using GameMaths;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -46,6 +47,30 @@ public class AlphaStrike : ISpellScript
     public void OnActivate(ObjAIBase owner, Spell spell)
     {
         _masterYi = owner;
+        _spell = spell;
+        ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
+        ApiEventManager.OnUpdateStats.AddListener(this, _masterYi, OnUpdateStats);
+    }
+
+    private void OnLevelUpSpell(Spell spell)
+    {
+        if (spell.CastInfo.SpellLevel != 1) return;
+        ApiEventManager.OnHitUnit.AddListener(this, _masterYi, OnHitUnit);
+    }
+
+    private void OnHitUnit(DamageData data)
+    {
+        if (data.IsAutoAttack)
+        {
+            _spell.LowerCooldown(1f);
+        }
+    }
+
+    private void OnUpdateStats(AttackableUnit unit, float diff)
+    {
+        var ad = _masterYi.Stats.AttackDamage.Total * _spell.SpellData.Coefficient;
+        var dmg = (_spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] + ad) * _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel];
+        SetSpellToolTipVar(unit, 0, dmg, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -84,8 +109,16 @@ public class AlphaStrike : ISpellScript
                     : spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel]) + ad;
 
             bool isCrit = RollCrit(_masterYi, target);
-            if (isCrit) dmg *= _masterYi.Stats.CriticalDamage.Total;
-            SpellEffectCreate("MasterYi_Base_Q_Tar.troy", _masterYi, target,  target, flags: FXFlags.UpdateOrientation, keywordObject: _masterYi);
+            if (isCrit)
+            {
+                dmg += dmg * _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel];
+                SpellEffectCreate("MasterYi_Base_Q_Crit_tar.troy", _masterYi, target,  target, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _masterYi);
+                
+            }
+            else
+            {
+                SpellEffectCreate("MasterYi_Base_Q_Tar.troy", _masterYi, target, null, flags: FXFlags.UpdateOrientation, keywordObject: _masterYi);
+            }
             target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK,
                 isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL);
         }

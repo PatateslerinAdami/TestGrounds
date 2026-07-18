@@ -42,8 +42,4 @@ internal class JudicatorHolyFervor : IBuffGameScript
                 SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) return;
         AddBuff("JudicatorHolyFervorDebuff", 5f, 1, _spell, data.Target, _kayle);
     }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-    {
-    }
 }

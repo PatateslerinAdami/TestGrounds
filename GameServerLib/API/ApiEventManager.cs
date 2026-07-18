@@ -364,18 +364,7 @@ namespace LeagueSandbox.GameServer.API
         // consumed delta) and then OnShieldBreak from RemoveShield when it hits 0.
         public static Dispatcher<Shield, float> OnShieldReduced
             = new Dispatcher<Shield, float>();
-
-        // REMOVED: OnUnitCrowdControlled dispatcher — it was never published anywhere (AI scripts
-        // poll StatusFlags instead, see BaseAIScript), and its "handle CC the same as normal dashes"
-        // TODO predates the real CC model: CC now applies via buff-driven CharacterState capability
-        // refcounts, with knockup/knockback carrying their own CC buff while dashes are not CC at all.
-
-        // Order-ISSUE gate, not a completion callback: published at the top of UpdateMoveOrder;
-        // a listener returning false vetoes the order (Riot's script-side order channel — the
-        // BaseAIScript IssueOrder/OnOrder path is the successor; legacy scripts like Zed's
-        // emote-shadow cleanup still listen here until the order/state split's P-B migrates them).
-        // (An old TODO suggested renaming to "OnMoveSuccess" — wrong on both counts: the name has
-        // no Riot equivalent in any corpus, and it would imply post-move timing this event never had.)
+        
         public static ConditionDispatcher<ObjAIBase, OrderType> OnUnitUpdateMoveOrder
             = new ConditionDispatcher<ObjAIBase, OrderType>();
 
