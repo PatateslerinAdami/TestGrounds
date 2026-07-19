@@ -15,6 +15,7 @@ namespace Spells;
 public class Consume : ISpellScript {
     private ObjAIBase _nunu;
     private AttackableUnit _target;
+    private Spell _spell;
 
     public SpellScriptMetadata ScriptMetadata => new() {
         TriggersSpellCasts = true,
@@ -27,10 +28,23 @@ public class Consume : ISpellScript {
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _nunu = owner;
+        _spell = spell;
+        ApiEventManager.OnUpdateStats.AddListener(this, _nunu, OnUpdateStats);
+    }
+
+    private void OnUpdateStats(AttackableUnit unit, float diff)
+    {
+        var maxHealthPercent = _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel <= 0 ? 1 : _spell.CastInfo.SpellLevel] * 100;
+        var moveSpeed = _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel <= 0 ? 1 : _spell.CastInfo.SpellLevel] * 100;
+        var maxHealthDamagePercent = _spell.SpellData.EffectLevelAmount[4][_spell.CastInfo.SpellLevel <= 0 ? 1 : _spell.CastInfo.SpellLevel] * 100;
+        SetSpellToolTipVar( _nunu, 2, maxHealthPercent, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
+        SetSpellToolTipVar( _nunu, 3,moveSpeed, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
+        SetSpellToolTipVar( _nunu, 4, maxHealthDamagePercent, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
+        _spell = spell;
         _target = target;
     }
 
