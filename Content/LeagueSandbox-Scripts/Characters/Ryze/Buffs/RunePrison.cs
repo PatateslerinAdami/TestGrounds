@@ -11,7 +11,9 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class runeprison : IBuffGameScript {
+internal class RunePrison : IBuffGameScript {
+    private ObjAIBase _ryze;
+    private Particle  _p1;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SNARE,
         BuffAddType = BuffAddType.REPLACE_EXISTING
@@ -20,8 +22,11 @@ internal class runeprison : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        _ryze = buff.SourceUnit;
+        _p1 = SpellEffectCreate("RunePrison_tar.troy",_ryze, unit,  unit, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        RemoveParticle(_p1);
     }
 }

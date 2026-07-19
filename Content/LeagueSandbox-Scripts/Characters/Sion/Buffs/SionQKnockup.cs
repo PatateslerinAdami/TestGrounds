@@ -63,7 +63,7 @@ namespace Buffs
             var bouncePos = GetRandomPointInAreaUnit(unit, 10, 10f);
             ForceMove(unit, bouncePos,
                 knockPath / knockupTime, gravity: knockGravity,
-                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
+                facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING, orders: ForceMovementOrdersType.CANCEL_ORDER, resolve: ForceMovementType.FURTHEST_WITHIN_RANGE, idealDistance: 10f,
                 movementName: "SionQKnockUp");
         }
 
@@ -78,7 +78,7 @@ namespace Buffs
             // the engine applies tenacity to it here, once.
             if (!unit.IsDead && _stunTail > 0f)
             {
-                ApiFunctionManager.AddBuff("Stun", _stunTail, 1, _spell, unit, _spell.CastInfo.Owner);
+                AddBuff("Stun", _stunTail, 1, _spell, unit, _spell.CastInfo.Owner);
             }
         }
 

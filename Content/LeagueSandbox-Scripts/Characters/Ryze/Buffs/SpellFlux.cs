@@ -23,7 +23,7 @@ internal class SpellFlux : IBuffGameScript {
     public void OnUpdate(Buff buff, float diff) { }
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        StatsModifier.MagicResist.FlatBonus =- (12f + 0.03f * (ownerSpell.CastInfo.SpellLevel - 1));
+        StatsModifier.MagicResist.FlatBonus =- ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel];
         unit.AddStatModifier(StatsModifier);
     }
 

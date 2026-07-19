@@ -44,6 +44,17 @@ namespace AIScripts
         private LaneMinion _minion;
         private Vector2 _lastOrderedWaypoint = new Vector2(float.NaN, float.NaN);
         private int _navIndex;
+        // Last waypoint of the path forward-nav ACTUALLY issued (not the nav target itself — the
+        // A* trim can end up to ~a cell short of it). Lets the re-issue gate detect a FOREIGN
+        // active path (leftover chase toward a dead target's stand cell, charm-drive remnant):
+        // same nav target + path-not-ended used to read as "hold", so the minion silently walked
+        // the corpse path to its end before retrying the lane leg (F8,
+        // docs/PATHING_AUDIT_2026_07_19.md). NaN until the first issue.
+        private Vector2 _lastIssuedPathEnd = new Vector2(float.NaN, float.NaN);
+        // Tolerance for "still our path": covers wire quantization, the trim ending short, and
+        // the in-collision reroute channel (AttackableUnit) rebuilding to the SAME goal with an
+        // end up to ~a nav-cell off. ≈ one nav-grid cell.
+        private const float FOREIGN_PATH_TOLERANCE = 50f;
         // Per-capping-turret committed approach cell (distinct-cell fix, see the capped branch):
         // computed ONCE per turret via the stand-cell reservation handshake, reused until the
         // capping turret changes (next tower after a kill resets it via the NetId mismatch).
@@ -150,6 +161,12 @@ namespace AIScripts
                 {
                     SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, target);
                     ResetAndStartTimer("TimerAntiKite");
+                }
+                else
+                {
+                    // Minion.lua TimerFindEnemies: pushing with nothing in acquisition range →
+                    // TurnOffAutoAttack(STOPREASON_TARGET_LOST). Was missing (Lua-audit finding #8).
+                    _minion.TurnOffAutoAttack(AutoAttackStopReason.TargetLost);
                 }
                 return;
             }
@@ -433,7 +450,35 @@ namespace AIScripts
         // point through the blocker-aware A* so it arcs around building footprints.
         private void SetStateAndMoveToForwardNav()
         {
+            // DISENGAGE-TO-MARCH (2026-07-19, sr129 visual: "minions briefly stand after combat,
+            // then dash-slide forward" + "walk sideways facing their old target"): entering
+            // forward-nav with a stale engaged TargetUnit violated the state-machine invariant
+            // (AI_ATTACKMOVESTATE = pushing, no engaged target) with two visible consequences:
+            //  - SERVER: UpdateTarget's in-range engage branch kept running its chase-stop
+            //    executor (RefreshWaypoints(idealRange)) against the stale target → the brief
+            //    stand on lane-advance.
+            //  - CLIENT: its autonomous minion swing loop keeps animating IN PLACE (facing the
+            //    old target) until a FORCED NPC_InstantStop_Attack arrives (AIMinionClient has
+            //    no self-cancel) → unit pinned in attack pose while the server marches, then
+            //    dash-slides to catch up on the next anchor; mid-march it runs with combat
+            //    facing = the sideways slide. Riot's wire carries ~590 ISA/min vs our ~140 —
+            //    they stop explicitly and often.
+            // So: clear the target and stop the attack. TurnOffAutoAttack(TARGET_LOST) is the
+            // Lua-faithful call (cancels an unconnected windup, lets a connected swing finish);
+            // the fullCancel below guarantees exactly the forced ISA the client loop needs even
+            // when no windup was in flight (idempotent if TurnOff already cancelled), with
+            // reset:false so the attack cooldown survives the transition. NOTE the state is set
+            // BEFORE SetTargetUnit(null): the OnTargetLost handler re-decides only in
+            // AI_ATTACKMOVE_ATTACKING, so flipping to ATTACKMOVESTATE first makes the null-set
+            // re-entry-free.
             NetSetState(AIState.AI_ATTACKMOVESTATE);
+            if (_minion.TargetUnit != null && _minion.TargetUnit.Team != _minion.Team)
+            {
+                _minion.TurnOffAutoAttack(AutoAttackStopReason.TargetLost);
+                _minion.CancelAutoAttack(reset: false, fullCancel: true,
+                    reason: AutoAttackStopReason.TargetLost);
+                _minion.SetTargetUnit(null);
+            }
 
             IReadOnlyList<Vector2> lane = _minion.PathingWaypoints;
             if (lane == null || lane.Count == 0)
@@ -448,11 +493,17 @@ namespace AIScripts
 
             if (next == null)
             {
-                // Held at the first alive enemy turret's regroup point, or arrived at the nexus end.
+                // DEFENSIVE ONLY (F12/B2, 2026-07-19): GetNextNavTarget never returns null for a
+                // valid lane — the cap point is re-returned forever, never "consumed", and the
+                // empty-lane case already returned above. The only remaining trigger is a broken
+                // GetMaxAllowedWaypointIndex < 0. The former comment ("held at the regroup point /
+                // arrived at the nexus end") described behavior that does not exist: holding at the
+                // cap/nexus is done by atFinalTarget suppressing re-issues below, with MoveOrder
+                // staying MoveTo — nothing ever keys off an OrderType.Stop from here.
                 if (PathLogger.Enabled)
                 {
                     PathLogger.LogNav(ApiMapFunctionManager.GameTime(), _minion.NetId, _navIndex, maxIndex,
-                        true, 0f, _minion.Position.X, _minion.Position.Y, "stop");
+                        true, 0f, _minion.Position.X, _minion.Position.Y, "no-lane");
                 }
                 _minion.UpdateMoveOrder(OrderType.Stop);
                 return;
@@ -479,23 +530,28 @@ namespace AIScripts
                 var cappingTurret = _minion.GetCappingTurret();
                 if (cappingTurret != null)
                 {
-                    if (_cappedStandTurretNetId != cappingTurret.NetId)
+                    // F9 REWORK (2026-07-19) of the 2026-07-05 distinct-cell + acquisition-clamp
+                    // pair:
+                    //  - REVALIDATION: the cache is only trusted while our OWN reservation still
+                    //    backs it. Intervening combat overwrites the per-unit reservation slot
+                    //    with combat stand cells; resuming toward the cached cell without a
+                    //    backing claim let siblings commit the same/nearby cells → tower stacks.
+                    //  - IN-SPIRAL RANGE CONSTRAINT (replaces the post-hoc acquisition clamp):
+                    //    the old clamp fell back to the RAW turret center for EVERY minion whose
+                    //    ring cell landed outside acquisition range — under crowding several took
+                    //    the fallback simultaneously, re-creating the tt120 fusion — and left the
+                    //    reservation on the unused ring cell. Passing the range check as
+                    //    cellAccept makes the spiral itself pick the nearest free cell that CAN
+                    //    acquire the turret; the spiral-cap fallback (raw center) remains the
+                    //    last resort for a single overflowing minion, and the reservation always
+                    //    matches the actual target.
+                    if (_cappedStandTurretNetId != cappingTurret.NetId
+                        || !HasAttackStandReservation(_minion, _cappedStandTarget))
                     {
-                        _cappedStandTarget = CommitAttackStandPosition(_minion, cappingTurret.Position);
-                        // ACQUISITION CLAMP (2026-07-05, user bug "minions stop on the lane just
-                        // short of turret range"): the reservation relocation is spatially
-                        // unconstrained — under crowding the Nth ring cell can land OUTSIDE this
-                        // minion's acquisition range of the turret. The minion then arrives there,
-                        // atFinalTarget correctly suppresses further re-issues (riot-emission
-                        // model: no lookahead top-up prods it anymore either), targeting never
-                        // sees the turret, and it stands on the lane forever. A cell that cannot
-                        // acquire the turret falls back to the raw center (one minion risking
-                        // ring overlap beats a pacifist).
                         float acq = _minion.GetAcquisitionRange();
-                        if (Vector2.DistanceSquared(_cappedStandTarget, cappingTurret.Position) > acq * acq)
-                        {
-                            _cappedStandTarget = cappingTurret.Position;
-                        }
+                        Vector2 turretPos = cappingTurret.Position;
+                        _cappedStandTarget = CommitAttackStandPosition(_minion, turretPos,
+                            c => Vector2.DistanceSquared(c, turretPos) <= acq * acq);
                         _cappedStandTurretNetId = cappingTurret.NetId;
                     }
                     target = _cappedStandTarget;
@@ -538,10 +594,24 @@ namespace AIScripts
             // the target (partial/blocked route — worth one retry; without it a blocked minion
             // would stand until the next node).
             bool pathConsumedShort = _minion.IsPathEnded() && !atFinalTarget;
-            if (_lastOrderedWaypoint != target || pathConsumedShort)
+            // FOREIGN-PATH ESCAPE (F8, 2026-07-19): the two clauses above key on forward-nav's
+            // OWN order memory — a leftover path from someone else (chase toward a target that
+            // died out of range: the engine clears the target but never the waypoints; charm-
+            // drive remnants likewise) used to slip through as "hold" and got walked to its end
+            // (the post-combat "detour to the corpse, then back to lane"). Riot's Lua re-issues
+            // the forward move every tick and suppresses position-driven (IsStillOldPosition),
+            // never order-memory-driven — so a path that doesn't end at OUR issued end is not
+            // ours and must be replaced immediately.
+            bool pathIsForeign = !_minion.IsPathEnded()
+                && !float.IsNaN(_lastIssuedPathEnd.X)
+                && _minion.Waypoints.Count > 1
+                && Vector2.DistanceSquared(_minion.Waypoints[_minion.Waypoints.Count - 1], _lastIssuedPathEnd)
+                    > FOREIGN_PATH_TOLERANCE * FOREIGN_PATH_TOLERANCE;
+            if (_lastOrderedWaypoint != target || pathConsumedShort || pathIsForeign)
             {
                 // Diagnostic reason for PATH_LOG: which clause opened the gate.
-                string reason = _lastOrderedWaypoint != target ? "fwd:target" : "fwd:pathend";
+                string reason = _lastOrderedWaypoint != target ? "fwd:target"
+                    : pathConsumedShort ? "fwd:pathend" : "fwd:foreign";
                 // TERRAIN-ONLY path (Riot-faithful, replay-verified 2026-06-30): the lane walk issues a
                 // straight path to the next nav point, routing around TERRAIN only — NOT around allied
                 // bodies. Riot's wire proves this: in a stacked wave 72% of minion paths are n=1 (a single
@@ -562,6 +632,7 @@ namespace AIScripts
                                      ?? new List<Vector2> { _minion.Position, target };
                 _minion.SetWaypoints(path, pathReason: reason);
                 _lastOrderedWaypoint = target;
+                _lastIssuedPathEnd = path[path.Count - 1];
 
                 if (PathLogger.Enabled)
                 {

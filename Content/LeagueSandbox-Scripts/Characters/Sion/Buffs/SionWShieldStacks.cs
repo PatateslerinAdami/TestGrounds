@@ -22,11 +22,15 @@ namespace Buffs
         private Particle _soundLoop;
         private Buff _buff;
         private float _lastShieldValue;
+        private PeriodicTicker _periodicTicker;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COUNTER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
-            MaxStacks = 1000000,
+            // COUNTER buff → travels as int32 via NPC_BuffUpdateNumCounter, so no 254 byte-cap
+            // applies (Buff.cs:104). Sion's shield can scale into very large values, so allow the
+            // full int range rather than an arbitrary ceiling.
+            MaxStacks = int.MaxValue,
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
@@ -39,9 +43,9 @@ namespace Buffs
             // Wire (fxdump audit): W_Shield sits on C_Buffbone_Glb_Center_Loc (0x0ac0f283), scale 0.5;
             // Sion_Base_W_Sound.troy is the shield LOOP sound — spawned at CAST, FX_Killed when the
             // shield ends (observed lifetimes 1.07-5.43s = exactly the hold time), NOT an explosion FX.
-            _shieldParticle = AddParticleTarget(_sion, _sion, "Sion_Base_W_Shield.troy", _sion, _buff.Duration, size: 0.5f, bone: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
-            _soundLoop = AddParticleTarget(_sion, _sion, "Sion_Base_W_Sound.troy", _sion, _buff.Duration + 0.5f, size: 1.3f, bone: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
-            var hpScaling = _sion.Stats.HealthPoints.Total * 0.1f;
+            _soundLoop = SpellEffectCreate("Sion_Base_W_Sound.troy",_sion, _sion,  _sion, lifetime:_buff.Duration + 0.5f, scale: 1.3f, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
+            _shieldParticle = SpellEffectCreate("Sion_Base_W_Shield.troy",_sion, _sion,  _sion, lifetime: _buff.Duration, scale: 0.5f, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
+            var hpScaling = _sion.Stats.HealthPoints.Total * ownerSpell.SpellData.EffectLevelAmount[6][ownerSpell.CastInfo.SpellLevel]/100;
             var ap =_sion.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
             var shieldValue = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel] + ap + hpScaling;
             _lastShieldValue = shieldValue;
@@ -49,6 +53,25 @@ namespace Buffs
             UpdateDisplay();
             ApiEventManager.OnShieldBreak.AddListener(this, _soulFurnaceShield, OnShieldBreak);
             ApiEventManager.OnShieldReduced.AddListener(this, _soulFurnaceShield, OnShieldReduce);
+
+            // Arm the recast: swap W → SionWDetonate (Riot wire bitfield 0x6E, 0x0E on restore),
+            // ready off-cooldown, then seal the slot for the initial 2s recast-lockout (unsealed in
+            // OnUpdate). Restore happens in OnDeactivate. Previously lived in a separate SionW buff
+            // whose lifecycle was already lockstep with this one; merged so the swap anchors to the
+            // only W buff Riot actually replicates.
+            SetSpell(_sion, "SionWDetonate", SpellSlotType.SpellSlots, 1, changeFlags: 0x6E);
+            _sion.Spells[1].SetCooldown(0f, true);
+            SealSpellSlot(_sion, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, true);
+        }
+
+        public void OnUpdate(Buff buff, float diff)
+        {
+            // Soul Furnace can't be recast for the first 2s (wiki; replay min recast gap = 2.18s,
+            // clean cluster from ~2.0s). Unseal the detonate slot once that lockout elapses.
+            if (_periodicTicker.ConsumeTicks(diff, 2000f, false, 1, 1) == 1)
+            {
+                SealSpellSlot(_sion, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);
+            }
         }
 
         private void OnShieldReduce(Shield shield, float amount)
@@ -79,14 +102,14 @@ namespace Buffs
 
             if (_soulFurnaceShield.Amount > 0)
             {
-                AddParticlePos(_sion, "Sion_Base_W_Nova.troy", _sion.Position, _sion.Position, size: 1.3f, flags:  FXFlags.SimulateWhileOffScreen);
+                SpellEffectCreate("Sion_Base_W_Nova.troy",_sion, null, null,_sion.Position, _sion.Position, scale: 1.3f, flags:  FXFlags.SimulateWhileOffScreen);
                 var unitsInRange = ForEachUnitInTargetAreaAddBuff(_sion, _sion.Position, 500f,
                     SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
                     SpellDataFlags.AffectHeroes, "SionWSoundHit", 0.25f, 1, _sion, ownerSpell);
                 
                 foreach (var unitInRange in unitsInRange)
                 {
-                    AddParticlePos(_sion, "Sion_Base_W_Nova_Tar.troy", unitInRange.Position, _sion.Position, size: 1.3f, flags: FXFlags.UpdateOrientation |  FXFlags.SimulateWhileOffScreen);
+                    SpellEffectCreate("Sion_Base_W_Nova_Tar.troy",_sion,  null, null,unitInRange.Position, _sion.Position, scale: 1.3f, orientTowards: unitInRange.GetPosition3D(), flags: FXFlags.UpdateOrientation |  FXFlags.SimulateWhileOffScreen);
                     unitInRange.TakeDamage(_sion,
                         ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel],
                         DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
@@ -98,7 +121,13 @@ namespace Buffs
             RemoveParticle(_shieldParticle);
             // FX_Kill for the shield loop sound at the end tick (wire-verified pattern).
             RemoveParticle(_soundLoop);
-            RemoveBuff(_sion, "SionW");
+
+            // Restore the W slot: unseal, swap SionWDetonate → SionW (wire bitfield 0x0E), and put
+            // the real cooldown back. Runs on every end path (recast-detonate, shield break, expiry)
+            // since all of them route through this OnDeactivate.
+            SealSpellSlot(_sion, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_CHAMPION, false);
+            SetSpell(_sion, "SionW", SpellSlotType.SpellSlots, 1);
+            _sion.Spells[1].SetCooldown(_sion.Spells[1].GetCooldown(), false);
         }
     }
 }

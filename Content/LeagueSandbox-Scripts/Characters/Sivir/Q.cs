@@ -65,7 +65,8 @@ public class SivirQMissile : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-            Type = MissileType.Arc
+            Type = MissileType.Arc,
+            OverrideHeightAugment = 100f
         },
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
@@ -89,6 +90,9 @@ public class SivirQMissile : ISpellScript
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
+        if (!IsValidTarget(_sivir, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral)) {
+            return;
+        }
         AddParticleTarget(_sivir, target, "Sivir_base_Q_tar.troy", target, flags: FXFlags.SimulateWhileOffScreen);
 
         var ad = _sivir.Stats.AttackDamage.Total * _sivir.Spells[0].SpellData.Coefficient;
@@ -142,7 +146,8 @@ public class SivirQMissileReturn : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-            Type = MissileType.Arc
+            Type = MissileType.Arc,
+            OverrideHeightAugment = 100f
         },
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
@@ -183,6 +188,7 @@ public class SivirQMissileReturn : ISpellScript
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
+        if(target == _sivir) return;
         AddParticleTarget(_sivir, target, "Sivir_base_Q_tar.troy", target, flags: FXFlags.SimulateWhileOffScreen);
 
         var ad = _sivir.Stats.AttackDamage.Total * _sivir.Spells[0].SpellData.Coefficient;
@@ -214,7 +220,8 @@ public class SivirQMissileReturnDead : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-          Type = MissileType.Arc
+          Type = MissileType.Arc,
+          OverrideHeightAugment = 100f
         },
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
@@ -249,6 +256,7 @@ public class SivirQMissileReturnDead : ISpellScript
 
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
+        if(target == _sivir) return;
         AddParticleTarget(_sivir, target, "Sivir_base_Q_tar.troy", target, flags: FXFlags.SimulateWhileOffScreen);
 
         var ad = _sivir.Stats.AttackDamage.Total * _sivir.Spells[0].SpellData.Coefficient;

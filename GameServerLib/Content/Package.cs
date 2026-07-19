@@ -20,8 +20,14 @@ namespace LeagueSandbox.GameServer.Content
         public string PackagePath { get; private set; }
         public string PackageName { get; private set; }
 
-        private readonly Dictionary<string, CharData> _charData = new Dictionary<string, CharData>();
-        private readonly Dictionary<string, SpellData> _spellData = new Dictionary<string, SpellData>();
+        // Case-insensitive for the same reason as _mapData below: champion data references content in
+        // PascalCase while the shipped folder may be lowercase (Ryze's "RunePrison" -> Spells/runeprison,
+        // same for Maokai's whole kit, Tryndamere "Slash" -> slash, "DragonFireBall" -> DragonFireball).
+        private readonly Dictionary<string, CharData> _charData = new Dictionary<string, CharData>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SpellData> _spellData = new Dictionary<string, SpellData>(StringComparer.OrdinalIgnoreCase);
+        // Lazily-built per-content-type folder indexes for case-insensitive directory resolution
+        // (content-type path -> {folder name (ci) -> exact on-disk name}).
+        private readonly Dictionary<string, Dictionary<string, string>> _contentFolderIndex = new Dictionary<string, Dictionary<string, string>>();
         private readonly Dictionary<string, NavigationGrid> _navGrids = new Dictionary<string, NavigationGrid>();
         // Riot's asset/package lookup is case-insensitive (Windows-era engine), and room.dsc entries
         // routinely disagree in case with the on-disk scene filenames (e.g. room.dsc references
@@ -317,6 +323,48 @@ namespace LeagueSandbox.GameServer.Content
             return navGrid;
         }
 
+        /// <summary>
+        /// Resolves "{contentType}/{name}/{name}.json" case-insensitively. Riot's content lookup is
+        /// case-insensitive (Windows-era engine; see the _mapData note), and the shipped data relies on
+        /// it: Ryze.json refers to "RunePrison" while the content folder is "runeprison" (same pattern
+        /// hits Maokai's whole kit, Tryndamere Slash, SRU_Dragon's DragonFireball, Karthus WallofPain,
+        /// Twitch SprayAndPray). On a case-sensitive filesystem the exact-path probe misses and the
+        /// spell silently loaded an empty default SpellData.
+        /// </summary>
+        private string ResolveContentJsonPath(string contentType, string name)
+        {
+            string dirPath = GetContentTypePath(contentType);
+            string path = $"{dirPath}/{name}/{name}.json";
+            if (File.Exists(path))
+            {
+                return path;
+            }
+
+            if (!_contentFolderIndex.TryGetValue(dirPath, out var index))
+            {
+                index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (Directory.Exists(dirPath))
+                {
+                    foreach (var dir in Directory.EnumerateDirectories(dirPath))
+                    {
+                        var folderName = Path.GetFileName(dir);
+                        index[folderName] = folderName;
+                    }
+                }
+                _contentFolderIndex[dirPath] = index;
+            }
+
+            if (index.TryGetValue(name, out var actual))
+            {
+                path = $"{dirPath}/{actual}/{actual}.json";
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
+        }
+
         public SpellData GetSpellData(string spellName)
         {
             if (_spellData.TryGetValue(spellName, out var spellData))
@@ -325,8 +373,8 @@ namespace LeagueSandbox.GameServer.Content
             }
             else
             {
-                string path = $"{GetContentTypePath("Spells")}/{spellName}/{spellName}.json";
-                ContentFile contentFile = GetContentFileFromJson(path);
+                string path = ResolveContentJsonPath("Spells", spellName);
+                ContentFile contentFile = path != null ? GetContentFileFromJson(path) : null;
                 if (contentFile != null)
                 {
                     SpellData toReturn = new SpellData().Load(contentFile);
@@ -346,8 +394,8 @@ namespace LeagueSandbox.GameServer.Content
             }
             else
             {
-                string path = $"{GetContentTypePath("Stats")}/{characterName}/{characterName}.json";
-                ContentFile contentFile = GetContentFileFromJson(path);
+                string path = ResolveContentJsonPath("Stats", characterName);
+                ContentFile contentFile = path != null ? GetContentFileFromJson(path) : null;
                 if (contentFile != null)
                 {
                     CharData toReturn = new CharData().Load(contentFile);

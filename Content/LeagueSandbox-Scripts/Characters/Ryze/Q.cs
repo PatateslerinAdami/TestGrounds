@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using System.Numerics;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
@@ -12,51 +13,65 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class Overload : ISpellScript {
-    private ObjAIBase     _ryze;
-    public  StatsModifier StatsModifier { get; } = new();
+public class Overload : ISpellScript
+{
+    private ObjAIBase _ryze;
+    private Spell _spell;
 
-    public SpellScriptMetadata ScriptMetadata => new() {
+    public SpellScriptMetadata ScriptMetadata => new()
+    {
+        NotSingleTargetSpell = true,
         TriggersSpellCasts = true,
-        IsDamagingSpell    = true,
-        MissileParameters = new MissileParameters {
+        IsDamagingSpell = true,
+        MissileParameters = new MissileParameters
+        {
             Type = MissileType.Target
         }
     };
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
         _ryze = owner;
+        _spell = spell;
+        ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
         ApiEventManager.OnUpdateStats.AddListener(this, _ryze, OnUpdateStats);
         ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
-        ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
-        var ap     = _ryze.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
-        var mana   = _ryze.Stats.ManaPoints.Total   * 0.065f;
-        var dmg = 40f + 20f * (spell.CastInfo.SpellLevel - 1) + ap + mana;
-
-        AddParticleTarget(_ryze, target, "Overload_tar.troy", target, bone: "root");
-        target.TakeDamage(_ryze, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
-        if (!_ryze.HasBuff("DesperatePower")) return;
-        AddParticle(_ryze, target, "DesperatePower_aoe.troy", target.Position);
-        var unitsInRange = GetUnitsInRange(_ryze, target.Position, 200f, true,
-                                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                                           SpellDataFlags.AffectMinions |
-                                           SpellDataFlags.AffectNeutral).Where(unit => unit != target);
-        foreach (var unit in unitsInRange) {
-            AddParticleTarget(_ryze, unit, "ManaLeach_tar", unit);
-            unit.TakeDamage(_ryze, dmg * 0.5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                            DamageResultType.RESULT_NORMAL);
-        }
-    }
-
-    private void OnLevelUpSpell(Spell spell) {
+    private void OnLevelUpSpell(Spell spell)
+    {
         AddBuff("Overload", 25000f, 1, spell, _ryze, _ryze, true);
     }
 
-    private void OnUpdateStats(AttackableUnit unit, float diff) {
-        var mana   = _ryze.Stats.ManaPoints.Total   * 0.065f;
+    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile)
+    {
+        SpellEffectCreate("Overload_tar.troy", _ryze, target, target, boneName: "C_Buffbone_Glb_Chest_Loc",
+            targetBoneName: "C_Buffbone_Glb_Chest_Loc", flags: FXFlags.SimulateWhileOffScreen);
+
+        var ap = _ryze.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+        var mana = _ryze.Stats.ManaPoints.Total * spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel] /
+                   100f;
+        var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap + mana;
+        target.TakeDamage(_ryze, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
+
+        if (!_ryze.HasBuff("DesperatePower")) return;
+        SpellEffectCreate("DesperatePower_aoe.troy", _ryze, target, target, flags: FXFlags.SimulateWhileOffScreen,
+            fowVisibilityRadius: 10f);
+        var unitsInRange = GetUnitsInRange(_ryze, target.Position, 300f, true,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral |
+            SpellDataFlags.AffectMinions | SpellDataFlags.AffectHeroes).Where(unit => unit != target);
+        foreach (var unit in unitsInRange)
+        {
+            SpellEffectCreate("ManaLeach_tar.troy",_ryze, unit,  unit, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
+            unit.TakeDamage(_ryze, dmg * 0.5f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
+                DamageResultType.RESULT_NORMAL);
+        }
+    }
+
+    private void OnUpdateStats(AttackableUnit unit, float diff)
+    {
+        var mana = _ryze.Stats.ManaPoints.Total * _spell.SpellData.EffectLevelAmount[3][_spell.CastInfo.SpellLevel] /
+                   100f;
         SetSpellToolTipVar(unit, 0, mana, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
     }
 }

@@ -1,3 +1,4 @@
+using System.Linq;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
@@ -41,9 +42,10 @@ namespace Spells
         private const float WhiteConeRadius = 720f;
 
         private ObjAIBase _sion;
+        private Spell _spell;
         private Vector2 _direction = new Vector2(1, 0);
         private Buff _chargeBuff;
-        private readonly List<Particle> _chargeFx = new List<Particle>();
+        private readonly List<Particle> _chargeFx = [];
         private bool _slamReadyFxSpawned;
         private bool _moveLockHeld;
 
@@ -52,9 +54,8 @@ namespace Spells
             // SionQ.lua metadata: NotSingleTargetSpell + DoesntBreakShields,
             // DoesntTriggerSpellCasts=false. Damage rides on SionQDamage data.
             NotSingleTargetSpell = true,
-            DoesntBreakShields = true,
             TriggersSpellCasts = true,
-            IsDamagingSpell = false,
+            IsDamagingSpell = true,
             // REQUIRED with AutoFaceDirection=false: without this the engine overwrites
             // CastInfo.TargetPosition/End with a fake point 10u in CURRENT facing before the
             // CastSpellAns (Spell.cs:796) — OnSpellChargeStart would then read the old facing
@@ -69,6 +70,25 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _sion = owner;
+            _spell = spell;
+            ApiEventManager.OnUpdateStats.AddListener(this, _sion, OnUpdateStats);
+        }
+
+        private void OnUpdateStats(AttackableUnit unit, float diff)
+        {
+            // Tooltip AD scaling must mirror the ACTUAL per-rank damage (SionQDamage.E3),
+            // NOT the flat SionQ.E3/E6 which are the max-rank/tooltip reference. Same rank
+            // indexing as Release/ApplyHits so var 0/1 always equal what the spell deals.
+            // Min charge = E3·AD (mult 1); max charge = ×3 (damage mult caps at 1s). E6 is
+            // deliberately unused: in SionQDamage it is stored in percent units (120-180),
+            // so the max value is derived as adMin·3. Replay-verified per-rank
+            // (project_sionq_ad_ratio_per_rank_replay_verified).
+            var dmgData = _sion.GetSpell("SionQDamage").SpellData;
+            int rank = Math.Clamp((int)_spell.CastInfo.SpellLevel, 1, 5);
+            float adMin = _sion.Stats.AttackDamage.Total * dmgData.EffectLevelAmount[3][rank];
+            float adMax = adMin * 3f;
+            SetSpellToolTipVar(_sion, 0, adMin, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
+            SetSpellToolTipVar(_sion, 1, adMax, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
@@ -122,20 +142,21 @@ namespace Spells
             // is unresolved (also appears on E casts) and intentionally skipped.
             // Wire (sionq_fx audit, all bind=Sion): ground indicators carry the LOCKED direction
             // as orientation (flags 0x0030 = UpdateOrientation|SimulateWhileOffScreen, bone
-            // BUFFBONE_GLB_GROUND_LOC, TargetNetID=0 -> AddParticle); Cas is target-bound to Sion
-            // on the ground bone (0x0020, TargetNetID=Sion -> AddParticleTarget); the weapon glow
+            // BUFFBONE_GLB_GROUND_LOC, TargetNetID=0 -> SpellEffectCreate); Cas is target-bound to Sion
+            // on the ground bone (0x0020, TargetNetID=Sion -> SpellEffectCreate); the weapon glow
             // sits on Buffbone_Glb_Weapon_1 (0x0020).
             float fxLife = spell.GetMaxHoldDuration() + 0.5f;
             var dir3 = new Vector3(_direction.X, 0, _direction.Y);
-            _chargeFx.Add(AddParticle(_sion, _sion, "Sion_Base_Q_Indicator.troy", _sion.Position, fxLife,
-                bone: "BUFFBONE_GLB_GROUND_LOC", direction: dir3,
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Indicator.troy",_sion, _sion, null, _sion.Position, lifetime: fxLife,
+                boneName: "BUFFBONE_GLB_GROUND_LOC", orientTowards: dir3,
                 flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
-            _chargeFx.Add(AddParticle(_sion, _sion, "Sion_Base_Q_Indicator2.troy", _sion.Position, fxLife,
-                bone: "BUFFBONE_GLB_GROUND_LOC", direction: dir3,
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Indicator2.troy",_sion, _sion,  null, _sion.Position, lifetime: fxLife,
+                boneName: "Buffbone_Glb_Ground_Loc", orientTowards: dir3,
                 flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
-            _chargeFx.Add(AddParticleTarget(_sion, _sion, "Sion_Base_Q_Cas.troy", _sion, fxLife,
-                bone: "BUFFBONE_GLB_GROUND_LOC"));
-            _chargeFx.Add(AddParticleTarget(_sion, _sion, "Sion_Base_Q_Cas1_weapon.troy", _sion, fxLife, bone:"Buffbone_Glb_Weapon_1"));
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Cas.troy",_sion, _sion,  _sion, lifetime: fxLife,
+                boneName: "Buffbone_Glb_Ground_Loc", flags: FXFlags.SimulateWhileOffScreen));
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Cas1_weapon.troy",_sion, _sion,  _sion, lifetime: fxLife,
+                boneName: "Buffbone_Glb_Weapon_1", flags: FXFlags.SimulateWhileOffScreen));
         }
 
         public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
@@ -147,25 +168,27 @@ namespace Spells
         {
             // "Slam ready" at charge >= 1s: red indicator + weapon glow spawn ON TOP of the
             // white set (wire kills the white FX only at release, not here).
-            if (!_slamReadyFxSpawned && spell.GetChargeElapsed() >= SlamThreshold)
-            {
-                _slamReadyFxSpawned = true;
-                // Wire: red indicators + Cas3 like the white indicators (0x0030, GROUND_LOC,
-                // orientation = locked direction; Cas3 at scale 1.5); weapon glow upgrade on
-                // Buffbone_Glb_Weapon_1 (0x0020, target-bound).
-                float fxLife = spell.GetMaxHoldDuration() + 0.5f;
-                var dir3 = new Vector3(_direction.X, 0, _direction.Y);
-                _chargeFx.Add(AddParticle(_sion, _sion, "Sion_Base_Q_Indicator_Red.troy", _sion.Position, fxLife,
-                    bone: "BUFFBONE_GLB_GROUND_LOC", direction: dir3,
-                    flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
-                _chargeFx.Add(AddParticle(_sion, _sion, "Sion_Base_Q_Indicator_Red2.troy", _sion.Position, fxLife,
-                    bone: "BUFFBONE_GLB_GROUND_LOC", direction: dir3,
-                    flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
-                _chargeFx.Add(AddParticleTarget(_sion, _sion, "Sion_Base_Q_Cas2_weapon.troy", _sion, fxLife, bone: "Buffbone_Glb_Weapon_1"));
-                _chargeFx.Add(AddParticle(_sion, _sion, "Sion_Base_Q_Cas3.troy", _sion.Position, fxLife, size: 1.5f,
-                    bone: "BUFFBONE_GLB_GROUND_LOC", direction: dir3,
-                    flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
-            }
+            if (_slamReadyFxSpawned || !(spell.GetChargeElapsed() >= SlamThreshold)) return;
+            _slamReadyFxSpawned = true;
+            // Wire: red indicators + Cas3 like the white indicators (0x0030, GROUND_LOC,
+            // orientation = locked direction; Cas3 at scale 1.5); weapon glow upgrade on
+            // Buffbone_Glb_Weapon_1 (0x0020, target-bound).
+            var fxLife = spell.GetMaxHoldDuration() + 0.5f;
+            var dir3 = new Vector3(_direction.X, 0, _direction.Y);
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Indicator_Red.troy", _sion, _sion, null, _sion.Position,
+                lifetime: fxLife,
+                boneName: "Buffbone_Glb_Ground_Loc", orientTowards: dir3,
+                flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Cas3.troy", _sion, _sion, null, _sion.Position,
+                lifetime: fxLife, scale: 1.5f,
+                boneName: "Buffbone_Glb_Ground_Loc", orientTowards: dir3,
+                flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Cas2_weapon.troy", _sion, _sion, _sion, lifetime: fxLife,
+                boneName: "Buffbone_Glb_Weapon_1", flags: FXFlags.SimulateWhileOffScreen));
+            _chargeFx.Add(SpellEffectCreate("Sion_Base_Q_Indicator_Red2.troy", _sion, _sion, null, _sion.Position,
+                lifetime: fxLife,
+                boneName: "Buffbone_Glb_Ground_Loc", orientTowards: dir3,
+                flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen));
         }
 
         // Manual recast release. The engine routed the recast through UpdateCharge ->
@@ -230,20 +253,20 @@ namespace Spells
             var hits = GetTargetsInArea(spell, ownerPos, radius);
             ApplyHits(spell, hits, step, slam, full);
 
-            string grade = full ? "3" : slam ? "2" : "1";
+            var grade = full ? "3" : slam ? "2" : "1";
             // Caster-bound swing/impact FX — Hit2/Hit3 play on slam even on a whiff (wire 848.77/1512.23).
             // Wire: Hit FX = 0x0030, bone BUFFBONE_GLB_GROUND_LOC, orientation = locked direction,
             // bind=Sion, TargetNetID=0; Cas3_weapon = 0x0020 on Buffbone_Glb_Weapon_1, target-bound.
             if (slam)
             {
-                AddParticle(_sion, _sion, $"Sion_Base_Q_Hit{grade}.troy", ownerPos,
-                    bone: "BUFFBONE_GLB_GROUND_LOC",
-                    direction: new Vector3(_direction.X, 0, _direction.Y),
+                SpellEffectCreate($"Sion_Base_Q_Hit{grade}.troy", _sion, _sion, null, ownerPos,
+                    boneName: "BUFFBONE_GLB_GROUND_LOC",
+                    orientTowards: new Vector3(_direction.X, 0, _direction.Y),
                     flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
                 if (full)
                 {
-                    AddParticleTarget(_sion, _sion, "Sion_Base_Q_Cas3_weapon.troy", _sion,
-                        bone: "Buffbone_Glb_Weapon_1");
+                    SpellEffectCreate("Sion_Base_Q_Cas3_weapon.troy", _sion, _sion, _sion,
+                        boneName: "Buffbone_Glb_Weapon_1", flags: FXFlags.SimulateWhileOffScreen);
                 }
             }
 
@@ -274,29 +297,14 @@ namespace Spells
             // No hit cap — the ChainMissileParameters MaximumHits=4 block is vestigial
             // (7-target knockup observed in the replay).
             Vector2 apex = ownerPos - _direction * ConeApexBehind;
-            var result = new List<AttackableUnit>();
-            foreach (var unit in GetUnitsInRange(_sion, ownerPos, radius + 50f, true, spell.SpellData.Flags))
-            {
-                if (unit == _sion)
-                {
-                    continue;
-                }
-                if (Vector2.Distance(unit.Position, ownerPos) > radius)
-                {
-                    continue;
-                }
-                float bb = unit.CollisionRadius;
-                if (!CircleTouchesSector(unit.Position, bb, apex, _direction, YellowConeRadius))
-                {
-                    continue;
-                }
-                if (CircleTouchesSector(unit.Position, bb, apex, _direction, WhiteConeRadius))
-                {
-                    continue;
-                }
-                result.Add(unit);
-            }
-            return result;
+
+            return (from unit in GetUnitsInRange(_sion, ownerPos, radius + 50f, true, spell.SpellData.Flags)
+                where unit != _sion
+                where !(Vector2.Distance(unit.Position, ownerPos) > radius)
+                let bb = unit.CollisionRadius
+                where CircleTouchesSector(unit.Position, bb, apex, _direction, YellowConeRadius)
+                where !CircleTouchesSector(unit.Position, bb, apex, _direction, WhiteConeRadius)
+                select unit).ToList();
         }
 
         // Circle (unit center + bounding radius) vs cone sector (apex, ±ConeHalfAngle around
@@ -310,19 +318,22 @@ namespace Spells
             {
                 return false;
             }
+
             if (d < 0.001f)
             {
                 return true;
             }
+
             float angle = MathF.Acos(Math.Clamp(Vector2.Dot(dir, v) / d, -1f, 1f));
             if (angle <= ConeHalfAngle)
             {
                 return true;
             }
+
             var e1 = Rotate(dir, ConeHalfAngle);
             var e2 = Rotate(dir, -ConeHalfAngle);
             return DistPointSegment(center, apex, apex + e1 * radius) <= r
-                || DistPointSegment(center, apex, apex + e2 * radius) <= r;
+                   || DistPointSegment(center, apex, apex + e2 * radius) <= r;
         }
 
         private static Vector2 Rotate(Vector2 v, float rad)
@@ -358,7 +369,7 @@ namespace Spells
             float stunTotal = 1.25f + 0.25f * ccStep;
             float knockupTime = 0.5f + 0.125f * ccStep;
 
-            string tarFx = full ? "Sion_Base_Q3_tar.troy" : slam ? "Sion_Base_Q2_tar.troy" : "Sion_Base_Q1_tar.troy";
+            var tarFx = full ? "Sion_Base_Q3_tar.troy" : slam ? "Sion_Base_Q2_tar.troy" : "Sion_Base_Q1_tar.troy";
 
             foreach (var target in hits)
             {
@@ -372,25 +383,24 @@ namespace Spells
                 }
 
                 target.TakeDamage(_sion, dealt, DamageType.DAMAGE_TYPE_PHYSICAL,
-                    DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
+                    DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
 
                 // Per-hit sound-carrier FX (wire, every release with hits, flail AND slam):
                 // EffectNameHash=0 (empty name), flags=0, no bones, TargetNetID=0, bind=target,
                 // KeywordNetID=Sion. Drives the client's on-hit/material audio for the target.
-                AddParticle(_sion, target, "", target.Position,
-                    flags: FXFlags.None, keywordObject: _sion);
+                SpellEffectCreate("", _sion, target, null, target.Position, flags: FXFlags.None, keywordObject: _sion);
 
                 // Wire: Qx_tar bound to the target (bind=tgt=unit, no bone, scale 2). The FLAIL
                 // variant (Q1_tar) additionally carries orientation = MINUS the cast direction
                 // (0x0030) — the hit flash faces back along the swing; Q2/Q3_tar are plain 0x0020.
                 if (slam)
                 {
-                    AddParticleTarget(_sion, target, tarFx, target, size: 2f);
+                    SpellEffectCreate(tarFx, _sion, target, target, scale: 2f, flags: FXFlags.SimulateWhileOffScreen);
                 }
                 else
                 {
-                    AddParticleTarget(_sion, target, tarFx, target, size: 2f,
-                        direction: new Vector3(-_direction.X, 0, -_direction.Y),
+                    SpellEffectCreate(tarFx, _sion, target, target, scale: 2f,
+                        orientTowards: new Vector3(-_direction.X, 0, -_direction.Y),
                         flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
                 }
 
@@ -411,7 +421,6 @@ namespace Spells
                 else
                 {
                     AddBuff("SionQSoundBeforeHalfHit", 0.25f, 1, spell, target, _sion);
-                    // Wire duration 0.3 (tooltip says 0.25) — -50% MS in the buff script.
                     AddBuff("SionQSlow", 0.3f, 1, spell, target, _sion);
                 }
             }
@@ -424,16 +433,19 @@ namespace Spells
                 _moveLockHeld = false;
                 _sion.SetStatus(StatusFlags.CanMove, true);
             }
+
             ClearOverrideAnimation(_sion, "ATTACK1", this);
             if (_chargeBuff != null)
             {
                 _sion.RemoveBuff(_chargeBuff);
                 _chargeBuff = null;
             }
+
             foreach (var fx in _chargeFx)
             {
                 fx?.SetToRemove();
             }
+
             _chargeFx.Clear();
         }
     }
@@ -462,7 +474,7 @@ namespace Spells
             IsDamagingSpell = true
         };
     }
-    
+
     public class SionQDamage : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -470,7 +482,7 @@ namespace Spells
             TriggersSpellCasts = false,
         };
     }
-    
+
     public class SionQShapeCut : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -478,7 +490,7 @@ namespace Spells
             TriggersSpellCasts = false,
         };
     }
-    
+
     public class SionQHitParticleMissile : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -486,7 +498,7 @@ namespace Spells
             TriggersSpellCasts = false,
         };
     }
-    
+
     public class SionQIndicatorMissile : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
@@ -494,7 +506,7 @@ namespace Spells
             TriggersSpellCasts = false,
         };
     }
-    
+
     public class SionQIndicatorMissile2 : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()

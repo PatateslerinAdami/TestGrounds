@@ -10,7 +10,7 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class ryzebasicattack : ISpellScript {
+public class RyzeBasicAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         IsDamagingSpell      = true,
@@ -20,7 +20,7 @@ public class ryzebasicattack : ISpellScript {
     };
 }
 
-public class ryzebasicattack2 : ISpellScript {
+public class RyzeBasicAttack2 : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         IsDamagingSpell      = true,
@@ -30,7 +30,7 @@ public class ryzebasicattack2 : ISpellScript {
     };
 }
 
-public class ryzecritattack : ISpellScript {
+public class RyzeCritAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         IsDamagingSpell      = true,

@@ -16,7 +16,8 @@ internal class DesperatePower : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+        MaxStacks   = 1,
+        IsNonDispellable = true
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -26,11 +27,11 @@ internal class DesperatePower : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _ryze = buff.SourceUnit;
-        OverrideAutoAttack(_ryze, "ryzedesperatepowerattack", false);
-        StatsModifier.SpellVamp.FlatBonus = 0.15f + 0.05f * (ownerSpell.CastInfo.SpellLevel - 1);
-        StatsModifier.MoveSpeed.FlatBonus = 80f;
+        //OverrideAutoAttack(_ryze, "RyzeDesperatePowerAttack", false);
+        StatsModifier.SpellVamp.FlatBonus = ownerSpell.SpellData.EffectLevelAmount[2][ownerSpell.CastInfo.SpellLevel] / 100f;
+        StatsModifier.MoveSpeed.FlatBonus = ownerSpell.SpellData.EffectLevelAmount[3][ownerSpell.CastInfo.SpellLevel];
         unit.AddStatModifier(StatsModifier);
-        _p3 = AddParticleTarget(_ryze, unit, "ManaLeach_tar2.troy", unit, buff.Duration);
+        _p3 = SpellEffectCreate("ManaLeach_tar2.troy",_ryze, unit,  unit, lifetime: buff.Duration, flags: FXFlags.SimulateWhileOffScreen, fowVisibilityRadius: 10f);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {

@@ -1669,7 +1669,17 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // Skip on TimeCompleted so natural completion stays silent on the wire.
                 if (reason != ChannelingStopSource.TimeCompleted)
                 {
-                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
+                    // missileNetID stays 0: under the corrected 4.20 ISA layout ([flags][netid],
+                    // see 052_NPC_InstantStop_Attack.cs) Riot populates the netid ONLY with
+                    // DESTROYMISSILE (0x10) set — every channel/charge-end ISA in the Sion/Singed
+                    // replay (e5b335cb) is netid=0. Threading CastInfo.MissileNetID here (2026-07-13,
+                    // based on the old flipped parse) put the netid's low byte into the client's
+                    // FLAGS field under the pre-flip writer; whenever that byte had bit3
+                    // (AVATARSPELL) set, the client routed the stop to the SUMMONER spellbook →
+                    // silent no-op → the charge HUD bar stuck forever (Sion Q) / channel-cancel
+                    // dropped (Katarina R class). flags=0 + netid=0 is byte-identical to the
+                    // pre-2026-07-13 known-good wire under BOTH layouts.
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
                     // Route to charge-specific cancel for charge spells.
                     if (IsChargeSpell)
                     {
@@ -1747,6 +1757,28 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void FinishCasting()
         {
+            // Riot's cast-frame gate (SpellInstanceClient::Update): a unit-requiring spell
+            // (SpellData::SpellNeedTargetUnits = TargetingType < 2, i.e. Self/Target) whose targets are
+            // all dead/removed by the time the windup completes FIZZLES — no effects, no missile and
+            // NO COOLDOWN ("if (!requiresUnits || SomeUnitsAlive()) ExecuteCastFrame(); else stop").
+            // CantCancelWhileWindingUp only blocks mid-windup cancels (CastCancelCheck), it does not
+            // force a dead-target cast frame through. The client runs this gate autonomously and never
+            // starts its ANS-derived QWER cooldown, so committing a server cooldown here desyncs the
+            // HUD (Ryze E on a minion that dies during the 0.25s windup showed the spell ready on the
+            // client but on cooldown server-side). Mana is deducted at cast start, so refund it.
+            if (!CastInfo.IsAutoAttack
+                && (SpellData.TargetingType == TargetingType.Self || SpellData.TargetingType == TargetingType.Target)
+                && !SomeTargetsAlive())
+            {
+                if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableManaCosts))
+                {
+                    var ownerStats = CastInfo.Owner.Stats;
+                    ownerStats.CurrentMana += GetManaCost() * (1 - ownerStats.SpellCostReduction);
+                }
+                ResetSpellCast();
+                return;
+            }
+
             if (CastInfo.IsAutoAttack)
             {
                 ApiEventManager.OnLaunchAttack.Publish(CastInfo.Owner, this);
@@ -1991,7 +2023,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // SpellInstanceClient stays at mChannelingFinished=0 + mChannelingFinishTime=FLT_MAX so
             // IsChanneling() returns true forever and Spellbook refuses to re-cast Q. Same mechanism
             // as StopChanneling(Cancel, non-TimeCompleted) uses for stun/silence/etc cancels.
-            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
+            // missileNetID stays 0 — Riot's Sion Q auto-fire ISA is flags=0x00 netid=0 (replay
+            // e5b335cb, corrected [flags][netid] parse); netid is populated ONLY with DESTROYMISSILE.
+            // See the StopChanneling cancel site for the full stuck-charge-bar failure mode.
+            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
 
             // Publish CANCEL (not Fire) — script chooses policy: mana refund, auto-fire, etc.
             ApiEventManager.OnSpellChargeCancel.Publish(this, ChannelingStopSource.TimeCompleted);
@@ -2588,6 +2623,25 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             SetCooldown(CurrentCooldown - lowerValue, silent: silent);
         }
 
+        /// <summary>
+        /// Whether any of this cast's targets is still alive — mirror of Riot's
+        /// SpellInstanceClient::SomeUnitsAlive (iterates CastInfo targets, true on the first
+        /// non-null, non-dead unit). Used by the FinishCasting cast-frame gate: unit-requiring
+        /// spells fizzle without cooldown when this is false. An emptied target list (the death
+        /// path calls ObjAIBase.Untarget -> RemoveTarget) counts as "none alive".
+        /// </summary>
+        private bool SomeTargetsAlive()
+        {
+            foreach (var target in CastInfo.Targets)
+            {
+                if (target.Unit != null && !target.Unit.IsDead)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public void ResetSpellCast()
         {
             State = SpellState.STATE_READY;
@@ -2890,7 +2944,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // ends naturally on the client. Don't broadcast ISA here.
                 if (IsChannelLockCharge)
                 {
-                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false, missileNetID: CastInfo.MissileNetID);
+                    // missileNetID stays 0 — Riot channel-lock recast ISAs carry netid=0 (netid is
+                    // populated ONLY with DESTROYMISSILE under the corrected [flags][netid] layout).
+                    // See the StopChanneling cancel site for the stuck-charge-bar failure mode.
+                    _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
                 }
 
                 // For charge-channel spells (UseChargeChanneling=1, e.g. Varus Q) the client-driven

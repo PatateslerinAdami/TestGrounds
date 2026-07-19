@@ -254,6 +254,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         // engine-owned once toggled on. _autoAttackEnabledTarget pins the toggle to a specific unit so a
         // stale enable can't fire at a newly-set target the script hasn't turned on yet.
         private bool _autoAttackEnabled;
+        // One forced NPC_InstantStop_Attack per abandoned client swing loop (see the Minion
+        // branch in SetTargetUnit): set when the stop is sent for the current engagement,
+        // cleared when the next auto-attack cast begins (UpdateTarget attack-begin).
+        private bool _clientSwingStopSent;
         private AttackableUnit _autoAttackEnabledTarget;
 
         private AttackableUnit _goldRedirectTarget;
@@ -951,15 +955,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsAttacking = false;
                 HasMadeInitialAttack = false;
             }
-            // forceClient for client-autonomous units (Minion/Monster): their attack loop runs on the
-            // client with no server packets and no self-cancel (AIMinionClient.cpp), so a non-forced stop
-            // is ignored while the loop is active → the swing keeps animating with no damage. Forcing it
-            // breaks the hardcode-attack state. Champions are server-driven per swing, so the default
-            // (non-forced) stop is correct for them.
+            // Evidence-based AA-stop wire shape (4.20 replay db0ba71d, Lux AA + orb-walk):
+            // - KEEPANIMATING (0x01) is set on EVERY Riot AA-stop (the swing animation plays out).
+            // - WINDUP cancel (swing not yet committed, fires ~0.06-0.2s after Basic_Attack): Riot sends
+            //   shape 0x11 = KEEPANIMATING|DESTROYMISSILE + the reserved missile netid, so the client
+            //   destroys the not-yet-launched projectile. Without it the client flies a phantom missile
+            //   that deals no damage (server already cancelled it) — the visible orb-walk bug.
+            // - POST-LAUNCH stop (swing already committed, fires ~0.5s after Basic_Attack): Riot sends
+            //   shape 0x03 = KEEPANIMATING|FORCESPELLCAST (ForceDoClient=0x02), netid ignored.
+            // forceClient (0x02) also breaks a client-autonomous Minion/Monster attack loop
+            // (AIMinionClient.cpp: no server packets, no self-cancel), so minions keep it set in both
+            // phases. missileNetID is only read by the client when DESTROYMISSILE is set.
             if ((reset || fullCancel) && !silent)
-                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, forceClient: this is Minion,
-                    // The cancelled swing's reserved missile id (Riot threads castInfo.missileNetworkID
-                    // through every ISA; ResetSpellCast above doesn't touch it).
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false,
+                    keepAnimating: true,
+                    destroyMissile: wasWindingUp,
+                    forceClient: !wasWindingUp || this is Minion,
                     missileNetID: AutoAttackSpell.CastInfo.MissileNetID);
 
             if (wasWindingUp)
@@ -2532,9 +2543,33 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 // class needs the clean state).
                 if (this is Minion)
                 {
-                    if (AutoAttackSpell == null || AutoAttackSpell.State != SpellState.STATE_CASTING)
+                    // WIRE SIDE (sr130 "attacks A, then teleports to the minion behind it",
+                    // 2026-07-19): the client's autonomous swing loop free-runs at the OLD target
+                    // and ignores movement — with the switch handled silently, NOTHING breaks the
+                    // loop until the first Basic_Attack_Pos at the NEW target position-syncs the
+                    // unit over = a visible teleport spanning the whole chase (sr130: 5 switch
+                    // events with 270-570u attack-position gaps and zero ISA between; Riot's wire
+                    // carries ~590 ISA/min for exactly this). So the client must get ONE forced
+                    // NPC_InstantStop_Attack per abandoned swing loop, while the SERVER-side
+                    // windup/cooldown protection stays exactly as before. _clientSwingStopSent
+                    // dedupes the per-tick collision/cost-model target ping-pong (the ISA is sent
+                    // once per client loop, not once per flip).
+                    bool clientLoopActive = IsAttacking || HasMadeInitialAttack;
+                    if (AutoAttackSpell != null && AutoAttackSpell.State == SpellState.STATE_CASTING)
                     {
-                        CancelAutoAttack(reset: false, fullCancel: true, silent: true);
+                        // In-flight windup: the server swing completes (no state change), but the
+                        // client loop is broken NOW so the unit visibly starts walking its chase.
+                        if (clientLoopActive && !_clientSwingStopSent)
+                        {
+                            _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false,
+                                forceClient: true, missileNetID: AutoAttackSpell.CastInfo.MissileNetID);
+                            _clientSwingStopSent = true;
+                        }
+                    }
+                    else
+                    {
+                        CancelAutoAttack(reset: false, fullCancel: true,
+                            silent: !clientLoopActive || _clientSwingStopSent);
                     }
                 }
                 else
@@ -3233,6 +3268,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                                 {
                                     HasAutoAttacked = false;
                                     IsAttacking = true;
+                                    _clientSwingStopSent = false;
                                     // No extra pre-attack event here: Riot's hook is OnPreAttack
                                     // (BuffScript/CharScript, owner+target+hitres_e — decomp
                                     // BuffScript.h:66) and ApiEventManager.OnPreAttack already

@@ -4256,9 +4256,21 @@ namespace LeagueSandbox.GameServer.API
         /// instead of fusing on one coordinate (tt120: capped casters all move-targeted the exact
         /// turret center, converged during the walk and ended stacked on one attack position).
         /// </summary>
-        public static Vector2 CommitAttackStandPosition(AttackableUnit attacker, Vector2 pos)
+        public static Vector2 CommitAttackStandPosition(AttackableUnit attacker, Vector2 pos,
+            Func<Vector2, bool> cellAccept = null)
         {
-            return _game.Map.PathingHandler.CommitStand(attacker, pos);
+            return _game.Map.PathingHandler.CommitStand(attacker, pos, cellAccept);
+        }
+
+        /// <summary>
+        /// True while <paramref name="attacker"/>'s own stand reservation still backs
+        /// <paramref name="pos"/> — see PathingHandler.HasOwnStandReservation (F9): callers that
+        /// cache a committed stand cell must re-run the handshake once an intervening (combat)
+        /// commit overwrote their claim.
+        /// </summary>
+        public static bool HasAttackStandReservation(AttackableUnit attacker, Vector2 pos)
+        {
+            return _game.Map.PathingHandler.HasOwnStandReservation(attacker, pos);
         }
 
         /// <summary>

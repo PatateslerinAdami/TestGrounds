@@ -202,16 +202,26 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public bool FullPathBroadcastPending { get; private set; }
 
         // Temp-ghost stuck recovery (S4 mGettingOutOfCollisionGhosted, consumed in
-        // Actor_Common::GetCollisionState, Actor.cpp:2325-2334): a per-tick stuck-with-repulse
-        // counter; past the threshold the unit's collision state flips mIgnoreCollisions and it
-        // PHASES through other actors until it gets free. Pure server-sim state — never
-        // broadcast, distinct from the player-facing StatusFlags.Ghosted buff. Threshold is
-        // mUseSlowerButMoreAccurateSearch-dependent (Actor.cpp:2684-2691): 45 fast (minions
-        // & non-AI default) / 15 slower-accurate (champions/pets).
-        // Lifecycle (client Actor.cpp:1473-1477): ++ per stuck tick, reset when in collision
-        // but NOT stuck; our additions: reset when stationary / dashing (client equivalent is
-        // its Stop/path lifecycle); frozen while ghosted (collision processing is skipped, so
-        // the ghost ends when the unit stops or arrives).
+        // Actor_Common::GetCollisionState, Actor.cpp:2683-2691): past the threshold the unit's
+        // collision state flips mIgnoreCollisions. P3 SEMANTICS (corrected 2026-07-19): in 4.17
+        // that flag is consumed ONLY by the PATHING queries (HasStuckActor/HasBlockedActor via
+        // the non-raw GetCollisionState; the pair rule ActorCollisionState::IgnoreCollisions) —
+        // body collision (CanCollide, Actor.cpp:300-304) consults only the buff-ghost flags. So
+        // a temp-ghosted unit keeps colliding bodily; its escape is that its own A* ignores all
+        // actors (predicate = null) and other units' path queries ignore it. (S1 still consulted
+        // the counter in body collision, actor_client.cpp:846 — 4.17 moved it to path level.)
+        // Pure server-sim state, never broadcast, distinct from StatusFlags.Ghosted. Threshold
+        // mUseSlowerButMoreAccurateSearch-dependent: 45 fast (minions & non-AI default) / 15
+        // slower-accurate (champions/pets) — S1:846 confirms the mapping. Lifecycle: ++ per
+        // in-collision pathing tick (S1:5044; the 4.17 increment is unrecovered garble), reset
+        // on not-in-collision / constrained rebuild ran (:1739/:1858) / stationary / dashing.
+        // GhostProof/ForAllies/ForEnemies pair-rule flags are NOT tracked. Full evidence chain
+        // (2026-07-19): they are CharacterState bits (CharacterState.h:50-51, setter chain
+        // CharacterState::SetGhostProof* → Actor_Common::SetGhostProof*), i.e. buff/script-layer
+        // capability — NOT character data (no key in our stat JSONs NOR the 4.20 client inibins),
+        // and nothing uses the capability: no BB name in the Lua symbol table, zero usages in
+        // both 4.20 Lua corpora, no BuffType mapping, no recovered setter callers. With all-false
+        // flags the simple Ghosted-skip is behavior-identical to ShouldIgnoreCollisionDueToGhost.
         private int _stuckGhostFrames;
         private int TempGhostThreshold => ((this as ObjAIBase)?.UsesFastPath ?? true) ? 45 : 15;
         public bool IsTemporarilyGhosted => _stuckGhostFrames > TempGhostThreshold;
@@ -271,6 +281,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // radii the routed path and the push agree about the geometry. If sideways resync storms
         // return in clumps, re-measure with COLLISION_LOG before reinventing a gate.
         private float _collisionRepathMs;
+        // Consecutive in-collision rebuilds since the last collision-free tick — drives the
+        // escalating repath backoff (S1 m_RepathedCount analog; see the F3 block).
+        private int _collisionRepathCount;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
@@ -557,9 +570,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (_inHardCollision && !IsPathEnded() && CanChangeWaypoints())
             {
                 _collisionRepathMs += diff;
-                if (_collisionRepathMs >= COLLISION_REPATH_INTERVAL_MS)
+                // ESCALATING BACKOFF (sr132 "blocked crowd stutters/twitches backwards",
+                // 2026-07-19): a flat 250ms cadence re-broadcasts a fresh detour around a
+                // persistent blocker four times a second; every broadcast hard-snaps the client
+                // to wp0 and the detour side can alternate — the visible stutter. Riot backs
+                // off progressively: each in-collision rebuild bumps m_RepathedCount and the
+                // next threshold is count·repathTimings[min(count,15)]·s_TimeBetweenRepaths +
+                // s_StuckDelay (S1 actor_client.cpp:5034-5051; the 4.17 repathTimings table is
+                // unrecovered garble, so the per-step factor is approximated as 1 — linear
+                // growth 250,500,750…ms, capped at count 15 ≈ 4s). The count resets on any
+                // collision-free tick (else-branch below), so the FIRST reroute of an encounter
+                // keeps the responsive 250ms.
+                float repathThreshold = COLLISION_REPATH_INTERVAL_MS * (1 + Math.Min(_collisionRepathCount, 15));
+                if (_collisionRepathMs >= repathThreshold)
                 {
                     _collisionRepathMs = 0f;
+                    _collisionRepathCount++;
                     // F3 (docs/PATHING_AUDIT_2026_07_19.md, decomp Actor.cpp:1758-1872): Riot's
                     // forceRepath fires for ANY in-collision pathing unit on the repath-timer
                     // cadence and rebuilds the path to the SAME goal actor-aware
@@ -583,11 +609,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     {
                         SetWaypoints(routed);
                     }
+                    // Riot resets the temp-ghost escalation whenever the constrained in-collision
+                    // rebuild RAN (Actor.cpp:1858, unconditional — not gated on the path having
+                    // changed): a fresh routing attempt restarts the escalation clock.
+                    _stuckGhostFrames = 0;
                 }
             }
             else
             {
                 _collisionRepathMs = 0f;
+                // Collision-free tick → the backoff ladder resets (Riot resets m_RepathedCount
+                // with its collision-free bookkeeping); the next encounter's first reroute is
+                // responsive again.
+                _collisionRepathCount = 0;
             }
 
             float dx = Position.X - _stuckLastCheckPos.X;
@@ -2204,11 +2238,31 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                     else
                     {
+                        // F7 (2026-07-19) — gated END-snap, decomp-literal (Actor_Common::
+                        // AssembleWaypointList final commit, Actor.cpp:2131-2137): the exact
+                        // stored end position is committed ONLY if the remaining hop is
+                        // terrain-LOS-clear AND the end cell is passable; otherwise the walk
+                        // finishes where the unit stands and the path still counts as consumed.
+                        // A bad final vertex (stale path, steered remnant, force-move leftover)
+                        // must not teleport the unit into geometry it could never walk to.
+                        // Intermediate waypoints stay ungated exactly like Riot's advance loop.
+                        if (CurrentWaypointKey == Waypoints.Count - 1)
+                        {
+                            Vector2 end = CurrentWaypoint;
+                            if (_game.Map.NavigationGrid.IsGridLineOfSightClear(Position, end)
+                                && _game.Map.PathingHandler.IsWalkable(end, 0f))
+                            {
+                                Position = end;
+                            }
+                            CurrentWaypointKey++;
+                            break;
+                        }
+
                         Position = CurrentWaypoint;
                         maxDist -= dist;
 
                         CurrentWaypointKey++;
-                        if (CurrentWaypointKey == Waypoints.Count || maxDist == 0)
+                        if (maxDist == 0)
                         {
                             break;
                         }
@@ -2250,17 +2304,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Vector2 originalDelta = Position - originalPos;
                 bool moving = originalDelta.LengthSquared() > 0.0001f;
 
-                if (moving && IsTemporarilyGhosted)
-                {
-                    // Temp-ghosted (S4 mIgnoreCollisions): the unit phases — its own collision
-                    // processing is skipped entirely and it keeps walking unimpeded (others also
-                    // ignore it via the neighbor filters). The counter is intentionally frozen
-                    // here; it resets when the unit goes stationary/arrives (below) — mirroring
-                    // the client where a ghosted actor's collision handling produces no
-                    // stuck/in-collision events and the state clears with the path lifecycle.
-                    _smoothedSeparationPush = Vector2.Zero;
-                }
-                else if (moving)
+                // P3 CORRECTION (2026-07-19): the former `moving && IsTemporarilyGhosted` branch
+                // (skip own collision processing entirely while temp-ghosted) was WRONG for 4.17.
+                // Body collision uses CanCollide = ShouldIgnoreCollisionDueToGhost(my, test)
+                // (Actor.cpp:300-304) which consults ONLY the buff-ghost flags — the escalated
+                // mIgnoreCollisions is consumed exclusively by the PATHING queries (HasStuckActor/
+                // HasBlockedActor via GetCollisionState; the non-raw state). S1 still checked the
+                // counter in body collision (actor_client.cpp:846) — 4.17 moved the escape to the
+                // path level: a temp-ghosted unit keeps colliding bodily but its A* ignores all
+                // actors (BuildActorBlockedPredicate returns null) and blockers ignore it.
+                if (moving)
                 {
                     // MOVING units: run the per-tick collision control-flow structure (S4
                     // Actor_Common::Update collision tail, Actor.cpp:1714-1741) — steer the path,
@@ -2446,19 +2499,21 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // jitter has not returned, and raise CHAMPION_KEEPALIVE if it has.
                 //
                 // Non-champions: 325u ≈ 1s of travel at minion speed (Riot's measured MAX walking
-                // stretch between same-path updates — replay 343e3502; Riot median is far sparser,
-                // ~6 updates per minion LIFETIME vs our former ~31). RAISED 100u→325u (2026-07-03,
-                // overlap diagnosis): every keepalive re-anchor hard-snaps the client to wp0 and
-                // thereby RESETS the client's own local collision separation — at 100u (~3/s) the
-                // real 4.x client never got a window to disentangle a marching wave, so server-side
-                // overlap (n=2 paths have NO server separation — steer/push gated n>=3/n>=4,
-                // faithful) stayed visible: measured 3.9% walking time <20u vs Riot 0.7%. The old
-                // "smaller intervals = smaller corrections" rationale predates D0/terrain-only:
-                // real off-path divergence is collision pushes, which accumulate in
-                // _unreplicatedDrift and trigger the 12u drift-RESYNC above IMMEDIATELY regardless
-                // of this cadence — the keepalive only folds sub-12u noise, so sparser is safe.
-                // ~1s windows let the client separation work like Riot's. Tune DOWN if walking
-                // paths visibly desync at corners, UP toward event-driven if overlap persists.
+                // stretch between same-path updates — replay 343e3502). RAISED 100u→325u
+                // (2026-07-03, overlap diagnosis).
+                // MECHANISM CORRECTED 2026-07-19 (client-model adjudication, STAGE_C plan +
+                // ghost-gate read): the original rationale — "dense re-anchors reset the client's
+                // own local collision separation" — was WRONG; a moving client actor is mGhosted
+                // per tick (AIBase.cpp UpdateMovement), there is NO client-side separation to
+                // reset. The 07-03 overlap "improvement" from sparser anchors was likely partly a
+                // METRIC artifact (the wire nearest-neighbour overlap metrics compare against
+                // ≤2s-stale neighbour positions; denser emissions sample more artifact pairs —
+                // see the 07-19 coloc staleness correction). What remains true: real off-path
+                // divergence is server collision output, which accumulates in _unreplicatedDrift
+                // and fires the 12u drift-RESYNC immediately regardless of this cadence — the
+                // keepalive only folds sub-12u noise, so the sparse value is safe and the wire
+                // cadence it produces sits at Riot's measured band (52.6 vs 53-60 re-anchors/min
+                // per moving minion, map1 baseline).
                 // EXPERIMENT ENDED (2026-07-05): the 2026-07-04 wiggle experiment raised this
                 // 325→650 (and contact 100→250, reverted earlier). tt122 exposed the REAL wiggle
                 // root instead: the Position+3 waypoint-count runway in GetCenteredWaypoints ran
@@ -2470,25 +2525,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // benefits (client-separation windows) without the dry-run.
                 const float NONCHAMPION_KEEPALIVE = 325f;
                 const float CHAMPION_KEEPALIVE = 57f;
-                // DENSITY-AWARE (2026-07-04, the "ranged minions teleport FORWARD in big marching
-                // groups" symptom, wire105): the server never jumps (wp0 excess-over-walk = 0
-                // events) — the forward yank is the CLIENT's local copy falling behind inside a
-                // dense clump (the real client's own collision/avoidance slows its local sim; our
-                // server, pushes suppressed, walks straight through) and then being hard-snapped
-                // forward by the next re-anchor. At 325u gaps that divergence accumulates ~1s
-                // before release = a visible yank; at 100u it releases in sub-perceptual steps.
-                // So: units in body contact this tick re-anchor on the old dense 100u cadence,
-                // free walkers keep the sparse Riot-like 325u.
-                // EXPERIMENT RESULT (2026-07-05, tt117): 250u REVERTED to 100f. The wire105
-                // forward-yank returned exactly as the revert criterion predicted — blue bot-lane
-                // casters in a marching clump visibly ran back-and-forth and "teleported" (user
-                // report 5:15-5:28; emitted paths verified CLEAN: headings stable, zero flips —
-                // the yank is the client copy collision-braking inside the clump and being pulled
-                // forward by the next, now-2.5x-later, anchor). Conclusion: the contact cadence
-                // knob cannot fix the facing wiggle without buying back the yank — dense anchors
-                // (100u) = separation-reset flicker, sparse (250u) = teleport. The real fix is
-                // upstream: keep marching minions from converging into body contact at all
-                // (server-side gentle separation / Riot's shared-collision model).
+                // DENSITY-AWARE contact cadence (2026-07-04, wire105 "ranged minions teleport
+                // FORWARD in marching groups"; tt117 confirmed the yank returns at sparse contact
+                // anchors). NOTE 2026-07-19 (adjudicated client model): the original explanation
+                // — "the client's own collision braking makes its copy fall behind" — was wrong
+                // (moving client actors are ghosted; the copy is a pure path follower). The real
+                // fall-behind sources in clumps were most plausibly (a) the client attack loop
+                // pinning units in place with no forced ISA on disengage (FIXED 2026-07-19,
+                // LaneMinionAI disengage-to-march) and (b) DeadRecon render catch-up after
+                // re-anchor gaps. The observations behind this knob were real; its mechanism
+                // story was not. NOTE it is DEAD for LaneMinions (unconditional 650u override
+                // below) — it only drives non-lane Minions (jungle monsters, pets). Candidate
+                // for simplification once a capture confirms the disengage fix removed the yank
+                // class at 325u.
                 const float CONTACT_KEEPALIVE = 100f;
                 _traveledSinceLastSync += originalDelta.Length();
                 _timeSinceLastSync += delta;
@@ -2502,19 +2551,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // leg, 12u drift-resync as the only net) → wobble gone.
                 //
                 // Step 2 (tt125 "minions accelerate dash-like the further they advance"): full
-                // silence overshot. The 4.x client SIMULATES its minion copies locally (own
-                // collision/avoidance — shared-sim heritage) and that local sim drifts; Riot's
-                // own TT replays measure the drift at ~31u/s (minionsnap on Riot wire: anchor
-                // snap p50=31.5u p90=116u at a p50 0.7-0.9s MOVING-minion anchor cadence) and
-                // rein it in every ~1-2s. With our anchors 3.4-5s apart the client sim ran free
-                // long enough to visibly accelerate away (~175u/window worst case) before an
-                // anchor pulled it back. So: travel keepalive REINSTATED for lane minions at
-                // 650u (~2s) — a pure same-path re-anchor (full remaining leg, wp0 re-seeded;
-                // no truncation, no path replacement — the wobble mechanics stay gone). Bounds
-                // client-sim drift to ~2s (~70u, sub-perceptual) while staying far sparser than
-                // the old wobble regime. If the wobble RETURNS at this cadence, that is the
-                // final proof that only a persistent velocity-model port (Riot m_Movement,
-                // Stage C) reconciles the two — cadence tuning cannot.
+                // silence overshot — with anchors 3.4-5s apart the client copy visibly diverged
+                // before the next anchor pulled it in. MECHANISM CORRECTED 2026-07-19: the
+                // original reading ("the client SIMULATES its copies locally and drifts ~31u/s")
+                // rests on the refuted client model — moving client actors are ghosted pure
+                // followers. What Riot's 31.5u/16.5u anchor-snap medians actually show is how
+                // far Riot's SERVER position walks off the previously-sent path between anchors
+                // (server-side perturbation + emission composition), not client drift; our
+                // client-copy divergence over long gaps comes from speed-replication timing, FP
+                // accumulation and DeadRecon render catch-up. The 650u (~2s) same-path re-anchor
+                // (full remaining leg, wp0 re-seeded, no truncation/replacement — the wobble
+                // mechanics stay gone) bounds all of those; the resulting wire cadence sits at
+                // the Riot map1 band. (The old "wobble returning would prove Stage C" clause is
+                // obsolete — Stage C was closed 2026-07-19, see STAGE_C plan closure note.)
                 const float LANEMINION_KEEPALIVE = 650f;
                 if (this is LaneMinion)
                 {
@@ -2648,7 +2697,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
+                // Buff-ghost only — the escalated temp-ghost does NOT exempt body collision in
+                // 4.17 (CanCollide consults only ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
                 if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
 
                 float distSq = Vector2.DistanceSquared(Position, other.Position);
@@ -2700,8 +2751,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// keepalive cadence was tuned to avoid. Because Position stays ON the (bent) path, every
         /// re-anchor carries wp0 == true Position, so the periodic resend is smooth — there is no
         /// off-path drift to release as a snap (that off-path drift was exactly the old position-push
-        /// bug). The 4.x client runs the same per-tick responder on the path it holds, so it bends
-        /// identically between resends.
+        /// bug). CLIENT-MODEL CORRECTION 2026-07-19: the former claim that "the 4.x client runs the
+        /// same per-tick responder and bends identically between resends" was WRONG — moving client
+        /// actors are ghosted (no collision response); the client walks the path it last RECEIVED
+        /// verbatim. Between resends the client therefore follows the pre-bend geometry and only
+        /// picks the bend up with the next keepalive/resync anchor — a small, bounded visual lag
+        /// (sub-keepalive-window), acceptable because the drift-resync catches any >12u divergence
+        /// immediately.
         /// </summary>
         private bool SteerPathAroundColliders(List<GameObject> nearby, Vector2 movementDelta)
         {
@@ -2742,7 +2798,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 float push = MathF.Max(threshold - d, 0f);
                 float sign = Vector2.Dot(side, movementDelta) > 0f ? 1f : -1f;
                 float f = 2f * push * sign;
-                Waypoints.Replace(i, w + side * f);
+                // F7 (2026-07-19): never write a steered waypoint into unpassable terrain.
+                // Riot's equivalent guard sits on the collision-modified MOVEMENT (in-collision
+                // cell passability revert, Actor.cpp:739-757: a step entering an unpassable cell
+                // is reverted and flags isStuck). In our position-first model the bent waypoint
+                // PERSISTS on the path and is walked LATER, outside collision processing, so the
+                // write itself is the right gate placement. An in-wall bend is dropped — the
+                // waypoint keeps its A*-validated position; push/reroute channels still separate.
+                Vector2 bent = w + side * f;
+                if (_game.Map.PathingHandler.IsWalkable(bent, 0f))
+                {
+                    Waypoints.Replace(i, bent);
+                }
             }
             return true;
         }
@@ -2852,20 +2919,61 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // no-op there but still reports hard colliders) — which is exactly the clip-through case.
             _inHardCollision = hadHardColliders;
 
-            // Body-contact WITHOUT the 10u deep-overlap floor (keepalive cadence only; see field).
+            // Body-contact WITHOUT the 10u deep-overlap floor (keepalive cadence + de-fusion
+            // seed below). Also finds the nearest partner INSIDE the collection's blind floor.
+            AttackableUnit fusedPartner = null;
+            float fusedDistSq = float.MaxValue;
             foreach (var o in nearby)
             {
                 if (o == this || o is not AttackableUnit au || au.IsDead
-                    || au.Status.HasFlag(StatusFlags.Ghosted) || au.IsTemporarilyGhosted)
+                    || au.Status.HasFlag(StatusFlags.Ghosted))
                 {
                     continue;
                 }
+                float distSq = Vector2.DistanceSquared(au.Position, Position);
                 float rr = PathfindingRadius + au.PathfindingRadius;
-                if (Vector2.DistanceSquared(au.Position, Position) < rr * rr)
+                if (distSq < rr * rr)
                 {
                     _inBodyContact = true;
-                    break;
                 }
+                if (distSq < 100f && distSq < fusedDistSq && au.MovementParameters == null)
+                {
+                    fusedPartner = au;
+                    fusedDistSq = distSq;
+                }
+            }
+
+            // DE-FUSION SEED (DOCUMENTED INVENTION, 2026-07-19, sr131 wave-stack test): the
+            // collision collection's faithful 10u deep-overlap floor (distSq >= 100,
+            // Actor.cpp:296) makes a FUSED pair mutually invisible to every responder. Riot
+            // never reaches this state — its movement model hard-stops bodies before full
+            // overlap — but our position-first walk lets compressed units pass through each
+            // other to ~0u (body-blocked waves, forced spawns), and from an identical position
+            // the pair can never separate again: identical reroute lines (the touching partner
+            // is start-proximity-exempt in the A*), no steer response (n=2), no push (mutually
+            // invisible). Riot has no equivalent code because it has no equivalent state; the
+            // measured consequence is our NN-spacing floor (sr131: p25=0u vs Riot map1 p10=48u).
+            // The seed ONLY breaks the symmetry: while a MOVING unit's nearest neighbour sits
+            // inside the blind floor, nudge a quarter-stride per tick along a deterministic
+            // axis — away from the partner, or the NetId angle when exactly co-located (same
+            // convention as the degenerate barycenter case in HandleActorCollision) — until the
+            // pair exits the floor and the real machinery (steer / reroutes / reservations)
+            // takes over. Terrain-gated via ApplyCollisionPush; ~3-4 ticks from 0u to >10u.
+            if (fusedPartner != null)
+            {
+                Vector2 away = Position - fusedPartner.Position;
+                Vector2 dir;
+                if (away.LengthSquared() < 0.01f)
+                {
+                    float angle = (NetId * 2.39996f) % 6.28318f;
+                    dir = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                }
+                else
+                {
+                    dir = Vector2.Normalize(away);
+                }
+                float seedMag = 0.25f * GetMoveSpeed() * (delta * 0.001f);
+                pushed |= ApplyCollisionPush(dir * seedMag, false, logLabel: "defuse");
             }
 
             // Push gate = Riot's `m_Path.GetSize() >= MAX_NUMREPATH && isInCollision`
@@ -2898,6 +3006,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // direction chain) and the ±15u ping-pong storm (134 events/3s, net 47u) the
                 // moment the minion push suppression was lifted. One clamped push per tick is
                 // what makes Riot's response converge.
+                //
+                // KNOWN LIMITATION (F7c, 2026-07-19, deliberate): in our position-first model
+                // this loop can never actually iterate — HandleActorCollision recomputes from
+                // the SAME inputs (Position isn't mutated until `handled`), so the first call
+                // always returns true and breaks at iteration 0. Riot's retry works because
+                // each iteration re-runs CheckActorCollisionResponse (the steer) against the
+                // mutated NextPosition/m_Movement state (Actor.cpp:1719-1731). Faking the retry
+                // without that state model would just accumulate waypoint bends. Revisit with
+                // Stage C (P0) — the single-commit integrator makes the retry meaningful.
                 for (int loopCount = 0; loopCount < HardStopLoopCount; loopCount++)
                 {
                     Vector2 outMovement = originalDelta;
@@ -2923,25 +3040,30 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                 }
 
-                // Temp-ghost counter (S4 Actor.cpp:1473-1477): escalate on GENUINE stuck (final
-                // movement collapsed below 25% of intent), else reset. Position-model caveat noted
-                // above — rarely fires until the Stage C velocity model.
-                Vector2 newDelta = Position - originalPos;
-                const float GenuineStuckRatio = 0.25f;
-                float genuineStuckSq = originalDelta.LengthSquared() * (GenuineStuckRatio * GenuineStuckRatio);
-                if (originalDelta.LengthSquared() > 0.01f && newDelta.LengthSquared() < genuineStuckSq)
-                {
-                    _stuckGhostFrames = Math.Min(_stuckGhostFrames + 1, TempGhostThreshold * 2);
-                }
-                else
-                {
-                    _stuckGhostFrames = 0;
-                }
+            }
+
+            // Temp-ghost counter, S1-anchored lifecycle (P3 rework 2026-07-19). The 4.17
+            // increment site is unrecovered (the repathTimings block at Actor.cpp:1877-1920 is
+            // FIXME-garbled; all resets + the threshold read survived), but S1
+            // actor_client.cpp:5044 shows `++mGettingOutOfCollisionGhosted` firing PER TICK
+            // inside the in-collision repath-pending block — NOT only on collapsed movement (the
+            // former "genuine stuck <25%" gate here was our invention and made the ghost nearly
+            // unreachable). Resets (4.17, recovered): not-in-collision (Actor.cpp:1739), the
+            // constrained path rebuild (:1858 — mirrored in UpdateStuckRecovery's collision
+            // repath), end-of-path recovery (:2100/:2184) ≈ our stationary reset, forced movement
+            // ≈ our dash reset. Riot's escalating repath backoff (repathTimings table, lost)
+            // meant the counter could outrun the rebuild cadence after repeated failed repaths;
+            // with our flat 250ms rebuild reset the ghost fires only when the reroute channel
+            // CANNOT run (CC lock, path ended in contact) — rarer than Riot's ladder, escape
+            // still guaranteed by the TryUnstuckRepath escalation. Cap removed (Riot: unbounded,
+            // resets do the work).
+            if (hadHardColliders && Waypoints.Count > 1)
+            {
+                _stuckGhostFrames++;
             }
             else if (!hadHardColliders)
             {
                 // Not in collision this tick (Actor.cpp:1738-1740) -> clear temp-ghost escalation.
-                // (Colliders present but path too short to run the push: leave the counter alone.)
                 _stuckGhostFrames = 0;
             }
 
@@ -2953,7 +3075,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// surviving cell check in 4.20 — see <see cref="HandleActorCollision"/>). Returns whether it
         /// moved the unit.
         /// </summary>
-        private bool ApplyCollisionPush(Vector2 push, bool isInCollision)
+        private bool ApplyCollisionPush(Vector2 push, bool isInCollision, string logLabel = null)
         {
             if (push.LengthSquared() <= 0.0001f) return false;
             Vector2 candidate = Position + push;
@@ -2962,7 +3084,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             _unreplicatedDrift += push;
             if (CollisionLogger.Enabled)
             {
-                CollisionLogger.Log(_game.GameTime, NetId, isInCollision ? "group" : "avoid", push.Length(), 0f, Position);
+                CollisionLogger.Log(_game.GameTime, NetId, logLabel ?? (isInCollision ? "group" : "avoid"), push.Length(), 0f, Position);
             }
             return true;
         }
@@ -3119,12 +3241,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             var members = new List<AttackableUnit>(4);
             Vector2 barycenter = Vector2.Zero;
             Vector2 groupVelocity = Vector2.Zero;
-            float softRadius = GetSoftRadius(); // SELF soft term (S4 Actor.cpp:766): champion 2r, minion 0.3r
+            float softRadius = GetSoftRadius(); // SELF soft term (S4 Actor.cpp:766): minion 2r, champion/pet 0.3r (F1-corrected)
             foreach (var other in nearby)
             {
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted) || otherUnit.IsTemporarilyGhosted) continue;
+                // Buff-ghost only — the escalated temp-ghost does NOT exempt body collision in
+                // 4.17 (CanCollide consults only ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
+                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
                 if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
 
                 float distSq = Vector2.DistanceSquared(Position, other.Position);
@@ -3326,6 +3450,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // wire-noise optimization (not Riot-evidenced), the S4 primitive is untouched.
             bool sameAsExisting = newWaypoints.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey)
                 && Waypoints.IsPathTheSame(newWaypoints, Position, CurrentWaypointKey, 0);
+
+            // P6 instrumentation (2026-07-19, opt-in PATH_LOG): count/attribute every broadcast
+            // the suppression swallows — the audit's precondition for deciding whether to drop
+            // the server-side dedup entirely (candidate theory: Riot broadcasts every repath-
+            // timer rebuild and that is where its ~16.5u anchor-snap p50 + high reanchor rate
+            // come from; our dedup would be hiding exactly those). ev-reason prefix "dedup:".
+            if (sameAsExisting && PathLogger.Enabled && this is Minion)
+            {
+                PathLogger.Log(_game.GameTime, NetId, "dedup:" + (pathReason ?? "?"), newWaypoints, null);
+            }
 
             Waypoints = newWaypoints;
             CurrentWaypointKey = 1;
@@ -4427,6 +4561,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     SetStatus(MovementParameters.SetStatus, false);
                 }
+
+                // CLIENT-AUTONOMOUS ATTACKERS (sr130 "minion teleports instead of knockback",
+                // 2026-07-19): a Minion's client swing loop has no self-cancel and ignores
+                // movement while active (AIMinionClient.cpp:134-187) — it only breaks on a
+                // FORCED NPC_InstantStop_Attack. Our knockback flow emitted the dash (0x64,
+                // end-of-tick batch) one tick BEFORE any attack cancel reached the wire, so the
+                // client unit stayed pinned in its swing loop through the whole dash and was
+                // teleported by the post-dash re-anchor. Riot's displacement CC hard-cancels the
+                // attack at apply time (TurnOffAutoAttack(STOPREASON_IMMEDIATELY)) — mirror that
+                // HERE, synchronously at force-move begin, so the forced ISA is a direct send
+                // that precedes the batched 0x64 on the wire.
+                if (this is Minion aiMinion)
+                {
+                    aiMinion.TurnOffAutoAttack(AutoAttackStopReason.OtherImmediately);
+                }
+
                 ApiEventManager.OnMoveBegin.Publish(this, MovementParameters);
             }
 

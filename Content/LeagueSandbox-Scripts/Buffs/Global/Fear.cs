@@ -20,7 +20,12 @@ namespace Buffs
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        public bool RandomDirection { get; set; } = false;
+        // Default TRUE (F12, 2026-07-19): in 4.20 FEAR means wander around the leash point —
+        // both shipping Lua brains (Shared/Scripts/Minions.lua OnFearBegin/TimerFeared and
+        // Scripts/Hero.lua) drive MakeWanderPoint(GetFearLeashPoint(), FEAR_WANDER_DISTANCE) on
+        // fear; running straight away is the separate FLEE type (Flee.cs). Content can still
+        // opt a specific fear out by setting this false.
+        public bool RandomDirection { get; set; } = true;
         public float slowPercent = 0f;
         private AttackableUnit _unit;
         private ObjAIBase _owner;

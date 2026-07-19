@@ -719,21 +719,46 @@ namespace LeagueSandbox.GameServer.Handlers
         /// nearest get-to-able cell clear of ALL reservations; then reserve. Champions and
         /// non-lane units pass through untouched.
         /// </summary>
-        public Vector2 CommitStand(AttackableUnit attacker, Vector2 pos)
+        public Vector2 CommitStand(AttackableUnit attacker, Vector2 pos,
+            Func<Vector2, bool> cellAccept = null)
         {
             if (attacker is not LaneMinion)
             {
                 return pos;
             }
             float bodyDist = attacker.PathfindingRadius * 2f;
-            if (HasReservationConflict(attacker, pos, bodyDist))
+            // F9 (2026-07-19): callers may constrain the relocation (e.g. the turret-cap
+            // approach requires the committed cell to stay within the minion's acquisition
+            // range of the tower). The constraint participates in the spiral itself — before,
+            // an out-of-range ring cell was clamped POST-HOC to the raw shared center, which
+            // (a) let several crowded minions fall back onto the identical coordinate (the
+            // exact tt120 fusion this handshake exists to prevent) and (b) left the reservation
+            // pointing at the unused ring cell, blocking siblings for nothing.
+            bool needRelocate = HasReservationConflict(attacker, pos, bodyDist)
+                || (cellAccept != null && !cellAccept(pos));
+            if (needRelocate)
             {
                 pos = SetToNearestGetToAbleCell(attacker, pos, attacker.PathfindingRadius,
-                    cellAccept: c => !HasReservationConflict(attacker, c, bodyDist),
+                    cellAccept: c => (cellAccept == null || cellAccept(c))
+                        && !HasReservationConflict(attacker, c, bodyDist),
                     preferOnAxis: true);
             }
             _standReservations[attacker] = pos;
             return pos;
+        }
+
+        /// <summary>
+        /// True while <paramref name="attacker"/>'s own live stand reservation still backs
+        /// <paramref name="pos"/> (same committed cell). Lets a caller that CACHES a committed
+        /// stand target (the turret-cap approach) detect that intervening decisions — a combat
+        /// stand commit overwrites the single per-unit slot — invalidated the claim, so it
+        /// re-runs the handshake instead of resuming toward an unreserved cell that siblings
+        /// may since have claimed (F9, 2026-07-19).
+        /// </summary>
+        public bool HasOwnStandReservation(AttackableUnit attacker, Vector2 pos)
+        {
+            return _standReservations.TryGetValue(attacker, out var reserved)
+                && Vector2.DistanceSquared(reserved, pos) < 1f;
         }
 
         // Graceful-degrade clearance levels (fractions of the full body-gap) for the attack-stand

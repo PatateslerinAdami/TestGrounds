@@ -55,10 +55,13 @@ public class AhriOrbofDeception : ISpellScript
     {
         // S1 SelfExecute: face the cursor, then fire the orb at a point a FIXED 900u ahead in that
         // facing direction (BBFaceDirection + BBGetPointByUnitFacingOffset, Distance = 900) — not
-        // the raw cursor pos.
+        // the raw cursor pos. OverrideForceLevel = Q's rank (S1: OverrideForceLevelVar = "Level");
+        // the wire SpellLevel of the orb MISREPs mirrors the champion Q's rank, not the unleveled
+        // extra slot (replay 9c0533a1: outbound + return both carry the Q level).
         FaceDirection(_end, _ahri, true);
         var aim = GetPointByUnitFacingOffset(_ahri, 900f);
-        SpellCast(_ahri, 0, SpellSlotType.ExtraSlots, _start, aim, true, Vector2.Zero);
+        SpellCast(_ahri, 0, SpellSlotType.ExtraSlots, _start, aim, true, Vector2.Zero,
+            overrideForceLevel: spell.CastInfo.SpellLevel);
     }
 }
 
@@ -71,7 +74,14 @@ public class AhriOrbMissile : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-            Type = MissileType.Arc
+            Type = MissileType.Arc,
+            // Riot launches the orb from the R_hand bone, ~100u above ground — the 4.20 data's
+            // MissileTargetHeightAugment is 0, the height comes from the server's bone sample.
+            // Replay 9c0533a1 (4.20): all 42 outbound spawn MISREPs carry Position.Y =
+            // terrain + 100 and Velocity.Y = -277.8 = -100 / (900u / 2500); the client takes
+            // its flight height from wire Position.Y (OverridePlacement: mStartHeightFromGround
+            // = Position.y - terrain), so without this the orb drags along the ground.
+            OverrideHeightAugment = 100f
         },
     };
 
@@ -128,7 +138,12 @@ public class AhriOrbMissile : ISpellScript
         }
         else
         {
-            SpellCast(_ahri, 1, SpellSlotType.ExtraSlots, true, _ahri, missile.Position);
+            // isForceCastingOrChanneling: Riot's return MISREP carries CastInfo bits = 12
+            // (ForceCast|OverrideCastPos, replay 9c0533a1) — S1's BBSpellCast sets
+            // ForceCastingOrChannelling = true. Force level = Q's rank (OverrideForceLevelVar).
+            SpellCast(_ahri, 1, SpellSlotType.ExtraSlots, true, _ahri, missile.Position,
+                isForceCastingOrChanneling: true,
+                overrideForceLevel: _ahri.Spells[0].CastInfo.SpellLevel);
         }
 
         ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnSpellMissileEnd);
@@ -145,7 +160,13 @@ public class AhriOrbReturn : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-            Type = MissileType.Arc
+            Type = MissileType.Arc,
+            // The return orb spawns at the outbound orb's 3D death position — terrain + ~100
+            // in all 40 return spawn MISREPs of replay 9c0533a1 (the outbound flies at +100,
+            // see AhriOrbMissile). Wire Position.Y is what the client flies at; tracked
+            // missiles (LineMissileTrackUnits=1) get Velocity.Y = 0, which our packet builder
+            // already handles.
+            OverrideHeightAugment = 110f
         }
     };
 
@@ -162,8 +183,15 @@ public class AhriOrbReturn : ISpellScript
 
     private void OnLaunchMissile(Spell spell, SpellMissile missile)
     {
+        // NO OnSpellMissileHit removal here: the catch is the engine's tracked-ARRIVAL
+        // (SpellLineMissile re-aims Destination at Ahri every tick, Move snaps onto her
+        // center → SetToRemove WITH the destroy packet — Riot sends exactly that destroy,
+        // 40/40 returns in replay 9c0533a1). Killing the missile on the swept-collision
+        // hit instead fired at LineWidth(100) + Ahri's radius ≈ 165u BEFORE her center,
+        // yanking the client orb visibly early — the 4.20 client flies its tracked copy
+        // all the way to the unit's position (decomp: CheckAtEndPoint plane-crossing on
+        // the per-frame re-aimed endpoint, no radius shortcut).
         ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnSpellMissileEnd);
-        ApiEventManager.OnSpellMissileHit.AddListener(this, missile, OnSpellMissileHit);
     }
 
     private void OnSpellMissileEnd(SpellMissile missile)
@@ -171,15 +199,17 @@ public class AhriOrbReturn : ISpellScript
         ApiEventManager.RemoveAllListenersForOwner(this);
     }
 
-    private void OnSpellMissileHit(SpellMissile missile, AttackableUnit target)
-    {
-        if (target != _ahri) return;
-        ApiEventManager.RemoveAllListenersForOwner(this);
-        missile.SetToRemove();
-    }
-
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
     {
+        // S1 AhriOrbReturn TargetExecute gates on Target != Attacker — the spell's AlwaysSelf
+        // flag (0x40000 in Flags=377856) makes Ahri herself a VALID target of her homing return
+        // orb, so without this gate she eats her own return TRUE damage on every catch. (This
+        // fires at collision contact, ~165u before the tracked-arrival that ends the missile.)
+        if (target == _ahri)
+        {
+            return;
+        }
+
         // S1 AhriOrbReturn TargetExecute: the return orb applies AhriOrbDamageSilence (TRUE damage)
         // — separate buff name from the outbound orb so a unit caught by both takes both hits.
         if (BreakSpellShields(target, _ahri.Spells[0]))
@@ -197,7 +227,11 @@ public class AhriOrbReturnDead : ISpellScript
     {
         MissileParameters = new MissileParameters()
         {
-          Type = MissileType.Arc
+          Type = MissileType.Arc,
+          // Same orb, same spawn point (outbound death position at terrain + 100) as the live
+          // return — no wire samples of the dead variant in the corpus, height mirrored from
+          // AhriOrbReturn.
+          OverrideHeightAugment = 100f
         }
     };
 

@@ -1,17 +1,19 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using GameMaths;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Collections.Generic;
-using System.Numerics;
-using GameMaths;
-using GameServerLib.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using System.Numerics;
 
 namespace Buffs
 {
@@ -19,9 +21,7 @@ namespace Buffs
     {
         private ObjAIBase _sion;
         private AttackableUnit _unit;
-        private Spell _spell;
         private Buff _buff;
-        private Spell _mainSpell;
         private Region _bubble;
         private HashSet<AttackableUnit> _hitUnits = [];
         private float _deferredDamage;
@@ -36,41 +36,26 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _spell = ownerSpell;
             _unit = unit;
             _sion = buff.SourceUnit;
             _buff = buff;
-            _mainSpell = _sion.Spells[2];
             _hitUnits.Add(unit);
-            // Wire-derived (test replay, 23 clean flings + 6 terrain stops): the fling target is
-            // the point ON THE MISSILE RAY at 1350 units from the CAST ORIGIN — NOT "1350 further
-            // from the hit position" and NOT radially away from the minion (end points lie within
-            // ~1u lateral of the ray even for minions hit up to ~120u off-axis; the radial model
-            // mispredicts by ~220u). So knockback length = 1350 - hitDistance. Terrain stops the
-            // flight early (observed 516/601/901/1006/1176); full flights end at 1272-1347 from
-            // the cast origin (navgrid snap), never beyond 1350. Speed 2100, gravity 0 (wire).
+
             var start = buff.BuffVars.Get("start", Vector2.Zero);
             var aim = buff.BuffVars.Get("end", Vector2.Zero);
             var dirVec = aim - start;
             var dir = dirVec.LengthSquared() > 0.001f ? Vector2.Normalize(dirVec) : new Vector2(1, 0);
             var flingTarget = start + dir * 1350f;
-            // FIRST_COLLISION_HIT: the fling path is clamped by coarse ~cellsize sampling to the
-            // last walkable sample before terrain — matching the observed early terrain stops
-            // (516/601/901/1006/1176 above) landing short of the wall rather than teleporting.
+
             ForceMove(unit, flingTarget, 2100f, gravity: 0f, resolve: ForceMovementType.FIRST_COLLISION_HIT,
                 facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
                 orders: ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, movementName: "SionEMinion");
-
-            // Wire: the flung minion gets a visible generic "Stun" (0.75s) at fling start plus
-            // the hidden collide-sound carrier (0.25s), on every fling in the test replay.
-            AddBuff("Stun", 0.75f, 1, ownerSpell, unit, _sion);
+            
             AddBuff("SionESoundMinionColide", 0.25f, 1, ownerSpell, unit, _sion);
-
-            // While airborne the flung unit is immune to minion damage, and if E's own damage
-            // would kill it, that damage is withheld until the fling stops (terrain, end of
-            // trajectory, or interruption) so the body completes the flight.
-            var damage = _mainSpell.SpellData.EffectLevelAmount[0][_mainSpell.CastInfo.SpellLevel]
-                         + _mainSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total;
+            AddBuff("Stun", 0.75f, 1, ownerSpell, unit, _sion);
+            
+            var damage = ownerSpell.SpellData.EffectLevelAmount[0][ownerSpell.CastInfo.SpellLevel]
+                         + ownerSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total;
             var postMitigation = unit.Stats.GetPostMitigationDamage(damage, DamageType.DAMAGE_TYPE_MAGICAL, _sion);
             if (postMitigation >= unit.Stats.CurrentHealth)
             {
@@ -106,15 +91,12 @@ namespace Buffs
             var targetsInRange = ForEachUnitInTargetArea(_sion, _unit.Position, 130f,
                 SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
                 SpellDataFlags.AffectHeroes);
-            foreach (var target in targetsInRange)
+            foreach (var target in targetsInRange.Where(target => !_hitUnits.Contains(target)))
             {
-                if (_hitUnits.Contains(target)) continue;
-                AddBuff("SionESlow", 2.5f, 1, _spell, target, _sion);
-                // Pass-through units receive E's own damage (Effect1 = 70-210 + 0.4 AP; Effect2 is
-                // the slow% row consumed by SionESlow, which the old code misused here as damage).
+                AddBuff("SionESlow", 2.5f, 1, buff.OriginSpell, target, _sion);
                 target.TakeDamage(_sion,
-                    _mainSpell.SpellData.EffectLevelAmount[0][_mainSpell.CastInfo.SpellLevel]
-                    + _mainSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total,
+                    buff.OriginSpell.SpellData.EffectLevelAmount[0][buff.OriginSpell.CastInfo.SpellLevel]
+                    + buff.OriginSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total,
                     DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
                 _hitUnits.Add(target);
             }
@@ -123,8 +105,6 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ApiEventManager.OnPreTakeDamage.RemoveListener(this, unit);
-            // Deferred lethal E damage lands now that the displacement is over (the buff is
-            // removed on move end, interruption, or duration expiry).
             if (_deferredDamage > 0 && !unit.IsDead)
             {
                 unit.TakeDamage(_sion, _deferredDamage, DamageType.DAMAGE_TYPE_MAGICAL,

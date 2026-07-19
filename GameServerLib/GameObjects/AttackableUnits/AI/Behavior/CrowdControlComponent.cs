@@ -18,15 +18,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.Behavior
     /// </summary>
     public class CrowdControlComponent : IAIComponent
     {
-        // Riot AIComponentDefaultFearBehavior / DefaultFleeBehavior constants. Both default CC
-        // components re-issue on a 0.5s timer (TimerFeared / TimerFlee). NOTE: the random-wander
-        // mechanic was disabled in patch 3.13, so on our 4.20 target Fear and Flee are effectively
-        // identical (both run directly away). The wander branch below is retained for completeness
-        // but is not exercised by 4.20 content.
-        private const float FEAR_WANDER_DISTANCE = 500f;
+        // Riot fear/flee cadence, 4.20-Lua-verified (F12, 2026-07-19): BOTH shipping brains —
+        // Shared/Scripts/Minions.lua:59-60 AND Scripts/Hero.lua:45-46 — run
+        // InitTimer("TimerFeared", 1, true) / InitTimer("TimerFlee", 0.5, true), and their
+        // TimerFeared bodies re-issue MakeWanderPoint(GetFearLeashPoint(), FEAR_WANDER_DISTANCE)
+        // each fire. The former claim here ("random-wander was disabled in 3.13, Fear==Flee on
+        // 4.20") was WRONG for our target patch: FEAR wanders around the leash point at a 1s
+        // cadence for minions AND champions; FLEE runs straight away at 0.5s. The wander/flee
+        // split is the CC TYPE (Fear vs Flee buffs), not a dead branch.
+        private const float FEAR_WANDER_DISTANCE = 500f;  // Aggro.lua/MinionOdin.lua = 500 (YorickPHPet uses 400)
         private const float FLEE_RUN_DISTANCE = 2000f;
-        private const float WANDER_REISSUE_INTERVAL = 0.5f;  // TimerFeared
-        private const float FLEE_REISSUE_INTERVAL = 0.5f;    // TimerFlee
+        private const float WANDER_REISSUE_INTERVAL = 1.0f;  // TimerFeared (Minions.lua:59, Hero.lua:45)
+        private const float FLEE_REISSUE_INTERVAL = 0.5f;    // TimerFlee (Minions.lua:60, Hero.lua:46)
         private const float CHARM_REISSUE_INTERVAL = 0.5f;   // fallback cadence (charmer stationary)
         // Charm re-paths as soon as the charmer drifts this far, so the pull tracks the charmer's
         // CURRENT position. Replay-derived (1fbb603a, 21 charm events): the charmed unit's repaths

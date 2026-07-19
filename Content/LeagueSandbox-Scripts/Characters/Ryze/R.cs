@@ -9,21 +9,25 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells;
 
-public class desperatepower : ISpellScript {
+public class DesperatePower : ISpellScript {
     public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts = true
+        NotSingleTargetSpell = true,
+        DoesntBreakShields = true,
+        TriggersSpellCasts = true,
+        CastingBreaksStealth = true,
+        IsDamagingSpell = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) { }
     
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        var duration = 5f + 1 * (spell.CastInfo.SpellLevel - 1);
+        var duration = spell.SpellData.EffectLevelAmount[3][spell.CastInfo.SpellLevel];
         AddBuff("DesperatePower", duration, 1, spell, owner, owner);
     }
 }
 
-public class ryzedesperatepowerattack : ISpellScript {
+public class RyzeDesperatePowerAttack : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata => new() {
         IsDamagingSpell      = true,

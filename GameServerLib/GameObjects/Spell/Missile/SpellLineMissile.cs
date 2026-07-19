@@ -88,6 +88,26 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 {
                     SuppressDestroyNotify = true;
                 }
+                // Arrival at the live tracked target IS the target's hit — Riot registers it on
+                // the destroy tick, never at en-route radius contact (replay 9c0533a1: the
+                // LineMissileHitList carrying the tracked target coincides with the missile's
+                // DestroyClientMissile in 40/40 AhriOrbReturn and 60/60 TalonRakeMissileTwo
+                // catches; zero contact-early hits). OnCollision excludes the tracked target for
+                // exactly this reason, so ObjectsHit can't have it yet. Applied DIRECTLY via
+                // ApplyEffects, NOT CheckFlagsForUnit: the designated target is hit regardless of
+                // the spell's Affect flags (TalonRakeMissileTwo's flags exclude allies, yet
+                // Talon's catch hit is on the wire 60/60) — ApplyEffects' own designated-ally and
+                // spell-shield gates still apply.
+                if (_atDestination && tracksLiveTarget && !ObjectsHit.Contains(TargetUnit))
+                {
+                    ObjectsHit.Add(TargetUnit);
+                    _hitInitialTarget = true;
+                    SpellOrigin?.ApplyEffects(TargetUnit, this);
+                    if (CastInfo.Owner is ObjAIBase arrivalAi && SpellOrigin != null && SpellOrigin.CastInfo.IsAutoAttack)
+                    {
+                        arrivalAi.AutoAttackHit(TargetUnit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
+                    }
+                }
                 SetToRemove();
                 return;
             }
@@ -174,6 +194,19 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // to their target.
             bool tracksUnits = SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileTrackUnits;
             if (IsToRemove() || (TargetUnit != null && collider != TargetUnit && !tracksUnits) || (Destination != Vector2.Zero && collider is ObjBuilding))
+            {
+                return;
+            }
+
+            // The tracked TARGET is hit at ARRIVAL (Update's _atDestination branch), never at
+            // en-route radius contact — wire-verified: the hit-list carrying the tracked target
+            // rides the destroy tick in 100/100 tracked-return catches (Ahri Q returns + Talon W
+            // return blades, replay 9c0533a1). A contact hit here fired LineWidth + unit radius
+            // (~165u) early, applying effects and (via scripts) destroying the missile visibly
+            // before it reached the target. AndContinues missiles keep the contact hit on their
+            // INITIAL target — hitting it en route and flying on is their entire mechanic.
+            if (tracksUnits && collider == TargetUnit
+                && !(SpellOrigin.SpellData.LineMissileTrackUnitsAndContinues && !_hitInitialTarget))
             {
                 return;
             }
