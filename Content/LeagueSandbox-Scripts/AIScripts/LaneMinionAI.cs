@@ -299,24 +299,21 @@ namespace AIScripts
             }
         }
 
-        // Aggro.lua OnCallForHelp: respond to an ally's attacker while pushing/engaging.
+        // Shared/Scripts/Minions.lua OnCallForHelp: respond to an ally's attacker while
+        // pushing/engaging — NO attacker-class filter (both 4.20 Lua corpora agree; the tutorial
+        // Aggro.lua variant differs only by also allowing AI_IDLE and skipping the anti-kite
+        // reset). Victim-type gating happens broadcast-side in ObjAIBase.TakeDamage: a LaneMinion
+        // responder only hears a regular CFH when the victim is an allied CHAMPION (replay-
+        // verified 2026-06-28), so the only case reaching this handler is "defend the champion" —
+        // including against attacking enemy minions.
+        // HISTORY: an invented `attacker is Minion → return` filter lived here (2026-06-21,
+        // front-of-wave anti-convergence). The 06-28 broadcast victim gate made its target case
+        // (minion-attacks-minion CFH) unreachable for lane minions, leaving it only suppressing
+        // the authentic champion-defense response — removed 2026-07-19 with the F2 acquisition
+        // fix (melee acq 750 restores Riot's own catch radius for under-fire melees).
         protected override void OnCallForHelpBehavior(AttackableUnit attacker, AttackableUnit victium)
         {
             if (_minion == null || _minion.IsDead || IsCrowdControlled() || attacker == null || !CanAggro())
-            {
-                return;
-            }
-
-            // FRONT-OF-WAVE TARGETING (stage A, 2026-06-21): do NOT peel onto a MINION attacker.
-            // A minion attacking us from behind/beside its own front line is exactly the target that,
-            // chased, pulls us off the front of the wave toward the backline — driving same-target
-            // convergence AND the behind-wave routing (the chase path then routes AROUND the enemy
-            // front to reach it). Minion-vs-minion targeting stays the nearest FRONT enemy chosen by
-            // FindTargetInAcR (the 0.25s sweep re-acquires the nearest if we currently have none).
-            // We STILL respond to non-minion threats (champion aggro) — that's the real purpose of
-            // CallForHelp. Verify in-game: faithfulness of the minion-attacker filter is the open
-            // question (Riot's wave doesn't mass-converge on backline minions, which supports it).
-            if (attacker is Minion)
             {
                 return;
             }
@@ -328,30 +325,55 @@ namespace AIScripts
             }
         }
 
-        // Aggro.lua OnCollisionEnemy: engage an enemy we bump into. Restricted to the pushing
-        // states (not yet locked onto a target) so it never yanks a minion off its current target
-        // every time it grazes another body in a clash — the 0.25s FindTargetInAcR keeps the
-        // best target once engaged.
+        // Shared/Scripts/Minions.lua OnCollisionEnemy + OnCollisionOther (F5,
+        // docs/PATHING_AUDIT_2026_07_19.md). Both fire per tick per overlapping collider —
+        // Riot's engine does the same (Actor_Common::Update walks the collider array calling
+        // mOnCollision for EACH collider, Actor.cpp:1678-1694; no edge-trigger), so the
+        // per-tick cadence here is faithful, and same-collider spam is idempotent because
+        // SetTargetUnit early-outs on an unchanged target.
+        //   ENEMY bump: SetStateAndCloseToTarget(ATTACKMOVE_ATTACKING, collider) in any state
+        //     except TAUNTED/FEARED/FLEEING — INCLUDING while already attacking someone else
+        //     (Riot minions attack what physically blocks them). The former already-engaged
+        //     early-out was an invention that starved this declump channel — removed 2026-07-19.
+        //   OTHER (ally/neutral) bump: FindTargetInAcR() re-pick + re-engage, also while
+        //     attacking — the attacker-count cost term redistributes a pile onto fresh targets
+        //     every time bodies compress. Previously not implemented (the team filter dropped
+        //     ally contacts entirely).
+        // No anti-kite reset in either branch (the Lua collision handlers don't reset it; the
+        // in-attack-range sweep re-arms it). IsCrowdControlled() is our CC-model equivalent of
+        // the Lua TAUNTED/FEARED/FLEEING state gate.
         private void OnOwnerCollision(GameObject self, GameObject collider)
         {
-            if (_minion == null || _minion.IsDead || IsCrowdControlled() || !CanAggro())
+            if (_minion == null || _minion.IsDead || IsCrowdControlled() || !CanAggro()
+                || !EngagesOnCollision)
             {
                 return;
             }
 
-            if (!EngagesOnCollision || CurrentState == AIState.AI_ATTACKMOVE_ATTACKING)
+            if (collider is not AttackableUnit u || u.IsDead)
             {
                 return;
             }
 
-            if (collider is not AttackableUnit u || u.IsDead || u.Team == _minion.Team
-                || !u.Status.HasFlag(StatusFlags.Targetable) || !u.IsVisibleByTeam(_minion.Team))
+            if (u.Team != _minion.Team && u.Team != TeamId.TEAM_NEUTRAL)
             {
-                return;
-            }
+                // OnCollisionEnemy
+                if (!u.Status.HasFlag(StatusFlags.Targetable) || !u.IsVisibleByTeam(_minion.Team))
+                {
+                    return;
+                }
 
-            SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, u);
-            ResetAndStartTimer("TimerAntiKite");
+                SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, u);
+            }
+            else
+            {
+                // OnCollisionOther
+                var target = FindTargetInAcR();
+                if (target != null)
+                {
+                    SetStateAndCloseToTarget(AIState.AI_ATTACKMOVE_ATTACKING, target);
+                }
+            }
         }
 
         // Aggro.lua OnCanMove / OnCanAttack handler body: NetSetState(AI_IDLE) + FindTargetOrMove.

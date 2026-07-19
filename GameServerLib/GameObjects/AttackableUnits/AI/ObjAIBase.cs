@@ -2515,7 +2515,32 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (isSwitchBetweenTargets)
             {
-                CancelAutoAttack(reset: true, fullCancel: true, silent: true);
+                // Client-autonomous attackers (Minion/Monster): the 4.x client always COMPLETES a
+                // started swing — it has no mid-swing abort path (AIMinionClient.cpp:134-187; same
+                // model as the kite-cancel exemption in UpdateTarget). Their AI retargets PER TICK
+                // under body contact (collision channels + FindTargetInAcR cost re-picks disagreeing
+                // about "the blocker" vs "the cost-best"), so the unconditional hard reset here
+                // machine-gunned the AA pipeline: cooldown zeroed + windup restarted every tick =
+                // one Basic_Attack_Pos per 33ms tick and the client restarting its windup anim
+                // (sr127: 277× 0x1A from one wedged melee at a CONSTANT target — the A↔B target
+                // ping-pong happens between casts and is wire-invisible). For Minions: never
+                // interrupt an in-flight windup (UpdateTarget's in-range SetCurrentTarget branch
+                // redirects it), and PRESERVE the attack cooldown across the switch — only the
+                // windup/engage flags are cleared so the next swing engages the new target at the
+                // normal attack cadence. Champions/turrets keep the full reset (server-driven per
+                // swing, orb-walk cancel semantics; the Trundle Q / Jax W post-switch staleness
+                // class needs the clean state).
+                if (this is Minion)
+                {
+                    if (AutoAttackSpell == null || AutoAttackSpell.State != SpellState.STATE_CASTING)
+                    {
+                        CancelAutoAttack(reset: false, fullCancel: true, silent: true);
+                    }
+                }
+                else
+                {
+                    CancelAutoAttack(reset: true, fullCancel: true, silent: true);
+                }
             }
 
             if (networked)

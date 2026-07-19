@@ -264,24 +264,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         private bool _inBodyContact;
 
-        /// <summary>
-        /// True while the active <see cref="Waypoints"/> came from an actor-aware body-routing /
-        /// unstuck repath (skipLineOfSight A*). Such a path already routes AROUND the collider
-        /// bodies — running the gated position-push on top of it makes the two FIGHT: the push
-        /// shoves the unit off the routed path ~9-15u per tick in alternating directions, every
-        /// shove breaches the 12u drift-resync, and the client gets hard-snapped sideways several
-        /// times a second (the "clumped minions glitch/teleport into each other" symptom,
-        /// wire103/coll103 2026-07-03: resync snaps median 17u / p90 49u). While on a routed path
-        /// the push is therefore suppressed; the replicated STEER and the terrain gates stay
-        /// active. Cleared whenever any other path is accepted (SetWaypoints). Note the temp-ghost
-        /// escalation lives inside the suppressed block, but in the position model bodies never
-        /// impede the walk itself — without pushes there is no body-wedge for it to escape.
-        /// </summary>
-        private bool _pathFromBodyRouting;
+        // NOTE (F3/F6 2026-07-19): the former `_pathFromBodyRouting` push-suppression flag
+        // ("routed paths and pushes FIGHT", wire103 glitching) was removed — that interaction was
+        // measured in the inverted-radius era (minion bodies at 0.2r); the decomp runs pushes and
+        // in-collision repaths concurrently with no such flag (Actor.cpp:1830-1872), and with full
+        // radii the routed path and the push agree about the geometry. If sideways resync storms
+        // return in clumps, re-measure with COLLISION_LOG before reinventing a gate.
         private float _collisionRepathMs;
-        // Position at the start of the current collision-repath window; the reroute only fires
-        // when travel over the window collapsed below half the expected stride (progress gate).
-        private Vector2 _collisionRepathAnchor;
         /// <summary>
         /// Status effects enabled on this unit. Refer to StatusFlags enum.
         /// </summary>
@@ -564,44 +553,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // clipping. Distinct from that watchdog: this only REROUTES, never gives up / ResetWaypoints.
             // The skip-LOS GetPath + actor-aware smoothing + the predicate's start-proximity / near-goal
             // exemptions keep it routing around the NEAR side, not wrapping behind the wave.
-            const float COLLISION_REPATH_INTERVAL_MS = 250f; // ~ Riot s_TimeBetweenRepaths; tunable
+            const float COLLISION_REPATH_INTERVAL_MS = 250f; // Riot s_TimeBetweenRepathsInSeconds base (NSEAI TimeBetweenRepathsInMS=250)
             if (_inHardCollision && !IsPathEnded() && CanChangeWaypoints())
             {
-                if (_collisionRepathMs == 0f)
-                {
-                    _collisionRepathAnchor = Position;
-                }
                 _collisionRepathMs += diff;
                 if (_collisionRepathMs >= COLLISION_REPATH_INTERVAL_MS)
                 {
-                    // PROGRESS GATE (2026-07-05, tt119 "wizard curves behind its own wave"): the
-                    // comment above always said "in collision AND NOT MAKING WAYPOINT PROGRESS" —
-                    // but the progress half was never implemented, so a TRAILING minion moving at
-                    // full speed ~65-70u behind its wave (permanently at the hard-collider
-                    // threshold to the ally ahead) got an actor-aware curve around its own wave
-                    // re-issued every 250ms (path119: 'other' issues at 250-300ms cadence). At
-                    // Riot mere contact triggers nothing for a full-speed follower: the repath
-                    // needs m_ForceRefreshPath (stuck-with-repulse = collapsed movement), the
-                    // n=2 steer is a no-op and the push is path-size-gated. Only reroute when
-                    // the unit actually LOST at least half its expected travel over the window.
-                    float movedInWindow = Vector2.Distance(Position, _collisionRepathAnchor);
-                    float expectedInWindow = GetMoveSpeed() * (_collisionRepathMs / 1000f);
                     _collisionRepathMs = 0f;
-                    if (expectedInWindow > 0.001f && movedInWindow < expectedInWindow * 0.5f)
+                    // F3 (docs/PATHING_AUDIT_2026_07_19.md, decomp Actor.cpp:1758-1872): Riot's
+                    // forceRepath fires for ANY in-collision pathing unit on the repath-timer
+                    // cadence and rebuilds the path to the SAME goal actor-aware
+                    // (BuildNavGridPath, output accepted unconditionally). Two former inventions
+                    // removed 2026-07-19 with the F1 radius fix in place:
+                    //  - the 0.5×-expected-travel progress gate (tt119 "wizard curves behind own
+                    //    wave") — Riot has no progress gate; a full-speed FOLLOWER stays straight
+                    //    because its touching neighbour is start-proximity-exempt in HasStuckActor
+                    //    (the ported dual-dot exemption) so the rebuilt path is identical and the
+                    //    IsPathTheSame dedup drops it. The tt119 curving happened in the inverted-
+                    //    flag era (minion bodies at 0.2r/×1 saw wrong blocker geometry).
+                    //  - the PathThreadsThroughBodies clearance floor (wire107, clr=6 gap-threading)
+                    //    — the full-size predicate (r + ×2 stuck-actor size) now prices those gaps
+                    //    correctly in the A* itself.
+                    // This is the wire-visible per-minion reroute channel (Riot map1: 17-26/1000
+                    // pkts, goal kept, middle shifted ~1 cell around a body ~110u ahead).
+                    Vector2 goal = Waypoints[Waypoints.Count - 1];
+                    var routed = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
+                    if (routed != null && routed.Count >= 2
+                        && !routed.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey))
                     {
-                        Vector2 goal = Waypoints[Waypoints.Count - 1];
-                        var routed = _game.Map.PathingHandler.GetPath(this, goal, skipLineOfSight: true);
-                        if (routed != null && routed.Count >= 2
-                            && !routed.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey)
-                            && !PathThreadsThroughBodies(routed))
-                        {
-                            if (SetWaypoints(routed))
-                            {
-                                // Routed around bodies — suppress the position-push while following it
-                                // (see _pathFromBodyRouting).
-                                _pathFromBodyRouting = true;
-                            }
-                        }
+                        SetWaypoints(routed);
                     }
                 }
             }
@@ -675,38 +655,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// avoids recursing through the SafePath logic. If repath fails, position is at least
         /// snapped to walkable so the next tick's path-following starts from a clean state.
         /// </summary>
-        /// <summary>
-        /// Clearance floor for actor-aware reroutes (2026-07-04): the A*'s start-proximity
-        /// exemption hides TOUCHING neighbours, so a "route around the bodies" through a dense
-        /// pack can come back THREADING a gap — vertices ~6u from an ally's centre (wire106 pair
-        /// trace) — which renders as the unit sliding THROUGH its neighbour into a stack. A route
-        /// whose vertex drives this unit's centre within body-sum of another unit isn't routing
-        /// around anything; reject it and keep the current path (straight n=2 clip-through is the
-        /// faithful open-clash behaviour).
-        /// </summary>
-        private bool PathThreadsThroughBodies(NavigationPath routed)
-        {
-            for (int i = 1; i < routed.Count; i++)
-            {
-                var nearby = _game.Map.CollisionHandler.GetNearestObjects(
-                    new System.Activities.Presentation.View.Circle(routed[i], PathfindingRadius * 2f));
-                for (int j = 0; j < nearby.Count; j++)
-                {
-                    var o = nearby[j];
-                    if (o == this || o is not AttackableUnit au || au.IsDead
-                        || au.Status.HasFlag(StatusFlags.Ghosted) || au.IsTemporarilyGhosted)
-                    {
-                        continue;
-                    }
-                    float rr = PathfindingRadius + au.PathfindingRadius;
-                    if (Vector2.DistanceSquared(au.Position, routed[i]) < rr * rr)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
+        // NOTE (F3 2026-07-19): the former `PathThreadsThroughBodies` clearance-floor rejection
+        // for actor-aware reroutes (wire106/107 "clr=6 gap-threading") was removed: it was
+        // compensating for the inverted-radius era (F1) in which the stuck-actor predicate saw
+        // half-size minion bodies and priced pack gaps as walkable. With full radii + the ×2
+        // minion stuck-actor size the A* itself prices those gaps; the decomp accepts
+        // BuildNavGridPath output unconditionally (Actor.cpp:1864-1872).
 
         private bool TryUnstuckRepath()
         {
@@ -757,12 +711,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // 45/15) becomes the escape of last resort.
                 bool reroutedOrSnapped = positionChanged
                     || !newPath.IsPathTheSame(Waypoints, Position, 0, CurrentWaypointKey);
-                if (SetWaypoints(newPath))
-                {
-                    // Actor-aware unstuck route — same push suppression as the body-routing
-                    // repath (see _pathFromBodyRouting).
-                    _pathFromBodyRouting = true;
-                }
+                SetWaypoints(newPath);
                 return reroutedOrSnapped;
             }
 
@@ -2919,26 +2868,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            // Body-routed paths (n>=4 actor-aware reroutes) suppress the push: the path already
-            // separates via its geometry + the steer; pushing on top of it caused the off-path
-            // drift → 12u-resync storm → visible sideways glitching in walking clumps (see
-            // _pathFromBodyRouting).
+            // Push gate = Riot's `m_Path.GetSize() >= MAX_NUMREPATH && isInCollision`
+            // (Actor.cpp:1721): NO active separation for n=2 marchers (spacing is preserved
+            // passively — spawn stagger + equal speeds); in the CLASH phase paths are n>=4
+            // (in-collision actor-aware reroutes) and the damped push/avoidance stack resolves
+            // compression.
             //
-            // HISTORY: 2026-07-03 extended this to ALL minions ("|| this is Minion") after
-            // wire104/coll104 showed push storms that never resolved overlap. REVERTED 2026-07-05
-            // (marching-separation research round): the blanket suppression removed the COMBAT-
-            // phase separation Riot relies on. Source-confirmed model (Actor.cpp:1721
-            // `m_Path.GetSize() >= MAX_NUMREPATH && isInCollision`): Riot applies NO active
-            // separation to n=2 marchers at all — march spacing is preserved passively (spawn
-            // stagger + equal speeds) — but in the CLASH phase paths are n>=4 and the damped
-            // push/avoidance stack actively resolves compression (replay: deep overlap 5.8% vs
-            // our 17%). With the blanket suppression, clash compression was permanent (ratchet)
-            // and waves carried the fusion onto the march — the wiggle/fusion root. The 2026-07-03
-            // storm predates CommitStand/stand-reservations/SmoothPath; re-measure with coll-log
-            // (push rate + magnitudes + resolution) — if storms return, the split-sim resync
-            // interplay needs the deeper lockstep look, NOT a blanket gate.
-            bool suppressPush = _pathFromBodyRouting;
-            if (Waypoints.Count >= MaxNumRepath && hadHardColliders && !suppressPush)
+            // HISTORY: two invented suppressions used to sit here and are both gone —
+            // "|| this is Minion" (2026-07-03, reverted 2026-07-05: removed the combat-phase
+            // separation entirely, fusion ratchet) and `_pathFromBodyRouting` (removed 2026-07-19
+            // with F1: the "push fights the routed path" glitching was measured with 0.2r minion
+            // bodies; the decomp runs pushes and in-collision repaths concurrently with no such
+            // flag). If sideways resync storms return in clumps, re-measure with COLLISION_LOG
+            // (push rate/magnitude/resolution) before reinventing a gate.
+            if (Waypoints.Count >= MaxNumRepath && hadHardColliders)
             {
                 float speedPerTick = GetMoveSpeed() * (delta * 0.001f);
 
@@ -3065,6 +3008,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // if the post-response movement collapsed to <= 1.5*speed, add an escape push away
                 // from the SAME group barycenter, magnitude min(95, speed*1.5). The decomp's /sepDist
                 // multiplies the full (pos-bary) vector so it cancels to a unit vector × magnitude.
+                //
+                // ON THE OMITTED RAMP TERM (F4 verdict 2026-07-19, docs/PATHING_AUDIT_2026_07_19.md):
+                // the full 4.17 formula is min(95, min(speed*1.5, s_ExtraSeparationSpeed *
+                // (stuckSecs/s_timeBetweenPathCorrections + 1)^2 * dt)) — but
+                // s_timeBetweenPathCorrections is a REAL, SEPARATE static (dsym-verified, distinct
+                // from s_TimeBetweenRepathsInSeconds) that has NO writer anywhere in the recovered
+                // 4.17 source (not in ReadConfigVariables; grep-clean). C++ zero-init ⇒ 0 ⇒ the
+                // ratio term is +inf and the inner min degenerates to speed*1.5 — i.e. the live 4.x
+                // push IS min(95, speed*1.5), exactly this code. S1 had a live ramp (denominator
+                // s_TimeBetweenRepathsInSeconds, S1 actor_client.cpp:2112, ExtraSeparationSpeed=50);
+                // 4.x refactored it onto the dead static — an N1-class parameter fossil. Do NOT
+                // "restore" the ramp without new evidence: it would be an S1 backport, not a port.
                 float gate = StuckGateRatio * speedPerTick;
                 if (outMovement.LengthSquared() <= gate * gate)
                 {
@@ -3374,9 +3329,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             Waypoints = newWaypoints;
             CurrentWaypointKey = 1;
-            // Default: a fresh path is push-eligible again; the body-routing/unstuck call sites
-            // re-mark their routed paths right after this call (see _pathFromBodyRouting).
-            _pathFromBodyRouting = false;
 
             PathHasTrueEnd = false;
 
