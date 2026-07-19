@@ -18,6 +18,7 @@ namespace Buffs
 
         private ObjAIBase _nunu;
         private Spell _spell;
+        private Particle _particle;
         private PeriodicTicker _periodicTicker;
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
@@ -32,6 +33,8 @@ namespace Buffs
         {
             _nunu = buff.SourceUnit;
             _spell = ownerSpell;
+            _particle = SpellEffectCreate("AbsoluteZero2_green_cas.troy", _nunu, _nunu,
+                effectNameForEnemy: "AbsoluteZero2_red_cas.troy", fowVisibilityRadius: 10, lifetime: 3f);
         }
 
         // S1 BuffOnUpdateActions: every 0.25s re-apply the slow to enemies in range (refresh + catch units
@@ -52,6 +55,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            RemoveParticle(_particle);
         }
     }
 }

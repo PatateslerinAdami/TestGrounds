@@ -21,7 +21,13 @@ namespace LeagueSandbox.GameServer.Content
 
     public class CharData
     {
-        public float AcquisitionRange { get; private set; } = 475;
+        // Riot engine default: CharacterData.cpp:907 ReadCFG_F(..., "AcquisitionRange", 750.0f).
+        // Load-bearing for exactly the units whose 4.20 inibin omits the key — lane MELEE and
+        // SIEGE minions (ranged=700, super/mech=600, champions=600 are all explicit in data).
+        // Riot's acquisition ordering is melee 750 > caster 700 > super 600; the old 475 default
+        // inverted it and made melees march ~275u past the enemy front before locking anything
+        // (F2, docs/PATHING_AUDIT_2026_07_19.md).
+        public float AcquisitionRange { get; private set; } = 750;
         // First Wave Special Rules -> The Wake-Up Range is smaller than the normal
         // Acquisition Range. While a First Wave Minion is asleep, it only checks this radius
         // before waking up. The FirstAcquisitionRange is larger and is used exactly once immediately

@@ -31,6 +31,7 @@ namespace LeagueSandbox.GameServer.Content
         {
             ["Aatrox"] = new Variants { Haste = "Run_Haste" },
             ["Azir"] = new Variants { Haste = "Run_Haste", Fast = "Run_FAST" },
+            ["Ashe"] = new Variants { Haste = "RUN2", Fast = "RUN3" },
             ["Braum"] = new Variants { Haste = "run_haste", Slow = "run_slow" },
             ["Diana"] = new Variants { Haste = "run_haste", Fast = "Run_fast", Slow = "Run_slow", SlowBack = "run_slow_back" },
             ["Garen"] = new Variants { Haste = "Run_HASTE", Fast = "Run_FAST" },

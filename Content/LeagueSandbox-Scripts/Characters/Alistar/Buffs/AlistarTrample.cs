@@ -34,8 +34,8 @@ namespace Buffs
             SetStatus(_alistar, StatusFlags.Ghosted, true);
             _alistar.SetAnimStates(new Dictionary<string, string>
             {
-                { "Idle1", "TRAMPLE" },
-                { "run", "Run2" }
+                {"RUN", "RUN2"},
+                { "IDLE1", "TRAMPLE" },
             });
             _p1 = SpellEffectCreate("alistar_trample_01", _alistar, _alistar, _alistar, lifetime: buff.Duration, fowVisibilityRadius: 10f);
             _p2 = SpellEffectCreate("alistar_trample_hand", _alistar, _alistar, _alistar, lifetime: buff.Duration,
@@ -87,8 +87,8 @@ namespace Buffs
             RemoveParticle(_p6);
             _alistar.SetAnimStates(new Dictionary<string, string>
             {
-                { "Idle1", "" },
-                { "run", "" }
+                { "RUN", "" },
+                { "IDLE1", "" }
             });
             SetStatus(_alistar, StatusFlags.Ghosted, false);
         }

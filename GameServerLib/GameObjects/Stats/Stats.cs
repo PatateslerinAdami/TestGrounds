@@ -30,7 +30,16 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public float HealthRegenerationPerLevel { get; set; }
         public float ManaRegenerationPerLevel { get; set; }
         public float GrowthAttackSpeed { get; set; }
+        // Per-slot current mana cost (decomp Spellbook.h mCurManaCost[63]); maintained on level-up
+        // (Spell.LevelUp/SetLevel) and replicated owner-only (ReplicationHero).
         public float[] ManaCost { get; }
+        // Per-slot mana-cost increments = Riot's SpellDataInst::SetIncManaCost /
+        // SetIncMultiplicativeManaCost (BBSetPARCostInc), set via ApiFunctionManager.SetSpellPARCost.
+        // Effective cost = (SpellData.ManaCost[level] + ManaCostInc[slot]) * (1 + ManaCostMult[slot]),
+        // clamped >= 0. Kept as a separate layer so a spell level-up (which rewrites ManaCost[slot]
+        // from SpellData) does not clobber the increment. See Spell.GetManaCost().
+        public float[] ManaCostInc { get; }
+        public float[] ManaCostMult { get; }
 
         public Stat AbilityPower { get; }
         public Stat Armor { get; }
@@ -206,6 +215,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Level = 1;
             SpellCostReduction = 0;
             ManaCost = new float[64];
+            ManaCostInc = new float[64];
+            ManaCostMult = new float[64];
             ActionState = ActionState.CAN_ATTACK | ActionState.CAN_CAST | ActionState.CAN_MOVE | ActionState.TARGETABLE;
             IsTargetable = true;
             IsTargetableToTeam = SpellDataFlags.TargetableToAll;

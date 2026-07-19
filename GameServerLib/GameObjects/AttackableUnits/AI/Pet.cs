@@ -7,6 +7,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 {
     public class Pet : Minion
     {
+        // Pets join heroes in the slower-but-more-accurate pathing class:
+        // obj_AI_Minion::OnCreate → `if (IsPet()) SetUseSlowerButMoreAccurateSearch(true)`
+        // (AIMinion.cpp:608-610). See ObjAIBase.UsesFastPath.
+        public override bool UsesFastPath => false;
+
         private float _returnRadius;
 
         /// <summary>

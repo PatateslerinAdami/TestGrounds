@@ -3160,14 +3160,9 @@ namespace PacketDefinitions420
                 });
             }
 
-            if (s.CastInfo.SpellLevel > 0)
-            {
-                castInfo.ManaCost = s.SpellData.ManaCost[s.CastInfo.SpellLevel];
-            }
-            else
-            {
-                castInfo.ManaCost = s.SpellData.ManaCost[0];
-            }
+            // Effective per-slot cost (base + SetSpellPARCost increment layer), so the wire matches
+            // what the server actually deducts. GetManaCost() already keys off CastInfo.SpellLevel.
+            castInfo.ManaCost = s.GetManaCost();
 
             var castAnsPacket = new NPC_CastSpellAns
             {
@@ -6502,14 +6497,9 @@ namespace PacketDefinitions420
                 });
             }
 
-            if (s.CastInfo.SpellLevel > 0)
-            {
-                castInfo.ManaCost = s.SpellData.ManaCost[s.CastInfo.SpellLevel];
-            }
-            else
-            {
-                castInfo.ManaCost = s.SpellData.ManaCost[0];
-            }
+            // Effective per-slot cost (base + SetSpellPARCost increment layer), so the wire matches
+            // what the server actually deducts. GetManaCost() already keys off CastInfo.SpellLevel.
+            castInfo.ManaCost = s.GetManaCost();
 
             var castAnsPacket = new NPC_CastSpellAns
             {

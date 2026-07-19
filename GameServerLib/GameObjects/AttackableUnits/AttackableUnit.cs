@@ -206,13 +206,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // counter; past the threshold the unit's collision state flips mIgnoreCollisions and it
         // PHASES through other actors until it gets free. Pure server-sim state — never
         // broadcast, distinct from the player-facing StatusFlags.Ghosted buff. Threshold is
-        // mUseSlowerButMoreAccurateSearch-dependent: 45 fast (champions) / 15 slow.
+        // mUseSlowerButMoreAccurateSearch-dependent (Actor.cpp:2684-2691): 45 fast (minions
+        // & non-AI default) / 15 slower-accurate (champions/pets).
         // Lifecycle (client Actor.cpp:1473-1477): ++ per stuck tick, reset when in collision
         // but NOT stuck; our additions: reset when stationary / dashing (client equivalent is
         // its Stop/path lifecycle); frozen while ghosted (collision processing is skipped, so
         // the ghost ends when the unit stops or arrives).
         private int _stuckGhostFrames;
-        private int TempGhostThreshold => (this as ObjAIBase)?.UsesFastPath == true ? 45 : 15;
+        private int TempGhostThreshold => ((this as ObjAIBase)?.UsesFastPath ?? true) ? 45 : 15;
         public bool IsTemporarilyGhosted => _stuckGhostFrames > TempGhostThreshold;
 
         // NOTE (D11, 2026-06-21): the former `_collisionSlideSign` latch + `ResolveSlideSign`
@@ -2342,6 +2343,37 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // (Stuck detection + extra push lives inside the moving branch above — it both
                 // applies the centroid escape push and drives the temp-ghost counter.)
 
+                // S0 DIAGNOSTICS (Stage C, no behavior change): measure how often the current
+                // position-first integrator produces a committed step that Riot's final-step
+                // sanitation would reject — so we know whether porting those guards (S3/S4) is
+                // catching a real producer bug or is dead weight. Env-gated (CollisionLogger).
+                //   overspeed: total committed step this tick > max(2*cellSize, intendedStep*3)
+                //             (S4 Actor_Common::Update overspeed clamp, Actor.cpp:1934-1940).
+                //   validatepos: |step|^2 > 6000 AND terrain LOS old->new fails
+                //             (S4 Actor_Common::ValidatePosition, Actor.cpp:1490-1513, kMaxPosDeltaSq).
+                if (CollisionLogger.Enabled)
+                {
+                    Vector2 stepDelta = Position - originalPos;
+                    float stepDistSq = stepDelta.LengthSquared();
+                    if (stepDistSq > 0.0001f)
+                    {
+                        float cellSize = _game.Map.NavigationGrid.CellSize;
+                        float intendedStep = GetMoveSpeed() * 0.001f * delta;
+                        float overspeedThresh = MathF.Max(2f * cellSize, intendedStep * 3f);
+                        float stepDist = MathF.Sqrt(stepDistSq);
+                        if (stepDist > overspeedThresh)
+                        {
+                            CollisionLogger.Log(_game.GameTime, NetId, "overspeed", stepDist, overspeedThresh, Position);
+                        }
+                        // ValidatePosition's kMaxPosDeltaSq is a squared world-unit threshold (6000).
+                        if (stepDistSq > 6000f
+                            && !_game.Map.NavigationGrid.IsGridLineOfSightClear(originalPos, Position))
+                        {
+                            CollisionLogger.Log(_game.GameTime, NetId, "validatepos", stepDist, 77.46f, Position);
+                        }
+                    }
+                }
+
                 // Force a movement data resync once the unreplicated drift gets large enough
                 // that the client would otherwise see a visible snap on the next SetWaypoints.
                 // Applies to STOPPED units too (Waypoints.Count == 1): GetCenteredWaypoints emits a
@@ -2608,15 +2640,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // broadphase) uses mRadius. So the whole steer/collision/pathing layer reads PathfindingRadius
         // via this accessor (resolves the old D3/D4 "verify mRadius" item, 2026-06-21).
         private float ActorRadius => PathfindingRadius;
-        // S4 Actor_Common::GetHardRadius/GetSoftRadius (Actor.cpp:2384-2398). The collision
+        // S4 Actor_Common::GetHardRadius/GetSoftRadius (Actor.cpp:2743-2755). The collision
         // response is ASYMMETRIC: the SELF term uses these type-scaled radii, the NEIGHBOR term
-        // always uses full GetRadius (= mRadius = the neighbour's PathfindingRadius). The gating flag
-        // mUseSlowerButMoreAccurateSearch == !UsesFastPath (champions = fast A*, minions = slow-
-        // accurate — same flag drives the NavGrid travelFactor branch). Champions (fast): hard = r,
-        // soft = 2r. Minions (slow): hard = 0.2r, soft = 0.3r → waves pack to Riot's tighter
-        // threshold. Used for SELF only.
-        private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? ActorRadius : ActorRadius * 0.2f;
-        private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? false) ? ActorRadius * 2f : ActorRadius * 0.3f;
+        // always uses full GetRadius (= mRadius = the neighbour's PathfindingRadius). The gating
+        // flag mUseSlowerButMoreAccurateSearch == !UsesFastPath (same flag drives the NavGrid
+        // travelFactor branch). Minions & non-AI default (fast): hard = r, soft = 2r — waves
+        // engage the full body. Champions/pets (slower-accurate): hard = 0.2r, soft = 0.3r —
+        // heroes slip through crowds. Used for SELF only. (Polarity was inverted until the F1
+        // fix 2026-07-19, docs/PATHING_AUDIT_2026_07_19.md — minions collided at 0.2r.)
+        private float GetHardRadius() => ((this as ObjAIBase)?.UsesFastPath ?? true) ? ActorRadius : ActorRadius * 0.2f;
+        private float GetSoftRadius() => ((this as ObjAIBase)?.UsesFastPath ?? true) ? ActorRadius * 2f : ActorRadius * 0.3f;
 
         // Vision-radius scale (S4 obj_AI_Base::GetVisionScale: multiplier = pctBonus + 1, additive =
         // flatBonus; raw fields fed by vision-range buffs/items). Applied to the effective vision
@@ -3249,7 +3282,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (CanChangeWaypoints())
             {
                 var nav = _game.Map.NavigationGrid;
-                bool useFast = (this as ObjAIBase)?.UsesFastPath ?? false;
+                bool useFast = (this as ObjAIBase)?.UsesFastPath ?? true;
                 var path = nav.GetPath(Position, location, PathfindingRadius, useFast);
                 if (path != null)
                 {

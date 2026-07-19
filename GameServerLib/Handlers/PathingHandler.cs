@@ -181,7 +181,7 @@ namespace LeagueSandbox.GameServer.Handlers
         /// <summary>
         /// Returns a path to the given target position from the given unit's position. Uses the
         /// unit's <see cref="ObjAIBase.UsesFastPath"/> setting to pick the client A* mode
-        /// (champions = fast, minions = slow-accurate). Also threads an actor-aware path filter
+        /// (minions = fast, champions/pets = slower-accurate). Also threads an actor-aware path filter
         /// so the search routes around other units that would block this attacker. The returned
         /// <see cref="NavigationPath.IsPartial"/> flag signals that the goal was unreachable
         /// and the path lands at the closest reachable cell.
@@ -189,7 +189,8 @@ namespace LeagueSandbox.GameServer.Handlers
         public NavigationPath GetPath(AttackableUnit obj, Vector2 target, bool usePathingRadius = true,
             bool skipLineOfSight = false, float ignoreTargetRadius = -1f)
         {
-            bool useFastPath = obj is ObjAIBase ai && ai.UsesFastPath;
+            // Non-AI actors keep the Actor ctor default (flag false = fast, Actor.cpp:1465).
+            bool useFastPath = obj is not ObjAIBase ai || ai.UsesFastPath;
             float radius = usePathingRadius ? obj.PathfindingRadius : 0f;
             var actorBlocked = BuildActorBlockedPredicate(obj);
             return _map.NavigationGrid.GetPath(obj.Position, target, radius, useFastPath, actorBlocked,
@@ -911,10 +912,10 @@ namespace LeagueSandbox.GameServer.Handlers
             // travelDistFactor = arrivalCost / maxSpeed (=1 if speed 0). Captured divisor.
             float maxSpeed = attacker.GetMoveSpeed();
             float divisor = maxSpeed > 0f ? maxSpeed : 1f;
-            // minionIncreaseSize = !IsSlowerButMoreAccurateSearch() = UsesFastPath: 2.0 for champions
-            // (fast A*), 1.0 for minions/pets/jungle (slow-accurate). Despite the decomp param name,
-            // it is FALSE for minions (NavigationGrid.cpp:3324 isBlockedCellCheckPassed = !isSlower).
-            bool fastPath = (attacker as ObjAIBase)?.UsesFastPath ?? false;
+            // minionIncreaseSize = !IsSlowerButMoreAccurateSearch() = UsesFastPath: 2.0 for
+            // minions/monsters (fast class), 1.0 for champions/pets (slower-accurate) — the decomp
+            // param name is literal (NavigationGrid.cpp:292 passes !isSlower; :3592 isSlower != 1).
+            bool fastPath = (attacker as ObjAIBase)?.UsesFastPath ?? true;
 
             // NO team filter (2026-06-18, new mac decomp): Riot's server A* probes actor-blocking with
             // a ZEROED collisionState (mTeamID=0), and a non-ghosted actor blocks regardless of team —

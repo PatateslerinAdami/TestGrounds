@@ -65,13 +65,13 @@ internal class BlackShield : IBuffGameScript
 
     private void OnShieldBreak(Shield shield)
     {
-        _buff.DeactivateBuff();
+        RemoveBuff(_buff);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
-        ApiEventManager.RemoveAllListenersForOwner(this);
         _morgana.RemoveShield(_blackShield);
         RemoveParticle(_blackShieldParticle);
+        ApiEventManager.RemoveAllListenersForOwner(this);
     }
 }

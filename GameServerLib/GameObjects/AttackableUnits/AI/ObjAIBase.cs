@@ -199,18 +199,27 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public string Name { get; }
 
         /// <summary>
-        /// Whether this entity should use the client's fast (less accurate) A* mode when
-        /// requesting paths from <see cref="NavigationGrid.GetPath"/>. Mirrors the client's
-        /// per-actor `m_UseSlowerButMoreAccurateSearch` flag inverted: client default is
-        /// slow-accurate=false (= fast=true here); only `obj_AI_Minion` instances override
-        /// the actor flag to true (S1 obj_ai_minion.cpp:1716), which corresponds to fast=false
-        /// here.
+        /// Whether this unit's actor uses the client's fast (less accurate) pathing class.
+        /// Mirrors the per-actor `mUseSlowerButMoreAccurateSearch` flag INVERTED
+        /// (UsesFastPath == !IsSlowerButMoreAccurateSearch). 4.17 mac decomp assignment chain:
+        /// the Actor ctor defaults the flag to false = fast (Actor.cpp:1465); obj_AI_Base::Load
+        /// passes `objIsHeroAI(this)` as Actor_Common::Create's FIRST param, and that param is
+        /// what the flag is stored from (AIBase.cpp:552 → Actor.cpp:2505 — the decompiled
+        /// parameter names are crossed: the param NAMED useSlowerButMoreAccurateSearch actually
+        /// gates the snap-to-passable-cell block at :2529); obj_AI_Minion::OnCreate re-sets the
+        /// flag true only `if (IsPet())` (AIMinion.cpp:608-610), which would be pointless if
+        /// ordinary minions already had it. Riot's own naming agrees: HasStuckActor's
+        /// `minionIncreaseSize` argument is passed `!IsSlowerButMoreAccurateSearch()`
+        /// (NavigationGrid.cpp:292) — minions are the fast class.
         ///
-        /// Default in this class is false (slow-accurate) so that all `Minion`/`Pet`/jungle
-        /// subclasses get the right behavior without per-class overrides; <see cref="Champion"/>
-        /// overrides to true.
+        /// So: HEROES and PETS are slower-but-more-accurate (override to false); everything
+        /// else (lane minions, monsters, turrets) keeps the fast default (true). Consumers:
+        /// A* travel factor/hint preset + step cap (NavigationGrid), GetHardRadius/GetSoftRadius,
+        /// temp-ghost threshold (AttackableUnit), HasStuckActor size multiplier (PathingHandler).
+        /// NOTE 2026-07-19: this mapping was INVERTED (champions=fast, minions=slow-accurate,
+        /// from a misread S1 anchor) until the F1 fix — see docs/PATHING_AUDIT_2026_07_19.md.
         /// </summary>
-        public virtual bool UsesFastPath => false;
+        public virtual bool UsesFastPath => true;
         /// <summary>
         /// The player's "Auto Acquire Target" option (Riot OPT_AutoAcquireTarget, default true),
         /// pushed from the client via <c>C2S_UpdateGameOptions</c>. When enabled, the engine lets a
@@ -992,7 +1001,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="moveBackBy">Riot BBMoveToUnit <c>MoveBackBy</c>: stop short of the followed unit (positive) or overshoot past it (negative).</param>
         /// <param name="travelTime">Total time (in seconds) the dash will follow the GameObject before stopping or reaching the Target.</param>
         /// <param name="lockActions">Whether or not to prevent movement, casting, or attacking during the duration of the movement.</param>
-        /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
         public void ServerForceFollowUnitPath
         (
             AttackableUnit target,
@@ -1023,8 +1031,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             SetWaypoints(new List<Vector2> { Position, target.Position }, true);
 
             SetTargetUnit(target, true);
-
-            // TODO: Take into account the rest of the arguments
+            
             MovementParameters = new ForceMovementParameters
             {
                 SetStatus = StatusFlags.None,

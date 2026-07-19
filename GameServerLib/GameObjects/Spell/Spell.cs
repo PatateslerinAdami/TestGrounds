@@ -104,6 +104,34 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public ToolTipData ToolTipData { get; protected set; }
 
         /// <summary>
+        /// Effective per-slot mana cost for the current spell level: the base
+        /// <see cref="SpellData"/>.ManaCost plus the per-slot increment layer
+        /// (Riot's SpellDataInst::SetIncManaCost / SetIncMultiplicativeManaCost, set via
+        /// <see cref="ApiFunctionManager.SetSpellPARCost"/>): <c>(base + Inc) * (1 + Mult)</c>,
+        /// clamped to >= 0. Does NOT apply <see cref="Stats.SpellCostReduction"/> (the global
+        /// URF/Lissandra factor) — that is multiplied in at deduction/gate time. This is the single
+        /// source of truth for what the server deducts and what is written to the cast wire; the
+        /// owner's client mirrors it via the base <see cref="Stats.ManaCost"/> replication plus the
+        /// S2C_UnitSetSpellPARCost increment that SetSpellPARCost also sends.
+        /// </summary>
+        public float GetManaCost()
+        {
+            float baseCost = SpellData.ManaCost[CastInfo.SpellLevel];
+            var owner = CastInfo.Owner;
+            if (owner == null)
+            {
+                return baseCost;
+            }
+            int slot = CastInfo.SpellSlot;
+            if (slot < 0 || slot >= owner.Stats.ManaCostInc.Length)
+            {
+                return baseCost;
+            }
+            float cost = (baseCost + owner.Stats.ManaCostInc[slot]) * (1f + owner.Stats.ManaCostMult[slot]);
+            return cost < 0f ? 0f : cost;
+        }
+
+        /// <summary>
         /// Allocates the missile NetID for the cast about to be announced. Heroes get a fresh NetID per
         /// auto-attack (replay shows champion AAs each carry a unique missile id); non-hero units (minions,
         /// pets) reuse ONE stable NetID for all their AAs across a life — see
@@ -466,7 +494,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             // pass the default false; the CastType heuristic below may still force it true.
             CastInfo.IsClickCasted = isClickCast;
 
-            if ((SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY || CurrentAmmo <= 0)
+            if ((GetManaCost() * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY || CurrentAmmo <= 0)
             {
                 return false;
             }
@@ -668,7 +696,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableManaCosts))
             {
-                stats.CurrentMana -= SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction);
+                stats.CurrentMana -= GetManaCost() * (1 - stats.SpellCostReduction);
             }
 
             if (!CastInfo.IsAutoAttack && !SpellData.IsToggleSpell
@@ -1034,14 +1062,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (cast)
             {
-                if ((SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY)
+                if ((GetManaCost() * (1 - stats.SpellCostReduction) > stats.CurrentMana && !CastInfo.IsAutoAttack) || State != SpellState.STATE_READY)
                 {
                     return false;
                 }
 
                 if (_game.Config.GameFeatures.HasFlag(FeatureFlags.EnableManaCosts))
                 {
-                    stats.CurrentMana -= SpellData.ManaCost[CastInfo.SpellLevel] * (1 - stats.SpellCostReduction);
+                    stats.CurrentMana -= GetManaCost() * (1 - stats.SpellCostReduction);
                 }
             }
 
@@ -2497,7 +2525,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (CastInfo.SpellSlot < 4)
             {
-                CastInfo.Owner.Stats.ManaCost[CastInfo.SpellSlot] = SpellData.ManaCost[CastInfo.SpellLevel];
+                // Effective cost (base + SetSpellPARCost increment), so a level-up doesn't wipe an
+                // active per-slot cost override (e.g. Nunu Visionary). GetManaCost folds in the inc.
+                CastInfo.Owner.Stats.ManaCost[CastInfo.SpellSlot] = GetManaCost();
             }
         }
 
@@ -2773,7 +2803,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             if (CastInfo.SpellSlot < 4)
             {
-                CastInfo.Owner.Stats.ManaCost[CastInfo.SpellSlot] = SpellData.ManaCost[CastInfo.SpellLevel];
+                // Effective cost (base + SetSpellPARCost increment), so a level-up doesn't wipe an
+                // active per-slot cost override (e.g. Nunu Visionary). GetManaCost folds in the inc.
+                CastInfo.Owner.Stats.ManaCost[CastInfo.SpellSlot] = GetManaCost();
             }
 
             if (CastInfo.Owner is Champion champion)

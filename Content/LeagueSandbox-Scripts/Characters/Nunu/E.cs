@@ -28,15 +28,15 @@ public class IceBlast : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
-        ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute);
+        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
 
-    private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile) {
+    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         var ap                = _nunu.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
         var dmg            = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
-        AddBuff("IceBlast", 2f, 1, spell, target, _nunu);  
-        AddParticleTarget(_nunu, target, "yeti_iceBlast_tar.troy", target);
+        SpellEffectCreate("yeti_iceBlast_tar.troy", _nunu, target, null, keywordObject: _nunu,boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.UpdateOrientation);
+        AddBuff("IceBlast", 2f, 1, spell, target, _nunu);
         target.TakeDamage(_nunu, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
-        ApiEventManager.OnSpellHit.RemoveListener(this, spell, TargetExecute);
+        ApiEventManager.OnSpellHit.RemoveListener(this, spell, OnSpellHit);
     }
 }

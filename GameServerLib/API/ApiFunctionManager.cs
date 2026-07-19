@@ -3994,6 +3994,26 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="amount">Cost delta; negative = cheaper, positive = more expensive, 0 = restore base.</param>
         public static void SetSpellPARCost(ObjAIBase unit, int slot, SpellPARCostType costType, float amount)
         {
+            if (unit == null || slot < 0 || slot >= unit.Stats.ManaCostInc.Length)
+            {
+                return;
+            }
+
+            // Server side: store the per-slot increment so the deduction/gate (Spell.GetManaCost)
+            // reflects it. Additive = SpellDataInst::SetIncManaCost, Multiplicative =
+            // SetIncMultiplicativeManaCost (applied as (1 + amount) in GetManaCost).
+            if (costType == SpellPARCostType.Multiplicative)
+            {
+                unit.Stats.ManaCostMult[slot] = amount;
+            }
+            else
+            {
+                unit.Stats.ManaCostInc[slot] = amount;
+            }
+
+            // Client tooltip (@Cost@) is computed by Spell::ComputeManaCostForSpell = (base +
+            // mIncManaCost)*(1+mult) on the CLIENT, which needs the client's per-slot mIncManaCost —
+            // set via S2C_UnitSetSpellPARCost (SpellDataInst::SetIncManaCost). Owner-only.
             if (unit is Champion champion)
             {
                 var player = _game.PlayerManager.GetClientInfoByChampion(champion);
@@ -4001,6 +4021,14 @@ namespace LeagueSandbox.GameServer.API
                 {
                     _game.PacketNotifier.NotifyS2C_UnitSetSpellPARCost(player.ClientId, unit, costType, slot, amount);
                 }
+            }
+
+            // Also push the effective cost into the REPLICATED mCurManaCost (Stats.ManaCost[slot],
+            // ReplicationHero ClientOnly bits 8-11, owner-only) — Riot updates this on the Visionary
+            // buff (replay db0ba71d). Drives the HUD ability-cost number / cast-gate feedback.
+            if (slot < unit.Stats.ManaCost.Length && unit.Spells.TryGetValue((short)slot, out var slotSpell) && slotSpell != null)
+            {
+                unit.Stats.ManaCost[slot] = slotSpell.GetManaCost();
             }
         }
 
