@@ -413,13 +413,14 @@ namespace Spells
                     var vars = new VariableTable();
                     vars.Set("KnockupTime", knockupTime);
                     vars.Set("StunTail", stunTotal - knockupTime);
-                    if (target.IsDead)return;
+                    if (target.IsDead) continue;
                     AddBuff("SionQKnockUp", stunTotal, 1, spell, target, _sion, variableTable: vars);
                 }
                 else
                 {
                     AddBuff("SionQSoundBeforeHalfHit", 0.25f, 1, spell, target, _sion);
-                    if (target.IsDead)return;
+                    // Bug fix: skip only this dead target's slow, not the rest of the loop (see above).
+                    if (target.IsDead) continue;
                     AddBuff("SionQSlow", 0.3f, 1, spell, target, _sion);
                 }
             }
