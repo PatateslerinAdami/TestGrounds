@@ -39,7 +39,7 @@ public class SionQKnockUp : IBuffGameScript
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         _spell = ownerSpell;
-
+        _buff = buff;
 
         ApiEventManager.OnMoveEnd.AddListener(this, unit, OnMoveEnd);
 
