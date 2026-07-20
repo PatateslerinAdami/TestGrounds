@@ -215,10 +215,7 @@ namespace Spells
             // move-cancel check off). Wire: ISA (engine) + FX_Kill + BuffRemove + anim restore,
             // no damage. Description: 2-second cooldown.
             CleanUpCharge();
-            // Deferred one tick: during this event State is still STATE_CHANNELING, so an
-            // immediate SetCooldown would skip the STATE_COOLDOWN transition and StopChanneling
-            // would leave the spell READY with a dangling cooldown.
-            CreateTimer(0f, () => spell.SetCooldown(2f, true));
+            spell.SetCooldown(2f, true);
         }
 
         private void Release(Spell spell, bool autoFire)
