@@ -5,30 +5,32 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Collections.Generic;
 using System.Numerics;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
 namespace Buffs
 {
-    internal class SionR : IBuffGameScript
+    internal class SionRSlow : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
-            BuffType = BuffType.COMBAT_ENCHANCER,
+            BuffType = BuffType.SLOW,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-        Particle p;
+
+        public StatsModifier StatsModifier { get; set; } = new StatsModifier();
+        
+
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            p = AddParticle(unit, unit, "sion_base_r_cas.troy", default, 8f,size:2f);//sion_base_r_skin
-            //AddParticlePos(unit, "sion_base_r_cas.troy", unit.Position, unit.Position);
-            OverrideAnimation(unit, "spell4_run", "run", this);
+            StatsModifier.MoveSpeed.PercentBonus -= ownerSpell.SpellData.EffectLevelAmount[3][ownerSpell.CastInfo.SpellLevel]/100;
         }
+
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            p?.SetToRemove();
-            ClearOverrideAnimation(unit, "run", this);
         }
     }
 }
