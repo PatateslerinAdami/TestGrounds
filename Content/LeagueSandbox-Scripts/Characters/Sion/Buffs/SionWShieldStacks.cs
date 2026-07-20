@@ -92,6 +92,7 @@ namespace Buffs
 
             if (_soulFurnaceShield.Amount > 0)
             {
+                PlayAnimation(_sion, "Spell2_B", 0, 0, 1, AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
                 SpellEffectCreate("Sion_Base_W_Nova.troy",_sion, null, null,_sion.Position, _sion.Position, scale: 1.3f, flags:  FXFlags.SimulateWhileOffScreen);
                 var unitsInRange = ForEachUnitInTargetAreaAddBuff(_sion, _sion.Position, 500f,
                     SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |

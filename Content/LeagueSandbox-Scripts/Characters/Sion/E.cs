@@ -86,22 +86,20 @@ namespace Spells
 
         private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile)
         {
+            if (!IsValidTarget(_sion, target,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions |
+                    SpellDataFlags.AffectHeroes)) return;
             var mainSpell = _sion.GetSpell("SionE");
             SpellEffectCreate("Sion_Base_E_Tar.troy", _sion, target, target, orientTowards: target.GetPosition3D(),
                 flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
-            if (target is Minion or Monster)
+            if (IsValidTarget(_sion, target,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral | SpellDataFlags.AffectMinions))
             {
                 AddBuff("SionESoundMinionColide", 0.25f, 1, mainSpell, target, _sion);
-                var distFromCaster = Vector2.Distance(_sion.Position, target.Position);
-                var pushDist = 1350 - distFromCaster;
-                if (pushDist < 0) pushDist = 0;
-                AddParticleTarget(_sion, target, "Sion_Base_E_Minion.troy", _sion, size: 2f,
-                    flags: FXFlags.SimulateWhileOffScreen);
                 AddBuff("SionEArmorShred", 2.5f, 1, mainSpell, target, _sion);
                 AddBuff("SionEMinion", 1f, 1, mainSpell, target, _sion, variableTable: _variableTable);
-                missile.SetToRemove();
             }
-            else
+            else if (IsValidTarget(_sion, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes))
             {
                 AddBuff("SionESlow", 2.5f, 1, mainSpell, target, _sion);
                 AddBuff("SionEArmorShred", 2.5f, 1, mainSpell, target, _sion);
@@ -110,6 +108,8 @@ namespace Spells
                 target.TakeDamage(_sion, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
                     DamageResultType.RESULT_NORMAL);
             }
+
+            missile.SetToRemove();
         }
     }
 }

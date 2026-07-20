@@ -49,6 +49,8 @@ namespace Buffs
             var dir = dirVec.LengthSquared() > 0.001f ? Vector2.Normalize(dirVec) : new Vector2(1, 0);
             var flingTarget = start + dir * 1350f;
 
+            SpellEffectCreate("Sion_Base_E_Minion.troy",_sion, unit, unit, lifetime: buff.Duration, scale: 2f,
+                flags: FXFlags.SimulateWhileOffScreen);
             ForceMove(unit, flingTarget, 2100f, gravity: 0f, resolve: ForceMovementType.FIRST_COLLISION_HIT,
                 facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
                 orders: ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, movementName: "SionEMinion");
@@ -102,6 +104,9 @@ namespace Buffs
                 SpellDataFlags.AffectHeroes);
             foreach (var target in targetsInRange.Where(target => !_hitUnits.Contains(target)))
             {
+                SpellEffectCreate("Sion_Base_E_Tar.troy", _sion, target, target, orientTowards: target.GetPosition3D(),
+                    flags: FXFlags.UpdateOrientation | FXFlags.SimulateWhileOffScreen);
+
                 AddBuff("SionESlow", 2.5f, 1, buff.OriginSpell, target, _sion);
                 target.TakeDamage(_sion,
                     (buff.OriginSpell.SpellData.EffectLevelAmount[1][buff.OriginSpell.CastInfo.SpellLevel]
