@@ -416,11 +416,13 @@ namespace Spells
                     var vars = new VariableTable();
                     vars.Set("KnockupTime", knockupTime);
                     vars.Set("StunTail", stunTotal - knockupTime);
+                    if (target.IsDead)return;
                     AddBuff("SionQKnockUp", stunTotal, 1, spell, target, _sion, variableTable: vars);
                 }
                 else
                 {
                     AddBuff("SionQSoundBeforeHalfHit", 0.25f, 1, spell, target, _sion);
+                    if (target.IsDead)return;
                     AddBuff("SionQSlow", 0.3f, 1, spell, target, _sion);
                 }
             }

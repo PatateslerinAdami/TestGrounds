@@ -12,13 +12,11 @@ namespace CharScripts;
 
 public class CharScriptSion : ICharScript {
     private ObjAIBase _sion;
-    private Spell _spell;
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _sion = owner;
-        _spell = spell;
         ApiEventManager.OnLevelUpSpell.AddListener(this, _sion.Spells[1], OnLevelUpSpell);
     }
     
@@ -59,7 +57,7 @@ public class CharScriptSion : ICharScript {
     {
         SetSpellToolTipVar(_sion, 0, _sion.CharVars.GetFloat("SoulFurnaceStacks"), SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
         var bonusMaxHealthDmg = _sion.Stats.HealthPoints.Total *
-            _sion.Spells[1].SpellData.EffectLevelAmount[6][_sion.Spells[1].CastInfo.SpellLevel];
+            (_sion.Spells[1].SpellData.EffectLevelAmount[6][_sion.Spells[1].CastInfo.SpellLevel]/100);
         SetSpellToolTipVar(_sion, 1, bonusMaxHealthDmg, SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
     }
 }
