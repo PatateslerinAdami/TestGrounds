@@ -31,34 +31,6 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _sion = owner;
-            _sion.CharVars.Set("SoulFurnaceStacks", 0f);
-            ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell);
-            ApiEventManager.OnUpdateStats.AddListener(this, _sion, OnUpdateStats);
-        }
-        
-        private void OnLevelUpSpell(Spell spell)
-        {
-            if (spell.CastInfo.SpellLevel != 1)return;
-            ApiEventManager.OnKillUnit.AddListener(this, _sion, OnUnitKill);
-        }
-        
-        private void OnUnitKill(DeathData data)
-        {
-            // UnitTags is a [Flags] composite (a siege minion is Minion | Minion_Lane |
-            // Minion_Lane_Siege), so equality patterns never match a live unit — query with
-            // ContainsAny, specific tags first since those units also carry the Minion bit.
-            var tags = data.Unit.UnitTags;
-            if (tags.ContainsAny(UnitTag.Minion_Lane_Siege | UnitTag.Minion_Lane_Super | UnitTag.Champion
-                                 | UnitTag.Champion_Clone | UnitTag.Monster_Large | UnitTag.Monster_Epic))
-            {
-                _sion.Stats.HealthPoints.FlatBonus =+ 15f;
-                _sion.CharVars.Set("SoulFurnaceStacks", _sion.CharVars.GetFloat("SoulFurnaceStacks") + 15f);
-            }
-            else if (tags.ContainsAny(UnitTag.Minion | UnitTag.Minion_Lane | UnitTag.Ward | UnitTag.Minion_Summon))
-            {
-                _sion.Stats.HealthPoints.FlatBonus =+ 4f;
-                _sion.CharVars.Set("SoulFurnaceStacks", _sion.CharVars.GetFloat("SoulFurnaceStacks") + 4f);
-            }
         }
 
         public void OnSpellCast(Spell spell)
@@ -69,15 +41,6 @@ namespace Spells
             // swap (arm/restore) and the recast-lockout. No separate SionW buff — Riot never
             // replicates one; the swap it drives goes out via ChangeSlotSpellData, not a buff.
             AddBuff("SionWShieldStacks", 6f, 1, spell, _sion, _sion);
-        }
-        
-        private void OnUpdateStats(AttackableUnit unit, float diff)
-        {
-            SetSpellToolTipVar(_sion, 0, _sion.CharVars.GetFloat("SoulFurnaceStacks"), SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
-        }
-
-        public void OnDeactivate(ObjAIBase owner, Spell spell)
-        {
         }
     }
     
@@ -99,33 +62,6 @@ namespace Spells
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _sion = owner;
-            _sion.CharVars.Set("SoulFurnaceStacks", 0f);
-            ApiEventManager.OnUpdateStats.AddListener(this, _sion, OnUpdateStats);
-            ApiEventManager.OnKillUnit.AddListener(this, _sion, OnUnitKill);
-        }
-        
-        private void OnUpdateStats(AttackableUnit unit, float diff)
-        {
-            SetSpellToolTipVar(_sion, 0, _sion.CharVars.GetFloat("SoulFurnaceStacks"), SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
-        }
-        
-        private void OnUnitKill(DeathData data)
-        {
-            // UnitTags is a [Flags] composite (a siege minion is Minion | Minion_Lane |
-            // Minion_Lane_Siege), so equality patterns never match a live unit — query with
-            // ContainsAny, specific tags first since those units also carry the Minion bit.
-            var tags = data.Unit.UnitTags;
-            if (tags.ContainsAny(UnitTag.Minion_Lane_Siege | UnitTag.Minion_Lane_Super | UnitTag.Champion
-                                 | UnitTag.Champion_Clone | UnitTag.Monster_Large | UnitTag.Monster_Epic))
-            {
-                _sion.Stats.HealthPoints.FlatBonus =+ 15f;
-                _sion.CharVars.Set("SoulFurnaceStacks", _sion.CharVars.GetFloat("SoulFurnaceStacks") + 15f);
-            }
-            else if (tags.ContainsAny(UnitTag.Minion | UnitTag.Minion_Lane | UnitTag.Ward | UnitTag.Minion_Summon))
-            {
-                _sion.Stats.HealthPoints.FlatBonus =+ 4f;
-                _sion.CharVars.Set("SoulFurnaceStacks", _sion.CharVars.GetFloat("SoulFurnaceStacks") + 4f);
-            }
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)

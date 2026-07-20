@@ -24,7 +24,7 @@ namespace Buffs
         private Buff _buff;
         private Region _bubble;
         private HashSet<AttackableUnit> _hitUnits = [];
-        private float _deferredDamage;
+        private List<DamageData> _deferredDamage = [];
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.AURA,
@@ -42,8 +42,8 @@ namespace Buffs
             _hitUnits.Add(unit);
 
             var start = buff.BuffVars.Get("start", Vector2.Zero);
-            var aim = buff.BuffVars.Get("end", Vector2.Zero);
-            var dirVec = aim - start;
+            var end = buff.BuffVars.Get("end", Vector2.Zero);
+            var dirVec = end - start;
             var dir = dirVec.LengthSquared() > 0.001f ? Vector2.Normalize(dirVec) : new Vector2(1, 0);
             var flingTarget = start + dir * 1350f;
 
@@ -54,30 +54,36 @@ namespace Buffs
             AddBuff("SionESoundMinionColide", 0.25f, 1, ownerSpell, unit, _sion);
             AddBuff("Stun", 0.75f, 1, ownerSpell, unit, _sion);
             
-            var damage = ownerSpell.SpellData.EffectLevelAmount[0][ownerSpell.CastInfo.SpellLevel]
-                         + ownerSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total;
-            var postMitigation = unit.Stats.GetPostMitigationDamage(damage, DamageType.DAMAGE_TYPE_MAGICAL, _sion);
-            if (postMitigation >= unit.Stats.CurrentHealth)
-            {
-                _deferredDamage = damage;
-            }
-            else
-            {
-                unit.TakeDamage(_sion, damage, DamageType.DAMAGE_TYPE_MAGICAL,
-                    DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
-            }
+            
             ApiEventManager.OnPreTakeDamage.AddListener(this, unit, OnPreTakeDamage);
+            var damage = ownerSpell.SpellData.EffectLevelAmount[1][ownerSpell.CastInfo.SpellLevel]
+                         + _sion.Stats.AbilityPower.Total * ownerSpell.SpellData.Coefficient;
+            unit.TakeDamage(_sion, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
             _bubble = AddUnitPerceptionBubble(_sion, 160f, buff.Duration, _sion.Team);
             ApiEventManager.OnMoveEnd.AddListener(this, unit, OnMoveEnd);
         }
 
         private void OnPreTakeDamage(DamageData data)
         {
-            if (data.Attacker is Minion)
+            // Bug fix: DamageData is a reference type, so storing "data" and then zeroing it
+            // below would also zero the entry in _deferredDamage (same instance) and the damage
+            // would be swallowed instead of deferred. Snapshot the values first.
+            _deferredDamage.Add(new DamageData
             {
-                data.Damage = 0;
-                data.PostMitigationDamage = 0;
-            }
+                Attacker = data.Attacker,
+                CallForHelpAttacker = data.CallForHelpAttacker,
+                Target = data.Target,
+                Damage = data.Damage,
+                PostMitigationDamage = data.PostMitigationDamage,
+                DamageType = data.DamageType,
+                DamageSource = data.DamageSource,
+                DamageResultType = data.DamageResultType,
+                IsAutoAttack = data.IsAutoAttack,
+                ForceCallForHelp = data.ForceCallForHelp,
+            });
+            data.Damage = 0;
+            data.PostMitigationDamage = 0;
+            data.DamageResultType = DamageResultType.RESULT_INVULNERABLENOMESSAGE;
         }
 
         private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters)
@@ -95,7 +101,7 @@ namespace Buffs
             {
                 AddBuff("SionESlow", 2.5f, 1, buff.OriginSpell, target, _sion);
                 target.TakeDamage(_sion,
-                    buff.OriginSpell.SpellData.EffectLevelAmount[0][buff.OriginSpell.CastInfo.SpellLevel]
+                    buff.OriginSpell.SpellData.EffectLevelAmount[1][buff.OriginSpell.CastInfo.SpellLevel]
                     + buff.OriginSpell.SpellData.Coefficient * _sion.Stats.AbilityPower.Total,
                     DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
                 _hitUnits.Add(target);
@@ -105,13 +111,13 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ApiEventManager.OnPreTakeDamage.RemoveListener(this, unit);
-            if (_deferredDamage > 0 && !unit.IsDead)
+            foreach (var damageDate in _deferredDamage)
             {
-                unit.TakeDamage(_sion, _deferredDamage, DamageType.DAMAGE_TYPE_MAGICAL,
-                    DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
+                unit.TakeDamage(damageDate.Attacker, damageDate.Damage, damageDate.DamageType, damageDate.DamageSource, damageDate.DamageResultType);
             }
             _hitUnits.Clear();
             _bubble.SetToRemove();
+            _deferredDamage.Clear();
         }
     }
 }
