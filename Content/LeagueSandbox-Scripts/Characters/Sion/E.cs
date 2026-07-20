@@ -16,6 +16,7 @@ namespace Spells
     public class SionE : ISpellScript
     {
         private ObjAIBase _sion;
+        private Vector2 _end;
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
@@ -23,7 +24,7 @@ namespace Spells
             DoesntBreakShields = true,
             TriggersSpellCasts = true,
             CastingBreaksStealth = false,
-            IsDamagingSpell = true
+            IsDamagingSpell = true,
         };
 
 
@@ -34,20 +35,24 @@ namespace Spells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
+            _end = end;
         }
 
         public void OnSpellCast(Spell spell)
         {
-            SpellEffectCreate("Sion_E_Sound.troy", _sion, null, null, _sion.Position, _sion.Position,
-                flags: FXFlags.SimulateWhileOffScreen);
-            SpellEffectCreate("Sion_Base_E_Cas.troy", _sion, _sion, _sion, boneName: "L_Clavicle",
-                flags: FXFlags.SimulateWhileOffScreen);
+            
+            
         }
 
         public void OnSpellPostCast(Spell spell)
         {
+            //FaceDirection(_end, _sion, true);
             SpellCast(_sion, 1, SpellSlotType.ExtraSlots, _sion.Position, GetPointFromUnit(_sion, 800f), true,
                 Vector2.Zero);
+            SpellEffectCreate("Sion_E_Sound.troy", _sion, null, null, _sion.Position, _sion.Position,
+                flags: FXFlags.SimulateWhileOffScreen);
+            SpellEffectCreate("Sion_Base_E_Cas.troy", _sion, _sion, _sion, boneName: "L_Clavicle",
+                flags: FXFlags.SimulateWhileOffScreen);
         }
     }
 
