@@ -33,6 +33,7 @@ namespace Spells
         private AttackableUnit _closestUnit;
         private float _currentAngle;
         private float _targetAngle;
+        private bool _instantHit = false;
 
         private float _unitHitboxRadius = 160f;
         private float _collisionGracePeriod = 0.1f;
@@ -60,6 +61,7 @@ namespace Spells
 
         public void OnSpellPostCast(Spell spell)
         {
+            _instantHit = false;
             _sion.StopMovement();
         }
 
@@ -83,6 +85,28 @@ namespace Spells
                                   _sion.Position);
             _currentAngle = (float)Math.Atan2(dir.Y, dir.X);
             _targetAngle = _currentAngle;
+
+            Vector2 checkPos = _sion.Position + dir * _sion.CollisionRadius;
+            if (!IsWalkable(checkPos.X, checkPos.Y, 10f))
+            {
+                _instantHit = true;
+                spell.FireCharge(_sion.Position);
+                StopCharge(false, true);
+            }
+            else
+            {
+                var nearbyUnits = GetUnitsInRange(_sion, _sion.Position, _unitHitboxRadius + 100f, true,
+                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectTurrets);
+                if ((from unit in nearbyUnits
+                        let dist = Vector2.Distance(_sion.Position, unit.Position)
+                        where dist <= _unitHitboxRadius + unit.CollisionRadius
+                        select unit).FirstOrDefault() != null)
+                {
+                    _instantHit = true;
+                    spell.FireCharge(_sion.Position);
+                    StopCharge(true, false);
+                }
+            }
         }
 
         public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
@@ -93,6 +117,7 @@ namespace Spells
 
         public void OnSpellChargeTick(Spell spell, float diff)
         {
+            if (_instantHit) return;
             if (_sion.IsDead) return;
 
             float deltaSeconds = diff / 1000f;
@@ -144,20 +169,18 @@ namespace Spells
             }
 
             _waypointUpdateTimer -= diff;
-            if (_waypointUpdateTimer <= 0f)
-            {
-                // Bug fix: ObjAIBase.Move() only advances Position when MoveOrder is a "moving"
-                // order; a stationary caster (fresh spawn = OrderNone, post-leap = Stop, or
-                // auto-attacking = CastSpell) hits Move()'s early-return, so the server never walks
-                // the charge path while the client does — then every re-broadcast snaps the client
-                // back to the (un-moved) start position. Force MoveTo each tick so the server
-                // actually advances. Set every tick to also override the AttackTo->CastSpell rewrite
-                // that StartChanneling applies at channel start. publish:false = direct field set.
-                _sion.UpdateMoveOrder(OrderType.MoveTo, false);
-                Vector2 newPos = _sion.Position + newDir * 500f;
-                _sion.SetWaypoints(new List<Vector2> { _sion.Position, newPos }, true);
-                _waypointUpdateTimer = 100f;
-            }
+            if (!(_waypointUpdateTimer <= 0f)) return;
+            // Bug fix: ObjAIBase.Move() only advances Position when MoveOrder is a "moving"
+            // order; a stationary caster (fresh spawn = OrderNone, post-leap = Stop, or
+            // auto-attacking = CastSpell) hits Move()'s early-return, so the server never walks
+            // the charge path while the client does — then every re-broadcast snaps the client
+            // back to the (un-moved) start position. Force MoveTo each tick so the server
+            // actually advances. Set every tick to also override the AttackTo->CastSpell rewrite
+            // that StartChanneling applies at channel start. publish:false = direct field set.
+            _sion.UpdateMoveOrder(OrderType.MoveTo, false);
+            Vector2 newPos = _sion.Position + newDir * 500f;
+            _sion.SetWaypoints(new List<Vector2> { _sion.Position, newPos }, true);
+            _waypointUpdateTimer = 100f;
         }
 
         public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
@@ -186,9 +209,6 @@ namespace Spells
             _sion.StopMovement();
             _sion.IgnoreMoveOrders = false;
 
-            _buff.SetToExpired();
-            RemoveBuff(_buff);
-
             //recast or timeout
             if (!hitChampion && !hitWall)
             {
@@ -205,6 +225,7 @@ namespace Spells
                     ForceMove(_sion, _sion.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0f,
                         facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
                         resolve: ForceMovementType.FIRST_COLLISION_HIT, orders: ForceMovementOrdersType.CANCEL_ORDER,
+                        ignoreTerrain: false,
                         movementName: "SionRLeap");
                 }));
             }
@@ -215,10 +236,12 @@ namespace Spells
                     _sion.StopChanneling(ChannelingStopCondition.Cancel,
                         ChannelingStopSource.StunnedOrSilencedOrTaunted);
                 }
-
+                _sion.SetWaypoints(new List<Vector2> { _sion.Position, _sion.Position }, true);
+                _sion.StopMovement();
                 PlayAnimation(_sion, "Spell4", 0, 0, 1,
                     AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
                 _spell.CastInfo.InstanceVars.Set("hasLeaped", false);
+                RemoveBuff(_buff);
                 AddBuff("Stun", _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel], 1, _spell, _sion,
                     _sion);
                 // Deal the slam damage in place — previously this only landed via the (now suppressed)
@@ -236,6 +259,7 @@ namespace Spells
                 PlayAnimation(_sion, "Spell4_Hit", 0, 0, 1,
                     AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
                 AddBuff("SionRSoundExplosionHitChampion", 0.25f, 1, _spell, _sion, _sion);
+                RemoveBuff(_buff);
                 OnHit();
             }
         }
@@ -246,6 +270,7 @@ namespace Spells
             PlayAnimation(_sion, "Spell4", 0, 0, 1,
                 AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
             _spell.CastInfo.InstanceVars.Set("hasLeaped", true);
+            RemoveBuff(_buff);
             OnHit();
             ApiEventManager.OnMoveEnd.RemoveListener(this, _sion, OnMoveEnd);
         }
