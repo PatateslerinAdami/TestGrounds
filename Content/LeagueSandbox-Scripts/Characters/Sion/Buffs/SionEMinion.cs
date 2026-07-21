@@ -51,6 +51,7 @@ namespace Buffs
 
             SpellEffectCreate("Sion_Base_E_Minion.troy",_sion, unit, unit, lifetime: buff.Duration, scale: 2f,
                 flags: FXFlags.SimulateWhileOffScreen);
+            unit.SetStatus(StatusFlags.Ghosted, true);
             ForceMove(unit, flingTarget, 2100f, gravity: 0f, resolve: ForceMovementType.FIRST_COLLISION_HIT,
                 facing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
                 orders: ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, movementName: "SionEMinion");
@@ -94,6 +95,7 @@ namespace Buffs
         private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters)
         {
             if (parameters.MovementName != "SionEMinion") return;
+            unit.SetStatus(StatusFlags.Ghosted, false);
             RemoveBuff(_buff);
         }
 
@@ -125,7 +127,7 @@ namespace Buffs
                 unit.TakeDamage(damageDate.Attacker, damageDate.Damage, damageDate.DamageType, damageDate.DamageSource,
                     damageDate.DamageResultType);
             }
-
+            
             _hitUnits.Clear();
             _bubble.SetToRemove();
             _deferredDamage.Clear();
