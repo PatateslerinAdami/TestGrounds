@@ -17,6 +17,7 @@ namespace Spells
     public class SionW : ISpellScript
     {
         private ObjAIBase _sion;
+
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             NotSingleTargetSpell = true,
@@ -26,29 +27,30 @@ namespace Spells
             IsDamagingSpell = true,
             AutoFaceDirection = false
         };
-
         
-
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _sion = owner;
         }
 
-        public void OnSpellCast(Spell spell)
+        public void OnSpellPostCast(Spell spell)
         {
-            SpellEffectCreate("Sion_Base_W_Cas.troy",_sion, _sion,  _sion, scale: 0.5f, boneName: "C_Buffbone_Glb_Center_Loc",  flags: FXFlags.SimulateWhileOffScreen);
-            SpellEffectCreate("Sion_Base_W_Precas.troy",_sion, _sion,  _sion, scale: 0.5f, boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
+            SpellEffectCreate("Sion_Base_W_Cas.troy", _sion, _sion, _sion, scale: 0.5f,
+                boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
+            SpellEffectCreate("Sion_Base_W_Precas.troy", _sion, _sion, _sion, scale: 0.5f,
+                boneName: "C_Buffbone_Glb_Center_Loc", flags: FXFlags.SimulateWhileOffScreen);
             // SionWShieldStacks owns the whole W lifecycle: shield, the SionW→SionWDetonate slot
             // swap (arm/restore) and the recast-lockout. No separate SionW buff — Riot never
             // replicates one; the swap it drives goes out via ChangeSlotSpellData, not a buff.
             AddBuff("SionWShieldStacks", 6f, 1, spell, _sion, _sion);
         }
     }
-    
-    
+
+
     public class SionWDetonate : ISpellScript
     {
         private ObjAIBase _sion;
+
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             NotSingleTargetSpell = true,
@@ -59,7 +61,6 @@ namespace Spells
             AutoFaceDirection = false
         };
 
-        
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
@@ -76,10 +77,11 @@ namespace Spells
             RemoveBuff(_sion, "SionWShieldStacks");
         }
     }
-    
+
     public class SionPassiveSpeed : ISpellScript
     {
         private ObjAIBase _sion;
+
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             NotSingleTargetSpell = false,
