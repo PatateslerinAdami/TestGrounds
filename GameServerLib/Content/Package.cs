@@ -191,9 +191,16 @@ namespace LeagueSandbox.GameServer.Content
 
             if (statProgressionFile.Values.ContainsKey("PerLevelStatsFactor"))
             {
-                for (int i = 0; i < statProgressionFile.Values["PerLevelStatsFactor"].Count; i++)
+                // Riot CharacterRecord::StaticInitialize (mac 4.17 CharacterData.cpp:1735): reads
+                // PerLevelStatsFactor "Level1".."Level18" into mPerLevelStatsFactor[0..17]. A missing
+                // level entry carries forward the previous value (ReadCFG_F default = lastStatsFactor,
+                // seeded at 1.0), NOT zero. Index i holds the factor for champion level i+1, matching
+                // GetStatForLevel's mPerLevelStatsFactor[level-1] lookup (see Stats.GetLevelUpStatValue).
+                float lastStatsFactor = 1.0f;
+                for (int i = 0; i < 18; i++)
                 {
-                    toReturnMapData.StatsProgression.Add(statProgressionFile.GetFloat("PerLevelStatsFactor", $"Level{i}"));
+                    lastStatsFactor = statProgressionFile.GetFloat("PerLevelStatsFactor", $"Level{i + 1}", lastStatsFactor);
+                    toReturnMapData.StatsProgression.Add(lastStatsFactor);
                 }
             }
 
