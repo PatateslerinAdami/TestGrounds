@@ -55,7 +55,7 @@ public class NamiQ : ISpellScript {
                 break;
         }
 
-        var bubbleMinion = AddMinion(_nami, "TestCubeRender10Vision", "bubble", _endPos, _nami.Team, 0, true, false, isVisible: false,
+        var bubbleMinion = AddMinion(_nami, "TestCubeRender10Vision", "k", _endPos, _nami.Team, 0, true, false, isVisible: false,
             rooted: true, invulnerable: true, magicImmune: true);
         SetStatus(bubbleMinion, StatusFlags.Ghosted, true);
         // Replay-verified (ec72643482, 93 Q casts): Riot casts NamiQMissile as a REAL spell —
