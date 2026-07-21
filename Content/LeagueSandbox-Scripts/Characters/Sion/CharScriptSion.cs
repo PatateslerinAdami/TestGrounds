@@ -19,7 +19,7 @@ public class CharScriptSion : ICharScript {
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _sion = owner;
         _spell = spell;
-        ApiEventManager.OnPreTakeDamage.AddListener(this, _sion, OnPreTakeDamage);
+        ApiEventManager.OnTakeDamage.AddListener(this, _sion, OnTakeDamage);
         ApiEventManager.OnLevelUpSpell.AddListener(this, _sion.Spells[1], OnLevelUpSpell);
     }
     
@@ -28,16 +28,22 @@ public class CharScriptSion : ICharScript {
         //AddBuff("SionPassive", 25000f, 1, spell, owner, owner, true);
     }
 
-    private void OnPreTakeDamage(DamageData data)
+    private void OnTakeDamage(DamageData data)
     {
-        if (data.PostMitigationDamage > data.Target.Stats.CurrentHealth)
+        if (data.Target.Stats.CurrentHealth > 0
+            || _sion.IsZombie || _sion.HasBuff("SionPassiveZombie") || _sion.HasBuff("SionPassiveDelay")) return;
+        var deferredDamageData = new DamageData()
         {
-            _sion.CharVars.Set("deferredDamageData", data);
-            data.Damage = 0f;
-            data.PostMitigationDamage = 0f;
-            data.DamageResultType = DamageResultType.RESULT_INVULNERABLE;
-            AddBuff("SionPassiveDelay", 1.75f, 1, _spell, _sion, _sion);
-        }
+            Damage = data.Damage,
+            DamageType = data.DamageType,
+            DamageSource = data.DamageSource,
+            DamageResultType = data.DamageResultType,
+            Target = data.Target,
+            Attacker = data.Attacker,
+            CallForHelpAttacker = data.CallForHelpAttacker,
+        };
+        _sion.CharVars.Set("deferredDamageData", deferredDamageData);
+        AddBuff("SionPassiveDelay", 1.5f, 1, _spell, _sion, _sion);
     }
 
     private void OnLevelUpSpell(Spell spell)
