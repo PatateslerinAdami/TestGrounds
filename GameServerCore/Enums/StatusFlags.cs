@@ -26,8 +26,14 @@ namespace GameServerCore.Enums
         DisableAmbientGold = 1 << 6,
         Feared = 1 << 8,
         ForceRenderParticles = 1 << 9,
+        // GhostProof is the DERIVED "immune to all ghost pass-through" state (Riot Actor_Common::
+        // IsGhostProof == GhostProofForAllies && GhostProofForEnemies). The two directional flags
+        // below are the primitives Riot actually stores (CharacterState mGhostProofForAllies /
+        // mGhostProofForEnemies); collision consults them via ShouldIgnoreCollisionDueToGhost.
         GhostProof = 1 << 10,
         Ghosted = 1 << 11,
+        GhostProofForEnemies = 1 << 7,  // enemies still collide with this unit while it is ghosted (Azir wall soldiers)
+        GhostProofForAllies = 1 << 17,  // allies still collide with this unit while it is ghosted
         IgnoreCallForHelp = 1 << 12,
         Immovable = 1 << 13,
         Invulnerable = 1 << 14,

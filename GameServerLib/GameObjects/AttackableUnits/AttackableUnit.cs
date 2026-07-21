@@ -215,13 +215,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         // slower-accurate (champions/pets) — S1:846 confirms the mapping. Lifecycle: ++ per
         // in-collision pathing tick (S1:5044; the 4.17 increment is unrecovered garble), reset
         // on not-in-collision / constrained rebuild ran (:1739/:1858) / stationary / dashing.
-        // GhostProof/ForAllies/ForEnemies pair-rule flags are NOT tracked. Full evidence chain
-        // (2026-07-19): they are CharacterState bits (CharacterState.h:50-51, setter chain
-        // CharacterState::SetGhostProof* → Actor_Common::SetGhostProof*), i.e. buff/script-layer
-        // capability — NOT character data (no key in our stat JSONs NOR the 4.20 client inibins),
-        // and nothing uses the capability: no BB name in the Lua symbol table, zero usages in
-        // both 4.20 Lua corpora, no BuffType mapping, no recovered setter callers. With all-false
-        // flags the simple Ghosted-skip is behavior-identical to ShouldIgnoreCollisionDueToGhost.
+        // GhostProof/ForAllies/ForEnemies are the pair-rule flags consumed by CanCollide (now ported
+        // faithfully in ShouldIgnoreCollisionDueToGhost). Evidence chain (2026-07-19): they are
+        // CharacterState bits (CharacterState.h:50-51, setter chain CharacterState::SetGhostProof* →
+        // Actor_Common::SetGhostProof*), i.e. buff/script-layer capability — NOT character data (no
+        // key in our stat JSONs NOR the 4.20 client inibins). They stay false by default; nothing
+        // sets them yet, so for ordinary units the body collision reduces to the old "skip if the
+        // other unit is Ghosted" test. Wire evidence: Azir wall soldiers carry Ghosted +
+        // GhostProofForEnemies (ActionState bit13+14, rlp fc985140) — allies pass, enemies blocked —
+        // which is exactly what a directional flag on a wall unit must produce. Wiring the flag onto
+        // those IceBlock-archetype units server-side is the remaining step.
         private int _stuckGhostFrames;
         private int TempGhostThreshold => ((this as ObjAIBase)?.UsesFastPath ?? true) ? 45 : 15;
         public bool IsTemporarilyGhosted => _stuckGhostFrames > TempGhostThreshold;
@@ -2715,8 +2718,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
                 // Buff-ghost only — the escalated temp-ghost does NOT exempt body collision in
-                // 4.17 (CanCollide consults only ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                // 4.17 (CanCollide == !ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
+                if (otherUnit.IsDead || ShouldIgnoreCollisionDueToGhost(otherUnit)) continue;
                 if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
 
                 float distSq = Vector2.DistanceSquared(Position, other.Position);
@@ -2920,6 +2923,72 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// "barely moved" forceRepath gate isn't yet meaningful and the actor-aware wedge repath is
         /// handled by <see cref="UpdateStuckRecovery"/> / <see cref="TryUnstuckRepath"/> (B1).
         /// </summary>
+        /// <summary>
+        /// Faithful port of Riot ActorCollisionState::ShouldIgnoreCollisionDueToGhost(this, other):
+        /// returns true when the two units must NOT body-collide because of ghost state. Consulted
+        /// per neighbour in place of the old simple "skip if other is Ghosted" test — for normal units
+        /// (no GhostProof* flags on either side) it reduces to exactly that test, so ordinary minion/
+        /// champion pathing is unchanged; only ghosted wall units (Azir soldiers set Ghosted +
+        /// GhostProofForEnemies) get the correct team-directional blocking.
+        ///
+        /// "GhostProof" (fully collidable while ghosted) is DERIVED, matching the decomp
+        /// (Actor_Common::IsGhostProof == GhostProofForAllies &amp;&amp; GhostProofForEnemies).
+        /// </summary>
+        private bool ShouldIgnoreCollisionDueToGhost(AttackableUnit other)
+        {
+            bool aGhosted = Status.HasFlag(StatusFlags.Ghosted);
+            bool oGhosted = other.Status.HasFlag(StatusFlags.Ghosted);
+
+            // Neither ghosted → normal collision (the common case, and the old behaviour).
+            if (!aGhosted && !oGhosted)
+            {
+                return false;
+            }
+
+            bool aGpAllies = Status.HasFlag(StatusFlags.GhostProofForAllies);
+            bool aGpEnemies = Status.HasFlag(StatusFlags.GhostProofForEnemies);
+            bool oGpAllies = other.Status.HasFlag(StatusFlags.GhostProofForAllies);
+            bool oGpEnemies = other.Status.HasFlag(StatusFlags.GhostProofForEnemies);
+            bool aGhostProof = aGpAllies && aGpEnemies;
+            bool oGhostProof = oGpAllies && oGpEnemies;
+
+            // L1 gate (mirrors the decomp's control flow): the actor's own GhostProof cancels the
+            // ignore. Reached when the actor is NOT ghosted (only other is), or when BOTH are ghosted.
+            if (aGhosted)
+            {
+                if (oGhostProof)
+                {
+                    return false;
+                }
+                if (oGhosted && aGhostProof)
+                {
+                    return false;
+                }
+                // actor ghosted, other not ghosted → skip L1, fall to the team check.
+            }
+            else if (aGhostProof) // !aGhosted && oGhosted
+            {
+                return false;
+            }
+
+            // Team-directional gate: a ghosted unit still collides with the side it is not proofed
+            // against (allies pass, enemies blocked → GhostProofForEnemies; and vice-versa).
+            if (Team == other.Team)
+            {
+                if (aGpAllies || oGpAllies)
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            if (aGpEnemies)
+            {
+                return false;
+            }
+            return !oGpEnemies;
+        }
+
         private bool RunCollisionResponse(List<GameObject> nearby, Vector2 originalPos, Vector2 originalDelta, float delta)
         {
             const int MaxNumRepath = 4;      // S4 MAX_NUMREPATH (Actor.cpp:163)
@@ -2943,7 +3012,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             foreach (var o in nearby)
             {
                 if (o == this || o is not AttackableUnit au || au.IsDead
-                    || au.Status.HasFlag(StatusFlags.Ghosted))
+                    || ShouldIgnoreCollisionDueToGhost(au))
                 {
                     continue;
                 }
@@ -3264,8 +3333,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (other == this || other.IsToRemove()) continue;
                 if (!(other is AttackableUnit otherUnit)) continue;
                 // Buff-ghost only — the escalated temp-ghost does NOT exempt body collision in
-                // 4.17 (CanCollide consults only ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
-                if (otherUnit.IsDead || otherUnit.Status.HasFlag(StatusFlags.Ghosted)) continue;
+                // 4.17 (CanCollide == !ShouldIgnoreCollisionDueToGhost; P3 2026-07-19).
+                if (otherUnit.IsDead || ShouldIgnoreCollisionDueToGhost(otherUnit)) continue;
                 if (Vector2.Dot(objFwd, other.Position - Position) <= 0f) continue;
 
                 float distSq = Vector2.DistanceSquared(Position, other.Position);
