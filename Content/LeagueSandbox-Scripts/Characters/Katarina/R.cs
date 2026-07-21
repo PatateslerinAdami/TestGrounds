@@ -65,11 +65,11 @@ namespace Spells
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend;
+            const AnimationFlags spell4Flags = AnimationFlags.Lock | AnimationFlags.NoBlend | AnimationFlags.Junk7;
             switch (_katarina.SkinID)
             {
-                default: PlayAnimation(_katarina, "Spell4", scaleTime: 0f, scaleSpeed: 1f, flags: spell4Flags); break;
-                case 7:  PlayAnimation(_katarina, "Spell4", scaleTime: 0.2f, scaleSpeed: 1f, flags: spell4Flags); break;
+                default: PlayAnimation(_katarina, "Spell4", 0, 0, 1, flags: spell4Flags); break;
+                case 7:  PlayAnimation(_katarina, "Spell4", 0, 0, 1, flags: spell4Flags); break;
             }
         }
 
