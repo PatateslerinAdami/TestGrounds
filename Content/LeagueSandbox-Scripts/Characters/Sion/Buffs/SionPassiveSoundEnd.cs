@@ -13,7 +13,7 @@ namespace Buffs;
 internal class SionPassiveSoundEnd : IBuffGameScript
 {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType = BuffType.INTERNAL,
+        BuffType = BuffType.AURA,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         PersistsThroughDeath = true,
         IsHidden = true

@@ -32,8 +32,7 @@ internal class SionPassive : IBuffGameScript
         _sion = buff.SourceUnit;
         _unit = unit;
         _ownerSpell = ownerSpell;
-        ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
-        ApiEventManager.OnZombie.AddListener(this, unit, OnZombie);
+        
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
@@ -41,13 +40,5 @@ internal class SionPassive : IBuffGameScript
         ApiEventManager.OnZombie.RemoveListener(this);
     }
     
-    private void OnDeath(DeathData data) {
-        if (_unit is Champion) {
-            data.BecomeZombie = true;
-        }
-    }
     
-    private void OnZombie(AttackableUnit unit, DeathData data) {
-        AddBuff("SionPassiveDelay", 1.5f, 1, _ownerSpell, unit, _sion);
-    }
 }

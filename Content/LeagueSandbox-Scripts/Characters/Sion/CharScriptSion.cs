@@ -12,17 +12,31 @@ namespace CharScripts;
 
 public class CharScriptSion : ICharScript {
     private ObjAIBase _sion;
+    private Spell _spell;
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
         _sion = owner;
+        _spell = spell;
         ApiEventManager.OnLevelUpSpell.AddListener(this, _sion.Spells[1], OnLevelUpSpell);
     }
     
     public void OnPostActivate(ObjAIBase owner, Spell spell = null)
     {
-        AddBuff("SionPassive", 25000f, 1, spell, owner, owner, true);
+        ApiEventManager.OnDeath.AddListener(this, _sion, OnDeath);
+        ApiEventManager.OnZombie.AddListener(this, _sion, OnZombie);
+        //AddBuff("SionPassive", 25000f, 1, spell, owner, owner, true);
+    }
+    
+    private void OnDeath(DeathData data) {
+        if (data.Unit is Champion) {
+            data.BecomeZombie = true;
+        }
+    }
+    
+    private void OnZombie(AttackableUnit unit, DeathData data) {
+        AddBuff("SionPassiveDelay", 1.5f, 1, _spell, unit, _sion);
     }
 
     private void OnLevelUpSpell(Spell spell)

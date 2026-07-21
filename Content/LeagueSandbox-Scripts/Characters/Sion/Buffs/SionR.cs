@@ -33,6 +33,7 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            SetCharacterVoiceOverride(unit, "Berserk");
             MaxSpeed = Math.Max(0, 950f - unit.GetMoveSpeed());
             SetStatus(unit, StatusFlags.Ghosted, true);
             _p1 = SpellEffectCreate("Sion_Base_R_GlobalSound.troy", unit, unit, unit, boneName: "Root", flags: FXFlags.SimulateWhileOffScreen);
@@ -93,6 +94,7 @@ namespace Buffs
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            ResetCharacterVoiceOverride(unit);
             SetStatus(unit, StatusFlags.Ghosted, false);
             RemoveParticle(_p1);
             RemoveParticle(_p2);

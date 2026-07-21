@@ -177,9 +177,6 @@ namespace Spells
 
         private void StopCharge(bool hitChampion, bool hitWall = false)
         {
-            // Bug fix: StopChanneling in the hitChampion/hitWall branches publishes OnSpellChargeCancel,
-            // which re-enters this method as StopCharge(false, false) and would schedule a second leap +
-            // OnHit — so a collided champion took damage twice. End the charge exactly once.
             if (_chargeStopped) return;
             _chargeStopped = true;
 
@@ -200,14 +197,15 @@ namespace Spells
                 _sion.RegisterTimer(new GameScriptTimer(0.10f, () =>
                 {
                     if (_sion.IsDead) return;
-                    PlayAnimation(_sion, "Spell4_STOP", 0,0, 1,flags: AnimationFlags.Lock | AnimationFlags.NoBlend | AnimationFlags.FreezeAtEnd | AnimationFlags.Junk5 |
-                                                               AnimationFlags.Junk6 | AnimationFlags.Junk7);
+                    PlayAnimation(_sion, "Spell4_STOP", 0, 0, 1, flags: AnimationFlags.Lock | AnimationFlags.NoBlend |
+                                                                        AnimationFlags.FreezeAtEnd |
+                                                                        AnimationFlags.Junk5 |
+                                                                        AnimationFlags.Junk6 | AnimationFlags.Junk7);
                     ApiEventManager.OnMoveEnd.AddListener(this, _sion, OnMoveEnd);
                     ForceMove(_sion, _sion.Position + dir2D * LeapDistance, LeapSpeed, gravity: 0f,
                         facing: ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION,
                         resolve: ForceMovementType.FIRST_COLLISION_HIT, orders: ForceMovementOrdersType.CANCEL_ORDER,
                         movementName: "SionRLeap");
-                    _spell.CastInfo.InstanceVars.Set("hasLeaped", false);
                 }));
             }
             else if (hitWall)
@@ -218,9 +216,11 @@ namespace Spells
                         ChannelingStopSource.StunnedOrSilencedOrTaunted);
                 }
 
-                PlayAnimation(_sion, "Spell4", 0,0, 1, AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
+                PlayAnimation(_sion, "Spell4", 0, 0, 1,
+                    AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
                 _spell.CastInfo.InstanceVars.Set("hasLeaped", false);
-                AddBuff("Stun", _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel], 1, _spell, _sion, _sion);
+                AddBuff("Stun", _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel], 1, _spell, _sion,
+                    _sion);
                 // Deal the slam damage in place — previously this only landed via the (now suppressed)
                 // re-entrant leap path, so without this explicit call a wall collision would deal no damage.
                 OnHit();
@@ -233,7 +233,8 @@ namespace Spells
                 }
 
                 _spell.CastInfo.InstanceVars.Set("hasLeaped", false);
-                PlayAnimation(_sion, "Spell4_Hit", 0, 0, 1, AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
+                PlayAnimation(_sion, "Spell4_Hit", 0, 0, 1,
+                    AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
                 OnHit();
             }
         }
@@ -241,7 +242,9 @@ namespace Spells
         private void OnMoveEnd(AttackableUnit unit, ForceMovementParameters parameters)
         {
             if (parameters.MovementName != "SionRLeap") return;
-            PlayAnimation(_sion, "Spell4", 0, 0, 1, AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
+            PlayAnimation(_sion, "Spell4", 0, 0, 1,
+                AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
+            _spell.CastInfo.InstanceVars.Set("hasLeaped", true);
             OnHit();
             ApiEventManager.OnMoveEnd.RemoveListener(this, _sion, OnMoveEnd);
         }
@@ -282,8 +285,10 @@ namespace Spells
                     }
                     else
                     {
-                        AddBuff("SionRTarget", _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel], 1, _spell, unit, _sion);
-                        AddBuff("Stun", _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel], 1, _spell, unit, _sion);
+                        AddBuff("SionRTarget", _spell.SpellData.EffectLevelAmount[5][_spell.CastInfo.SpellLevel], 1,
+                            _spell, unit, _sion);
+                        AddBuff("Stun", _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel], 1, _spell,
+                            unit, _sion);
                     }
 
                     var ad = _sion.Stats.AttackDamage.Total * _spell.SpellData.Coefficient;
@@ -292,7 +297,41 @@ namespace Spells
                         false);
                 }
             }
-            StopAnimation(_sion, "Spell4_STOP", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
+
+            _sion.RegisterTimer(new GameScriptTimer(0.10f,
+                () =>
+                {
+                    StopAnimation(_sion, "Spell4_STOP", StopAnimationFlags.FadeOut | StopAnimationFlags.IgnoreLock);
+                }));
+        }
+    }
+
+
+    public class SionVOModeChange : ISpellScript
+    {
+        private ObjAIBase _sion;
+
+        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        {
+            TriggersSpellCasts = false,
+        };
+
+
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _sion = owner;
+        }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+        }
+
+        public void OnSpellCast(Spell spell)
+        {
+        }
+
+        public void OnSpellPostCast(Spell spell)
+        {
         }
     }
 }
