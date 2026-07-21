@@ -1865,17 +1865,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Stats.SetActionState(ActionState.CAN_CAST, Status.HasFlag(StatusFlags.CanCast));
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
             Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
-            Stats.SetActionState(ActionState.CHARMED, Status.HasFlag(StatusFlags.Charmed));
+            // Charm and taunt share wire bit 6 (both replay-verified: Ahri Seduce + PuncturingTaunt).
+            // Drive it from the OR so a charmed-not-taunted (or vice-versa) unit keeps the bit set —
+            // the two SetActionState calls both target bit 6, so each must write the combined value.
+            bool controlledForcedAction = Status.HasFlag(StatusFlags.Charmed) || Status.HasFlag(StatusFlags.Taunted);
+            Stats.SetActionState(ActionState.CHARMED, controlledForcedAction);
             // DisableAmbientGold
 
-            // FEARED (bit 7) / IS_FLEEING (bit 8) are NEVER set on Riot's 4.20 wire — replay-verified
-            // across the whole corpus (statusdump over every replay: 0 transitions of either bit,
-            // while e.g. Taunted flips 264×), including a game where Fiddlesticks feared heroes 28×
-            // (buff "Flee", BuffType FLEE — 4.20 fears ship as FLEE-type buffs; FEAR-type adds: 0).
-            // The CC is conveyed by the buff packet + the forced movement itself; CharacterState has
-            // SetFeared/SetFleeing but the 4.20 server never drives them (vestigial, like
-            // CAN_NOT_ATTACK below). StatusFlags.Feared stays purely server-internal (AI flee logic).
+            // FEARED: DEAD in 4.20 — no buff/effect drives it (user-confirmed; 4.20 fears ship as
+            // FLEE-type). Kept false. NOTE the enum's FEARED=bit7 is a misnomer: wire bit 7 is a
+            // structural always-on bit, unrelated to fear.
             Stats.SetActionState(ActionState.FEARED, false);
+            // IS_FLEEING (wire bit 9, REPLAY-VERIFIED via Shaco "Flee" across 4 champs): Riot DOES set
+            // this on every fear, clearing CanMove alongside. We currently DON'T drive it (CC handled
+            // purely as capability-disable + forced movement) — known faithfulness gap, see
+            // reference_4_20_actionstate_wire_bits. The old "never set" claim measured the wrong
+            // (4.17) bit 8, not the real bit 9.
             Stats.SetActionState(ActionState.IS_FLEEING, false);
 
             Stats.SetActionState(ActionState.FORCE_RENDER_PARTICLES, Status.HasFlag(StatusFlags.ForceRenderParticles));
@@ -1915,7 +1920,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 Stats.SetActionState(ActionState.TARGETABLE, targetable);
             }
 
-            Stats.SetActionState(ActionState.TAUNTED, Status.HasFlag(StatusFlags.Taunted));
+            // Same shared bit 6 as CHARMED above — write the combined value (see controlledForcedAction).
+            Stats.SetActionState(ActionState.TAUNTED, controlledForcedAction);
 
             // M2 Phase 2 (replay-verified 2026-06-27): Riot's wire conveys temporary "can't move/attack" by
             // CLEARING the CAN_MOVE/CAN_ATTACK bits — it NEVER sets CAN_NOT_MOVE/CAN_NOT_ATTACK for CC (decoded
