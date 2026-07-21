@@ -38,8 +38,11 @@ internal class SionPassiveDelay : IBuffGameScript
         unit.SetStatus(StatusFlags.Invulnerable, true);
         unit.SetStatus(StatusFlags.CanMove, false);
         unit.SetStatus(StatusFlags.CanAttack, false);
+        unit.SetStatus(StatusFlags.CanCast, false);
+        _sion.Spells[4].SetCooldown(4f, true);
+        _sion.Spells[5].SetCooldown(4f, true);
         PlayAnimation(buff.SourceUnit, "Passive_Death", 1.7f, 0, 1, AnimationFlags.Lock | AnimationFlags.Junk7);
-        SetCharacterVoiceOverride(buff.SourceUnit, "Max");
+        SetCharacterVoiceOverride(buff.SourceUnit, "Berserk");
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
@@ -48,8 +51,11 @@ internal class SionPassiveDelay : IBuffGameScript
         unit.SetStatus(StatusFlags.Invulnerable, false);
         unit.SetStatus(StatusFlags.CanMove, true);
         unit.SetStatus(StatusFlags.CanAttack, true);
+        unit.SetStatus(StatusFlags.CanCast, true);
         StopAnimation(unit, "Passive_Death", StopAnimationFlags.IgnoreLock);
         AddBuff("SionPassiveZombie", 60f, 1, ownerSpell, _sion, _sion);
         AddBuff("SionPassiveSoundEnd", 60f, 1, ownerSpell, unit, _sion);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,0, SpellbookType.SPELLBOOK_SUMMONER, true);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,1, SpellbookType.SPELLBOOK_SUMMONER, true);
     }
 }

@@ -17,31 +17,44 @@ internal class SionPassiveZombie : IBuffGameScript
 {
     private ObjAIBase _sion;
     private DamageData _defferedDamageData;
+    private float _ticks = 0;
+    private Particle _p1, _p2, _p3, _p4, _p5;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new()
     {
         BuffType = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         PersistsThroughDeath = true,
-        IsHidden = true
     };
 
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
+        _ticks = 0;
         _sion = buff.SourceUnit;
-        _defferedDamageData = _sion.CharVars.Get("deferredDamageData", _defferedDamageData);
+        _defferedDamageData = _sion.CharVars.Get("deferredDamageData", _defferedDamageData) ?? new DamageData()
+        {
+            Damage = 10000f,
+            DamageType = DamageType.DAMAGE_TYPE_TRUE,
+            DamageSource = DamageSource.DAMAGE_SOURCE_RAW,
+            DamageResultType = DamageResultType.RESULT_NORMAL,
+            Target = unit,
+            Attacker = null,
+            CallForHelpAttacker = null,
+        };
+
         ApiEventManager.OnDeath.AddListener(this, _sion, OnDeath);
         unit.TakeDamage(_defferedDamageData.Attacker, _defferedDamageData.Damage, _defferedDamageData.DamageType,
             _defferedDamageData.DamageSource,
             _defferedDamageData.DamageResultType);
-        unit.TakeHeal(_sion, _sion.Stats.HealthPoints.Total, HealType.SelfHeal);
+        unit.Stats.CurrentHealth = unit.Stats.HealthPoints.Total;
+        // Lock attack speed to exactly 1.75 during the zombie: min AND max cap = 1.75, so the
+        // attack cadence (SpellData.GetCharacterAttackDelay clamps to 1/1.75s) is fixed regardless
+        // of Sion's actual AS stat. This is a per-unit override on the unit itself, NOT part of the
+        // StatsModifier, so it must be cleared explicitly in OnDeactivate (see below).
+        OverrideUnitAttackSpeedCap(_sion, true, 1.75f, true, 1.75f);
 
-        var bonusAs = 1.75f;
-        OverrideUnitAttackSpeedCap(_sion, true,1.75f, true, 1.75f);
-
-        StatsModifier.AttackSpeed.BaseBonus = bonusAs;
         StatsModifier.LifeSteal.FlatBonus = 1f;
         unit.AddStatModifier(StatsModifier);
 
@@ -63,17 +76,19 @@ internal class SionPassiveZombie : IBuffGameScript
             { "TAUNT", "PASSIVE_DANCE" },
             { "JOKE", "PASSIVE_DANCE" },
         });
-        SpellEffectCreate("Sion_Base_Passive_Hand.troy", _sion, _sion, _sion, lifetime: buff.Duration, scale: 2.5f,
+        _p1 = SpellEffectCreate("Sion_Base_Passive_Hand.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+            scale: 2.5f,
             boneName: "L_Buffbone_Glb_Hand_Loc",
             flags: FXFlags.SimulateWhileOffScreen);
-        SpellEffectCreate("Sion_Base_Passive_Hand.troy", _sion, _sion, _sion, lifetime: buff.Duration, scale: 2.5f,
+        _p2 = SpellEffectCreate("Sion_Base_Passive_Hand.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+            scale: 2.5f,
             boneName: "R_Buffbone_Glb_Hand_Loc",
             flags: FXFlags.SimulateWhileOffScreen);
-        SpellEffectCreate("Sion_Base_Passive_Skin.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+        _p3 = SpellEffectCreate("Sion_Base_Passive_Skin.troy", _sion, _sion, _sion, lifetime: buff.Duration,
             flags: FXFlags.SimulateWhileOffScreen);
-        SpellEffectCreate("Sion_Base_Passive_Cas.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+        _p4 = SpellEffectCreate("Sion_Base_Passive_Cas.troy", _sion, _sion, _sion, lifetime: buff.Duration,
             flags: FXFlags.SimulateWhileOffScreen);
-        SpellEffectCreate("Sion_Base_Passive_Smoke.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+        _p5 = SpellEffectCreate("Sion_Base_Passive_Smoke.troy", _sion, _sion, _sion, lifetime: buff.Duration,
             flags: FXFlags.SimulateWhileOffScreen);
         for (var i = 0; i < 4; i++)
         {
@@ -81,11 +96,32 @@ internal class SionPassiveZombie : IBuffGameScript
         }
     }
 
+    public void OnUpdate(Buff buff, float diff)
+    {
+        if (_sion.Stats.CurrentHealth <= 0)
+        {
+            RemoveBuff(buff);
+        }
+        else
+        {
+            ExecutePeriodically(buff.BuffVars, "SionPassiveZombieHealthDecayTicks", 250f, false, 0,
+                () =>
+                {
+                    _ticks++;
+                    var level = _sion.Stats.Level;
+                    var baseLoss = 1f + level;
+                    var increment = 0.7f + 0.7f * level;
+                    _sion.Stats.CurrentHealth -= baseLoss + (_ticks - 1) * increment;
+                });
+        }
+    }
+
     private void OnHeal(HealData data)
     {
-        if (data.HealType == HealType.SelfHeal)
+        if (data.HealType is HealType.SelfHeal or HealType.SpellVamp or HealType.PhysicalVamp
+            or HealType.HealthRegeneration or HealType.Drain)
         {
-            
+            data.HealAmount = 0f;
         }
     }
 
@@ -104,7 +140,7 @@ internal class SionPassiveZombie : IBuffGameScript
     private void OnDeath(DeathData data)
     {
         data.BecomeZombie = true;
-        ApiEventManager.OnDeath.RemoveListener(this);
+        ApiEventManager.OnDeath.RemoveListener(this, _sion, OnDeath);
     }
 
 
@@ -112,8 +148,14 @@ internal class SionPassiveZombie : IBuffGameScript
     {
         ApiEventManager.OnHitUnit.RemoveListener(this, _sion, OnHit);
         _sion.SetStatus(StatusFlags.Ghosted, false);
-        ResetCharacterVoiceOverride(buff.SourceUnit);
+        ResetCharacterVoiceOverride(_sion);
         _sion.RemoveOverrideAutoAttack();
+        // Clear the 1.75 min/max attack-speed lock set in OnActivate. Replay-verified (Sion rlp
+        // bae83ecc, t=382.597): Riot does NOT drop the override flags — it keeps DoOverrideMax/Min
+        // TRUE and sends the sentinel value -1.0 (client + server GetCharacterAttackDelay treat any
+        // value <= 0 as "no cap" -> gcd default). Sending 0/false instead makes the client clamp AS
+        // to 0 -> attacks look frozen/super slow.
+        OverrideUnitAttackSpeedCap(_sion, true, -1f, true, -1f);
         unit.SetAnimStates(new Dictionary<string, string>
         {
             { "ATTACK1", "" },
@@ -129,11 +171,18 @@ internal class SionPassiveZombie : IBuffGameScript
             { "TAUNT", "" },
             { "JOKE", "" },
         });
-
+        RemoveParticle(_p1);
+        RemoveParticle(_p2);
+        RemoveParticle(_p3);
+        RemoveParticle(_p4);
+        RemoveParticle(_p5);
         SetSpell(_sion, "SionQ", SpellSlotType.SpellSlots, 0);
         SetSpell(_sion, "SionW", SpellSlotType.SpellSlots, 1);
         SetSpell(_sion, "SionE", SpellSlotType.SpellSlots, 2);
         SetSpell(_sion, "SionR", SpellSlotType.SpellSlots, 3);
+        RemoveBuff(_sion, "SionPassiveSoundEnd", _sion);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,0, SpellbookType.SPELLBOOK_SUMMONER, false);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,1, SpellbookType.SPELLBOOK_SUMMONER, false);
         _sion.EndZombie();
     }
 }
