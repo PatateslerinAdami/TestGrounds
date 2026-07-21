@@ -131,7 +131,7 @@ namespace GameServerLib.GameObjects
             );
             while(campMonster.Stats.Level < monster.InitialLevel)
             {
-                campMonster.Stats.LevelUp();
+                campMonster.Stats.LevelUp(_game.Map.MapData.StatsProgression);
             }
             Monsters.Add(campMonster);
             ApiEventManager.OnDeath.AddListener(campMonster, campMonster, OnMonsterDeath, true);
