@@ -217,7 +217,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             ManaCost = new float[64];
             ManaCostInc = new float[64];
             ManaCostMult = new float[64];
-            ActionState = ActionState.CAN_ATTACK | ActionState.CAN_CAST | ActionState.CAN_MOVE | ActionState.TARGETABLE;
+            ActionState = ActionState.CAN_ATTACK | ActionState.CAN_CAST | ActionState.CAN_MOVE | ActionState.SELECTABLE;
             IsTargetable = true;
             IsTargetableToTeam = SpellDataFlags.TargetableToAll;
 

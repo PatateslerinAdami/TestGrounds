@@ -231,7 +231,11 @@ namespace LeagueSandbox.GameServer.Content
             GoldGivenOnDeath = file.GetFloat("Data", "GoldGivenOnDeath", GoldGivenOnDeath);
             HpRegenPerLevel = file.GetFloat("Data", "HPRegenPerLevel", HpRegenPerLevel);
             HpPerLevel = file.GetFloat("Data", "HPPerLevel", HpPerLevel);
-            Immobile = file.GetBool("Data", "Imobile", Immobile);
+            // Riot's real chardata key is the typo "Imobile" (byte-verified); but the converted stat
+            // JSONs in this repo spell it "Immobile" (only SRU_Baron currently has it). Read both so
+            // the flag lands regardless of spelling — otherwise Baron's displacement-immunity (and the
+            // IMMOVABLE ActionState bit 3 it drives on the wire) is silently lost.
+            Immobile = file.GetBool("Data", "Imobile", file.GetBool("Data", "Immobile", Immobile));
 
             var isMeleeStr = file.GetString("Data", "IsMelee", IsMelee ? "Yes" : "No");
             IsMelee = isMeleeStr.Equals("Yes", StringComparison.OrdinalIgnoreCase)

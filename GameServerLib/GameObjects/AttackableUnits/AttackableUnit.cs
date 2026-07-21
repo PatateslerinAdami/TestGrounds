@@ -1864,7 +1864,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // so CAN_CAST mirrors the capability directly — Riot's wire representation (replay-verified).
             Stats.SetActionState(ActionState.CAN_CAST, Status.HasFlag(StatusFlags.CanCast));
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
-            Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
+            Stats.SetActionState(ActionState.CAN_NOT_MOVE, IsDisplacementImmune);
             // Charm and taunt share wire bit 6 (both replay-verified: Ahri Seduce + PuncturingTaunt).
             // Drive it from the OR so a charmed-not-taunted (or vice-versa) unit keeps the bit set —
             // the two SetActionState calls both target bit 6, so each must write the combined value.
@@ -1904,7 +1904,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             bool targetable = Status.HasFlag(StatusFlags.Targetable);
             Stats.IsTargetable = targetable;
             // USEABLE units are deliberately excluded from this mirror. Bit 23 is Riot's mSelectable
-            // (CharacterState.h CompressedStates — our enum name TARGETABLE is a misnomer): it
+            // (CharacterState.h CompressedStates — ActionState.SELECTABLE): it
             // gates MOUSE-PICKING, and the client's use-cursor branch checks IsUseable() on the
             // picked selection WITHOUT any IsTargetable test (HudCursorTargetLogic.cpp:908,
             // kCursorModeCaptureUse), unlike the attack/select branches. So click-to-use units
@@ -1917,20 +1917,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Replicate&lt;int&gt;), consistent with ValidTargetCheck's team-blind useable escape.
             if (!CharData.IsUseable)
             {
-                Stats.SetActionState(ActionState.TARGETABLE, targetable);
+                Stats.SetActionState(ActionState.SELECTABLE, targetable);
             }
 
             // Same shared bit 6 as CHARMED above — write the combined value (see controlledForcedAction).
             Stats.SetActionState(ActionState.TAUNTED, controlledForcedAction);
 
-            // M2 Phase 2 (replay-verified 2026-06-27): Riot's wire conveys temporary "can't move/attack" by
-            // CLEARING the CAN_MOVE/CAN_ATTACK bits — it NEVER sets CAN_NOT_MOVE/CAN_NOT_ATTACK for CC (decoded
-            // real champion ActionState: stun/sleep/etc. = 0x800000, all positive caps cleared, no CAN_NOT_*
-            // bit). CC now clears the CAN_MOVE/CAN_ATTACK/CAN_CAST capability bits (via BuffType.
-            // ToCapabilityDisable in RecomputeBuffEffects), so those bits already carry it. CAN_NOT_MOVE is
-            // reserved for PERMANENT immobility (CanMoveEver=false: turrets/structures); CAN_NOT_ATTACK has no
-            // permanent source and is never set (matches Riot).
-            Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
+            // M2 Phase 2 (replay-verified): temporary "can't move/attack" CC is conveyed by CLEARING the
+            // CAN_MOVE/CAN_ATTACK/CAN_CAST capability bits — Riot NEVER sets a dedicated CC bit (stun/sleep
+            // = caps cleared). CAN_NOT_ATTACK has no source and is never set.
+            // CAN_NOT_MOVE (bit 3) = Riot's IMMOVABLE, replay-verified DATA-DRIVEN from the chardata
+            // "Imobile"/"Immobile" flag (IsDisplacementImmune): epic monsters like Baron set it
+            // (rlp 312026bc: Baron 0x048C808B, bit3 set + CanMove clear). NOT driven by CanMoveEver —
+            // turrets (CanMoveEver=false) do NOT set bit3 on Riot's wire (they keep CanMove); only
+            // displacement-immune units do.
             Stats.SetActionState(ActionState.CAN_NOT_ATTACK, false);
         }
 
@@ -2002,6 +2002,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             foreach (Buff buff in BuffList)
             {
+                // Skip buffs already deactivated this tick (Remove==true) but not yet pulled from
+                // BuffList by the next UpdateBuffs pass. DeactivateBuff removes the stat modifier
+                // immediately, so without this guard a buff's BuffType-derived CC / capability-disable
+                // flags would linger one extra tick (~33ms) past its duration while its stat effects
+                // already ended — an asymmetry Riot doesn't have (it drops the CharacterState
+                // contribution atomically with the buff). Guarding here ends CC on the same tick as stats.
+                if (buff.Elapsed())
+                {
+                    continue;
+                }
+
                 buffEnable |= buff.StatusEffectsToEnable;
                 if (!ccImmune)
                 {
