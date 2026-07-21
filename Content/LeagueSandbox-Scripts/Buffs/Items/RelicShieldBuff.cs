@@ -49,7 +49,7 @@ public class TalentReaper : IBuffGameScript
         _rechargePeriodMs = _buff.Duration * 1000f;
         _rechargePeriodSeconds = _buff.Duration;
 
-        EditBuff(_buff, (byte)_buff.MaxStacks);
+        EditBuff(_buff, _buff.MaxStacks);
         _wasAtMaxStacks = true;
         UpdateParticles();
 
@@ -93,7 +93,7 @@ public class TalentReaper : IBuffGameScript
             var newStacks = Math.Min(_buff.MaxStacks, currentStacks + ticks);
             if (newStacks != currentStacks)
             {
-                EditBuff(_buff, (byte)newStacks);
+                EditBuff(_buff, newStacks);
                 currentStacks = newStacks;
             }
 
@@ -144,7 +144,7 @@ public class TalentReaper : IBuffGameScript
 
             if ((currentMinionHealth < EXECUTE_HEALTH_THRESHOLD) && (closestAllyHero != null))
             {
-                EditBuff(_buff, (byte)(_buff.StackCount - 1));
+                EditBuff(_buff, _buff.StackCount - 1);
                 UpdateParticles();
 
                 data.Target.TakeDamage(_owner, currentMinionHealth, DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_PROC, false);

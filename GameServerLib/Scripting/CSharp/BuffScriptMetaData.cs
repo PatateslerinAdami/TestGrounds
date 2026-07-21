@@ -14,7 +14,6 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// "server-internal" switch.
         /// </summary>
         public bool IsHidden { get; set; } = false;
-        public bool UpdateInfinite { get; set; } = false;
         
         public bool IsNonDispellable { get; set; } = false; //this is important for things like cleanse or self cc's that should not be removed
         
@@ -23,10 +22,14 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         // (Guardian Angel, Morde COTG) and persist-across-respawn passives (Caitlyn headshot,
         // Wukong/Shyvana passives, mushroom managers) — must set this to true explicitly.
         public bool PersistsThroughDeath { get; set; } = false;
-        
-        public bool PermeatesThroughDeath { get; set; } = false;
 
         public bool IsDeathRecapSource { get; set; } = false;
+
+        // Riot BuffData.mDeathRecapPriority (config key [BuffData] DeathRecapPriority, BuffData.cpp:26):
+        // int, DEFAULT 4 (a 0/absent value falls back to 4). Orders which sources a death recap credits
+        // when several contributed — lower/higher priority decides display precedence. Config-driven in
+        // Riot (not a Lua/BB API); modelled here so a buff can carry its priority to the death-recap layer.
+        public int DeathRecapPriority { get; set; } = 4;
 
         public int OnPreDamagePriority { get; set; } = 0;
 

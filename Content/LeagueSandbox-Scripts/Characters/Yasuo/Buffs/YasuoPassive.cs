@@ -98,7 +98,7 @@ namespace Buffs
                 return;
             }
 
-            EditBuff(charge, (byte)stacks);
+            EditBuff(charge, stacks);
             _lastFlowCounter = stacks;
         }
 

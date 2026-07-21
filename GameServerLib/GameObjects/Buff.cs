@@ -132,6 +132,9 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public BuffAddType BuffAddType { get; }
         public BuffType BuffType { get; }
+        /// <summary>Script-friendly alias for <see cref="Stackable.StackCount"/> (int) — lets scripts read
+        /// stacks/counter without touching the wire byte width (e.g. EditBuff(b, b.Stacks - 1)).</summary>
+        public int Stacks => StackCount;
         public float Duration { get; }
         public bool Hidden { get; set; }
         public bool IsHidden => Hidden;
@@ -299,12 +302,30 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             if (result && sendPacket)
             {
-                // Client computes mEndTime = now + duration (BuffInstance::ResizeClient), so the wire
-                // `duration` must be REMAINING time, not full — otherwise a mid-life stack change resets
-                // the timer ring to full. Renewal paths reset TimeElapsed first, so remaining == full there.
-                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
+                NotifyStackChange();
             }
             return result;
+        }
+
+        /// <summary>
+        /// Routes a stack/count change to the correct wire packet. COUNTER-type buffs carry their value
+        /// as an int32 via NPC_BuffUpdateNumCounter — BuffUpdateCount's Count is a byte (truncates &gt;255)
+        /// and its ResizeClient path never sets the client mCounter, so a COUNTER buff sent via
+        /// BuffUpdateCount would not update the displayed number. Everything else uses BuffUpdateCount with
+        /// the REMAINING duration (the client computes mEndTime = now + duration, so full Duration would
+        /// reset the timer ring — renewal paths reset TimeElapsed first, so remaining == full there).
+        /// Mirrors <see cref="Refresh"/> / EditBuff / EditBuffCounter.
+        /// </summary>
+        private void NotifyStackChange()
+        {
+            if (BuffType == BuffType.COUNTER)
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(this);
+            }
+            else
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
+            }
         }
 
         public override bool DecrementStackCount() => DecrementStackCount(true);
@@ -321,8 +342,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 }
                 else if (sendPacket)
                 {
-                    // Remaining duration, not full — see IncrementStackCount.
-                    _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
+                    NotifyStackChange();
                 }
             }
             return result;
@@ -338,17 +358,36 @@ namespace LeagueSandbox.GameServer.GameObjects
             base.SetStacks(newStacks);
             if (sendPacket)
             {
-                // Remaining duration, not full — see IncrementStackCount.
-                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Math.Max(0f, Duration - TimeElapsed), TimeElapsed);
+                NotifyStackChange();
             }
         }
 
         public void Refresh()
         {
             ResetTimeElapsed();
-            // Hidden buffs are replicated too (wire IsHidden=1) — see BuffIsReplicated in
-            // AttackableUnit for the decomp evidence.
-            _game.PacketNotifier.NotifyNPC_BuffReplace(this);
+            // Renewal signal = NPC_BuffUpdateCount with runningTime=0 (after ResetTimeElapsed the
+            // remaining time == full Duration and rt == 0), NOT NPC_BuffReplace.
+            // DECOMP-verified (4.17 mac, BuffManagerClient.cpp): both PKT_NPC_BuffUpdateCount (:869)
+            // and PKT_NPC_BuffReplace (:731) handlers converge on the SAME renewal path —
+            // BuffInstance::ResizeClient(duration, count, rt) + BuffScriptInstance::Renew(caster).
+            // ResizeClient (BuffInstance.cpp:579) sets mStartTime = now - rt, mEndTime = now + duration,
+            // so rt=0 fully resets the timer ring exactly like Replace; UpdateCount additionally carries
+            // the stack count (Replace keeps the existing count, forces rt=0). Replay-verified: 98% of
+            // wire renewals are BuffUpdateCount(rt=0); Replace is reserved for permanent-aura/late-joiner
+            // resyncs (project_buff_wire_semantics). Pulse auras (Taric RadianceAura ~1s, ShatterAura
+            // ~0.5s) renew via BuffUpdateCount(rt=0). Path taken by every RENEW_EXISTING re-add +
+            // FrozenMallet/Rylais slow refresh. Hidden buffs are replicated too (IsHidden=1).
+            if (BuffType == BuffType.COUNTER)
+            {
+                // COUNTER carries its value as int32 via NumCounter (BuffUpdateCount's byte Count
+                // would truncate); keep the timer-resetting Replace + a counter re-send.
+                _game.PacketNotifier.NotifyNPC_BuffReplace(this);
+                _game.PacketNotifier.NotifyNPC_BuffUpdateNumCounter(this);
+            }
+            else
+            {
+                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, 0f);
+            }
         }
         public void Update(float diff)
         {

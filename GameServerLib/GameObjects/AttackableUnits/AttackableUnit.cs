@@ -3651,6 +3651,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     {
                         RemoveBuffSlot(b);
                     }
+                    // Riot BuffScriptInstance::Renew (BuffScriptClient.cpp:354) re-attributes the buff's
+                    // caster to the renewing source on every renewal (mCasterObjID = packet caster;
+                    // RefreshSourceName if it changed). Mirror it: a renew by a DIFFERENT caster updates
+                    // SourceUnit so the wire CasterNetID and script attribution follow the latest applier.
+                    if (b.SourceUnit != null && b.SourceUnit != parentBuff.SourceUnit)
+                    {
+                        parentBuff.SourceUnit = b.SourceUnit;
+                    }
                     parentBuff.Refresh();
                 }
                 else if (b.BuffAddType == BuffAddType.STACKS_AND_CONTINUE)
@@ -3708,7 +3716,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                             }
                             else
                             {
-                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff, parentBuff.Duration, parentBuff.TimeElapsed);
+                                // REMAINING duration, not full — the active segment keeps counting down while a
+                                // new stack is queued behind it. Replay-verified (FlaskOfCrystalWater, 2026-07-21):
+                                // Riot's count=1→2 packet carries the active segment's remaining time (dur=13.085,
+                                // rt=3.415), NOT the full duration; sending full would reset the client timer ring.
+                                _game.PacketNotifier.NotifyNPC_BuffUpdateCount(parentBuff,
+                                    Math.Max(0f, parentBuff.Duration - parentBuff.TimeElapsed), parentBuff.TimeElapsed);
                             }
                         }
 
@@ -4035,8 +4048,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     }
                     else
                     {
-                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(ParentBuffs[b.Name], ParentBuffs[b.Name].Duration,
-                            ParentBuffs[b.Name].TimeElapsed);
+                        // A queued segment just became the active one — the client should show ITS remaining,
+                        // not the summed total our continuingBuff carries. Replay-verified (FlaskOfCrystalWater,
+                        // 2026-07-21): Riot's count=2→1 boundary packet is (dur=next-segment-full, rt=0); our
+                        // continuingBuff's remaining (Duration - TimeElapsed) equals that next segment's time,
+                        // and rt=0 presents it as freshly started (matches Riot). Sending full/elapsed would
+                        // show the summed duration and reset the ring wrong.
+                        var promoted = ParentBuffs[b.Name];
+                        _game.PacketNotifier.NotifyNPC_BuffUpdateCount(promoted,
+                            Math.Max(0f, promoted.Duration - promoted.TimeElapsed), 0f);
                     }
                 }
             }

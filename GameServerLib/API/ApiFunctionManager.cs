@@ -654,7 +654,7 @@ namespace LeagueSandbox.GameServer.API
         public static Buff AddBuff(
             string buffName,
             float duration,
-            byte stacks,
+            int stacks,
             Spell originspell,
             AttackableUnit onto,
             ObjAIBase from,
@@ -759,6 +759,27 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Remaining time until the buff expires, in SECONDS (0 if already elapsed or null). Mirrors Lua BB
+        /// <c>GetBuffRemainingDuration</c> / Riot <c>BuffInstance::RemainingDuration()</c> (mEndTime − now).
+        /// Units match <see cref="Buff.Duration"/> (seconds), NOT <c>GameTime()</c>'s milliseconds.
+        /// </summary>
+        public static float GetBuffRemainingDuration(Buff buff)
+        {
+            return buff == null ? 0f : Math.Max(0f, buff.Duration - buff.TimeElapsed);
+        }
+
+        /// <summary>
+        /// Engine-clock time (MILLISECONDS, same scale as <c>GameTime()</c>) at which the buff was applied —
+        /// i.e. <c>GameTime() − elapsed</c>. Mirrors Lua BB <c>GetBuffStartTime</c> / Riot
+        /// <c>BuffInstance::mStartTime</c>. Use the <c>GameTime() - GetBuffStartTime(buff)</c> pattern for
+        /// "time since applied". Returns 0 for a null buff.
+        /// </summary>
+        public static float GetBuffStartTime(Buff buff)
+        {
+            return buff == null ? 0f : ApiMapFunctionManager.GameTime() - buff.TimeElapsed * 1000f;
+        }
+
+        /// <summary>
         /// Adds a buff only if no buff with the same name is currently active on the target — does not refresh
         /// or re-stack an existing one. Mirrors Lua API <c>SpellBuffAddNoRenew</c>.
         /// </summary>
@@ -766,7 +787,7 @@ namespace LeagueSandbox.GameServer.API
         public static Buff AddBuffNoRenew(
             string buffName,
             float duration,
-            byte stacks,
+            int stacks,
             Spell originSpell,
             AttackableUnit onto,
             ObjAIBase from,
@@ -787,7 +808,7 @@ namespace LeagueSandbox.GameServer.API
         /// </summary>
         /// <param name="b">Buff instance.</param>
         /// <param name="newStacks">Stacks to set.</param>
-        public static void EditBuff(Buff b, byte newStacks)
+        public static void EditBuff(Buff b, int newStacks)
         {
             if (b == null)
             {
@@ -812,10 +833,10 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
-        /// Sets the counter of a COUNTER-type buff to the given value. Unlike the byte overload,
-        /// the value travels as an int32 via NPC_BuffUpdateNumCounter (client SetCounter(int)), so
-        /// values above 255 are preserved — e.g. Sion W's Soul Furnace shield amount, which is
-        /// replay-verified to reach 500+ (NPC_BuffUpdateNumCounter, BuffType=COUNTER).
+        /// Sets the counter of a COUNTER-type buff to the given value. Unlike <see cref="EditBuff"/>'s
+        /// non-counter path (NPC_BuffUpdateCount, whose wire Count is a byte capped at 255), the value
+        /// travels as an int32 via NPC_BuffUpdateNumCounter (client SetCounter(int)), so values above 255
+        /// are preserved — e.g. Sion W's Soul Furnace shield amount, replay-verified to reach 500+.
         /// </summary>
         /// <param name="b">Buff instance.</param>
         /// <param name="newCounter">Counter value to set.</param>
@@ -902,6 +923,65 @@ namespace LeagueSandbox.GameServer.API
                 if (b.SourceUnit == source)
                 {
                     b.DeactivateBuff();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Removes <paramref name="count"/> stacks of the named buff from <paramref name="target"/>.
+        /// Mirrors Lua BB <c>BBSpellBuffRemoveStacks</c> (BuildingBlocksBase.lua:2368): a loop of
+        /// single-stack removals, optionally caster-filtered. Two stack representations are handled
+        /// the way Riot's per-add-type engine does:
+        /// <list type="bullet">
+        /// <item>STACKS_AND_OVERLAPS — each stack is its own buff instance, so <paramref name="count"/>
+        /// whole instances are deactivated (one <c>SpellBuffRemove</c> per stack in Riot).</item>
+        /// <item>every other add-type — a single instance carries the StackCount, so stacks are peeled
+        /// one at a time; the buff deactivates automatically when its count reaches zero.</item>
+        /// </list>
+        /// A <paramref name="count"/> of 0 mirrors Riot's "remove all present stacks" branch
+        /// (<c>NumStacks==0 → SpellBuffCount</c>). Pass <paramref name="source"/> to only affect
+        /// instances from that caster (like the 3-arg <see cref="RemoveBuff(AttackableUnit,string,ObjAIBase)"/>).
+        /// </summary>
+        /// <param name="target">Unit to remove stacks from.</param>
+        /// <param name="buffName">Buff name to peel.</param>
+        /// <param name="count">Stacks to remove; 0 removes all present stacks of that buff.</param>
+        /// <param name="source">Optional caster filter (null = any caster).</param>
+        public static void RemoveBuffStacks(AttackableUnit target, string buffName, int count, ObjAIBase source = null)
+        {
+            if (target == null || count < 0)
+            {
+                return;
+            }
+
+            // Snapshot: DecrementStackCount/DeactivateBuff mutate the underlying buff collections.
+            var buffs = target.GetBuffsWithName(buffName)
+                .Where(b => source == null || b.SourceUnit == source)
+                .ToArray();
+
+            // count == 0 → Riot's SpellBuffCount branch: remove every present stack.
+            var remaining = count == 0 ? int.MaxValue : count;
+
+            foreach (var b in buffs)
+            {
+                if (remaining <= 0)
+                {
+                    break;
+                }
+
+                if (b.BuffAddType == BuffAddType.STACKS_AND_OVERLAPS)
+                {
+                    // One instance == one stack; drop the whole instance.
+                    b.DeactivateBuff();
+                    remaining--;
+                }
+                else
+                {
+                    // Single instance holds the StackCount; peel it down (auto-deactivates at 0).
+                    while (remaining > 0 && !b.Elapsed())
+                    {
+                        b.DecrementStackCount();
+                        remaining--;
+                    }
                 }
             }
         }
@@ -2114,7 +2194,7 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="buffAttacker">Buff source (BuffAttackerVar); defaults to the attacker.</param>
         public static List<AttackableUnit> ForEachUnitInTargetAreaAddBuff(
             AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
-            string buffName, float buffDuration, byte buffNumberOfStacks = 1,
+            string buffName, float buffDuration, int buffNumberOfStacks = 1,
             ObjAIBase buffAttacker = null, Spell originSpell = null,
             string buffNameFilter = null, bool inclusiveBuffFilter = true,
             VariableTable variableTable = null)
@@ -2130,7 +2210,7 @@ namespace LeagueSandbox.GameServer.API
         /// <see cref="ForEachUnitInTargetAreaAddBuff"/> but visibility-checked.</summary>
         public static List<AttackableUnit> ForEachVisibleUnitInTargetAreaAddBuff(
             AttackableUnit attacker, Vector2 center, float range, SpellDataFlags flags,
-            string buffName, float buffDuration, byte buffNumberOfStacks = 1,
+            string buffName, float buffDuration, int buffNumberOfStacks = 1,
             ObjAIBase buffAttacker = null, Spell originSpell = null,
             string buffNameFilter = null, bool inclusiveBuffFilter = true,
             VariableTable variableTable = null)
@@ -2142,13 +2222,107 @@ namespace LeagueSandbox.GameServer.API
         }
 
         private static void AddBuffToEach(
-            List<AttackableUnit> units, string buffName, float buffDuration, byte buffNumberOfStacks,
+            List<AttackableUnit> units, string buffName, float buffDuration, int buffNumberOfStacks,
             ObjAIBase buffAttacker, Spell originSpell, VariableTable variableTable)
         {
             foreach (var unit in units)
             {
                 AddBuff(buffName, buffDuration, buffNumberOfStacks, originSpell, unit, buffAttacker,
                     variableTable: variableTable);
+            }
+        }
+
+        // ── Aura maintenance: Riot BB DefUpdateAura / BBDefUpdateAura (BuildingBlocksBase.lua:2155,
+        //    DefUpdateAura(center, range, unitScan, buffName)). Call every aura tick from the aura
+        //    buff's OnUpdate, throttled with ExecutePeriodically.
+        //
+        //    Replay analysis (2026-07-21) shows Riot uses TWO distinct aura wire-models, so we expose
+        //    both. Pick by the aura buff's duration; the tick cadence is PER-AURA (Riot's per-BB
+        //    TickRate), NOT a global constant — measure it from a replay:
+        //
+        //    ┌ PULSE  (short fixed-duration buff, re-applied every tick → BuffUpdateCount stream) ┐
+        //      Taric RadianceAura: dur 1.25s, renewed every ~1000ms; expires ~1 tick after leaving.
+        //      Taric ShatterAura(Self): dur 1.25s, renewed every ~500ms. Duration = tick + margin so
+        //      the buff never lapses between ticks. Use the (…, buffDuration, …) overload.
+        //    └──────────────────────────────────────────────────────────────────────────────────┘
+        //    ┌ TRANSITION (permanent buff, added once on enter, removed on leave, NO renewals) ────┐
+        //      Nocturne/Fiddle ParanoiaMissChance: dur 25000 (permanent), add-once, scan ~1000ms,
+        //      0 BuffUpdateCount/Replace on the wire. Use the (…, HashSet affectedUnits, …) overload.
+        //    └──────────────────────────────────────────────────────────────────────────────────┘
+        //    Both mask visibility (plain BB), matching ForEachUnitInTargetAreaAddBuff.
+
+        /// <summary>
+        /// PULSE aura model — re-applies <paramref name="buffName"/> (RENEW) to every valid unit in
+        /// range each call. Give the buff a short fixed duration a bit above your tick interval
+        /// (Riot: 1.25s for ~1000ms / ~500ms ticks); units that leave range simply let it expire, so
+        /// no membership tracking is needed. This is the common aura model (Taric Radiance/Shatter).
+        /// </summary>
+        /// <param name="center">Aura source; its position is the center and it becomes the buff's SourceUnit.</param>
+        /// <param name="range">Aura radius.</param>
+        /// <param name="unitScan">SpellDataFlags target filter (which teams/unit types the aura affects).</param>
+        /// <param name="buffName">Buff to maintain (should be RENEW_EXISTING, duration = tick + margin).</param>
+        /// <param name="buffDuration">Fixed per-application duration; keep it above the tick interval.</param>
+        /// <param name="originSpell">Optional origin spell for the applied buff.</param>
+        /// <returns>The units refreshed this tick.</returns>
+        public static List<AttackableUnit> DefUpdateAura(
+            ObjAIBase center, float range, SpellDataFlags unitScan, string buffName,
+            float buffDuration, Spell originSpell = null)
+        {
+            if (center == null)
+            {
+                return new List<AttackableUnit>();
+            }
+
+            return ForEachUnitInTargetAreaAddBuff(
+                center, center.Position, range, unitScan,
+                buffName, buffDuration, buffNumberOfStacks: 1,
+                buffAttacker: center, originSpell: originSpell);
+        }
+
+        /// <summary>
+        /// TRANSITION aura model — the aura buff is a permanent buff added ONCE when a unit enters
+        /// range and explicitly removed when it leaves; units that stay get one BuffAdd and no
+        /// renewals (Nocturne/Fiddle Paranoia). The native tracks membership internally; our static
+        /// helper can't, so the caller owns <paramref name="affectedUnits"/> (put it on the aura buff
+        /// script instance and clear it in OnDeactivate). Generalizes the hand-rolled Paranoia loop.
+        /// </summary>
+        /// <param name="center">Aura source; its position is the center and it becomes the buff's SourceUnit.</param>
+        /// <param name="range">Aura radius.</param>
+        /// <param name="unitScan">SpellDataFlags target filter.</param>
+        /// <param name="buffName">Buff to maintain on units in range.</param>
+        /// <param name="affectedUnits">Caller-owned membership set (units currently carrying the aura buff).</param>
+        /// <param name="buffDuration">Applied buff duration; defaults to permanent (removed on leave, not by expiry).</param>
+        /// <param name="infiniteDuration">Whether the applied buff is permanent-on-the-wire (default true).</param>
+        /// <param name="originSpell">Optional origin spell for the applied buff.</param>
+        public static void DefUpdateAura(
+            ObjAIBase center, float range, SpellDataFlags unitScan, string buffName,
+            HashSet<AttackableUnit> affectedUnits,
+            float buffDuration = Buff.PERMANENT_DURATION, bool infiniteDuration = true,
+            Spell originSpell = null)
+        {
+            if (center == null || affectedUnits == null)
+            {
+                return;
+            }
+
+            var inRange = EnumerateValidUnitsInRange(center, center.Position, range, true, unitScan)
+                .ToHashSet();
+
+            // Newcomers: add the aura buff once.
+            foreach (var unit in inRange)
+            {
+                if (affectedUnits.Add(unit))
+                {
+                    AddBuff(buffName, buffDuration, 1, originSpell, unit, center,
+                        infiniteduration: infiniteDuration);
+                }
+            }
+
+            // Leavers: strip the buff and drop them from the set.
+            foreach (var unit in affectedUnits.Where(u => !inRange.Contains(u)).ToList())
+            {
+                RemoveBuff(unit, buffName);
+                affectedUnits.Remove(unit);
             }
         }
 

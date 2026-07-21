@@ -138,7 +138,7 @@ public class Focus : IBuffGameScript {
         // out of combat AND with something to show (StackCount > 0 — a 0 wire Count means "remove").
         _display = null;
         if (!InCombat && _buff.StackCount > 0) {
-            _display = AddBuff("AsheCritChance", 25000f, (byte)stacks, _spell, _ashe, _ashe, true);
+            _display = AddBuff("AsheCritChance", 25000f, stacks, _spell, _ashe, _ashe, true);
             _lastDisplayStacks = stacks;
         }
     }
