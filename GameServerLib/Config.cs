@@ -286,9 +286,14 @@ public class MapData
     public float DeathTimeScalingPercentIncrease { get; set; }
     public float DeathTimeScalingPercentCap { get; set; }
     /// <summary>
-    /// Potential progression of stats per-level of jungle monsters.
+    /// Per-level stat growth factor for this map (LEVELS/MapX/StatsProgression.inibin →
+    /// "PerLevelStatsFactor"). This is Riot's CharacterRecord::mPerLevelStatsFactor (mac 4.17
+    /// CharacterData.cpp:1735), a per-match static shared by ALL units (champions and monsters),
+    /// NOT jungle-monster-specific. Index i is the factor for level i+1 (Level1..Level18); consumed
+    /// as a per-level-up increment in Stats.GetLevelUpStatValue. All shipped
+    /// maps carry the standard curve (0.65 + 0.035*level), so this is data-driven parity rather than
+    /// a behaviour change for stock content.
     /// </summary>
-    /// TODO: Figure out what this is and how to implement it.
     public List<float> StatsProgression { get; private set; }
 
     /// <summary>

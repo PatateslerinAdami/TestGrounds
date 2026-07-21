@@ -810,7 +810,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public virtual bool LevelUp(bool force = true)
         {
-            Stats.LevelUp();
+            Stats.LevelUp(_game.Map.MapData.StatsProgression);
             _game.PacketNotifier.NotifyNPC_LevelUp(this);
             //_game.PacketNotifier.NotifyOnReplication(this, partial: false);
             ApiEventManager.OnLevelUp.Publish(this);
@@ -1805,6 +1805,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             float baseAttackSpeed = Math.Max(0.0001f, Stats.GetTotalAttackSpeed());
             float cooldown = 1.0f / baseAttackSpeed;
+
+            // Per-unit attack-speed cap overrides (Sion zombie 1.75 lock, Karthus, ...). The swing
+            // cadence must honour the same caps the client applies in Spell::ComputeCharacterAttackDelay
+            // (SpellMath.cpp) / our SpellData.GetCharacterAttackDelay — GetTotalAttackSpeed() ignores
+            // them, so without this the server runs attacks off the raw AS stat and the override does
+            // nothing. A MIN AS override caps the delay (1/minAS ceiling); a MAX AS override floors it
+            // (1/maxAS). <= ~0 = no override (matches the client's > 0.00001 gate and the -1 clear).
+            // Gated on an override being present so non-overridden units are untouched.
+            if (MinAttackSpeedOverride > 0.00001f)
+            {
+                float maxDelay = 1.0f / MinAttackSpeedOverride;
+                if (cooldown > maxDelay) cooldown = maxDelay;
+            }
+            if (MaxAttackSpeedOverride > 0.00001f)
+            {
+                float minDelay = 1.0f / MaxAttackSpeedOverride;
+                if (minDelay > cooldown) cooldown = minDelay;
+            }
 
             if (spell == null || !spell.CastInfo.IsAutoAttack)
             {

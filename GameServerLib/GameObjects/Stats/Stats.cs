@@ -487,8 +487,15 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             }
         }
 
-        public void LevelUp()
+        // Per-match stat growth factor table (map StatsProgression, Riot's
+        // CharacterRecord::mPerLevelStatsFactor). Supplied by the level-up caller; null for units
+        // levelled up before/without a map table, in which case GetLevelUpStatValue falls back to the
+        // closed-form curve.
+        private IReadOnlyList<float> _statsProgression;
+
+        public void LevelUp(IReadOnlyList<float> statsProgression = null)
         {
+            _statsProgression = statsProgression;
             Level++;
             StatsModifier statsLevelUp = new StatsModifier();
             statsLevelUp.HealthPoints.BaseValue = GetLevelUpStatValue(HealthPerLevel);
@@ -508,6 +515,17 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public float GetLevelUpStatValue(float value)
         {
+            // Riot CharacterRecord::GetStatForLevel (mac 4.17 CharacterData.cpp:1768):
+            //   statForLevel = growthStat * mPerLevelStatsFactor[level - 1]
+            // where mPerLevelStatsFactor is the map's StatsProgression table (index i = Level(i+1)).
+            // We apply it as the per-level-up increment; summed across level-ups it reproduces Riot's
+            // total. When no table is supplied we fall back to the closed-form 0.65 + 0.035*Level,
+            // which is the exact per-step delta of the classic (n-1)*(0.7025 + 0.0175*(n-1)) growth
+            // curve and equals every shipped map's table, so stock content is unaffected.
+            if (_statsProgression != null && Level >= 1 && Level - 1 < _statsProgression.Count)
+            {
+                return value * _statsProgression[Level - 1];
+            }
             return value * (0.65f + 0.035f * Level);
         }
 

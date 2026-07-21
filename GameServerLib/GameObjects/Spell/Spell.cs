@@ -826,6 +826,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // cast frames too slowly at high attack speed.
                 float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
                 float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
+                // Per-unit attack-speed cap overrides (Sion zombie 1.75 lock, ...): clamp the total
+                // cycle to the same bounds the windup already gets via GetCharacterAttackCastDelay and
+                // the client applies in Spell::ComputeCharacterAttackDelay (SpellMath.cpp). The raw
+                // formula above ignores the cap, so DesignerTotalTime — the attack cadence — never
+                // reflects it and the swing rate stays at the base AS. A MIN AS override caps the delay
+                // (1/minAS), a MAX AS override floors it (1/maxAS); <= ~0 = no override. Gated so
+                // non-overridden units keep the exact replay-verified raw value.
+                if (CastInfo.Owner.MinAttackSpeedOverride > 0.00001f)
+                {
+                    float maxDelay = 1.0f / CastInfo.Owner.MinAttackSpeedOverride;
+                    if (autoAttackTotalTime > maxDelay) autoAttackTotalTime = maxDelay;
+                }
+                if (CastInfo.Owner.MaxAttackSpeedOverride > 0.00001f)
+                {
+                    float minDelay = 1.0f / CastInfo.Owner.MaxAttackSpeedOverride;
+                    if (minDelay > autoAttackTotalTime) autoAttackTotalTime = minDelay;
+                }
                 // Windup = client Spell::ComputeCharacterAttackCastDelay: a Lerp between the unscaled
                 // and AS-scaled cast time governed by the per-slot AttackSpeedRatio. ratio=1 (Talon,
                 // Jinx — replay-verified) collapses to autoAttackTotalTime * castPercent (the old
@@ -1281,6 +1298,23 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 // cast frames too slowly at high attack speed.
                 float attackSpeedMod = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
                 float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent) / attackSpeedMod;
+                // Per-unit attack-speed cap overrides (Sion zombie 1.75 lock, ...): clamp the total
+                // cycle to the same bounds the windup already gets via GetCharacterAttackCastDelay and
+                // the client applies in Spell::ComputeCharacterAttackDelay (SpellMath.cpp). The raw
+                // formula above ignores the cap, so DesignerTotalTime — the attack cadence — never
+                // reflects it and the swing rate stays at the base AS. A MIN AS override caps the delay
+                // (1/minAS), a MAX AS override floors it (1/maxAS); <= ~0 = no override. Gated so
+                // non-overridden units keep the exact replay-verified raw value.
+                if (CastInfo.Owner.MinAttackSpeedOverride > 0.00001f)
+                {
+                    float maxDelay = 1.0f / CastInfo.Owner.MinAttackSpeedOverride;
+                    if (autoAttackTotalTime > maxDelay) autoAttackTotalTime = maxDelay;
+                }
+                if (CastInfo.Owner.MaxAttackSpeedOverride > 0.00001f)
+                {
+                    float minDelay = 1.0f / CastInfo.Owner.MaxAttackSpeedOverride;
+                    if (minDelay > autoAttackTotalTime) autoAttackTotalTime = minDelay;
+                }
                 // Windup = client Spell::ComputeCharacterAttackCastDelay: a Lerp between the unscaled
                 // and AS-scaled cast time governed by the per-slot AttackSpeedRatio. ratio=1 (Talon,
                 // Jinx — replay-verified) collapses to autoAttackTotalTime * castPercent (the old

@@ -96,7 +96,12 @@ namespace MapScripts.Map10
         public static Dictionary<TurretType, int[]> TurretItems { get; set; } = new Dictionary<TurretType, int[]>
         {
             { TurretType.OUTER_TURRET, new[] { 1500, 1501, 1502, 1503 } },
-            { TurretType.INNER_TURRET, new[] { 1500, 1501, 1502, 1503, 1504 } },
+            // No 1504 (Vanguard): that item is the inner-turret champion-shield aura, which is a
+            // Summoner's-Rift-only mechanic in 4.20. Riot applies it via the SR level script
+            // (map11/Scripts/LevelScript.lua:552 ApplyPersistentBuff(innerTurret,
+            // "SRTurretSecondaryShielder") — SR-prefixed, referenced by NO other map). TT (Map10)
+            // never grants a turret shield, so its inner turrets carry the same base set as the outer.
+            { TurretType.INNER_TURRET, new[] { 1500, 1501, 1502, 1503 } },
             { TurretType.INHIBITOR_TURRET, new[] { 1501, 1502, 1503, 1505 } },
             { TurretType.NEXUS_TURRET, new[] { 1501, 1502, 1503, 1505 } }
         };
