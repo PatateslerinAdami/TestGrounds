@@ -235,6 +235,7 @@ namespace Spells
                 _spell.CastInfo.InstanceVars.Set("hasLeaped", false);
                 PlayAnimation(_sion, "Spell4_Hit", 0, 0, 1,
                     AnimationFlags.NoBlend | AnimationFlags.Junk5 | AnimationFlags.Junk7);
+                AddBuff("SionRSoundExplosionHitChampion", 0.25f, 1, _spell, _sion, _sion);
                 OnHit();
             }
         }
@@ -254,6 +255,7 @@ namespace Spells
             if (_spell.CastInfo.InstanceVars.Get("hasLeaped", true))
             {
                 var impactPos = _sion.Position + new Vector2(_sion.Direction.X, _sion.Direction.Z) * 200;
+                AddBuff("SionRSoundExplosion", 0.25f, 1, _spell, _sion, _sion);
                 SpellEffectCreate("Sion_Base_R_Explosion.troy", _sion, null, null, impactPos, scale: 1.1f,
                     lifetime: 0.5f, flags: FXFlags.SimulateWhileOffScreen);
 
@@ -271,6 +273,7 @@ namespace Spells
             }
             else
             {
+                AddBuff("SionRSoundExplosion", 0.25f, 1, _spell, _sion, _sion);
                 SpellEffectCreate("Sion_Base_R_Explosion.troy", _sion, null, null, _sion.Position, scale: 1.1f,
                     lifetime: 0.5f, flags: FXFlags.SimulateWhileOffScreen);
                 var unitsInRange = GetUnitsInRange(_sion, _sion.Position, 400f, true,

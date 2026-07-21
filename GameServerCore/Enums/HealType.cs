@@ -9,5 +9,6 @@ public enum HealType : byte
     OutgoingHeal = 0x4,
     IncomingHeal = 0x5,
     Drain = 0x6,
-    PhysicalVamp = 0x7
+    PhysicalVamp = 0x7,
+    DirectHeal = 0x8 //this was added in patch 5.1 but its a good idea to have it here already
 }

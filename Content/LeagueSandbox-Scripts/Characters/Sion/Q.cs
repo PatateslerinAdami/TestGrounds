@@ -129,6 +129,7 @@ namespace Spells
             // CanMoveWhileChanneling=1 spells, so without this a re-path (right-click) during
             // the charge WOULD move Sion server-side. Released in CleanUpCharge on all end paths.
             _sion.SetStatus(StatusFlags.CanMove, false);
+            _sion.SetStatus(StatusFlags.CanCast, true);
             _moveLockHeld = true;
 
             // Wire: SetAnimStates {ATTACK1 -> Spell1_CHRG}; the Spell1 charge loop itself is

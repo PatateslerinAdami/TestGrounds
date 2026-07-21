@@ -34,4 +34,16 @@ public class SionQ : IBuffGameScript
     };
 
     public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
+
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, true);
+        SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 3, SpellbookType.SPELLBOOK_CHAMPION, true);
+    }
+
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 2, SpellbookType.SPELLBOOK_CHAMPION, false);
+        SealSpellSlot(buff.SourceUnit, SpellSlotType.SpellSlots, 3, SpellbookType.SPELLBOOK_CHAMPION, false);
+    }
 }

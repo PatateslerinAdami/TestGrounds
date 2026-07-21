@@ -23,7 +23,8 @@ namespace Spells
             DoesntBreakShields = true,
             TriggersSpellCasts = true,
             CastingBreaksStealth = false,
-            IsDamagingSpell = true
+            IsDamagingSpell = true,
+            AutoFaceDirection = false
         };
 
         
@@ -54,7 +55,8 @@ namespace Spells
             DoesntBreakShields = true,
             TriggersSpellCasts = false,
             CastingBreaksStealth = false,
-            IsDamagingSpell = true
+            IsDamagingSpell = true,
+            AutoFaceDirection = false
         };
 
         
@@ -72,6 +74,30 @@ namespace Spells
             // 59 shield ends in the test replay). No SionWDetonate marker buff: Riot never sends one
             // (SionWDetonate is a spell, replicated via ChangeSlotSpellData, not a buff).
             RemoveBuff(_sion, "SionWShieldStacks");
+        }
+    }
+    
+    public class SionPassiveSpeed : ISpellScript
+    {
+        private ObjAIBase _sion;
+        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        {
+            NotSingleTargetSpell = false,
+            DoesntBreakShields = true,
+            TriggersSpellCasts = false,
+            CastingBreaksStealth = false,
+            IsDamagingSpell = true,
+            AutoFaceDirection = false
+        };
+
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _sion = owner;
+        }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            AddBuff("SionPassiveSpeed", 3f, 1, spell, _sion, _sion);
         }
     }
 }
