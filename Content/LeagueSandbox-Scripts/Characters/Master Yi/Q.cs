@@ -3,6 +3,7 @@ using System.Numerics;
 using GameMaths;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
@@ -21,6 +22,7 @@ public class AlphaStrike : ISpellScript
     private ObjAIBase _masterYi;
     private AttackableUnit _target;
     private Spell _spell;
+
     // Targets the chain marked during the dash. Damage is dealt to all of them at once in
     // OnChainEnd (replay: every Alpha Strike target takes damage in the same tick, not per hop).
     private readonly List<AttackableUnit> _hitTargets = new();
@@ -69,7 +71,8 @@ public class AlphaStrike : ISpellScript
     private void OnUpdateStats(AttackableUnit unit, float diff)
     {
         var ad = _masterYi.Stats.AttackDamage.Total * _spell.SpellData.Coefficient;
-        var dmg = (_spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] + ad) * _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel];
+        var dmg = (_spell.SpellData.EffectLevelAmount[1][_spell.CastInfo.SpellLevel] + ad) *
+                  _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel];
         SetSpellToolTipVar(unit, 0, dmg, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
     }
 
@@ -85,13 +88,13 @@ public class AlphaStrike : ISpellScript
 
     public void OnSpellCast(Spell spell)
     {
-        SpellEffectCreate("MasterYi_Base_Q_Cas.troy", _masterYi, null, _masterYi, boneName: "C_Buffbone_Glb_Center_Loc",
-            flags: FXFlags.SimulateWhileOffScreen | FXFlags.PARDriven);
         AddBuff("AlphaStrike", 3f, 1, spell, _masterYi, _masterYi);
     }
 
     private void OnChainEnd(Spell spell, SpellMissile missile)
     {
+        RemoveBuff(_masterYi, "AlphaStrike");
+        
         // Apply all bounce damage simultaneously (replay: every target lands in the same tick),
         // and emit the hit particle on each target at the same moment.
         foreach (var target in _hitTargets)
@@ -112,26 +115,25 @@ public class AlphaStrike : ISpellScript
             if (isCrit)
             {
                 dmg += dmg * _spell.SpellData.EffectLevelAmount[6][_spell.CastInfo.SpellLevel];
-                SpellEffectCreate("MasterYi_Base_Q_Crit_tar.troy", _masterYi, target,  target, flags: FXFlags.SimulateWhileOffScreen, keywordObject: _masterYi);
-                
+                SpellEffectCreate("MasterYi_Base_Q_Crit_tar.troy", _masterYi, target, target,
+                    flags: FXFlags.SimulateWhileOffScreen, keywordObject: _masterYi);
             }
             else
             {
-                SpellEffectCreate("MasterYi_Base_Q_Tar.troy", _masterYi, target, null, flags: FXFlags.UpdateOrientation, keywordObject: _masterYi);
+                SpellEffectCreate("MasterYi_Base_Q_Tar.troy", _masterYi, target, null, flags: FXFlags.UpdateOrientation,
+                    keywordObject: _masterYi);
             }
+
             target.TakeDamage(_masterYi, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK,
                 isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL);
         }
+
         _hitTargets.Clear();
 
-        SpellEffectCreate("MasterYi_Base_Q_End.troy", _masterYi, _masterYi, _masterYi, boneName: "Root",
-            flags: FXFlags.SimulateWhileOffScreen);
-        RemoveBuff(_masterYi, "AlphaStrike");
         if (!_target.IsDead)
         {
             SpellCast(_masterYi, 1, SpellSlotType.ExtraSlots, true, _target, _masterYi.Position);
         }
-
         ApiEventManager.OnSpellHit.RemoveListener(this, spell, OnSpellHit);
         ApiEventManager.OnSpellChainMissileEnd.RemoveListener(this, spell, OnChainEnd);
     }
@@ -190,7 +192,7 @@ public class AlphaStrikeTeleport : ISpellScript
     {
         _target = target;
         _previousPos = _masterYi.Position;
-        
+
         _coords = GetMovePositionByCollisionOffset(_masterYi, _target, 50f);
 
         var landing3D = new Vector3(_coords.X, GetHeightAtLocation(_coords), _coords.Y);
@@ -212,6 +214,7 @@ public class AlphaStrikeTeleport : ISpellScript
         {
             IssueOrder(_masterYi, OrderType.AttackTo, _target);
         }
+
         FaceDirection(_target.Position, _masterYi, true);
     }
 }

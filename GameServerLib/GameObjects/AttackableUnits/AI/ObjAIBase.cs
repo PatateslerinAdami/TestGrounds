@@ -345,7 +345,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// set by the S1 Lua BuildingBlock <c>BBSetDodgePiercing</c>). Checked in <see cref="RollDodge"/>.
         /// Backed by <see cref="StatusFlags.DodgePiercing"/> so it flows through the CharacterState
         /// path and replicates on the wire (ActionState bit 18) exactly like Riot's SetDodgePiercing.
-        /// Plain set/clear (not ref-counted) — same convention as our other non-capability StatusFlags.
+        /// REF-COUNTED like Riot (CharacterState::RefCountedState): each <c>= true</c> adds a hold, each
+        /// <c>= false</c> releases one, and the unit is dodge-piercing while any hold is active — so
+        /// overlapping enablers (two buffs) compose and one expiring does not clear it prematurely.
+        /// The getter reports the current effective state (holds &gt; 0).
         /// </summary>
         public bool DodgePiercing
         {

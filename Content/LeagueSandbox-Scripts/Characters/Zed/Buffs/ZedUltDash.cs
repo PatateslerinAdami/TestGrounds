@@ -92,7 +92,7 @@ internal class ZedUltDash : IBuffGameScript {
         _zedRShadowHandler = rHandlerBuff?.BuffScript as ZedRHandler;
         _zedRShadowHandler?.SetSpellUltShadowSwap();
         _zedRShadowHandler?.SpawnShadow(_zed.Position, _target.Position);
-        HideHealthBar(_zed, -1, true);
+        HideHealthBar(_zed, null, true);
         _zed.UpdateMoveOrder(OrderType.Stop);
         _zed.SetStatus(StatusFlags.CanMove,    false); // (was Rooted) — M2
         _zed.SetStatus(StatusFlags.Ghosted,    true);
@@ -180,7 +180,7 @@ internal class ZedUltDash : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         RemoveBuff(_zed, "ZedDashCloneMaker");
         _zed.SetStatus(StatusFlags.NoRender, false);
-        HideHealthBar(_zed, -1, false);
+        HideHealthBar(_zed, null, false);
         _zed.SetStatus(StatusFlags.CanMove, true); // (was Rooted) — M2
         if (!_zed.IsDead) {
             _zed.SetStatus(StatusFlags.Targetable, true);

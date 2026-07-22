@@ -30,7 +30,7 @@ namespace Buffs
         {
             _vladimir = buff.SourceUnit;
             unit.SetStatus(StatusFlags.Targetable, false);
-            HideHealthBar(unit, -1, true);
+            HideHealthBar(unit, null, true);
             StatsModifier.MoveSpeed.PercentBonus += MaxMovespeedAmount;
             _vladimir.AddStatModifier(StatsModifier);
         }
@@ -48,7 +48,7 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             unit.SetStatus(StatusFlags.Targetable, true);
-            HideHealthBar(unit, -1, false);
+            HideHealthBar(unit, null, false);
         }
     }
 }

@@ -1244,13 +1244,21 @@ namespace LeagueSandbox.GameServer.API
         /// Shows or hides the specified unit's health bar on the client.
         /// </summary>
         /// <param name="target">Unit whose health bar visibility should change.</param>
-        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="specificUnitOnly">If set, only that unit's owning player sees the change; the
+        /// recipient's userId is resolved from its player (only Champions map to a client). If null,
+        /// broadcasts to all players.</param>
         /// <param name="hide">True to hide the health bar, false to show it.</param>
-        public static void HideHealthBar(AttackableUnit target, int userId = -1, bool hide = true)
+        public static void HideHealthBar(AttackableUnit target, AttackableUnit specificUnitOnly = null, bool hide = true)
         {
             if (target == null)
             {
                 return;
+            }
+
+            int userId = -1;
+            if (specificUnitOnly is Champion champion)
+            {
+                userId = _game.PlayerManager.GetClientInfoByChampion(champion)?.ClientId ?? -1;
             }
 
             _game.PacketNotifier.NotifyShowHealthBar(target, userId, hide);
@@ -4065,6 +4073,8 @@ namespace LeagueSandbox.GameServer.API
         /// Faithful port of Riot's S1 Lua BuildingBlock <c>BBSetDodgePiercing(Target, Value)</c>:
         /// sets the DodgePiercing CharacterState and replicates it (ActionState bit 18). The dodge
         /// gate itself lives in <see cref="ObjAIBase.RollDodge"/> — a piercing attacker skips the roll.
+        /// Ref-counted like Riot: <c>true</c> adds a hold, <c>false</c> releases one — every enable must
+        /// be matched by exactly one disable, and the unit is piercing while any hold remains.
         /// </summary>
         /// <param name="unit">Attacker whose auto attacks should pierce dodge.</param>
         /// <param name="enabled">Whether dodge piercing is enabled.</param>

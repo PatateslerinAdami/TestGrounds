@@ -23,6 +23,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private int _disableCanCast;
         private int _disableCanMoveEver;
 
+        // Ref-counted ENABLE-holds (Riot CharacterState::RefCountedState, ENABLE polarity — opposite of the
+        // default-ON capability disable-holds above): default-OFF, the bit is set iff its hold counter > 0.
+        // DodgePiercing is the sole member (Riot SetDodgePiercing: refCount += newState?1:-1; bit = count>0,
+        // refCount at CharacterState +0x0e). Ref-counting lets overlapping enablers compose — two buffs each
+        // enable it; one expiring must NOT clear the bit while the other still holds it. (Riot's
+        // kNonRefCountedCharacterStates feature would collapse this to set-1/0; we don't model that flag and
+        // always ref-count, consistent with the capability holds above.)
+        private int _dodgePiercingHolds;
+
         // Non-capability flags: plain set/clear bitfield (imperative SetStatus). Immovable stays here too —
         // it is default-OFF (enable polarity, opposite to CanX) and has no ref-counted callers.
         private StatusFlags _nonCapabilityBase;
@@ -34,6 +43,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         private const StatusFlags CapabilityMask =
             StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMoveEver;
+
+        // Ref-counted enable-hold flags (routed to their hold counters instead of the plain bitfield).
+        private const StatusFlags RefCountedEnableMask = StatusFlags.DodgePiercing;
 
         /// <summary>The effective action-state bitmask (capabilities + plain bits + buff layer).</summary>
         public StatusFlags Status { get; private set; }
@@ -49,7 +61,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if ((status & StatusFlags.CanCast) != 0) _disableCanCast = RefHold(_disableCanCast, enabled);
             if ((status & StatusFlags.CanMoveEver) != 0) _disableCanMoveEver = RefHold(_disableCanMoveEver, enabled);
 
-            StatusFlags otherBits = status & ~CapabilityMask;
+            // Enable-polarity ref-counted holds (DodgePiercing): enabled=true adds a hold, false releases one.
+            if ((status & StatusFlags.DodgePiercing) != 0) _dodgePiercingHolds = RefEnableHold(_dodgePiercingHolds, enabled);
+
+            StatusFlags otherBits = status & ~CapabilityMask & ~RefCountedEnableMask;
             if (otherBits != 0)
             {
                 if (enabled)
@@ -85,6 +100,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (_disableCanAttack == 0) b |= StatusFlags.CanAttack;
             if (_disableCanCast == 0) b |= StatusFlags.CanCast;
             if (_disableCanMoveEver == 0) b |= StatusFlags.CanMoveEver;
+            // Enable-holds: default-OFF, set iff a hold is active (buff layer below can still add its own).
+            if (_dodgePiercingHolds > 0) b |= StatusFlags.DodgePiercing;
             Status = (b & ~_buffDisable) | _buffEnable;
         }
 
@@ -98,6 +115,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return count > 0 ? count - 1 : 0;
             }
             return count + 1;
+        }
+
+        // ENABLE-polarity ref-count (mirror of RefHold, opposite direction): enable=true adds a hold,
+        // enable=false releases one (clamped at 0 so an over-release stays OFF). The state is ON iff the
+        // counter is > 0. Matches Riot's SetDodgePiercing ref-count (count += newState ? 1 : -1).
+        private static int RefEnableHold(int count, bool enable)
+        {
+            if (enable)
+            {
+                return count + 1;
+            }
+            return count > 0 ? count - 1 : 0;
         }
     }
 }
