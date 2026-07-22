@@ -51,7 +51,7 @@ public class AhriOrbofDeception : ISpellScript
         _end = end;
     }
 
-    public void OnSpellCast(Spell spell)
+    public void OnSpellPostCast(Spell spell)
     {
         // S1 SelfExecute: face the cursor, then fire the orb at a point a FIXED 900u ahead in that
         // facing direction (BBFaceDirection + BBGetPointByUnitFacingOffset, Distance = 900) — not
@@ -69,9 +69,11 @@ public class AhriOrbMissile : ISpellScript
 {
     private ObjAIBase _ahri;
     private Spell _spell;
+    private Vector2 _ahriPosition;
 
     public SpellScriptMetadata ScriptMetadata => new()
     {
+        PersistsThroughDeath = true,
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
@@ -81,7 +83,7 @@ public class AhriOrbMissile : ISpellScript
             // terrain + 100 and Velocity.Y = -277.8 = -100 / (900u / 2500); the client takes
             // its flight height from wire Position.Y (OverridePlacement: mStartHeightFromGround
             // = Position.y - terrain), so without this the orb drags along the ground.
-            OverrideHeightAugment = 100f
+            OverrideHeightAugment = 50f
         },
     };
 
@@ -93,6 +95,7 @@ public class AhriOrbMissile : ISpellScript
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
         _spell = spell;
+        _ahriPosition = _ahri.Position;
         ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
         ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
     }
@@ -131,10 +134,10 @@ public class AhriOrbMissile : ISpellScript
                 AddBuff("AhriOrbDamage", 2f, 1, _ahri.Spells[0], u, _ahri);
             }
         }
-
         if (_ahri.IsDead)
         {
-            SpellCast(_ahri, 6, SpellSlotType.ExtraSlots, missile.Position, _ahri.Position, true, missile.Position);
+            SpellCast(_ahri, 6, SpellSlotType.ExtraSlots, missile.Position, _ahriPosition, true, missile.Position, isForceCastingOrChanneling: true, overrideForceLevel: _ahri.Spells[0].CastInfo.SpellLevel);
+            
         }
         else
         {
@@ -158,6 +161,7 @@ public class AhriOrbReturn : ISpellScript
 
     public SpellScriptMetadata ScriptMetadata => new()
     {
+        PersistsThroughDeath = true,
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
@@ -166,7 +170,7 @@ public class AhriOrbReturn : ISpellScript
             // see AhriOrbMissile). Wire Position.Y is what the client flies at; tracked
             // missiles (LineMissileTrackUnits=1) get Velocity.Y = 0, which our packet builder
             // already handles.
-            OverrideHeightAugment = 110f
+            OverrideHeightAugment = 50f
         }
     };
 
@@ -231,7 +235,7 @@ public class AhriOrbReturnDead : ISpellScript
           // Same orb, same spawn point (outbound death position at terrain + 100) as the live
           // return — no wire samples of the dead variant in the corpus, height mirrored from
           // AhriOrbReturn.
-          OverrideHeightAugment = 100f
+          OverrideHeightAugment = 50f
         }
     };
 
