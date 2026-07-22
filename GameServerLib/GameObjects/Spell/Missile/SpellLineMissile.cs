@@ -19,6 +19,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         // everything on the way back (Lux W boomerang; Draven R adds UsesAccelerationForBounce).
         private bool _hasBounced;
 
+        // Total XZ distance flown (S4 mDistanceTraveled). Only consumed by the
+        // LineMissileTrackUnitsAndContinues continuation (UpdateContinueThroughMissle,
+        // SpellLineMissile.cpp:916): distanceLeft = CastRange - mDistanceTraveled.
+        private float _distanceTraveled;
+
         // Read by MissileReplication construction: an enter-vision replication of a returning
         // missile must carry the wire Bounced flag so the client aims it at the caster.
         public bool HasBounced => _hasBounced;
@@ -82,12 +87,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 // until the unit stops — the blade visibly trails the unit for as long as it keeps
                 // moving. Keep the destroy so the client removes the missile the instant the
                 // server's copy arrives.
+                // "Tracks a live target" for the destroy decision: a missile still homing on a
+                // living unit. Once an AndContinues missile has hit its initial target it flies
+                // STRAIGHT (no longer homing), so it reverts to the normal endpoint rule.
                 bool tracksLiveTarget = TargetUnit != null && !TargetUnit.IsDead
-                    && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileTrackUnits;
-                if (_atDestination && !tracksLiveTarget)
-                {
-                    SuppressDestroyNotify = true;
-                }
+                    && SpellOrigin?.SpellData != null && SpellOrigin.SpellData.LineMissileTrackUnits
+                    && !(SpellOrigin.SpellData.LineMissileTrackUnitsAndContinues && _hitInitialTarget);
+
                 // Arrival at the live tracked target IS the target's hit — Riot registers it on
                 // the destroy tick, never at en-route radius contact (replay 9c0533a1: the
                 // LineMissileHitList carrying the tracked target coincides with the missile's
@@ -101,12 +107,52 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 if (_atDestination && tracksLiveTarget && !ObjectsHit.Contains(TargetUnit))
                 {
                     ObjectsHit.Add(TargetUnit);
-                    _hitInitialTarget = true;
                     SpellOrigin?.ApplyEffects(TargetUnit, this);
                     if (CastInfo.Owner is ObjAIBase arrivalAi && SpellOrigin != null && SpellOrigin.CastInfo.IsAutoAttack)
                     {
                         arrivalAi.AutoAttackHit(TargetUnit, CastInfo.Targets.Count > 0 ? CastInfo.Targets[0].HitResult : (HitResult?)null);
                     }
+
+                    // LineMissileTrackUnitsAndContinues (S4 UpdateContinueThroughMissle,
+                    // SpellLineMissile.cpp:916): reaching the tracked target does NOT end the
+                    // missile. It marks the initial target hit, then re-aims to fly STRAIGHT for
+                    // the REMAINING CastRange along a blend of the contact heading and the
+                    // caster->target direction, re-hitting pass-through units the rest of the way;
+                    // it ends only when that straight endpoint is reached (or the range is already
+                    // used up). No 4.20 spell sets this flag, so nothing exercises this today —
+                    // kept faithful for a future port. (Guarded by !_hitInitialTarget so it fires
+                    // once; the far-endpoint arrival falls through to the normal end below.)
+                    if (SpellOrigin.SpellData.LineMissileTrackUnitsAndContinues && !_hitInitialTarget)
+                    {
+                        _hitInitialTarget = true;
+
+                        var castRange = SpellOrigin.SpellData.CastRange;
+                        int wireLevel = Math.Clamp(CastInfo.SpellLevel - 1, 0, castRange.Length - 1);
+                        float distanceLeft = castRange[wireLevel] - _distanceTraveled;
+                        // Contact heading (S4 mPlaneDirection = current flight direction) and the
+                        // launch->target direction, both flattened to XZ.
+                        var contactDir = new Vector2(Direction.X, Direction.Z);
+                        var launch = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+                        var casterToTarget = TargetUnit.Position - launch;
+                        if (distanceLeft > 0f && contactDir.LengthSquared() > 0f && casterToTarget.LengthSquared() > 0f)
+                        {
+                            contactDir = Vector2.Normalize(contactDir);
+                            casterToTarget = Vector2.Normalize(casterToTarget);
+                            var newDir = contactDir == casterToTarget
+                                ? contactDir
+                                : Vector2.Normalize(contactDir + casterToTarget);
+                            Destination = Position + newDir * distanceLeft;
+                            _atDestination = false;
+                            return; // keep flying straight; do NOT end here
+                        }
+                    }
+
+                    _hitInitialTarget = true;
+                }
+
+                if (_atDestination && !tracksLiveTarget)
+                {
+                    SuppressDestroyNotify = true;
                 }
                 SetToRemove();
                 return;
@@ -182,6 +228,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             UpdateTimedSpeedChange();
             var positionBeforeMove = Position;
             Move(diff);
+            _distanceTraveled += Vector2.Distance(positionBeforeMove, Position);
             CheckSweptCollision(positionBeforeMove);
             PublishOnSpellMissileUpdate(diff, positionBeforeMove);
         }
@@ -203,10 +250,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             // rides the destroy tick in 100/100 tracked-return catches (Ahri Q returns + Talon W
             // return blades, replay 9c0533a1). A contact hit here fired LineWidth + unit radius
             // (~165u) early, applying effects and (via scripts) destroying the missile visibly
-            // before it reached the target. AndContinues missiles keep the contact hit on their
-            // INITIAL target — hitting it en route and flying on is their entire mechanic.
-            if (tracksUnits && collider == TargetUnit
-                && !(SpellOrigin.SpellData.LineMissileTrackUnitsAndContinues && !_hitInitialTarget))
+            // before it reached the target. This holds for AndContinues too: the decomp marks the
+            // initial target hit at ENDPOINT arrival (UpdateContinueThroughMissle sets
+            // mHitInitialTarget on isAtEndPoint, SpellLineMissile.cpp:919), not on en-route radius
+            // contact — the missile is chasing the target, so it only overlaps it at the catch.
+            if (tracksUnits && collider == TargetUnit)
             {
                 return;
             }
