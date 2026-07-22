@@ -40,6 +40,11 @@ namespace GameServerCore.Enums
         MagicImmune = 1 << 15,
         NearSighted = 1 << 16,
         NoRender = 1 << 18,
+        // Riot CharacterState mDodgePiercing (wire ActionState bit 18). When set, this unit's auto
+        // attacks cannot be dodged — the attacker gates the target's dodge roll (ObjAIBase.RollDodge).
+        // Riot exposed it to scripts via the S1 Lua BuildingBlock BBSetDodgePiercing; the 4.20 client
+        // never consumes the wire bit (server-authoritative), but we replicate it to match Riot.
+        DodgePiercing = 1 << 19,
         PhysicalImmune = 1 << 20,
         RevealSpecificUnit = 1 << 21,
         Sleep = 1 << 24,

@@ -342,9 +342,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool IsNextAutoDodged { get; protected set; }
         /// <summary>
         /// When true, this unit's auto attacks CANNOT be dodged (Riot CharacterState DodgePiercing,
-        /// set by <c>BBSetDodgePiercing</c>; many empowered/spell attacks set it). Checked in <see cref="RollDodge"/>.
+        /// set by the S1 Lua BuildingBlock <c>BBSetDodgePiercing</c>). Checked in <see cref="RollDodge"/>.
+        /// Backed by <see cref="StatusFlags.DodgePiercing"/> so it flows through the CharacterState
+        /// path and replicates on the wire (ActionState bit 18) exactly like Riot's SetDodgePiercing.
+        /// Plain set/clear (not ref-counted) — same convention as our other non-capability StatusFlags.
         /// </summary>
-        public bool DodgePiercing { get; set; }
+        public bool DodgePiercing
+        {
+            get => Status.HasFlag(StatusFlags.DodgePiercing);
+            set => SetStatus(StatusFlags.DodgePiercing, value);
+        }
         /// <summary>
         /// Current order this AI is performing. The enum is COMPLETE — verified 1:1 against Riot's
         /// orders_e (mac decomp AI/AIEnums.h, all 16 values, ORDERS_END_OF_LIST = 16); see the

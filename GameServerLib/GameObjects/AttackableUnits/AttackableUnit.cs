@@ -1902,6 +1902,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Silenced
             Stats.SetActionState(ActionState.IS_ASLEEP, Status.HasFlag(StatusFlags.Sleep));
             Stats.SetActionState(ActionState.STEALTHED, Status.HasFlag(StatusFlags.Stealthed));
+            // DodgePiercing (wire bit 18): faithful to Riot's SetDodgePiercing, which set the bit and
+            // replicated it. The 4.20 client never reads it (server resolves dodge into the wire
+            // HitResult), so this is a cosmetic/state mirror — the functional gate lives in RollDodge.
+            Stats.SetActionState(ActionState.DODGE_PIERCING, Status.HasFlag(StatusFlags.DodgePiercing));
             // SuppressCallForHelp
 
             bool targetable = Status.HasFlag(StatusFlags.Targetable);

@@ -73,12 +73,22 @@ namespace GameServerCore.Enums
         // --- unshifted region (4.17 bits >=16 == 4.20) ---
         NO_RENDER = 1 << 16,             // [V] live-confirmed (client stops rendering)
         FORCE_RENDER_PARTICLES = 1 << 17,// [V] live-confirmed: a NoRender'd unit's particle renders again once this bit is set (Ryze DesperatePower test). 4.17 = 17.
-        // [A] bit 18 is NOT DodgePiercing (audit: toggles on ~all heroes as one early-game window,
-        // not per-dodge). Best hypothesis = Map11 early spawn-lock (S4SpawnLockSpeed, absent in 4.17).
-        // A live SetStatus test showed NO standalone client-visible effect -> likely a backend/info
-        // flag (like DisableAmbientGold/XP). Not driven by anything; meaning UNCONFIRMED, name is a
-        // placeholder.
-        SPAWN_LOCK = 1 << 18,
+        // [V] mDodgePiercing (4.17 CompressedStates bit 18, UNSHIFTED -> same position in 4.20).
+        // CONFIRMED 2026-07-22: bit 18 is part of the HERO SPAWN-STATE bundle. Skin-identified 4.20
+        // heroes start at 0x04849081 (CanAttack + NearSight(12) + DodgePiercing(18) + structural, with
+        // CanCast/CanMove CLEARED) and flip to the normal baseline 0x04808087 on their first real
+        // ActionState change (varied times, Brand +127s / JarvanIV +322s — the spawn value persists in
+        // the diff until the hero first acts). Pre-game/fountain state: NearSight = spawn fog, cleared
+        // caps = input lock, DodgePiercing bundled along. Likely written as a bulk CompressedStates
+        // word (explains why CharacterState::SetDodgePiercing has zero callers yet the bit is set).
+        // Stock 4.20 has NO other consumer: no ability sets it, the client never reads it (live
+        // SetStatus test = no effect), and the dodge roll (ComputeDodgeSuccess) ignores it. Dodge
+        // itself is live (Jax); only the piercing modifier is unwired. NOTE: an earlier "minion spawn
+        // flash ~40ms" reading was a DECODE ARTIFACT (minion Local1[0] is a health float, not
+        // ActionState). We now drive this bit ourselves for the scriptable DodgePiercing feature
+        // (StatusFlags.DodgePiercing -> here), replicating like Riot's setter; enforcement is in
+        // ObjAIBase.RollDodge (the gate Riot left unwired).
+        DODGE_PIERCING = 1 << 18,
         DISABLE_AMBIENT_GOLD = 1 << 19,  // [V-ish] 4.17 = 19; matches bit19 on Vlad pool / Sion combat-cycle
         DISABLE_AMBIENT_XP = 1 << 20,    // [V] 4.17 = 20; constant on all turrets/structures (rlp x3)
         // Bit 21 DECOMP-CONFIRMED (CharacterState::SetBrushVisibilityFake writes <<21; unshifted region

@@ -4061,6 +4061,19 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Makes the given unit's auto attacks unable to be dodged (or restores dodgeability).
+        /// Faithful port of Riot's S1 Lua BuildingBlock <c>BBSetDodgePiercing(Target, Value)</c>:
+        /// sets the DodgePiercing CharacterState and replicates it (ActionState bit 18). The dodge
+        /// gate itself lives in <see cref="ObjAIBase.RollDodge"/> — a piercing attacker skips the roll.
+        /// </summary>
+        /// <param name="unit">Attacker whose auto attacks should pierce dodge.</param>
+        /// <param name="enabled">Whether dodge piercing is enabled.</param>
+        public static void SetDodgePiercing(ObjAIBase unit, bool enabled)
+        {
+            unit.DodgePiercing = enabled;
+        }
+
+        /// <summary>
         /// Sets the given spell slot of the given unit to the spell of the given name.
         /// </summary>
         /// <param name="target">Unit to set the spell for.</param>
