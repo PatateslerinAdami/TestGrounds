@@ -43,7 +43,7 @@ public class CharScriptZed : ICharScript {
         _zed = owner;
         _spell = spell;
         ApiEventManager.OnHitUnit.AddListener(this, _zed, OnHitUnit);
-        ApiEventManager.OnUnitUpdateMoveOrder.AddListener(this, _zed, OnUpdateMoveOrder);
+        ApiEventManager.OnHandleOnIssueOrder.AddListener(this, _zed, OnIssueOrder);
         for (short i = 0; i < 4; i++) {
             ApiEventManager.OnSpellCast.AddListener(this, _zed.Spells[i], OnSpellsCast);
         }
@@ -64,8 +64,8 @@ public class CharScriptZed : ICharScript {
         RemoveEmoteShadows();
     }
 
-    private bool OnUpdateMoveOrder(ObjAIBase zed, OrderType orderType) {
-        if (orderType is OrderType.MoveTo or OrderType.AttackMove or OrderType.AttackTo or OrderType.Stop) {
+    private bool OnIssueOrder(ObjAIBase zed, IssueOrderData order) {
+        if (order.Order is OrderType.MoveTo or OrderType.AttackMove or OrderType.AttackTo or OrderType.Stop) {
             RemoveEmoteShadows();
         }
         return true;

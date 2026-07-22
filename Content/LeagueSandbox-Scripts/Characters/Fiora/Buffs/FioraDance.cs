@@ -76,8 +76,8 @@ namespace Buffs
             {
                 SealSpellSlot(owner, SpellSlotType.SpellSlots, i, SpellbookType.SPELLBOOK_CHAMPION, seal);
             }
-            SealSpellSlot(owner, SpellSlotType.SpellSlots, 0, SpellbookType.SPELLBOOK_SUMMONER, seal);
-            SealSpellSlot(owner, SpellSlotType.SpellSlots, 1, SpellbookType.SPELLBOOK_SUMMONER, seal);
+            SealSpellSlot(owner, SpellSlotType.SummonerSpellSlots, 0, SpellbookType.SPELLBOOK_SUMMONER, seal);
+            SealSpellSlot(owner, SpellSlotType.SummonerSpellSlots, 1, SpellbookType.SPELLBOOK_SUMMONER, seal);
         }
 
         private void Strike()

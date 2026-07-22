@@ -212,7 +212,7 @@ public class AlphaStrikeTeleport : ISpellScript
         // at variable post-cast times — no script-side wire packets).
         if (_target is Champion)
         {
-            IssueOrder(_masterYi, OrderType.AttackTo, _target);
+            IssueOrder(_masterYi, OrderType.AttackTo, targetOfOrder: _target);
         }
 
         FaceDirection(_target.Position, _masterYi, true);

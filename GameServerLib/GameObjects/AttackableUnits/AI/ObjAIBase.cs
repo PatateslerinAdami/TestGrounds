@@ -450,6 +450,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             VisionRadius = visionRadius > 0 ? visionRadius : CharData.PerceptionBubbleRadius;
 
+            // Per-unit XP-share radius (Riot ExperienceRadius): neutrals override the map-wide
+            // ai_ExpRadius2 default (camps 400, epics 2000). 0 in chardata -> keep the map default.
+            if (CharData.ExperienceRadius > 0f)
+            {
+                ExperienceGiveRadius = CharData.ExperienceRadius;
+            }
+
             Stats.CurrentMana = Stats.ManaPoints.Total;
             Stats.CurrentHealth = Stats.HealthPoints.Total;
 
@@ -3407,8 +3414,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (publish)
             {
-                // Return if scripts do not allow this order.
-                if (!ApiEventManager.OnUnitUpdateMoveOrder.Publish(this, order))
+                // Return if scripts veto this order (Riot HandleOnIssueOrder bool return). Populate the
+                // full Riot param set best-effort from current state: the order's target is the pending
+                // cast target or the current target, its position that unit's position (else the
+                // attack-move destination), and the cast info comes from the pending SpellToCast.
+                var orderTarget = PostponedCastTarget ?? TargetUnit;
+                var orderData = new IssueOrderData
+                {
+                    Order = order,
+                    TargetUnit = orderTarget,
+                    CastInfo = SpellToCast?.CastInfo,
+                    TargetPosition = orderTarget?.Position ?? AttackMoveDestination
+                };
+                if (!ApiEventManager.OnHandleOnIssueOrder.Publish(this, orderData))
                 {
                     return;
                 }
@@ -3431,10 +3449,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // single issue point (HandleNewOrder, called from HandleMove); the move-to-cast postpone stays in
             // SetSpellToCast (→ POSTPONED). Still 0 behaviour change (nothing reads OrderStatus for control).
 
-            if ((MoveOrder == OrderType.OrderNone
+            // Stop / OrderNone / PetHardStop DROP the current order (Riot ForceMovementOrdersType
+            // CANCEL_ORDER=0 "drop current order", AIEnums.h:67; IssueOrders → ORDER_STATUS_CLEAR +
+            // SetEnemyID(0), AIBase.cpp:2643) — so the attack target must be cleared UNCONDITIONALLY.
+            // The former `&& !IsPathEnded()` gate tied the target-clear to the unit still moving, so a
+            // Stop issued with the path already ended silently kept the target and the unit resumed
+            // attacking (= POSTPONE behaviour). That path-ended state is exactly what a CANCEL_ORDER
+            // force-move leaves behind: its end runs base.SetForceMovementState → ResetWaypoints before
+            // this Stop is issued, so CANCEL_ORDER dashes (Diana R/E) wrongly behaved like POSTPONE.
+            // StopMovement() self-guards (early-outs at Waypoints.Count == 1), so only the target-clear
+            // needed ungating; a genuinely-moving Stop still stops as before.
+            if (MoveOrder == OrderType.OrderNone
                 || MoveOrder == OrderType.Stop
                 || MoveOrder == OrderType.PetHardStop)
-                && !IsPathEnded())
             {
                 StopMovement();
                 SetTargetUnit(null, true);
@@ -3647,7 +3674,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// no OnOrder callback. (Naming caveat: Riot's <c>obj_AI_Base::IssueOrder</c> is the order FUNNEL —
         /// clamp + path-build + HandleNewOrder — which is our HandleMove, not this method.)
         /// </summary>
-        public void IssueOrder(OrderType order, AttackableUnit target, Vector2 pos)
+        // Param order mirrors Riot's native obj_AI_Base::IssueOrder(orders_e, r3dPoint3D&,
+        // AttackableUnit*, ...) — position before target. (The player-input bools shift/alt/ack-sound
+        // are not modelled here; they're not part of the script/BB order path.)
+        public void IssueOrder(OrderType order, Vector2 pos, AttackableUnit target)
         {
             (AIScript as Behavior.BaseAIScript)?.OnOrder(order, target, pos);
         }

@@ -365,8 +365,13 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<Shield, float> OnShieldReduced
             = new Dispatcher<Shield, float>();
         
-        public static ConditionDispatcher<ObjAIBase, OrderType> OnUnitUpdateMoveOrder
-            = new ConditionDispatcher<ObjAIBase, OrderType>();
+        // Vetoable order-issue hook — mirrors Riot's buff-script BuffScriptInstance::HandleOnIssueOrder
+        // (BuffScript.h:65). Fires when an order is issued to the unit; a listener returning false
+        // rejects it. Carries the full Riot param set via IssueOrderData (order type + target position +
+        // target unit + cast info). Named to match the Riot hook; there is no separate Riot
+        // "UpdateMoveOrder" hook — this is our single analog of HandleOnIssueOrder.
+        public static ConditionDispatcher<ObjAIBase, IssueOrderData> OnHandleOnIssueOrder
+            = new ConditionDispatcher<ObjAIBase, IssueOrderData>();
 
         public static Dispatcher<AttackableUnit, float> OnUpdateStats
             = new Dispatcher<AttackableUnit, float>();

@@ -60,7 +60,7 @@ public class TalonCutthroat : ISpellScript {
 
         if (target is Champion)
         {
-            IssueOrder(_talon, OrderType.AttackTo, target);
+            IssueOrder(_talon, OrderType.AttackTo, targetOfOrder: target);
         }
     }
 

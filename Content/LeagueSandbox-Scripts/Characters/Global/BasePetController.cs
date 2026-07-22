@@ -50,7 +50,7 @@ namespace Spells
                 // poking those bypasses the AI's _aiState, so its 0.15s timers (on a stale IDLE state)
                 // would immediately override the move with auto-return/acquire ("pet only moves while I
                 // spam the control"). A hard state (AI_PET_HARDMOVE) is respected by the timers.
-                Pet.IssueOrder(OrderType.PetHardMove, null, end);
+                Pet.IssueOrder(OrderType.PetHardMove, end, null);
             }
         }
     }

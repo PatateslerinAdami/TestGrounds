@@ -96,6 +96,9 @@ namespace LeagueSandbox.GameServer.Content
         public bool DisableContinuousTargetFacing { get; private set; } = false;
         public bool EnemyCanUse { get; private set; } = false;
         public float ExpGivenOnDeath { get; private set; } = 0.0f;
+        // Per-unit XP-share radius (Riot ExperienceRadius): neutrals override the map-wide ai_ExpRadius2
+        // (camps 400, epics 2000). 0 = use the map default. Gates who gets XP from this unit's death.
+        public float ExperienceRadius { get; private set; } = 0.0f;
         public float GameplayCollisionRadius { get; private set; } = 65.0f;
         public float GlobalExpGivenOnDeath { get; private set; } = 0.0f;
         public float GlobalGoldGivenOnDeath { get; private set; } = 0.0f;
@@ -225,6 +228,7 @@ namespace LeagueSandbox.GameServer.Content
             DamagePerLevel = file.GetFloat("Data", "DamagePerLevel", DamagePerLevel);
             DisableContinuousTargetFacing = file.GetBool("Data", "DisableContinuousTargetFacing");
             ExpGivenOnDeath = file.GetFloat("Data", "ExpGivenOnDeath", ExpGivenOnDeath);
+            ExperienceRadius = file.GetFloat("Data", "ExperienceRadius", ExperienceRadius);
             GameplayCollisionRadius = file.GetFloat("Data", "GameplayCollisionRadius", GameplayCollisionRadius);
             GlobalExpGivenOnDeath = file.GetFloat("Data", "GlobalExpGivenOnDeath", GlobalExpGivenOnDeath);
             GlobalGoldGivenOnDeath = file.GetFloat("Data", "GlobalGoldGivenOnDeath", GlobalGoldGivenOnDeath);

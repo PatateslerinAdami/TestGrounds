@@ -61,7 +61,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public int SpawnIndex { get; set; }
 
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
-        public bool teamChanged = false;
         public PlayerQuestManager PlayerQuestManager { get; private set; }
 
         public Champion(Game game,
