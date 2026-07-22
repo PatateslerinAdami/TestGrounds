@@ -52,6 +52,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     public class ObjAIBase : AttackableUnit
     {
         public int hitCount = 0;
+
+        /// <summary>
+        /// The AI manager holding this unit's movement/collision engine (Riot's
+        /// <c>obj_AI_Base::PTR_AIManager</c> → <c>AIManager_Common::AI_actor</c>). Reach the movement
+        /// engine as <c>AIManager.Actor</c>. STAGE 0 scaffold — see
+        /// <c>docs/ACTOR_CLASS_EXTRACTION_PLAN.md</c>; logic migrates onto <see cref="AI.Actor"/> in later
+        /// stages. Buildings (plain <see cref="AttackableUnit"/>) have no AIManager, exactly like Riot.
+        /// </summary>
+        public AIManager AIManager { get; }
+
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
 
@@ -400,6 +410,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             _itemManager = game.ItemManager;
             _scriptsEnabled = enableScripts;
+
+            // Compose the AI manager + movement/collision actor (Riot: PTR_AIManager->AI_actor). Stage 0
+            // scaffold: no logic hangs on it yet, so construction order is unconstrained; later stages that
+            // move waypoint init here must run before base movement init.
+            AIManager = new AIManager(this);
 
             Name = name;
             SkinID = skinId;

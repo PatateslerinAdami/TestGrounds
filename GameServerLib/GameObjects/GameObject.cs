@@ -97,7 +97,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <summary>
         /// Position of this GameObject from a top-down view.
         /// </summary>
-        public Vector2 Position { get; protected set; }
+        // set widened protected->internal (Stage 3): the Actor's collision push writes the mirrored
+        // Position (Owner.Position = ...) — Riot's actor owns m_Position and the unit mirrors it. internal
+        // keeps it inaccessible to Content scripts (separate assembly), which use SetPosition/TeleportTo.
+        public Vector2 Position { get; internal set; }
         /// <summary>
         /// Riot's engine-default spawn facing: world +Z. Replay-verified on stationary spawned
         /// minions (Jinx E chompers): the spawn 0xBA carries MovementDataStop with
