@@ -33,21 +33,6 @@ internal class SionPassiveZombie : IBuffGameScript
     {
         _ticks = 0;
         _sion = buff.SourceUnit;
-        _defferedDamageData = _sion.CharVars.Get("deferredDamageData", _defferedDamageData) ?? new DamageData()
-        {
-            Damage = 10000f,
-            DamageType = DamageType.DAMAGE_TYPE_TRUE,
-            DamageSource = DamageSource.DAMAGE_SOURCE_RAW,
-            DamageResultType = DamageResultType.RESULT_NORMAL,
-            Target = unit,
-            Attacker = null,
-            CallForHelpAttacker = null,
-        };
-
-        ApiEventManager.OnDeath.AddListener(this, _sion, OnDeath);
-        unit.TakeDamage(_defferedDamageData.Attacker, _defferedDamageData.Damage, _defferedDamageData.DamageType,
-            _defferedDamageData.DamageSource,
-            _defferedDamageData.DamageResultType);
         unit.Stats.CurrentHealth = unit.Stats.HealthPoints.Total;
         // Lock attack speed to exactly 1.75 during the zombie: min AND max cap = 1.75, so the
         // attack cadence (SpellData.GetCharacterAttackDelay clamps to 1/1.75s) is fixed regardless
@@ -60,6 +45,8 @@ internal class SionPassiveZombie : IBuffGameScript
 
         _sion.SetStatus(StatusFlags.Ghosted, true);
 
+        SetCharacterVoiceOverride(buff.TargetUnit, "Berserk");
+        
         ApiEventManager.OnHeal.AddListener(this, _sion, OnHeal);
         ApiEventManager.OnHitUnit.AddListener(this, _sion, OnHit);
         OverrideAutoAttacks(_sion, false, "SionBasicAttackPassive2", "SionBasicAttackPassive");
@@ -135,12 +122,6 @@ internal class SionPassiveZombie : IBuffGameScript
 
         data.Target.TakeDamage(_sion, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC,
             DamageResultType.RESULT_NORMAL);
-    }
-
-    private void OnDeath(DeathData data)
-    {
-        data.BecomeZombie = true;
-        ApiEventManager.OnDeath.RemoveListener(this, _sion, OnDeath);
     }
 
 

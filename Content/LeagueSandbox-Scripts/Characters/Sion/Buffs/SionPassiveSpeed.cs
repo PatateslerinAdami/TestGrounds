@@ -15,6 +15,8 @@ namespace Buffs;
 
 internal class SionPassiveSpeed : IBuffGameScript {
     private ObjAIBase _sion;
+    private Buff _buff;
+    private Particle _p1;
     private const float MaxDecaySteps = 10f;
     private  float _baseValue;
     private float _decayStepsApplied = 0;
@@ -28,10 +30,17 @@ internal class SionPassiveSpeed : IBuffGameScript {
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _sion = buff.SourceUnit;
-        SpellEffectCreate("Sion_Base_Passive_Speed.troy", _sion, _sion, _sion, lifetime: buff.Duration,
+        _buff = buff;
+        _p1 = SpellEffectCreate("Sion_Base_Passive_Speed.troy", _sion, _sion, _sion, lifetime: buff.Duration,
             flags: FXFlags.SimulateWhileOffScreen);
         _baseValue = 0.66f;
         _decayStepsApplied = 0;
+        ApiEventManager.OnResurrect.AddListener(this, _sion, OnResurrect);
+    }
+
+    private void OnResurrect(ObjAIBase sion)
+    {
+        RemoveBuff(_buff);
     }
 
     public void OnUpdate(Buff buff, float diff)
@@ -46,5 +55,7 @@ internal class SionPassiveSpeed : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        ApiEventManager.OnResurrect.RemoveListener(this, _sion, OnResurrect);
+        RemoveParticle(_p1);
     }
 }

@@ -10,39 +10,30 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace CharScripts;
 
-public class CharScriptSion : ICharScript {
+public class CharScriptSion : ICharScript
+{
     private ObjAIBase _sion;
     private Spell _spell;
 
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(ObjAIBase owner, Spell spell) {
+    public void OnActivate(ObjAIBase owner, Spell spell)
+    {
         _sion = owner;
         _spell = spell;
-        ApiEventManager.OnTakeDamage.AddListener(this, _sion, OnTakeDamage);
+        ApiEventManager.OnDeath.AddListener(this, _sion, OnDeath);
+        ApiEventManager.OnZombie.AddListener(this, _sion, OnZombie);
         ApiEventManager.OnLevelUpSpell.AddListener(this, _sion.Spells[1], OnLevelUpSpell);
     }
-    
-    public void OnPostActivate(ObjAIBase owner, Spell spell = null)
-    {
-        //AddBuff("SionPassive", 25000f, 1, spell, owner, owner, true);
-    }
 
-    private void OnTakeDamage(DamageData data)
+    private void OnDeath(DeathData data)
     {
-        if (data.Target.Stats.CurrentHealth > 0
-            || _sion.IsZombie || _sion.HasBuff("SionPassiveZombie") || _sion.HasBuff("SionPassiveDelay")) return;
-        var deferredDamageData = new DamageData()
-        {
-            Damage = data.Damage,
-            DamageType = data.DamageType,
-            DamageSource = data.DamageSource,
-            DamageResultType = data.DamageResultType,
-            Target = data.Target,
-            Attacker = data.Attacker,
-            CallForHelpAttacker = data.CallForHelpAttacker,
-        };
-        _sion.CharVars.Set("deferredDamageData", deferredDamageData);
+        if (_sion.HasBuff("SionPassiveZombie") || _sion.HasBuff("SionPassiveDelay")) return;
+        data.BecomeZombie = true;
+    }
+    
+    private void OnZombie(AttackableUnit unit, DeathData deathData)
+    {
         AddBuff("SionPassiveDelay", 1.5f, 1, _spell, _sion, _sion);
     }
 
@@ -54,7 +45,7 @@ public class CharScriptSion : ICharScript {
         ApiEventManager.OnKillUnit.AddListener(this, _sion, OnUnitKill);
         ApiEventManager.OnLevelUpSpell.RemoveListener(this, _sion.Spells[1], OnLevelUpSpell);
     }
-    
+
     private void OnUnitKill(DeathData data)
     {
         // UnitTags is a [Flags] composite (a siege minion is Minion | Minion_Lane |
@@ -73,12 +64,14 @@ public class CharScriptSion : ICharScript {
             _sion.CharVars.Set("SoulFurnaceStacks", _sion.CharVars.GetFloat("SoulFurnaceStacks") + 4f);
         }
     }
-    
+
     private void OnUpdateStats(AttackableUnit unit, float diff)
     {
-        SetSpellToolTipVar(_sion, 0, _sion.CharVars.GetFloat("SoulFurnaceStacks"), SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
+        SetSpellToolTipVar(_sion, 0, _sion.CharVars.GetFloat("SoulFurnaceStacks"), SpellbookType.SPELLBOOK_CHAMPION, 1,
+            SpellSlotType.SpellSlots);
         var bonusMaxHealthDmg = _sion.Stats.HealthPoints.Total *
-            (_sion.Spells[1].SpellData.EffectLevelAmount[6][_sion.Spells[1].CastInfo.SpellLevel]/100);
+                                (_sion.Spells[1].SpellData.EffectLevelAmount[6][_sion.Spells[1].CastInfo.SpellLevel] /
+                                 100);
         SetSpellToolTipVar(_sion, 1, bonusMaxHealthDmg, SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
     }
 }
