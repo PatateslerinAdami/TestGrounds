@@ -12,6 +12,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings
             Vector2 position = new Vector2(), int visionRadius = 0, uint netId = 0, TeamId team = TeamId.TEAM_BLUE, Stats stats = null) :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
         {
+            // Structures (inhibitors, nexus) grant NO life steal to attackers
+            // (Riot Building::SetLifestealImmune(true)).
+            Stats.IsLifestealImmune = true;
         }
     }
 }
