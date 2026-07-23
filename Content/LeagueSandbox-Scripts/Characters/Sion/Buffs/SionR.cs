@@ -66,13 +66,16 @@ namespace Buffs
         public void OnUpdate(Buff buff, float diff)
         {
             if (_currentBonusSpeed >= MaxSpeed) return;
-            ExecutePeriodically(buff.BuffVars, "SionRSpeed", 100f, false, 0, () =>
+            ExecutePeriodically(buff.BuffVars, "SionRSpeed", 150f, false, 0, () =>
             {
                 {
-                    _currentBonusSpeed += 40;
-                    buff.TargetUnit.RemoveStatModifier(StatsModifier);
-                    StatsModifier.MoveSpeed.FlatBonus = _currentBonusSpeed;
-                    buff.TargetUnit.AddStatModifier(StatsModifier);
+                    // Ramp a fixed +40 per step, clamped so the last step lands EXACTLY on MaxSpeed
+                    // (= 950 - base true speed) instead of overshooting. Applied as a soft-cap-EXEMPT
+                    // flat bonus so the charge reaches a true 950 — a normal MoveSpeed modifier would
+                    // be halved by the >490 soft cap. Set directly (no StatsModifier add/remove churn),
+                    // which recomputes + replicates the true speed immediately.
+                    _currentBonusSpeed = Math.Min(_currentBonusSpeed + 40, MaxSpeed);
+                    buff.TargetUnit.Stats.MoveSpeedSoftCapExemptFlatBonus = _currentBonusSpeed;
                     if (_animationIsFast) return;
                     if (!(_currentBonusSpeed >= MaxSpeed / 2)) return;
                     buff.TargetUnit.SetAnimStates(new Dictionary<string, string>
@@ -95,6 +98,8 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ResetCharacterVoiceOverride(unit);
+            // Clear the soft-cap-exempt charge speed (mirrors the StatsModifier removal it replaced).
+            unit.Stats.MoveSpeedSoftCapExemptFlatBonus = 0f;
             SetStatus(unit, StatusFlags.Ghosted, false);
             RemoveParticle(_p1);
             RemoveParticle(_p2);
