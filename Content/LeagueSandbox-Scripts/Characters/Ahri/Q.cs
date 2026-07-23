@@ -58,10 +58,12 @@ public class AhriOrbofDeception : ISpellScript
         // the raw cursor pos. OverrideForceLevel = Q's rank (S1: OverrideForceLevelVar = "Level");
         // the wire SpellLevel of the orb MISREPs mirrors the champion Q's rank, not the unleveled
         // extra slot (replay 9c0533a1: outbound + return both carry the Q level).
+        var variables = spell.CastInfo.InstanceVars;
+        variables.Set("ahriPosition", _ahri.Position);
         FaceDirection(_end, _ahri, true);
         var aim = GetPointByUnitFacingOffset(_ahri, 900f);
         SpellCast(_ahri, 0, SpellSlotType.ExtraSlots, _start, aim, true, Vector2.Zero,
-            overrideForceLevel: spell.CastInfo.SpellLevel);
+            overrideForceLevel: spell.CastInfo.SpellLevel, inheritVariablesFrom: spell.CastInfo);
     }
 }
 
@@ -133,12 +135,22 @@ public class AhriOrbMissile : ISpellScript
             }
         }
 
+        if (_ahri.IsDead)
+        {
+            var ahriPosition = _spell.CastInfo.InstanceVars.Get<Vector2>("ahriPosition");
+            SpellCast(_ahri, 6, SpellSlotType.ExtraSlots, ahriPosition, ahriPosition, true, missile.Position,
+                isForceCastingOrChanneling: true,
+                overrideForceLevel: _ahri.Spells[0].CastInfo.SpellLevel);
+        }
+        else
+        {
+            SpellCast(_ahri, 1, SpellSlotType.ExtraSlots, true, _ahri, missile.Position,
+                overrideForceLevel: _ahri.Spells[0].CastInfo.SpellLevel, isForceCastingOrChanneling: true);
+        }
         // isForceCastingOrChanneling: Riot's return MISREP carries CastInfo bits = 12
         // (ForceCast|OverrideCastPos, replay 9c0533a1) — S1's BBSpellCast sets
         // ForceCastingOrChannelling = true. Force level = Q's rank (OverrideForceLevelVar).
-        SpellCast(_ahri, _ahri.IsDead ? 6 : 1, SpellSlotType.ExtraSlots, true, _ahri, missile.Position,
-            isForceCastingOrChanneling: true,
-            overrideForceLevel: _ahri.Spells[0].CastInfo.SpellLevel);
+
 
         ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnSpellMissileEnd);
         ApiEventManager.OnLaunchMissile.RemoveListener(this, _spell, OnLaunchMissile);
@@ -212,12 +224,12 @@ public class AhriOrbReturn : ISpellScript
             AddBuff("AhriOrbDamageSilence", 2f, 1, _ahri.Spells[0], target, _ahri);
         }
     }
-
 }
 
 public class AhriOrbReturnDead : ISpellScript
 {
     private ObjAIBase _ahri;
+
     public SpellScriptMetadata ScriptMetadata => new()
     {
         MissileParameters = new MissileParameters()

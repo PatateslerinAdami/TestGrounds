@@ -51,7 +51,9 @@ public class SivirQ : ISpellScript
 
     public void OnSpellPostCast(Spell spell)
     {
-        SpellCast(_sivir, 1, SpellSlotType.ExtraSlots, _start, _end, true, Vector2.Zero);
+        var variables = spell.CastInfo.InstanceVars;
+        variables.Set("sivirPosition", _sivir.Position);
+        SpellCast(_sivir, 1, SpellSlotType.ExtraSlots, _start, _end, true, Vector2.Zero, inheritVariablesFrom: spell.CastInfo);
     }
 }
 
@@ -122,7 +124,8 @@ public class SivirQMissile : ISpellScript
     {
         if (_sivir.IsDead)
         {
-            SpellCast(_sivir, 4, SpellSlotType.ExtraSlots, true, _sivir, missile.Position, inheritVariablesFrom: _spell.CastInfo, overrideForceLevel: _sivir.Spells[0].CastInfo.SpellLevel);
+            var sivirPosition = missile.CastInfo.InstanceVars.Get<Vector2>("sivirPosition");
+            SpellCast(_sivir, 4, SpellSlotType.ExtraSlots, sivirPosition, sivirPosition,true, missile.Position, inheritVariablesFrom: _spell.CastInfo, overrideForceLevel: _sivir.Spells[0].CastInfo.SpellLevel);
         }
         else
         {
