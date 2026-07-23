@@ -186,8 +186,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// (decomp SpellLineMissile.cpp:1112-1122, byte-matching 4.17) so the server hitbox
         /// and the client visual die at the same point:
         ///   LineMissileEndsAtTargetPoint=1 → the missile flies exactly to the cast target
-        ///     point (distance caster→TargetPositionEnd; the client measures against
-        ///     mCasterPos, not the launch offset);
+        ///     point: distance LAUNCH→TargetPositionEnd. The client measures against
+        ///     mCasterPos, which is mSpellCastLaunchPos (InitializeMissileTargeting:
+        ///     `mCasterPos = mCastInfo.mSpellCastLaunchPos; targetRange = |target − mCasterPos|`),
+        ///     NOT the owner's live position. These are equal for a normal self-launched cast,
+        ///     but DIVERGE for an override-launched missile (SpellCast overrideCastPos != 0):
+        ///     Ahri's dead-return orb (AhriOrbReturnDead) launches from the outbound turn point
+        ///     yet is owned by the dead champion sitting at the endpoint — measuring from
+        ///     Owner.Position gave range ≈ 0, so the orb died the tick it spawned (never visible).
+        ///     Talon W return blades launch from the blade endpoints for the same reason.
         ///   otherwise → CastRange[wire level] — the client indexes with the 0-based wire
         ///     SpellLevel, so rank 1 uses the BASE CastRange[0] and rank r uses CastRange[r-1].
         /// The old GetCurrentCastRange() (= max of base and per-rank value) overshot the
@@ -200,7 +207,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             var targetPosEnd2D = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
             if (SpellOrigin.SpellData.LineMissileEndsAtTargetPoint)
             {
-                return Vector2.Distance(CastInfo.Owner.Position, targetPosEnd2D);
+                // mCasterPos == mSpellCastLaunchPos (the LAUNCH point), not the owner's live
+                // position — matches InitializeDestination, which also anchors Position here.
+                var launch2D = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
+                return Vector2.Distance(launch2D, targetPosEnd2D);
             }
 
             var castRange = SpellOrigin.SpellData.CastRange;

@@ -96,7 +96,7 @@ public class KatarinaE : ISpellScript {
             // unknown (server binaries unavailable); this line reproduces the wire-proven
             // BEHAVIOR regardless of which internal path Riot used.
             _katarina.CancelAutoAttackIfWindingUp();
-            IssueOrder(_katarina, OrderType.AttackTo, _target);
+            IssueOrder(_katarina, OrderType.AttackTo, targetOfOrder: _target);
 
             switch (_katarina.SkinID) {
                 case 9:

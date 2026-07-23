@@ -63,6 +63,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Lane = lane;
             ParentObject = mapObject;
             SetTeam(team);
+            // Turrets grant NO life steal to attackers (Riot AITurret::SetLifestealImmune(true)).
+            Stats.IsLifestealImmune = true;
             Replication = new ReplicationAITurret(this);
         }
 

@@ -3256,12 +3256,15 @@ namespace PacketDefinitions420
         }
         public void NotifyNPC_Die_EventHistory(Champion ch, uint killerNetID = 0, AttackableUnit killer = null)
         {
-            //For some reason when on team blue event history doesn't get shown, its ugly but for now it doesn't seem to have a problem for now, making a mental note.
-            if (ch.Team == TeamId.TEAM_BLUE)
-            {
-                ch.teamChanged = true;
-                ch.SetTeam(TeamId.TEAM_PURPLE);
-            }
+            // NO team flip here. The old BLUE->PURPLE->BLUE dance was a cargo-cult workaround
+            // ("event history doesn't show on team blue") — Riot NEVER changes a champion's team on
+            // death (0 S2C_UnitChangeTeam across a full replay). The client's death-recap trigger is
+            // team-BLIND: obj_AI_Base_PImpl_Int::OnNetworkPacket<NPC_Die_EventHistory> renders the
+            // recap `if (killer)` — i.e. iff KillerNetID resolves to a known obj_AI_Base
+            // (AIBaseClient.cpp:1620 → HandleDeathRecapPimpl → ProcessDeathRecapData, no team check).
+            // So a non-showing recap means an unresolvable/0 KillerNetID, never the team. The flip
+            // also churned the dead champ's vision providers (SetTeam Remove/Add) at the exact moment
+            // sub-casts (Ahri/Sivir dead-return orb) spawn — an unwanted side effect now gone.
             var history = new NPC_Die_EventHistory();
             history.SenderNetID = ch.NetId;
             history.KillerNetID = killerNetID;
@@ -3289,11 +3292,6 @@ namespace PacketDefinitions420
             history.Entries = ch.EventHistory;
 
             _packetHandlerManager.SendPacket(ch.ClientId, history.GetBytes(), Channel.CHL_S2C);
-            if (ch.teamChanged)
-            {
-                ch.SetTeam(TeamId.TEAM_BLUE);
-                ch.teamChanged = false;
-            }
         }
         /// <summary>
         /// Sends a packet to all players with vision of the specified AttackableUnit detailing that the attacker has abrubtly stopped their attack (can be a spell or auto attack, although internally AAs are also spells).

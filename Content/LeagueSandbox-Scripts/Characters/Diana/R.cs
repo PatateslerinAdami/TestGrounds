@@ -55,7 +55,7 @@ public class DianaTeleport : ISpellScript {
         }
 
         
-        ForceMove(_diana, GetMovePositionByCollisionOffset(_diana, _target, 0f), 2500f, 0, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, true, ForceMovementOrdersType.CANCEL_ORDER, movementName: "DianaTeleport");
+        ForceMove(_diana, GetMovePositionByCollisionOffset(_diana, _target, 0f), 2500f, 0, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, true, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, movementName: "DianaTeleport");
         
         //ForceMoveToUnit(_diana, _target, 2100f, 150f,0f, 2100f, 4f, ForceMovementOrdersFacing.FACE_MOVEMENT_DIRECTION, true, ForceMovementOrdersType.CANCEL_ORDER, "DianaTeleport");
     }

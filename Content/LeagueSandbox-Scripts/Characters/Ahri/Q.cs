@@ -51,7 +51,7 @@ public class AhriOrbofDeception : ISpellScript
         _end = end;
     }
 
-    public void OnSpellCast(Spell spell)
+    public void OnSpellPostCast(Spell spell)
     {
         // S1 SelfExecute: face the cursor, then fire the orb at a point a FIXED 900u ahead in that
         // facing direction (BBFaceDirection + BBGetPointByUnitFacingOffset, Distance = 900) — not
@@ -72,6 +72,7 @@ public class AhriOrbMissile : ISpellScript
 
     public SpellScriptMetadata ScriptMetadata => new()
     {
+        PersistsThroughDeath = true,
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
@@ -206,17 +207,17 @@ public class AhriOrbReturn : ISpellScript
 
         // S1 AhriOrbReturn TargetExecute: the return orb applies AhriOrbDamageSilence (TRUE damage)
         // — separate buff name from the outbound orb so a unit caught by both takes both hits.
-        if (BreakSpellShields(target, spell))
+        if (BreakSpellShields(target, _ahri.Spells[0]))
         {
             AddBuff("AhriOrbDamageSilence", 2f, 1, _ahri.Spells[0], target, _ahri);
         }
     }
+
 }
 
 public class AhriOrbReturnDead : ISpellScript
 {
     private ObjAIBase _ahri;
-
     public SpellScriptMetadata ScriptMetadata => new()
     {
         MissileParameters = new MissileParameters()

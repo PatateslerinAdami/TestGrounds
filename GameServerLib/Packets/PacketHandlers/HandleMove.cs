@@ -430,7 +430,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 if (req.OrderType != OrderType.PetHardAttack && req.OrderType != OrderType.PetHardMove
                     && req.OrderType != OrderType.PetHardReturn && req.OrderType != OrderType.PetHardStop)
                 {
-                    champion.IssueOrder(req.OrderType, u, req.Position);
+                    champion.IssueOrder(req.OrderType, req.Position, u);
 
                     // IssueOrders S2 Phase 2: drive the order-status lifecycle through HandleNewOrder (Riot's
                     // status machine: setOrder → PENDING → TryToExecuteOrder ? ExecuteOrder (EXECUTED)). This
@@ -444,8 +444,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     // Pet-hard commands target the PET's brain, not the champion's. Route them to the
                     // pet's OnOrder so the (new) PetAI BaseAIScript can translate them into pet states.
                     // The legacy IAIScript Pet.cs is not a BaseAIScript, so IssueOrder is a no-op for it
-                    // (it keeps using its OnUnitUpdateMoveOrder listener) — behaviour-neutral until P-B.
-                    pet.IssueOrder(req.OrderType, u, req.Position);
+                    // (it keeps using its OnHandleOnIssueOrder listener) — behaviour-neutral until P-B.
+                    pet.IssueOrder(req.OrderType, req.Position, u);
                     // Status machine runs on the PET (its own IssueOrders), mirroring Riot's pet.IssueOrder
                     // → pet.orders.HandleNewOrder. Neutral (unread).
                     pet.HandleNewOrder(req.OrderType, u, req.Position);

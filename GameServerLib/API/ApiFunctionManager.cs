@@ -319,6 +319,21 @@ namespace LeagueSandbox.GameServer.API
                 {
                     slot = (int)SpellSlotType.TempItemSlot;
                 }
+                else if (slotType == SpellSlotType.BluePillSlot)
+                {
+                    slot = (int)SpellSlotType.BluePillSlot;
+                }
+                else if (slotType == SpellSlotType.UseSpellSlot)
+                {
+                    slot = (int)SpellSlotType.UseSpellSlot;
+                }
+                else if (slotType == SpellSlotType.PassiveSpellSlot)
+                {
+                    // Fixed-base slots (Riot spellbook: use=61, passive=62). Without this the passed
+                    // 0-based index falls through unchanged and lands on the Q slot — e.g. a champion
+                    // passive's SetSpellToolTipVar(PassiveSpellSlot) would overwrite Q's tooltip vars.
+                    slot = (int)SpellSlotType.PassiveSpellSlot;
+                }
                 else if (slotType == SpellSlotType.ExtraSlots)
                 {
                     slot += (int)SpellSlotType.ExtraSlots;
@@ -1244,13 +1259,21 @@ namespace LeagueSandbox.GameServer.API
         /// Shows or hides the specified unit's health bar on the client.
         /// </summary>
         /// <param name="target">Unit whose health bar visibility should change.</param>
-        /// <param name="userId">UserId to send to. If -1, broadcasts to all players.</param>
+        /// <param name="specificUnitOnly">If set, only that unit's owning player sees the change; the
+        /// recipient's userId is resolved from its player (only Champions map to a client). If null,
+        /// broadcasts to all players.</param>
         /// <param name="hide">True to hide the health bar, false to show it.</param>
-        public static void HideHealthBar(AttackableUnit target, int userId = -1, bool hide = true)
+        public static void HideHealthBar(AttackableUnit target, AttackableUnit specificUnitOnly = null, bool hide = true)
         {
             if (target == null)
             {
                 return;
+            }
+
+            int userId = -1;
+            if (specificUnitOnly is Champion champion)
+            {
+                userId = _game.PlayerManager.GetClientInfoByChampion(champion)?.ClientId ?? -1;
             }
 
             _game.PacketNotifier.NotifyShowHealthBar(target, userId, hide);
@@ -3656,23 +3679,32 @@ namespace LeagueSandbox.GameServer.API
         /// Issues an engine AI order to a unit — Riot's <c>BBIssueOrder</c> (params WhomToOrderVar /
         /// Order / TargetOfOrderVar), which routes through the SAME order pipeline as player input
         /// (<c>obj_AI_Base::IssueOrder</c>; HandleMove performs the identical calls for right-clicks).
-        /// The S1 block always orders onto a UNIT — corpus-wide the third param is TargetOfOrderVar,
-        /// there is no point variant — hence the unit-only signature. Canonical use: post-hit attack
-        /// orders (Pantheon W LeapBash, Lee Sin Q2, WW R, Talon Cutthroat all issue AI_ATTACKTO on
+        /// Signature mirrors Riot's native <c>IssueOrder(whom, order, position, target)</c>
+        /// (BuildingBlocksBase.lua:1774): the S1 BB always passed a target (SrcVar unused, so
+        /// position = <c>GetPosition(target)</c>), but the native takes an explicit point — exposed
+        /// here so MoveTo can order a bare ground position, not only move-to-unit. Canonical use: post-hit
+        /// attack orders (Pantheon W LeapBash, Lee Sin Q2, WW R, Talon Cutthroat all issue AI_ATTACKTO on
         /// the victim after the spell connects, so the caster immediately starts basic-attacking).
         /// </summary>
         /// <param name="whom">Unit receiving the order (BBIssueOrder <c>WhomToOrderVar</c>).</param>
         /// <param name="order">Order to issue. The values the S1 scripts use: AttackTo (AI_ATTACKTO),
-        /// MoveTo (AI_MOVETO — walks to the target unit's current position), Hold (AI_HOLD) and
-        /// OrderNone (AI_ORDER_NONE — clears target and order).</param>
+        /// MoveTo (AI_MOVETO), Hold (AI_HOLD) and OrderNone (AI_ORDER_NONE — clears target and order).</param>
+        /// <param name="position">Target point of the order (Riot native 3rd arg / BBIssueOrder
+        /// <c>SrcVar</c>). Null → the target unit's position (Riot <c>GetPosition(target)</c>). Lets MoveTo
+        /// target a bare ground point with no unit.</param>
         /// <param name="targetOfOrder">Unit the order acts on (BBIssueOrder <c>TargetOfOrderVar</c>);
-        /// required for AttackTo/MoveTo, ignored for Hold/OrderNone.</param>
-        public static void IssueOrder(ObjAIBase whom, OrderType order, AttackableUnit targetOfOrder = null)
+        /// required for AttackTo, ignored for Hold/OrderNone. MoveTo only uses it to source
+        /// <paramref name="position"/> when no explicit point is given.</param>
+        public static void IssueOrder(ObjAIBase whom, OrderType order, Vector2? position = null, AttackableUnit targetOfOrder = null)
         {
             if (whom == null || whom.IsDead)
             {
                 return;
             }
+
+            // Riot native IssueOrder position rule: SrcVar else GetPosition(target); we add whom.Position
+            // as a final fallback so point-less state orders (Hold/OrderNone) still carry a valid point.
+            var orderPos = position ?? targetOfOrder?.Position ?? whom.Position;
 
             switch (order)
             {
@@ -3690,11 +3722,13 @@ namespace LeagueSandbox.GameServer.API
                     break;
                 case OrderType.MoveTo:
                 {
-                    if (targetOfOrder == null)
+                    if (position == null && targetOfOrder == null)
                     {
                         return;
                     }
-                    var path = _game.Map.PathingHandler.GetPath(whom, targetOfOrder.Position);
+                    // Path to the order point — an explicit ground position, or the target unit's
+                    // position when only a target was given (supports both, not just move-to-unit).
+                    var path = _game.Map.PathingHandler.GetPath(whom, orderPos);
                     if (path == null)
                     {
                         return;
@@ -3726,8 +3760,7 @@ namespace LeagueSandbox.GameServer.API
             //      champion wasn't already in an attack state).
             //  (2) HandleNewOrder — Riot's order-status machine (PENDING→EXECUTED), the single
             //      issue point for order status, same as HandleMove.
-            var orderPos = targetOfOrder?.Position ?? whom.Position;
-            whom.IssueOrder(order, targetOfOrder, orderPos);
+            whom.IssueOrder(order, orderPos, targetOfOrder);
             whom.HandleNewOrder(order, targetOfOrder, orderPos);
         }
 
@@ -3999,7 +4032,12 @@ namespace LeagueSandbox.GameServer.API
 
             if (spellbookType == SpellbookType.SPELLBOOK_SUMMONER)
             {
-                target.Stats.SetSummonerSpellEnabled((byte)slot, !seal);
+                // ConvertAPISlot already applied the SummonerSpellSlots (+4) offset, but
+                // SetSummonerSpellEnabled takes the RELATIVE summoner index (0/1) and maps it to the
+                // wire bit itself (16u << id -> bits 4/5, matching Champion.Respawn). Passing the
+                // absolute 4/5 here would double-offset to bits 8/9, which the client never reads
+                // (summoner CanCast lives at bits 4/5 of mCanCastBits2) -> the seal silently no-ops.
+                target.Stats.SetSummonerSpellEnabled((byte)(slot - (int)SpellSlotType.SummonerSpellSlots), !seal);
                 return;
             }
 
@@ -4058,6 +4096,21 @@ namespace LeagueSandbox.GameServer.API
         public static void SetStatus(AttackableUnit unit, StatusFlags status, bool enabled)
         {
             unit.SetStatus(status, enabled);
+        }
+
+        /// <summary>
+        /// Makes the given unit's auto attacks unable to be dodged (or restores dodgeability).
+        /// Faithful port of Riot's S1 Lua BuildingBlock <c>BBSetDodgePiercing(Target, Value)</c>:
+        /// sets the DodgePiercing CharacterState and replicates it (ActionState bit 18). The dodge
+        /// gate itself lives in <see cref="ObjAIBase.RollDodge"/> — a piercing attacker skips the roll.
+        /// Ref-counted like Riot: <c>true</c> adds a hold, <c>false</c> releases one — every enable must
+        /// be matched by exactly one disable, and the unit is piercing while any hold remains.
+        /// </summary>
+        /// <param name="unit">Attacker whose auto attacks should pierce dodge.</param>
+        /// <param name="enabled">Whether dodge piercing is enabled.</param>
+        public static void SetDodgePiercing(ObjAIBase unit, bool enabled)
+        {
+            unit.DodgePiercing = enabled;
         }
 
         /// <summary>

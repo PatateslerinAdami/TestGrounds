@@ -52,6 +52,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     public class ObjAIBase : AttackableUnit
     {
         public int hitCount = 0;
+
+        /// <summary>
+        /// The AI manager holding this unit's movement/collision engine (Riot's
+        /// <c>obj_AI_Base::PTR_AIManager</c> → <c>AIManager_Common::AI_actor</c>). Reach the movement
+        /// engine as <c>AIManager.Actor</c>. STAGE 0 scaffold — see
+        /// <c>docs/ACTOR_CLASS_EXTRACTION_PLAN.md</c>; logic migrates onto <see cref="AI.Actor"/> in later
+        /// stages. Buildings (plain <see cref="AttackableUnit"/>) have no AIManager, exactly like Riot.
+        /// </summary>
+        public AIManager AIManager { get; }
+
         // Crucial Vars
         private float _autoAttackCurrentCooldown;
 
@@ -342,9 +352,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public bool IsNextAutoDodged { get; protected set; }
         /// <summary>
         /// When true, this unit's auto attacks CANNOT be dodged (Riot CharacterState DodgePiercing,
-        /// set by <c>BBSetDodgePiercing</c>; many empowered/spell attacks set it). Checked in <see cref="RollDodge"/>.
+        /// set by the S1 Lua BuildingBlock <c>BBSetDodgePiercing</c>). Checked in <see cref="RollDodge"/>.
+        /// Backed by <see cref="StatusFlags.DodgePiercing"/> so it flows through the CharacterState
+        /// path and replicates on the wire (ActionState bit 18) exactly like Riot's SetDodgePiercing.
+        /// REF-COUNTED like Riot (CharacterState::RefCountedState): each <c>= true</c> adds a hold, each
+        /// <c>= false</c> releases one, and the unit is dodge-piercing while any hold is active — so
+        /// overlapping enablers (two buffs) compose and one expiring does not clear it prematurely.
+        /// The getter reports the current effective state (holds &gt; 0).
         /// </summary>
-        public bool DodgePiercing { get; set; }
+        public bool DodgePiercing
+        {
+            get => Status.HasFlag(StatusFlags.DodgePiercing);
+            set => SetStatus(StatusFlags.DodgePiercing, value);
+        }
         /// <summary>
         /// Current order this AI is performing. The enum is COMPLETE — verified 1:1 against Riot's
         /// orders_e (mac decomp AI/AIEnums.h, all 16 values, ORDERS_END_OF_LIST = 16); see the
@@ -391,6 +411,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _itemManager = game.ItemManager;
             _scriptsEnabled = enableScripts;
 
+            // Compose the AI manager + movement/collision actor (Riot: PTR_AIManager->AI_actor). Stage 0
+            // scaffold: no logic hangs on it yet, so construction order is unconstrained; later stages that
+            // move waypoint init here must run before base movement init.
+            AIManager = new AIManager(this);
+
             Name = name;
             SkinID = skinId;
             // Seed the model/skin stack's base with the real spawn skinID (set after the base ctor).
@@ -424,6 +449,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             VisionRadius = visionRadius > 0 ? visionRadius : CharData.PerceptionBubbleRadius;
+
+            // Per-unit XP-share radius (Riot ExperienceRadius): neutrals override the map-wide
+            // ai_ExpRadius2 default (camps 400, epics 2000). 0 in chardata -> keep the map default.
+            if (CharData.ExperienceRadius > 0f)
+            {
+                ExperienceGiveRadius = CharData.ExperienceRadius;
+            }
 
             Stats.CurrentMana = Stats.ManaPoints.Total;
             Stats.CurrentHealth = Stats.HealthPoints.Total;
@@ -3382,8 +3414,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         {
             if (publish)
             {
-                // Return if scripts do not allow this order.
-                if (!ApiEventManager.OnUnitUpdateMoveOrder.Publish(this, order))
+                // Return if scripts veto this order (Riot HandleOnIssueOrder bool return). Populate the
+                // full Riot param set best-effort from current state: the order's target is the pending
+                // cast target or the current target, its position that unit's position (else the
+                // attack-move destination), and the cast info comes from the pending SpellToCast.
+                var orderTarget = PostponedCastTarget ?? TargetUnit;
+                var orderData = new IssueOrderData
+                {
+                    Order = order,
+                    TargetUnit = orderTarget,
+                    CastInfo = SpellToCast?.CastInfo,
+                    TargetPosition = orderTarget?.Position ?? AttackMoveDestination
+                };
+                if (!ApiEventManager.OnHandleOnIssueOrder.Publish(this, orderData))
                 {
                     return;
                 }
@@ -3406,10 +3449,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // single issue point (HandleNewOrder, called from HandleMove); the move-to-cast postpone stays in
             // SetSpellToCast (→ POSTPONED). Still 0 behaviour change (nothing reads OrderStatus for control).
 
-            if ((MoveOrder == OrderType.OrderNone
+            // Stop / OrderNone / PetHardStop DROP the current order (Riot ForceMovementOrdersType
+            // CANCEL_ORDER=0 "drop current order", AIEnums.h:67; IssueOrders → ORDER_STATUS_CLEAR +
+            // SetEnemyID(0), AIBase.cpp:2643) — so the attack target must be cleared UNCONDITIONALLY.
+            // The former `&& !IsPathEnded()` gate tied the target-clear to the unit still moving, so a
+            // Stop issued with the path already ended silently kept the target and the unit resumed
+            // attacking (= POSTPONE behaviour). That path-ended state is exactly what a CANCEL_ORDER
+            // force-move leaves behind: its end runs base.SetForceMovementState → ResetWaypoints before
+            // this Stop is issued, so CANCEL_ORDER dashes (Diana R/E) wrongly behaved like POSTPONE.
+            // StopMovement() self-guards (early-outs at Waypoints.Count == 1), so only the target-clear
+            // needed ungating; a genuinely-moving Stop still stops as before.
+            if (MoveOrder == OrderType.OrderNone
                 || MoveOrder == OrderType.Stop
                 || MoveOrder == OrderType.PetHardStop)
-                && !IsPathEnded())
             {
                 StopMovement();
                 SetTargetUnit(null, true);
@@ -3622,7 +3674,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// no OnOrder callback. (Naming caveat: Riot's <c>obj_AI_Base::IssueOrder</c> is the order FUNNEL —
         /// clamp + path-build + HandleNewOrder — which is our HandleMove, not this method.)
         /// </summary>
-        public void IssueOrder(OrderType order, AttackableUnit target, Vector2 pos)
+        // Param order mirrors Riot's native obj_AI_Base::IssueOrder(orders_e, r3dPoint3D&,
+        // AttackableUnit*, ...) — position before target. (The player-input bools shift/alt/ack-sound
+        // are not modelled here; they're not part of the script/BB order path.)
+        public void IssueOrder(OrderType order, Vector2 pos, AttackableUnit target)
         {
             (AIScript as Behavior.BaseAIScript)?.OnOrder(order, target, pos);
         }

@@ -54,7 +54,7 @@ public class PantheonW : ISpellScript
         // basic-attacking out of the stun. Hero-gated like the lua.
         if (target.Team != _pantheon.Team && !target.IsDead && target is Champion)
         {
-            IssueOrder(_pantheon, OrderType.AttackTo, target);
+            IssueOrder(_pantheon, OrderType.AttackTo, targetOfOrder: target);
         }
     }
 

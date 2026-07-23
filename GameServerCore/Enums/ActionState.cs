@@ -51,7 +51,13 @@ namespace GameServerCore.Enums
         CAN_NOT_ATTACK = 1 << 8,
 
         // --- +1-shifted window (4.17 bits 8-14 -> 4.20 bits 9-15) ---
-        IS_FLEEING = 1 << 9,           // [V] Shaco "Flee" (rlp 7dea59f9, x4 champs); 4.17 bit 8
+        // [V] The UNIFIED fear+flee bit. Shaco "Flee" sets it (rlp 7dea59f9), and so does Fiddlesticks
+        // Terrify — a canonical FEAR — which literally calls AddBuff("Flee", buffType FLEE) and flips
+        // bit 9 on its victims (rlp 096729fe: Leona/Khazix/Yasuo bit9 0->1 on cast, ->0 on end; bit 7
+        // stays constant = structural). So 4.20 has NO separate "feared" state: fear and flee are the
+        // SAME buff on the SAME bit (even more merged than Charm/Taunt, which are 2 buffs sharing bit 6).
+        // 4.17 bit 8.
+        IS_FLEEING = 1 << 9,
         SUPPRESSED = 1 << 10,          // [V] Warwick R "Suppression" (rlp ba5459a2): clears caps AND sets this; 4.17 bit 9
         IS_ASLEEP = 1 << 11,           // [I] 4.17 Sleep(10)+1; not directly measured
         IS_NEAR_SIGHTED = 1 << 12,     // [V] Nocturne R NearSight (rlp 312026bc); 4.17 bit 11
@@ -73,12 +79,22 @@ namespace GameServerCore.Enums
         // --- unshifted region (4.17 bits >=16 == 4.20) ---
         NO_RENDER = 1 << 16,             // [V] live-confirmed (client stops rendering)
         FORCE_RENDER_PARTICLES = 1 << 17,// [V] live-confirmed: a NoRender'd unit's particle renders again once this bit is set (Ryze DesperatePower test). 4.17 = 17.
-        // [A] bit 18 is NOT DodgePiercing (audit: toggles on ~all heroes as one early-game window,
-        // not per-dodge). Best hypothesis = Map11 early spawn-lock (S4SpawnLockSpeed, absent in 4.17).
-        // A live SetStatus test showed NO standalone client-visible effect -> likely a backend/info
-        // flag (like DisableAmbientGold/XP). Not driven by anything; meaning UNCONFIRMED, name is a
-        // placeholder.
-        SPAWN_LOCK = 1 << 18,
+        // [V] mDodgePiercing (4.17 CompressedStates bit 18, UNSHIFTED -> same position in 4.20). REAL,
+        // ACTIVELY-USED state in 4.20 (NOT dead): Master Yi Q "Alpha Strike" sets it for the dash
+        // duration on EVERY cast (rlp 1e6bf323: bit18 pulses SET<->clr in lockstep with each AlphaStrike
+        // over the whole game). Makes sense — Alpha Strike deals attack damage + triggers on-hits (so it
+        // would otherwise be DODGEABLE like an AA), and DodgePiercing lets it ignore the target's dodge.
+        // The server drives it via the ability script (that is why CharacterState::SetDodgePiercing has
+        // zero callers in the CLIENT decomp — server ability code is not in that binary); the client
+        // never reads the bit (dodge is resolved server-side into the wire HitResult), it is a
+        // server-authoritative state mirrored onto the wire. Also appears in the one-time hero spawn
+        // snapshot 0x04849081 (with NearSight(12) + cleared caps) — an init/load default that lingers in
+        // the visibility-diff until each hero is next re-replicated (NOT a timed 0:15 event; see memory).
+        // (An earlier "minion spawn flash ~40ms" reading was a DECODE ARTIFACT — minion Local1[0] is a
+        // health float.) We drive it via StatusFlags.DodgePiercing (ref-counted, mirroring Riot's
+        // RefCountedState); enforcement is in ObjAIBase.RollDodge. Our Master Yi Alpha Strike script
+        // SHOULD set it for the dash to be faithful.
+        DODGE_PIERCING = 1 << 18,
         DISABLE_AMBIENT_GOLD = 1 << 19,  // [V-ish] 4.17 = 19; matches bit19 on Vlad pool / Sion combat-cycle
         DISABLE_AMBIENT_XP = 1 << 20,    // [V] 4.17 = 20; constant on all turrets/structures (rlp x3)
         // Bit 21 DECOMP-CONFIRMED (CharacterState::SetBrushVisibilityFake writes <<21; unshifted region

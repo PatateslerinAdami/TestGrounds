@@ -41,8 +41,20 @@ internal class SionPassiveDelay : IBuffGameScript
         unit.SetStatus(StatusFlags.CanCast, false);
         _sion.Spells[4].SetCooldown(4f, true);
         _sion.Spells[5].SetCooldown(4f, true);
-        PlayAnimation(buff.SourceUnit, "Passive_Death", 1.7f, 0, 1, AnimationFlags.Lock | AnimationFlags.Junk7);
-        SetCharacterVoiceOverride(buff.SourceUnit, "Berserk");
+    }
+
+    public void OnUpdate(Buff buff, float diff)
+    {
+        // Delay the death animation by one client-settle window (~100ms) instead of playing it on
+        // the death tick. The controlling player predicts + locks its own last action anim (an
+        // auto-attack/cast) locally; the client drops any S2C_PlayAnimation that arrives while an
+        // animation is locked (obj_AI_Base_PImpl_Int::OnNetworkPacket -> IsAnimationLocked() early
+        // return), so a death-tick Passive_Death is silently dropped ONLY on the owner (remote
+        // viewers have no local lock and show it fine). Waiting a few ticks lets the predicted lock
+        // clear so the play is accepted. Flags = Lock only (0x01), matching Riot's replay exactly;
+        // the client masks packet bits 5-7 (PlaybackFlagsFromPacketFlags reads only bits 0-3).
+        ExecutePeriodically(buff.BuffVars, "SionPassiveSoundStart", 100f, false, 1,
+            () => { PlayAnimation(buff.TargetUnit, "Passive_Death", 1.7f, 0, 1, AnimationFlags.Lock); });
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
@@ -55,7 +67,8 @@ internal class SionPassiveDelay : IBuffGameScript
         StopAnimation(unit, "Passive_Death", StopAnimationFlags.IgnoreLock);
         AddBuff("SionPassiveZombie", 60f, 1, ownerSpell, _sion, _sion);
         AddBuff("SionPassiveSoundEnd", 60f, 1, ownerSpell, unit, _sion);
-        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,0, SpellbookType.SPELLBOOK_SUMMONER, true);
-        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots,1, SpellbookType.SPELLBOOK_SUMMONER, true);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots, 0, SpellbookType.SPELLBOOK_SUMMONER, true);
+        SealSpellSlot(_sion, SpellSlotType.SummonerSpellSlots, 1, SpellbookType.SPELLBOOK_SUMMONER, true);
+        SealSpellSlot(_sion, SpellSlotType.BluePillSlot, 0, SpellbookType.SPELLBOOK_CHAMPION, true);
     }
 }
