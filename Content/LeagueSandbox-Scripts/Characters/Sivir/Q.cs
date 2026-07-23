@@ -66,7 +66,7 @@ public class SivirQMissile : ISpellScript
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
-            OverrideHeightAugment = 100f
+            OverrideHeightAugment = 50f
         },
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
@@ -122,12 +122,12 @@ public class SivirQMissile : ISpellScript
     {
         if (_sivir.IsDead)
         {
-            SpellCast(_sivir, 4, SpellSlotType.ExtraSlots, missile.Position, _sivir.Position, true, missile.Position);
+            SpellCast(_sivir, 4, SpellSlotType.ExtraSlots, true, _sivir, missile.Position, inheritVariablesFrom: _spell.CastInfo, overrideForceLevel: _sivir.Spells[0].CastInfo.SpellLevel);
         }
         else
         {
             SpellCast(_sivir, 3, SpellSlotType.ExtraSlots, true, _sivir, missile.Position,
-                inheritVariablesFrom: _spell.CastInfo);
+                inheritVariablesFrom: _spell.CastInfo, overrideForceLevel: _sivir.Spells[0].CastInfo.SpellLevel);
         }
 
         ApiEventManager.OnSpellMissileEnd.RemoveListener(this, missile, OnSpellMissileEnd);
@@ -147,7 +147,7 @@ public class SivirQMissileReturn : ISpellScript
         MissileParameters = new MissileParameters()
         {
             Type = MissileType.Arc,
-            OverrideHeightAugment = 100f
+            OverrideHeightAugment = 50f
         },
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
@@ -191,16 +191,10 @@ public class SivirQMissileReturn : ISpellScript
         if(target == _sivir) return;
         AddParticleTarget(_sivir, target, "Sivir_base_Q_tar.troy", target, flags: FXFlags.SimulateWhileOffScreen);
 
-        var ad = _sivir.Stats.AttackDamage.Total * _sivir.Spells[0].SpellData.Coefficient;
-        var dmg = _sivir.Spells[0].SpellData.EffectLevelAmount[2][_sivir.Spells[0].CastInfo.SpellLevel] + ad;
-        var modifier = System.Math.Max(_hitUnits.Count, 5) switch
-        {
-            1 => 0.15f,
-            2 => 0.3f,
-            3 => 0.45f,
-            4 => 0.6f,
-            _ => 0.0f
-        };
+        var mainSpell = _sivir.GetSpell("SivirQ");
+        var ad = _sivir.Stats.AttackDamage.Total * mainSpell.SpellData.Coefficient;
+        var dmg = mainSpell.SpellData.EffectLevelAmount[2][mainSpell.CastInfo.SpellLevel] + ad;
+        var modifier = System.Math.Max(_hitUnits.Count * (mainSpell.SpellData.EffectLevelAmount[2][_sivir.Spells[0].CastInfo.SpellLevel]/100), 5);
 
         target.TakeDamage(_sivir, dmg - dmg * modifier, DamageType.DAMAGE_TYPE_PHYSICAL,
             DamageSource.DAMAGE_SOURCE_SPELLAOE,
