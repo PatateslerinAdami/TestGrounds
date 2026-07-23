@@ -23,7 +23,6 @@ public class NamiQ : ISpellScript {
 
     public SpellScriptMetadata ScriptMetadata { get; } = new() {
         TriggersSpellCasts = true,
-        IsDeathRecapSource = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

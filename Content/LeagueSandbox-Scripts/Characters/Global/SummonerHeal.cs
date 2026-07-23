@@ -64,7 +64,7 @@ namespace Spells
             {
                 healthGain *= 0.5f;
             }
-            target.TakeHeal(owner, healthGain, target == owner ? HealType.SelfHeal : HealType.OutgoingHeal, spell);
+            target.TakeHeal(owner, healthGain, target == owner ? HealType.SelfHeal : HealType.OutgoingHeal);
             AddBuff("HealSpeed", 1.0f, 1, spell, target, owner);
             AddBuff("HealCheck", 35.0f, 1, spell, target, owner);
         }

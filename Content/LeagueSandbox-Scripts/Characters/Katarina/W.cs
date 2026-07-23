@@ -59,7 +59,7 @@ namespace Spells
             var AD = spell.CastInfo.Owner.Stats.AttackDamage.Total * 0.6f;
             float damage = 5f + spell.CastInfo.SpellLevel * 35f + AP + AD;
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell);
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
             AddParticleTarget(owner, target, "katarina_w_tar.troy", target, 1f);
             if (target is Champion) AddBuff("KatarinaWHaste", 1f, 1, spell, owner, owner);
         }

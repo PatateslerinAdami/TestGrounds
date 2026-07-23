@@ -44,7 +44,7 @@ namespace Spells
 
             foreach (var unit in units)
             {
-                    unit.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell);
+                    unit.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
                     AddBuff("RivenMartyr", 0.75f, 1, spell, unit, _owner);
                     AddParticleTarget(_owner, unit, "exile_W_tar_02.troy", unit, 1f);
             }

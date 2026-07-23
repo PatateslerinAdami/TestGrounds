@@ -109,7 +109,7 @@ namespace Spells
 
                 ApiEventManager.OnLaunchAttack.Publish(owner, spell);
 
-                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, _isCritRoll, spell);
+                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, _isCritRoll);
 
                 AddParticleTarget(owner, target, "Yasuo_Base_Q_hit_tar", target);
                 AddParticleTarget(owner, owner, "yasuo_q2_ready_buff.troy", owner, size: 1f);
@@ -121,7 +121,7 @@ namespace Spells
             }
             else
             {
-                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, _isCritRoll, spell);
+                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, _isCritRoll);
             }
         }
     }

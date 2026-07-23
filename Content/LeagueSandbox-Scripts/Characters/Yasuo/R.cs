@@ -83,7 +83,7 @@ namespace Spells
 
                 float bonusAD = owner.Stats.AttackDamage.Total - owner.Stats.AttackDamage.BaseValue;
                 float damage = 100f + (spell.CastInfo.SpellLevel * 100f) + (bonusAD * 1.5f);
-                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, spell);
+                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL, false);
                 
                 AddParticleTarget(owner, target, "Yasuo_Base_R_land_tar", target, 2.0f, 1, "root");
             }

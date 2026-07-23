@@ -46,7 +46,6 @@ namespace Spells
         private const float LeapSpeed = 605f;
 
         private float _chargeTime;
-        private float _waypointUpdateTimer;
 
         // Guards against StopCharge re-entrancy: the hitChampion/hitWall branches call
         // StopChanneling, which publishes OnSpellChargeCancel and re-enters StopCharge(false, false).
@@ -69,7 +68,6 @@ namespace Spells
         {
             _buff = AddBuff("SionR", 8.5f, 1, spell, _sion, _sion);
             _chargeTime = 0f;
-            _waypointUpdateTimer = 0f;
             // Reset the re-entry guard per cast — the script instance is reused across casts, so
             // without this every cast after the first would short-circuit in StopCharge.
             _chargeStopped = false;
@@ -80,11 +78,28 @@ namespace Spells
             _sion.IgnoreMoveOrders = true;
             spell.SpellData.CanMoveWhileChanneling = true;
 
+            // Owner-only charge-state setup (replay-verified, 79a9129c: every SionR charge emits
+            // S2C_UpdateSpellToggle(slot=3, ON) ~125ms after the start cast = at OnSpellChargeStart,
+            // and OFF at release). Without it the owner client's R spell-state stays un-toggled while
+            // the charge runs, so the HUD charge targeter (drawn while the spell is the active/running
+            // charge) blinks on/off. Toggle OFF is done centrally in StopCharge. The paired
+            // ChangeSlotSpellData_OwnerOnly(IconIndex=1) icon swap Riot also sends is cosmetic (R
+            // button art) and omitted for now.
+            spell.SetSpellToggle(true);
+
             Vector2 dir =
                 Vector2.Normalize(new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z) -
                                   _sion.Position);
             _currentAngle = (float)Math.Atan2(dir.Y, dir.X);
             _targetAngle = _currentAngle;
+
+            // Retail sends exactly ONE S2C_FaceDirection for the whole charge, ~one cast-windup
+            // (SionR start-cast DesignerCastTime = 0.125s) after the start cast — which is exactly
+            // when OnSpellChargeStart fires, matching the replay's ~130ms offset. Direction is the
+            // cursor−caster delta, lerped over 0.0833s. Verified across 3 Sion replays / 25 charge
+            // episodes: never re-sent during the hold. Facing during the run is then implicit from
+            // the movement waypoints — do NOT re-emit facing per tick.
+            _sion.FaceDirection(new Vector3(dir.X, 0f, dir.Y), false, 0.0833f);
 
             Vector2 checkPos = _sion.Position + dir * _sion.CollisionRadius;
             if (!IsWalkable(checkPos.X, checkPos.Y, 10f))
@@ -107,12 +122,51 @@ namespace Spells
                     StopCharge(true, false);
                 }
             }
+
+            // Kick off the forward run. Subsequent re-steering happens in OnSpellChargeUpdate at
+            // the client's charge-update cadence; the engine's Move() walks this path between
+            // updates while OnSpellChargeTick keeps the MoveTo order alive.
+            if (!_instantHit)
+            {
+                SteerChargePath(dir);
+            }
         }
 
         public void OnSpellChargeUpdate(Spell spell, Vector3 position, bool forceStop)
         {
+            if (_instantHit || _chargeStopped || _sion.IsDead)
+            {
+                return;
+            }
+
             Vector2 targetDir = Vector2.Normalize(new Vector2(position.X, position.Z) - _sion.Position);
+            if (float.IsNaN(targetDir.X) || float.IsNaN(targetDir.Y))
+            {
+                return;
+            }
             _targetAngle = (float)Math.Atan2(targetDir.Y, targetDir.X);
+
+            // Re-steer the charge path HERE — once per client charge-update packet, which IS Riot's
+            // WaypointGroup (0x61) cadence for a charge (replay: client-driven, irregular ~100-200ms).
+            // This script previously re-broadcast the path on a fixed server-tick timer in
+            // OnSpellChargeTick; that re-anchored the client every 100ms out of step with the client's
+            // own input, and because the client anchors the charge indicator to the caster's position
+            // (HudSpellLogic::DrawHudTargeterForSpell → Player->GetPosition()) the indicator flickered.
+            // Driving the broadcast off the client's input cadence removes the beat/re-anchor. Heading
+            // uses the gradually-turned _currentAngle (integrated in OnSpellChargeTick) so Sion still
+            // cannot snap-turn.
+            Vector2 newDir = new Vector2((float)Math.Cos(_currentAngle), (float)Math.Sin(_currentAngle));
+            SteerChargePath(newDir);
+        }
+
+        // Points the charge run in `dir`: a short 2-waypoint path re-anchored at the caster's
+        // current position (so wp0 advances monotonically, matching retail's 0x61 stream) and a
+        // MoveTo order so Move() will actually walk it. isForced bypasses the channel CC gate.
+        private void SteerChargePath(Vector2 dir)
+        {
+            _sion.UpdateMoveOrder(OrderType.MoveTo, false);
+            Vector2 newPos = _sion.Position + dir * 500f;
+            _sion.SetWaypoints(new List<Vector2> { _sion.Position, newPos }, true);
         }
 
         public void OnSpellChargeTick(Spell spell, float diff)
@@ -168,19 +222,16 @@ namespace Spells
                 }
             }
 
-            _waypointUpdateTimer -= diff;
-            if (!(_waypointUpdateTimer <= 0f)) return;
-            // Bug fix: ObjAIBase.Move() only advances Position when MoveOrder is a "moving"
-            // order; a stationary caster (fresh spawn = OrderNone, post-leap = Stop, or
-            // auto-attacking = CastSpell) hits Move()'s early-return, so the server never walks
-            // the charge path while the client does — then every re-broadcast snaps the client
-            // back to the (un-moved) start position. Force MoveTo each tick so the server
-            // actually advances. Set every tick to also override the AttackTo->CastSpell rewrite
-            // that StartChanneling applies at channel start. publish:false = direct field set.
+            // A collision above may have ended the charge — don't touch movement afterwards.
+            if (_chargeStopped) return;
+
+            // Keep the MoveTo order alive (publish:false = direct field set, NO wire packet) so the
+            // engine's Move() keeps walking Sion along the path last steered in OnSpellChargeUpdate.
+            // The actual WaypointGroup broadcast happens on the client charge-update (Riot cadence),
+            // NOT per server tick. ObjAIBase.Move() only advances Position under a "moving" order, so
+            // this also overrides the AttackTo->CastSpell order rewrite StartChanneling applies at
+            // channel start (otherwise Move() early-returns and the server never walks the path).
             _sion.UpdateMoveOrder(OrderType.MoveTo, false);
-            Vector2 newPos = _sion.Position + newDir * 500f;
-            _sion.SetWaypoints(new List<Vector2> { _sion.Position, newPos }, true);
-            _waypointUpdateTimer = 100f;
         }
 
         public void OnSpellChargeCancel(Spell spell, ChannelingStopSource reason)
@@ -202,6 +253,9 @@ namespace Spells
         {
             if (_chargeStopped) return;
             _chargeStopped = true;
+
+            // Clear the owner-only charge toggle set in OnSpellChargeStart (replay: OFF at release).
+            _spell.SetSpellToggle(false);
 
             // Release the camera lock now the charge has ended (cancel / recast / timeout / collision).
             LockCamera(_sion, false);

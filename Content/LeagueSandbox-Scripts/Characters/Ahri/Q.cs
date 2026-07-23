@@ -84,7 +84,7 @@ public class AhriOrbMissile : ISpellScript
             // terrain + 100 and Velocity.Y = -277.8 = -100 / (900u / 2500); the client takes
             // its flight height from wire Position.Y (OverridePlacement: mStartHeightFromGround
             // = Position.y - terrain), so without this the orb drags along the ground.
-            OverrideHeightAugment = 50f
+            OverrideHeightAugment = 100f
         },
     };
 
@@ -173,7 +173,7 @@ public class AhriOrbReturn : ISpellScript
             // see AhriOrbMissile). Wire Position.Y is what the client flies at; tracked
             // missiles (LineMissileTrackUnits=1) get Velocity.Y = 0, which our packet builder
             // already handles.
-            OverrideHeightAugment = 50f
+            OverrideHeightAugment = 100f
         }
     };
 
@@ -238,7 +238,7 @@ public class AhriOrbReturnDead : ISpellScript
             // Same orb, same spawn point (outbound death position at terrain + 100) as the live
             // return — no wire samples of the dead variant in the corpus, height mirrored from
             // AhriOrbReturn.
-            OverrideHeightAugment = 50f
+            OverrideHeightAugment = 100f
         }
     };
 

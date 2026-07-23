@@ -123,14 +123,14 @@ namespace Spells
 
                 ApiEventManager.OnLaunchAttack.Publish(owner, spell);
 
-                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, _isCritRoll, spell);
+                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, _isCritRoll);
                 
                 FirstTarget = false;
                 spell.CastInfo.IsAutoAttack = false;
             }
             else
             {
-                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, _isCritRoll, spell);
+                target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, _isCritRoll);
             }
 
             AddBuff("YasuoQ3Mis", 1.2f, 1, spell, target, owner);

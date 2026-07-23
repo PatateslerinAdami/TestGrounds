@@ -23,7 +23,6 @@ public class KatarinaE : ISpellScript {
         IsDamagingSpell                = true,
         CastingBreaksStealth           = false,
         NotSingleTargetSpell           = false,
-        IsDeathRecapSource             = true,
         AutoFaceDirection              = false,
         // Lets OnSpellPreCast write the landing pos into CastInfo.TargetPosition without
         // Spell.Cast clobbering it with the default 10-unit-forward stub.

@@ -15,10 +15,9 @@ using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 namespace ItemSpells;
 
 public class TrinketTotemLvl1 : ISpellScript {
-    private       Minion _ward;
 
     public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts = false
+        TriggersSpellCasts = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -28,7 +27,6 @@ public class TrinketTotemLvl1 : ISpellScript {
     }
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        
         var cursor   = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
         var current  = new Vector2(owner.Position.X,                owner.Position.Y);
         var distance = cursor - current;
@@ -41,17 +39,18 @@ public class TrinketTotemLvl1 : ISpellScript {
             var range = distance * 500f;
             truecoords = current + range;
         } else { truecoords = cursor; }
-
-        _ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true);
-        _ward.Stats.ManaPoints.BaseValue = duration;
-        _ward.Stats.CurrentMana          = duration;
-        AddParticle(owner, _ward, "TrinketOrbLvl1Audio", _ward.Position);
+        SpellCastItem(owner, "ItemPlacementMissile", truecoords, truecoords, true, Vector2.Zero);
+    
+        var ward = AddMinion(owner, "YellowTrinket", "YellowTrinket", truecoords, owner.Team, 0, true, true);
+        ward.Stats.ManaPoints.BaseValue = duration;
+        ward.Stats.CurrentMana          = duration;
+        AddParticle(owner, ward, "TrinketOrbLvl1Audio", ward.Position);
         if (owner.HasBuff("SharedWardBuff")) {
             var buff = owner.GetBuffWithName("SharedWardBuff").BuffScript as SharedWardBuff;
-            buff?.AddWard(_ward);
+            buff?.AddWard(ward);
         } else {
            var buff = AddBuff("SharedWardBuff", 25000f, 1, spell, owner, owner, true).BuffScript as SharedWardBuff;
-           buff?.AddWard(_ward);
+           buff?.AddWard(ward);
         }
     }
 }

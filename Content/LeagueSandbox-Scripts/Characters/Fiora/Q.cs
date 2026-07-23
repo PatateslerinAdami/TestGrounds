@@ -78,7 +78,6 @@ namespace Spells
 
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            IsDeathRecapSource = true,
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)

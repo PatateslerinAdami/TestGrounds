@@ -3254,6 +3254,40 @@ namespace PacketDefinitions420
 
             NotifyNPC_Die_EventHistory(champ, killerNetID, deathData.Killer);
         }
+        /// <summary>
+        /// First index to keep when trimming a death-recap history to Riot's time window (Game.cfg
+        /// [Gameplay] DeathRecapMinimumTimeWindow / DeathRecapExtensionTimeWindow). Anchored at the
+        /// latest (chronologically last) entry: always keep events within <paramref name="minWindow"/>
+        /// of it; beyond that, keep an older event only while its gap to the next-newer kept event is
+        /// within <paramref name="extWindow"/> (continuous combat chains backward, an out-of-combat gap
+        /// stops it). Pure/static for testability.
+        /// </summary>
+        public static int DeathRecapWindowStart(List<EventHistoryEntry> events, float minWindow, float extWindow)
+        {
+            if (events == null || events.Count == 0)
+            {
+                return 0;
+            }
+            float anchor = events[events.Count - 1].Timestamp;
+            int keepFrom = events.Count - 1;
+            for (int i = events.Count - 1; i >= 0; i--)
+            {
+                if (anchor - events[i].Timestamp <= minWindow)
+                {
+                    keepFrom = i;
+                }
+                else if (events[i + 1].Timestamp - events[i].Timestamp <= extWindow)
+                {
+                    keepFrom = i;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            return keepFrom;
+        }
+
         public void NotifyNPC_Die_EventHistory(Champion ch, uint killerNetID = 0, AttackableUnit killer = null)
         {
             // NO team flip here. The old BLUE->PURPLE->BLUE dance was a cargo-cult workaround
@@ -3268,12 +3302,24 @@ namespace PacketDefinitions420
             var history = new NPC_Die_EventHistory();
             history.SenderNetID = ch.NetId;
             history.KillerNetID = killerNetID;
+
+            // Riot death-recap time window (Game.cfg [Gameplay]: DeathRecapMinimumTimeWindow=15,
+            // DeathRecapExtensionTimeWindow=5). The recap must show only the recent combat that killed
+            // the champion, NOT everything since respawn. Anchored at the latest event (~time of death),
+            // always keep the last 15s; beyond that, keep older events only while each is within 5s of
+            // the next-newer kept event — a continuous fight chains backward (replay spans reach ~36s),
+            // an out-of-combat gap cuts it off (replay: no intra-recap gap exceeds ~12s). The exact
+            // server trim isn't in the 4.17 client decomp; this reproduces the 4.20 rlp corpus behavior.
+            const float DeathRecapMinimumTimeWindow = 15.0f;
+            const float DeathRecapExtensionTimeWindow = 5.0f;
+            var events = ch.EventHistory;
+            int keepFrom = DeathRecapWindowStart(events, DeathRecapMinimumTimeWindow, DeathRecapExtensionTimeWindow);
+            var windowed = keepFrom == 0 ? events : events.GetRange(keepFrom, events.Count - keepFrom);
+
             history.Duration = 0;
-            if (ch.EventHistory.Count > 0)
+            if (windowed.Count > 0)
             {
-                float firstTimestamp = ch.EventHistory[0].Timestamp;
-                float lastTimestamp = ch.EventHistory[ch.EventHistory.Count - 1].Timestamp;
-                history.Duration = lastTimestamp - firstTimestamp;
+                history.Duration = windowed[windowed.Count - 1].Timestamp - windowed[0].Timestamp;
             }
             // The KILLER's unit class for the death-recap header (client: HandleDeathRecapPimpl →
             // DeathRecap::ProcessDeathRecapData consumes it as EventSystem::EventSourceType —
@@ -3289,7 +3335,7 @@ namespace PacketDefinitions420
                 Minion => 1,            // EVENTSOURCETYPE_MINION
                 _ => 5                  // EVENTSOURCETYPE_UNKNOWN
             };
-            history.Entries = ch.EventHistory;
+            history.Entries = windowed;
 
             _packetHandlerManager.SendPacket(ch.ClientId, history.GetBytes(), Channel.CHL_S2C);
         }

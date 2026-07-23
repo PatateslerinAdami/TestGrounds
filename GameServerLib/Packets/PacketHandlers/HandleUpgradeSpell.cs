@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Packets.Handlers;
 using GameServerCore.Packets.PacketDefinitions.Requests;
+using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Logging;
@@ -37,7 +38,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
                 if (champion.Spells.TryGetValue(req.Slot, out var spell))
                 {
-                    spell.Script.OnSpellEvolve(spell);
+                    using (ScriptContext.Enter(spell)) spell.Script.OnSpellEvolve(spell);
                 }
 
                 LeaguePackets.Game.Events.IEvent evolveEvent = null;

@@ -33,8 +33,7 @@ namespace Spells
         {
             NotSingleTargetSpell = true,
             DoesntBreakShields = true,
-            TriggersSpellCasts = true,
-            IsDeathRecapSource = true
+            TriggersSpellCasts = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)

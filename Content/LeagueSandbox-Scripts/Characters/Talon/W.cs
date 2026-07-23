@@ -86,7 +86,6 @@ public class TalonRakeMissileOne : ISpellScript {
         NotSingleTargetSpell = true,
         IsDamagingSpell = true,
         SpellDamageRatio = 0.5f,
-        IsDeathRecapSource = true,
         TriggersSpellCasts = false
     };
 

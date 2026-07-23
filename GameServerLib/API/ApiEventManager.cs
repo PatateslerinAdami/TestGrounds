@@ -1,4 +1,5 @@
 ﻿using GameServerCore.Enums;
+using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -10,6 +11,7 @@ using LeagueSandbox.GameServer.Logging;
 using log4net;
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using GameServerCore.Packets.Enums;
 
 /*
@@ -129,6 +131,14 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnDeath
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
 
+        // Riot CharOnNearbyDeath (S1 CharOnNearbyDeathBuildingBlocks — Alistar Q/W cooldown reduction,
+        // Trundle King's Tribute heal). Each consumer registers the RANGE it cares about; the dispatcher
+        // spatially gates per-listener at publish time. The "nearby" radius is per-champion (Trundle 1000
+        // pre-5.5, Thresh soul range 1900), NOT a single engine constant — and Riot's exact value is
+        // stripped from every decomp — so it lives with the listener via AddListener(range) instead of a
+        // fixed engine gate or a hand-written per-handler distance check.
+        public static NearbyDeathDispatcher OnNearbyDeath = new NearbyDeathDispatcher();
+
         // Fires when a death produces a ZOMBIE rather than a normal death (DeathData.BecomeZombie
         // set during the OnDeath pass). Faithful to Riot's BuffOnZombieBuildingBlocks (decomp:
         // obj_AI_Base::DoDeath sets bZombie=true → buff OnZombie hooks). The zombie unit stays in
@@ -162,7 +172,13 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, AttackableUnit> OnMiss        
             = new Dispatcher<AttackableUnit, AttackableUnit>();
         
-        public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingDodged 
+        public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingDodged
+            = new Dispatcher<AttackableUnit, AttackableUnit>();
+
+        // Defender-side counterpart of OnMiss (Riot HandleOnBeingMissed / HandleCharOnBeingMissed):
+        // fires on the unit an attack MISSED (e.g. the attacker was blinded), source = that defender,
+        // data = the attacker. Mirrors the OnDodge/OnBeingDodged split.
+        public static Dispatcher<AttackableUnit, AttackableUnit> OnBeingMissed
             = new Dispatcher<AttackableUnit, AttackableUnit>();
 
         /// <summary>
@@ -557,6 +573,15 @@ namespace LeagueSandbox.GameServer.API
                             CarefulRemoval(i);
                         }
 
+                        // Ambient script-context (Riot's sScriptHistory analog): while this listener's
+                        // callback runs, its script is the "current" frame, so damage/heal it deals
+                        // without an explicit sourceScript is attributed to it. Only real scripts
+                        // (Spell/Buff/AbilityInfo) implement IEventSource; unit/other Sources push nothing.
+                        var scriptFrame = listener.Source is IEventSource src ? src : null;
+                        if (scriptFrame != null)
+                        {
+                            ScriptContext.Push(scriptFrame);
+                        }
                         try
                         {
                             using var _scope = Profiler.Scope(listener.ProfileName, "scripts");
@@ -565,6 +590,13 @@ namespace LeagueSandbox.GameServer.API
                         catch (Exception e)
                         {
                             _logger.Error(e);
+                        }
+                        finally
+                        {
+                            if (scriptFrame != null)
+                            {
+                                ScriptContext.Pop();
+                            }
                         }
                     }
                 }
@@ -644,6 +676,76 @@ namespace LeagueSandbox.GameServer.API
             protected override void Call(Action<Data> callback)
             {
                 callback(_data);
+            }
+        }
+
+        // Range-gated dispatcher for OnNearbyDeath (Riot CharOnNearbyDeath). Each listener registers the
+        // radius within which it wants to hear about deaths; Publish(DeathData) fires it only if its
+        // subscriber is alive and within that radius of the dying unit. Inherits DispatcherBase so
+        // RemoveAllListenersForOwner tears it down with the owning buff/script.
+        public sealed class NearbyDeathDispatcher : DispatcherBase
+        {
+            private sealed class RangedListener
+            {
+                public object Owner;
+                public AttackableUnit Subscriber;
+                public Action<DeathData> Callback;
+                public float RangeSq;
+            }
+
+            private readonly List<RangedListener> _rangedListeners = new List<RangedListener>();
+
+            /// <param name="range">Only deaths within this distance of <paramref name="subscriber"/> fire the callback.</param>
+            public void AddListener(object owner, AttackableUnit subscriber, Action<DeathData> callback, float range)
+            {
+                if (owner == null || subscriber == null || callback == null)
+                {
+                    return;
+                }
+                _rangedListeners.Add(new RangedListener
+                {
+                    Owner = owner, Subscriber = subscriber, Callback = callback, RangeSq = range * range
+                });
+            }
+
+            public override void RemoveListener(object owner)
+            {
+                _rangedListeners.RemoveAll(l => l.Owner == owner);
+            }
+
+            public void RemoveListener(object owner, AttackableUnit subscriber)
+            {
+                _rangedListeners.RemoveAll(l => l.Owner == owner && l.Subscriber == subscriber);
+            }
+
+            // Fired once per death; invokes each listener whose subscriber is alive and in range.
+            public void Publish(DeathData data)
+            {
+                if (data?.Unit == null || _rangedListeners.Count == 0)
+                {
+                    return;
+                }
+                var deathPos = data.Unit.Position;
+                // Snapshot: a handler may add/remove listeners mid-dispatch.
+                foreach (var l in _rangedListeners.ToArray())
+                {
+                    if (l.Subscriber == data.Unit || l.Subscriber.IsDead)
+                    {
+                        continue;
+                    }
+                    if (Vector2.DistanceSquared(l.Subscriber.Position, deathPos) > l.RangeSq)
+                    {
+                        continue;
+                    }
+                    try
+                    {
+                        l.Callback(data);
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.Error(e);
+                    }
+                }
             }
         }
 

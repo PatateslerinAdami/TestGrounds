@@ -81,8 +81,10 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         
         // TODO: Find a use for this.
         public bool IsDamagingSpell { get; set; } = false;
-        public bool IsDeathRecapSource { get; set; } = false;
-        
+        // NOTE: IsDeathRecapSource is a BUFF-only concept in Riot — Spell::Lua::scriptBase::
+        // IsDeathRecapSource() hard-returns false (LuaSpellScript.cpp:463); only scriptBaseBuff
+        // overrides it. It lived here as dead metadata (never consumed) and was removed. The real
+        // flag stays on BuffScriptMetaData. See reference_death_recap_decomp_model.
         public bool IsDebugMode { get; set; } = false;
         public bool IsPetDurationBuff { get; set; } = false;
         public bool IsNonDispellable { get; set; } = false;

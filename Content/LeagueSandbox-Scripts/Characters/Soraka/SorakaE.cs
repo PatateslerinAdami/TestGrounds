@@ -67,7 +67,7 @@ namespace Spells
             var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;
             float damage = 70f + spell.CastInfo.SpellLevel * 40f + AP;
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell); // TODO: fix the damage, it's too high
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false); // TODO: fix the damage, it's too high
             AddParticleTarget(owner, target, "soraka_base_e_enemy_tar.troy", target, 1f);
             if (target is Champion && target.Team != owner.Team)
             {
@@ -81,7 +81,7 @@ namespace Spells
             var AP = spell.CastInfo.Owner.Stats.AbilityPower.Total * 0.40f;
             float damage = 70f + spell.CastInfo.SpellLevel * 40f + AP;
 
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell); // TODO: fix the damage, it's too high
+            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false); // TODO: fix the damage, it's too high
             if (target is Champion && target.Team != owner.Team)
             {
                 AddBuff("SorakaESnare", 1.5f, 1, spell, target, owner);

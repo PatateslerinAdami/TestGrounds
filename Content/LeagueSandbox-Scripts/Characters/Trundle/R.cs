@@ -95,7 +95,7 @@ public class TrundlePainHealBig : ISpellScript {
     private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile) {
         if (target != _trundle) return;
         if (_immediateHealAmount <= 0f) return;
-        _trundle.TakeHeal(_trundle, _immediateHealAmount, HealType.Drain, spell);
+        _trundle.TakeHeal(_trundle, _immediateHealAmount, HealType.Drain);
     }
 }
 

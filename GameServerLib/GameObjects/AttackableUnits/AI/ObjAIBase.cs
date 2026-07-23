@@ -714,7 +714,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
             };
 
-            target.TakeDamage(damageData, isCrit);
+            // Attribute the swing to the basic-attack spell so it shows in the death recap. Autos are
+            // dealt from the engine (not a wrapped script callback), so the ambient ScriptContext is
+            // empty here — without an explicit source the entry would be dropped. The AA spell carries
+            // CastInfo.IsAutoAttack, so it lands as EVENTSOURCE_BASICATTACK (Riot lists "<Champ>BasicAttack").
+            target.TakeDamage(damageData, isCrit, AutoAttackSpell);
         }
 
         public override bool CanMove()
@@ -2728,6 +2732,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             TryPostActivateSpellScripts();
         }
 
+        // Ambient-income tick timers (Riot: obj_AI_Base level). Only units with a gold/XP wallet
+        // (champions) actually accrue — the tick self-gates below.
+        private float _goldTimer;
+        private float _EXPTimer;
+
         public override void Update(float diff)
         {
             if (delayedSpellPackets.Count > 0) invisSent = true;
@@ -2741,6 +2750,46 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             catch (Exception e)
             {
                 _logger.Error(null, e);
+            }
+
+            // Ambient income (Riot: the machinery lives on obj_AI_Base; effect reaches only wallet
+            // holders = champions). Moved here from Champion for faithful placement. Gold is gated by
+            // DisableAmbientGold, the periodic ambient XP by DisableAmbientXP (Nidalee cougar-form
+            // disables ambient gold; both amounts are 0 on SR, non-zero on Dominion/ARAM).
+            // Dead-while-generating is CONFIG-DRIVEN, not hardcoded: Riot gates it per the
+            // ai_DisableAmbient{Gold,XP}WhileDead CVars, which are 0 (OFF) on every 4.20 map — i.e.
+            // dead champions DO keep accruing ambient income by default. Neither the wire bit20 nor a
+            // dead-flag is the mechanism (bit20 doesn't set on death). We honor the config flags below.
+            if (this is Champion ambientChampion)
+            {
+                if (Stats.IsGeneratingGold && Stats.GoldPerGoldTick.Total > 0
+                    && !Status.HasFlag(StatusFlags.DisableAmbientGold)
+                    && !(ambientChampion.IsDead && LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.DisableAmbientGoldWhileDead))
+                {
+                    _goldTimer -= diff;
+                    if (_goldTimer <= 0)
+                    {
+                        ambientChampion.AddGold(null, Stats.GoldPerGoldTick.Total, false);
+                        _goldTimer = LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.AmbientGoldInterval;
+                    }
+                }
+                else if (!Stats.IsGeneratingGold
+                    && _game.GameTime >= LeagueSandbox.GameServer.Content.GlobalData.ObjAIBaseVariables.AmbientGoldDelay)
+                {
+                    Stats.IsGeneratingGold = true;
+                }
+
+                if (_game.GameTime >= LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.AmbientXPDelay
+                    && !Status.HasFlag(StatusFlags.DisableAmbientXP)
+                    && !(ambientChampion.IsDead && LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.DisableAmbientXPWhileDead))
+                {
+                    _EXPTimer -= diff;
+                    if (_EXPTimer <= 0)
+                    {
+                        ambientChampion.AddExperience(LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.AmbientXPAmount, false);
+                        _EXPTimer = LeagueSandbox.GameServer.Content.GlobalData.ChampionVariables.AmbientXPInterval;
+                    }
+                }
             }
 
             if (!_aiPaused)

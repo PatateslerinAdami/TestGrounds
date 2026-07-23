@@ -7,9 +7,9 @@ namespace LeaguePackets.Game.Events
         public override void ReadArgs(ByteReader reader)
         {
             base.ReadArgs(reader);
+            NewByte = reader.ReadByte();
             ScriptNameHash = reader.ReadUInt32();
             EventSource = reader.ReadByte();
-            Unknown = reader.ReadByte();
             SourceObjectNetID = reader.ReadUInt32();
             ParentScriptNameHash = reader.ReadUInt32();
             ParentCasterNetID = reader.ReadUInt32();
@@ -18,9 +18,9 @@ namespace LeaguePackets.Game.Events
         public override void WriteArgs(ByteWriter writer)
         {
             base.WriteArgs(writer);
+            writer.WriteByte(NewByte);
             writer.WriteUInt32(ScriptNameHash);
             writer.WriteByte(EventSource);
-            writer.WriteByte(Unknown);
             writer.WriteUInt32(SourceObjectNetID);
             writer.WriteUInt32(ParentScriptNameHash);
             writer.WriteUInt32(ParentCasterNetID);

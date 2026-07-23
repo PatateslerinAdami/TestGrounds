@@ -72,9 +72,7 @@ public class JaxCounterStrikeAttack : ISpellScript
         NotSingleTargetSpell = true,
         DoesntBreakShields = true,
         TriggersSpellCasts = false,
-        IsDamagingSpell = true,
-        IsDeathRecapSource = true
-        
+        IsDamagingSpell = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell)

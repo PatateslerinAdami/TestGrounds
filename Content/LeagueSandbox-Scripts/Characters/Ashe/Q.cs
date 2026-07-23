@@ -44,7 +44,6 @@ public class FrostArrow : ISpellScript {
         },
         NotSingleTargetSpell = true,
         DoesntBreakShields = true,
-        TriggersSpellCasts = false,
-        IsDeathRecapSource = true
+        TriggersSpellCasts = false
     };
 }

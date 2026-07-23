@@ -35,7 +35,7 @@ namespace Spells
             var dmg = spell.SpellData.EffectLevelAmount[1][spell.CastInfo.SpellLevel] + ap;
             var damagePerTick = dmg / 2.0f;
 
-            target.TakeDamage(_fiddlesticks, damagePerTick, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, spell);
+            target.TakeDamage(_fiddlesticks, damagePerTick, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
         }
 
         public void OnSpellPostChannel(Spell spell)

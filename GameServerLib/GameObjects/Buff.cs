@@ -155,6 +155,10 @@ namespace LeagueSandbox.GameServer.GameObjects
         public uint ScriptNameHash { get; }
         public IEventSource ParentScript { get; }
 
+        // Buff-only opt-in (BuffScriptMetaData): credit this buff in the death recap when its damage
+        // resolves through the ambient script stack, over the enclosing root frame.
+        public bool IsDeathRecapSource => BuffScript?.BuffMetaData?.IsDeathRecapSource ?? false;
+
         public StatusFlags StatusEffectsToEnable { get; private set; }
         public StatusFlags StatusEffectsToDisable { get; private set; }
         /// <summary>
@@ -183,7 +187,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             try
             {
                 using var _scope = Profiler.Scope($"buff:{Name}.OnActivate", "scripts");
-                BuffScript.OnActivate(TargetUnit, this, OriginSpell);
+                using (ScriptContext.Enter(this)) BuffScript.OnActivate(TargetUnit, this, OriginSpell);
             }
             catch (Exception e)
             {
@@ -211,7 +215,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             try
             {
                 using var _scope = Profiler.Scope($"buff:{Name}.OnDeactivate", "scripts");
-                BuffScript.OnDeactivate(TargetUnit, this, OriginSpell);
+                using (ScriptContext.Enter(this)) BuffScript.OnDeactivate(TargetUnit, this, OriginSpell);
             }
             catch (Exception e)
             {
@@ -402,7 +406,7 @@ namespace LeagueSandbox.GameServer.GameObjects
             try
             {
                 using var _scope = Profiler.Scope($"buff:{Name}.OnUpdate", "scripts");
-                BuffScript.OnUpdate(this, diff);
+                using (ScriptContext.Enter(this)) BuffScript.OnUpdate(this, diff);
             }
             catch (Exception e)
             {

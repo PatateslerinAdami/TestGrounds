@@ -263,7 +263,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             try
             {
                 using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnActivate", "scripts");
-                Script.OnActivate(CastInfo.Owner, this);
+                using (ScriptContext.Enter(this)) Script.OnActivate(CastInfo.Owner, this);
             }
             catch(Exception e)
             {
@@ -297,7 +297,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             try
             {
                 using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnPostActivate", "scripts");
-                Script.OnPostActivate(CastInfo.Owner, this);
+                using (ScriptContext.Enter(this)) Script.OnPostActivate(CastInfo.Owner, this);
             }
             catch (Exception e)
             {
@@ -679,7 +679,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             try
             {
                 using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellPreCast", "scripts");
-                Script.OnSpellPreCast(CastInfo.Owner, this, unit, start, end);
+                using (ScriptContext.Enter(this)) Script.OnSpellPreCast(CastInfo.Owner, this, unit, start, end);
             }
             catch(Exception e)
             {
@@ -1063,7 +1063,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             try
             {
                 using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellPreCast", "scripts");
-                Script.OnSpellPreCast(CastInfo.Owner, this, castInfo.Targets[0].Unit, start, end);
+                using (ScriptContext.Enter(this)) Script.OnSpellPreCast(CastInfo.Owner, this, castInfo.Targets[0].Unit, start, end);
             }
             catch(Exception e)
             {
@@ -2108,7 +2108,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             try
             {
                 using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnDeactivate", "scripts");
-                Script.OnDeactivate(CastInfo.Owner, this);
+                using (ScriptContext.Enter(this)) Script.OnDeactivate(CastInfo.Owner, this);
             }
             catch(Exception e)
             {
@@ -2959,7 +2959,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
             using (Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnSpellChargeUpdate", "scripts"))
             {
-                Script.OnSpellChargeUpdate(this, position, forceStop);
+                using (ScriptContext.Enter(this)) Script.OnSpellChargeUpdate(this, position, forceStop);
             }
 
             if (forceStop)
@@ -3167,7 +3167,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     try
                     {
                         using var _scope = Profiler.Scope($"spell:{CastInfo?.Owner?.Model ?? "?"}/{SpellName}.OnUpdate", "scripts");
-                        Script.OnUpdate(diff);
+                        using (ScriptContext.Enter(this)) Script.OnUpdate(diff);
                     }
                     catch(Exception e)
                     {

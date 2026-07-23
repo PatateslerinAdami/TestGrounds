@@ -301,8 +301,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return LevelUpSpell(slot, true);
         }
 
-        float _goldTimer;
-        float _EXPTimer;
         public override void Update(float diff)
         {
             base.Update(diff);
@@ -310,31 +308,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // Shop upkeep: clears the undo stack once the champion leaves the fountain (see Shop.OnUpdate).
             Shop.OnUpdate(diff);
 
-            if (Stats.IsGeneratingGold && Stats.GoldPerGoldTick.Total > 0)
-            {
-                _goldTimer -= diff;
-
-                if (_goldTimer <= 0)
-                {
-                    AddGold(null, Stats.GoldPerGoldTick.Total, false);
-                    _goldTimer = GlobalData.ChampionVariables.AmbientGoldInterval;
-                }
-            }
-            else if (!Stats.IsGeneratingGold && _game.GameTime >= GlobalData.ObjAIBaseVariables.AmbientGoldDelay)
-            {
-                Stats.IsGeneratingGold = true;
-                _logger.Debug("Generating Gold!");
-            }
-
-            if (_game.GameTime >= GlobalData.ChampionVariables.AmbientXPDelay)
-            {
-                _EXPTimer -= diff;
-                if (_EXPTimer <= 0)
-                {
-                    AddExperience(GlobalData.ChampionVariables.AmbientXPAmount, false);
-                    _EXPTimer = GlobalData.ChampionVariables.AmbientXPInterval;
-                }
-            }
+            // Ambient gold/XP income moved to ObjAIBase.Update (Riot: obj_AI_Base level) — see there.
 
 
 
@@ -549,6 +523,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             // OnDeath before the zombie decision (Riot DoDeath ordering) so a death-reactive buff
             // (Karthus DeathDefied) can arm data.BecomeZombie from its OnDeath handler.
             ApiEventManager.OnDeath.Publish(data.Unit, data);
+            PublishNearbyDeath(data);
             data.Unit.SetStatus(StatusFlags.Ghosted, true);
 
             if (data.Killer is Champion)
@@ -563,7 +538,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             // Kill credit fires immediately (the killing blow earns the kill even if the victim
             // lingers as a zombie).
-            EventHistory.Clear();
             ApiEventManager.OnKill.Publish(data.Killer, data);
 
             // Replay-verified (Karthus rlp f3ad103e): the die packet + death timer are sent AT death
@@ -591,6 +565,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
 
             _game.PacketNotifier.NotifyNPC_Hero_Die(data);
+
+            // Clear the accumulated damage/heal history ONLY after the death packet (which carries it
+            // as the death recap) has been serialized and sent — this life's recap is now on the wire,
+            // so the next life starts fresh. Clearing before the send left every recap empty.
+            EventHistory.Clear();
         }
 
         /// <summary>
@@ -621,6 +600,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         private T CreateEventForHistory<T>(AttackableUnit source, IEventSource sourceScript) where T: ArgsForClient, new()
         {
+            // Ambient fallback: when the caller didn't name a sourceScript, resolve it from the running
+            // script stack the way Riot does (GetDeathRecapEventSource) — a flagged buff frame wins,
+            // otherwise the root script that started the chain. An explicit sourceScript always wins
+            // (Riot's SetDeathRecapInfo-style override).
+            sourceScript ??= ScriptContext.ResolveDeathRecapSource();
+
             if(source == null || sourceScript == null)
             {
                 return null;
@@ -639,28 +624,94 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             e.ParentCasterNetID = entry.Source;
             e.OtherNetID = this.NetId;
 
-            e.ScriptNameHash = 1;
-            e.ParentScriptNameHash = sourceScript.ScriptNameHash;
-            if(sourceScript.ParentScript != null)
+            // Riot: ScriptNameHash = the leaf script that dealt the effect; ParentScriptNameHash = the
+            // owning/parent script, defaulting to the leaf itself when there is no parent (EventFrame,
+            // LuaSpellScript.cpp:180-182). The client aggregates the recap per (source, ScriptNameHash),
+            // so the leaf must carry the real ELF hash — never a sentinel.
+            e.ScriptNameHash = sourceScript.ScriptNameHash;
+            if (sourceScript.ParentScript != null)
             {
-                e.ScriptNameHash = sourceScript.ScriptNameHash;
                 e.ParentScriptNameHash = sourceScript.ParentScript.ScriptNameHash;
             }
-            else if(sourceScript is Buff b && b.OriginSpell != null)
+            else if (sourceScript is Buff b && b.OriginSpell != null)
             {
-                e.ScriptNameHash = sourceScript.ScriptNameHash;
-                e.ParentScriptNameHash = (uint)b.OriginSpell.GetId();
+                // OriginSpell is the buff's parent script — use its ELF ScriptNameHash (the wire hash),
+                // not its numeric spell id.
+                e.ParentScriptNameHash = b.OriginSpell.ScriptNameHash;
+            }
+            else
+            {
+                e.ParentScriptNameHash = sourceScript.ScriptNameHash; // self-parent
             }
 
-            e.EventSource = 0; // ?
-            e.Unknown = 0; // ?
+            // EventSource (EventEnums.h): the leaf script's source class. Derived from the runtime
+            // script type here rather than plumbed through IEventSource — the death recap is its only
+            // consumer, and the corpus shows this is per-script constant (SPELL/BUFF/BASICATTACK...).
+            e.EventSource = (byte)LeafEventSource(sourceScript);
+
+            // SourceObjectNetID stays 0 (invalid) for the general case, matching Riot: SetDeathRecapInfo
+            // sets it only for the death-recap-source event (the killing blow). Leaving it 0 keeps
+            // NewByte at its faithful default of 1 and routes this event through the client's legacy
+            // aggregation path, exactly as the 4.20 replay corpus shows for ~99.8% of entries.
             e.SourceObjectNetID = 0;
-            e.Bitfield = 0; // ?
+
+            // Bitfield (ParamsDamage/Heal/Buff, AIBase.cpp:1277):
+            //   parentEventSource[0:4] | parentTeam[4:8] | parentEventSourceType[8:12] | sourceSpellLevel[12:15]
+            var parentSource = sourceScript.ParentScript ?? sourceScript;
+            uint parentEventSource = (uint)LeafEventSource(parentSource) & 0xF;
+            uint parentTeam = (uint)ToWireTeam(source.Team) & 0xF;
+            uint parentSourceType = (uint)ToWireSourceType(source) & 0xF;
+            uint sourceSpellLevel = (uint)SourceSpellLevel(sourceScript) & 0x7;
+            e.Bitfield = (ushort)(parentEventSource
+                | (parentTeam << 4)
+                | (parentSourceType << 8)
+                | (sourceSpellLevel << 12));
 
             EventHistory.Add(entry);
 
             return e;
         }
+
+        // The leaf/parent EventSource class the client shows next to the recap entry. Buff scripts are
+        // BUFF; spell scripts are SPELL unless they are the auto-attack spell (then BASICATTACK, which
+        // the corpus confirms for genuine basic-attack damage); AbilityInfo carries its own value.
+        private static EventSource LeafEventSource(IEventSource script) => script switch
+        {
+            Buff => EventSource.BUFF,
+            Spell spell => spell.CastInfo.IsAutoAttack ? EventSource.BASICATTACK : EventSource.SPELL,
+            AbilityInfo ability => ability.EventSource,
+            _ => EventSource.UNKNOWN
+        };
+
+        // team_e -> TeamType (Riot ToTeamType, r3dGameEnums.h): ORDER=0, CHAOS=1, NEUTRAL=2; anything
+        // else (incl. an unset team) maps to VISTEAM_MAX=4 — the value the corpus shows for the default.
+        private static uint ToWireTeam(TeamId team) => team switch
+        {
+            TeamId.TEAM_BLUE => 0u,
+            TeamId.TEAM_PURPLE => 1u,
+            TeamId.TEAM_NEUTRAL => 2u,
+            _ => 4u
+        };
+
+        // Unit class -> EventSourceType (EventEnums.h). CLONE (Shaco/LeBlanc/Wukong) is not modelled
+        // yet, so those fall through to UNKNOWN.
+        private static uint ToWireSourceType(AttackableUnit unit) => unit switch
+        {
+            Champion => 0u,     // HERO
+            BaseTurret => 2u,   // TOWER
+            Pet => 3u,          // PET  (checked before Minion: Pet : Minion)
+            Minion => 1u,       // MINION
+            _ => 5u             // UNKNOWN
+        };
+
+        // 0-based spell level driving the recap priority scaling. Available for spell casts and for
+        // buffs that carry an OriginSpell; unknown sources report 0 (the corpus plurality).
+        private static int SourceSpellLevel(IEventSource script) => script switch
+        {
+            Spell spell => spell.CastInfo.SpellLevel,
+            Buff buff when buff.OriginSpell != null => buff.OriginSpell.CastInfo.SpellLevel,
+            _ => 0
+        };
 
         public override bool AddBuff(Buff b)
         {

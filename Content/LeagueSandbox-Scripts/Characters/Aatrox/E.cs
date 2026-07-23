@@ -92,8 +92,7 @@ public class AatroxEConeMissile : ISpellScript {
         NotSingleTargetSpell = false,
         DoesntBreakShields = true,
         TriggersSpellCasts = false,
-        IsDamagingSpell = true,
-        IsDeathRecapSource = true
+        IsDamagingSpell = true
     };
     
     public void OnActivate(ObjAIBase owner, Spell spell) {
@@ -119,8 +118,7 @@ public class AatroxEConeMissile2 : ISpellScript {
         NotSingleTargetSpell = false,
         DoesntBreakShields = true,
         TriggersSpellCasts = false,
-        IsDamagingSpell = true,
-        IsDeathRecapSource = true
+        IsDamagingSpell = true
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

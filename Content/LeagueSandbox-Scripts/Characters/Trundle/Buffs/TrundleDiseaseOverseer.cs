@@ -17,11 +17,12 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 public class TrundleDiseaseOverseer : IBuffGameScript {
-    private const float DeathSearchRadius = 1400.0f;
+    // King's Tribute nearby-death range. 1000 for our patch (S4/4.20); Riot raised it to 1400 only in
+    // patch 5.5. The range is consumer-side, NOT an engine gate — different champions differ (e.g. Thresh
+    // soul collection = 1900), which is why OnNearbyDeath itself does not range-filter.
+    private const float DeathSearchRadius = 1000.0f;
     private const float MinHealPercent    = 0.018f;
     private const float MaxHealPercent    = 0.0594f;
-
-    private readonly HashSet<uint> _subscribedUnits = [];
 
     private ObjAIBase _trundle;
 
@@ -38,23 +39,9 @@ public class TrundleDiseaseOverseer : IBuffGameScript {
         _trundle = buff.SourceUnit ?? unit as ObjAIBase;
         if (_trundle == null) return;
 
-        RegisterNearbyDeathListeners();
-    }
-
-    public void OnUpdate(Buff buff, float diff) {
-        if (_trundle == null || _trundle.IsDead) return;
-        RegisterNearbyDeathListeners();
-    }
-
-    private void RegisterNearbyDeathListeners() {
-        var units = GetUnitsInRange(_trundle, _trundle.Position, DeathSearchRadius, true,
-                                    SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions |
-                                    SpellDataFlags.AffectNeutral | SpellDataFlags.AffectEnemies);
-        foreach (var candidate in units) {
-            if (candidate == _trundle || _subscribedUnits.Contains(candidate.NetId)) continue;
-            ApiEventManager.OnDeath.AddListener(this, candidate, OnNearbyUnitDeath);
-            _subscribedUnits.Add(candidate.NetId);
-        }
+        // Riot CharOnNearbyDeath: register with Trundle's own King's Tribute range — the dispatcher
+        // range-gates per-listener, so the handler only filters team/type. Auto-removed on buff deactivate.
+        ApiEventManager.OnNearbyDeath.AddListener(this, _trundle, OnNearbyUnitDeath, DeathSearchRadius);
     }
 
     private void OnNearbyUnitDeath(DeathData deathData) {
@@ -69,8 +56,7 @@ public class TrundleDiseaseOverseer : IBuffGameScript {
         // Ignore structures.
         if (deadUnit is BaseTurret or ObjBuilding or Inhibitor or Nexus) return;
 
-        if (Vector2.DistanceSquared(deadUnit.Position, _trundle.Position) > DeathSearchRadius * DeathSearchRadius) return;
-
+        // Range is gated by the dispatcher (registered with DeathSearchRadius) — no distance check here.
         var healPercent = GetHealPercentForLevel(_trundle.Stats.Level);
         var healAmount  = deadUnit.Stats.HealthPoints.Total * healPercent;
         if (healAmount > 0.0f)

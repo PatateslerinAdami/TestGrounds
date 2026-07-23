@@ -1175,7 +1175,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         public void TakeDamage(DamageData damageData, bool isCrit, IEventSource sourceScript = null)
         {
-            this.TakeDamage(damageData, Bool2Crit(isCrit));
+            this.TakeDamage(damageData, Bool2Crit(isCrit), sourceScript);
         }
 
         /// <summary>
@@ -1263,9 +1263,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             {
                 if (damageData.DamageResultType == DamageResultType.RESULT_MISS)
                 {
-                    // Missed (e.g. Blind): the attack never connected — fire only the miss signal,
-                    // NOT OnBeingHit / OnHitUnit (no on-hit procs on a missed attack).
+                    // Missed (e.g. Blind): the attack never connected — fire only the miss signals,
+                    // NOT OnBeingHit / OnHitUnit (no on-hit procs on a missed attack). Both sides fire,
+                    // mirroring the dodge pair: OnMiss on the attacker ("I missed"), OnBeingMissed on the
+                    // defender ("an attack against me missed").
                     ApiEventManager.OnMiss.Publish(damageData.Attacker, damageData.Target);
+                    ApiEventManager.OnBeingMissed.Publish(damageData.Target, damageData.Attacker);
                 }
                 else if (damageData.DamageResultType == DamageResultType.RESULT_DODGE)
                 {
@@ -1427,6 +1430,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // arm data.BecomeZombie from its OnDeath handler. The actual removal / zombie branch runs
             // further down, after the non-persist buff cull.
             ApiEventManager.OnDeath.Publish(data.Unit, data);
+            PublishNearbyDeath(data);
 
             // PersistsThroughDeath (buff side): the holder's death removes every buff that is NOT
             // flagged to persist. Riot's scriptBaseBuff::PersistsThroughDeath checks only the buff's
@@ -1661,7 +1665,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // the two SetActionState calls both target bit 6, so each must write the combined value.
             bool controlledForcedAction = Status.HasFlag(StatusFlags.Charmed) || Status.HasFlag(StatusFlags.Taunted);
             Stats.SetActionState(ActionState.CHARMED, controlledForcedAction);
-            // DisableAmbientGold
+            Stats.SetActionState(ActionState.DISABLE_AMBIENT_GOLD, Status.HasFlag(StatusFlags.DisableAmbientGold));
+            Stats.SetActionState(ActionState.DISABLE_AMBIENT_XP, Status.HasFlag(StatusFlags.DisableAmbientXP));
 
             // FEARED: DEAD in 4.20 — no buff/effect drives it (user-confirmed; 4.20 fears ship as
             // FLEE-type). Kept false. NOTE the enum's FEARED=bit7 is a misnomer: wire bit 7 is a
@@ -1727,6 +1732,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // turrets (CanMoveEver=false) do NOT set bit3 on Riot's wire (they keep CanMove); only
             // displacement-immune units do.
             Stats.SetActionState(ActionState.CAN_NOT_ATTACK, false);
+        }
+
+        // Fires OnNearbyDeath (Riot CharOnNearbyDeath) when any unit dies. The dispatcher range-gates
+        // per-listener (each consumer registered its own radius — see NearbyDeathDispatcher), so this is
+        // a single publish. Called from both death paths (AttackableUnit + Champion).
+        protected void PublishNearbyDeath(DeathData data)
+        {
+            ApiEventManager.OnNearbyDeath.Publish(data);
         }
 
         void UpdateBuffs(float diff)

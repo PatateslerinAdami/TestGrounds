@@ -24,8 +24,7 @@ public class TalonCutthroat : ISpellScript {
         IsDamagingSpell       = true,
         OverrideCooldownCheck = true,
         CastingBreaksStealth  = true,
-        NotSingleTargetSpell  = false,
-        IsDeathRecapSource    = true
+        NotSingleTargetSpell  = false
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

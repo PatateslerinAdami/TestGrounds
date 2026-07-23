@@ -24,6 +24,7 @@ namespace GameServerCore.Enums
         CanMoveEver = 1 << 4,
         Charmed = 1 << 5,
         DisableAmbientGold = 1 << 6,
+        DisableAmbientXP = 1 << 22,  // suppresses the passive ambient-XP tick (0 on SR, active on Dominion/ARAM)
         Feared = 1 << 8,
         ForceRenderParticles = 1 << 9,
         // GhostProof is the DERIVED "immune to all ghost pass-through" state (Riot Actor_Common::
