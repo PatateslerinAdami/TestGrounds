@@ -66,7 +66,7 @@ namespace Buffs
         public void OnUpdate(Buff buff, float diff)
         {
             if (_currentBonusSpeed >= MaxSpeed) return;
-            ExecutePeriodically(buff.BuffVars, "SionRSpeed", 150f, false, 0, () =>
+            ExecutePeriodically(buff.BuffVars, "SionRSpeed", 100f, false, 0, () =>
             {
                 {
                     // Ramp a fixed +40 per step, clamped so the last step lands EXACTLY on MaxSpeed
