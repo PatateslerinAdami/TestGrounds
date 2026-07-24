@@ -192,23 +192,24 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         private const float PENETRATION_COMPARE_EPSILON = 0.0001f;
         private float _currentHealth;
         private float _trueMoveSpeed;
-        private float _moveSpeedSoftCapExemptFlatBonus;
+        private float _moveSpeedFloorMod;
 
         /// <summary>
-        /// Flat move-speed added to the TRUE speed AFTER the soft caps in
-        /// <see cref="CalculateTrueMoveSpeed"/> — i.e. it bypasses the diminishing-returns
-        /// compression that normal move-speed bonuses (BaseValue/FlatBonus/PercentBonus) are
-        /// subject to. Used by fixed-speed dashes/charges whose speed is a hard designer value,
-        /// not a soft-capped stat (e.g. Sion R "Unstoppable Onslaught", which ramps to a true
-        /// 950 that the >490 soft cap would otherwise halve). Setting it recomputes the true
-        /// speed immediately so the change replicates (ReplicationHero reads GetTrueMoveSpeed()).
+        /// Guaranteed-minimum TRUE move speed, applied AFTER the soft caps (and slows) in
+        /// <see cref="CalculateTrueMoveSpeed"/> as <c>max(computed, floor)</c> — Riot's
+        /// MoveSpeedFloorMod (4.17 <c>CharacterIntermediate.mMoveSpeedFloorMod</c> @0x68; Lua
+        /// <c>IncMoveSpeedFloorMod</c>, e.g. Viktor Chaos Storm). Lets a fixed-speed charge force
+        /// a hard designer value that the &gt;490 soft cap would otherwise compress (e.g. Sion R
+        /// ramping its floor to a true 950). 0 = no floor (a no-op for any positive speed). Setting
+        /// it recomputes the true speed immediately so the change replicates (ReplicationHero reads
+        /// GetTrueMoveSpeed()).
         /// </summary>
-        public float MoveSpeedSoftCapExemptFlatBonus
+        public float MoveSpeedFloorMod
         {
-            get => _moveSpeedSoftCapExemptFlatBonus;
+            get => _moveSpeedFloorMod;
             set
             {
-                _moveSpeedSoftCapExemptFlatBonus = value;
+                _moveSpeedFloorMod = value;
                 CalculateTrueMoveSpeed();
             }
         }
@@ -854,9 +855,10 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
                 speed = speed * 0.5f + 110.0f;
             }
 
-            // Soft-cap-EXEMPT bonus (Sion R etc.): added after the caps so a fixed-speed charge
-            // reaches its true designer value instead of being compressed by the >490 halving.
-            _trueMoveSpeed = speed + _moveSpeedSoftCapExemptFlatBonus;
+            // Move-speed FLOOR (Riot mMoveSpeedFloorMod), applied last: a fixed-speed charge forces
+            // its true designer value (e.g. Sion R's 950) that the >490 soft cap would otherwise
+            // compress. 0 = no floor (Max with 0 is a no-op for any positive speed).
+            _trueMoveSpeed = Math.Max(speed, _moveSpeedFloorMod);
         }
     }
 }

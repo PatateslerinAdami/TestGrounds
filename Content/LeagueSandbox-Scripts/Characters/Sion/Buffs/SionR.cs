@@ -18,6 +18,7 @@ namespace Buffs
     {
         private Particle _p1, _p2, _p3;
         private float MaxSpeed = 950f;
+        private float _baseSpeed = 0f;
         private float _currentBonusSpeed = 0f;
         private bool _animationIsFast = false;
 
@@ -34,7 +35,8 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             SetCharacterVoiceOverride(unit, "Max");
-            MaxSpeed = Math.Max(0, 950f - unit.GetMoveSpeed());
+            _baseSpeed = unit.GetMoveSpeed();
+            MaxSpeed = Math.Max(0, 950f - _baseSpeed);
             SetStatus(unit, StatusFlags.Ghosted, true);
             _p1 = SpellEffectCreate("Sion_Base_R_GlobalSound.troy", unit, unit, unit, boneName: "Root", flags: FXFlags.SimulateWhileOffScreen);
             _p2 = SpellEffectCreate("Sion_Base_R_Cas.troy",unit, unit,  null, lifetime: buff.Duration, scale: 2f, flags: FXFlags.SimulateWhileOffScreen);
@@ -70,12 +72,12 @@ namespace Buffs
             {
                 {
                     // Ramp a fixed +40 per step, clamped so the last step lands EXACTLY on MaxSpeed
-                    // (= 950 - base true speed) instead of overshooting. Applied as a soft-cap-EXEMPT
-                    // flat bonus so the charge reaches a true 950 — a normal MoveSpeed modifier would
-                    // be halved by the >490 soft cap. Set directly (no StatsModifier add/remove churn),
-                    // which recomputes + replicates the true speed immediately.
+                    // (= 950 - base true speed) instead of overshooting. Drives an absolute move-speed
+                    // FLOOR (base + bonus) that ramps to a true 950 — the floor is applied after the
+                    // >490 soft cap (Riot mMoveSpeedFloorMod), so the charge reaches its designer speed
+                    // instead of being halved. Setting it recomputes + replicates the true speed.
                     _currentBonusSpeed = Math.Min(_currentBonusSpeed + 40, MaxSpeed);
-                    buff.TargetUnit.Stats.MoveSpeedSoftCapExemptFlatBonus = _currentBonusSpeed;
+                    buff.TargetUnit.Stats.MoveSpeedFloorMod = _baseSpeed + _currentBonusSpeed;
                     if (_animationIsFast) return;
                     if (!(_currentBonusSpeed >= MaxSpeed / 2)) return;
                     buff.TargetUnit.SetAnimStates(new Dictionary<string, string>
@@ -98,8 +100,8 @@ namespace Buffs
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             ResetCharacterVoiceOverride(unit);
-            // Clear the soft-cap-exempt charge speed (mirrors the StatsModifier removal it replaced).
-            unit.Stats.MoveSpeedSoftCapExemptFlatBonus = 0f;
+            // Clear the charge move-speed floor (mirrors the StatsModifier removal it replaced).
+            unit.Stats.MoveSpeedFloorMod = 0f;
             SetStatus(unit, StatusFlags.Ghosted, false);
             RemoveParticle(_p1);
             RemoveParticle(_p2);
