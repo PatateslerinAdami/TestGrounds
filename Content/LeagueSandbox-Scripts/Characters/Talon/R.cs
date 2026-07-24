@@ -35,7 +35,6 @@ public class TalonShadowAssault : ISpellScript {
         IsDamagingSpell     = true,
         TriggersSpellCasts = true,
         DoesntBreakShields = true,
-        SpellToggleSlot = 2
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

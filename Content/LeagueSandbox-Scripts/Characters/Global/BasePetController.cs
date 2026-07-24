@@ -19,8 +19,7 @@ namespace Spells
             DoesntBreakShields = true,
             TriggersSpellCasts = false,
             IsDamagingSpell = true,
-            SpellDamageRatio = 0.5f,
-            IsPetDurationBuff = true
+            SpellDamageRatio = 0.5f
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)

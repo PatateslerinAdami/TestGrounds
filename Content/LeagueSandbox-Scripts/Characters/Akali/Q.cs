@@ -26,7 +26,6 @@ public class AkaliMota : ISpellScript {
         CastingBreaksStealth = true,
         IsDamagingSpell      = true,
         PersistsThroughDeath = true,
-        IsNonDispellable = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

@@ -28,7 +28,6 @@ public class TalonRake : ISpellScript {
         DoesntBreakShields = true,
         TriggersSpellCasts = true,
         IsDamagingSpell    = true,
-        SpellToggleSlot = 2
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

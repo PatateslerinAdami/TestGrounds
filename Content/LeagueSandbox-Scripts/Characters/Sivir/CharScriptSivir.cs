@@ -11,7 +11,8 @@ namespace CharScripts;
 public class CharScriptSivir : ICharScript {
     private ObjAIBase _owner;
 
-    public void OnActivate(ObjAIBase owner, Spell spell = null) {
+    public void OnActivate(ObjAIBase owner, Spell spell) {
         _owner = owner;
+        AddBuff("SivirPassive", 25000f, 1, spell, _owner, _owner, true);
     }
 }

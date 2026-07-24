@@ -76,7 +76,6 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// </summary>
         public float ChargeMaxHoldDuration { get; set; } = 0.0f;
         public bool CooldownIsAffectedByCDR { get; set; } = true;
-        public bool DoOnPreDamageInExpirationOrder { get; set; } = false;
         public bool DoesntBreakShields { get; set; } = false;
         
         // TODO: Find a use for this.
@@ -86,20 +85,23 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         // overrides it. It lived here as dead metadata (never consumed) and was removed. The real
         // flag stays on BuffScriptMetaData. See reference_death_recap_decomp_model.
         public bool IsDebugMode { get; set; } = false;
-        public bool IsPetDurationBuff { get; set; } = false;
-        public bool IsNonDispellable { get; set; } = false;
+        // NOTE: IsPetDurationBuff and IsNonDispellable were removed — both are BUFF concepts in Riot,
+        // not spell-script metadata. IsPetDurationBuff is read only from a buff script's Lua state
+        // (Spell::Buff::BuffManagerClient::GetPetDurationBuff, BuffManagerClient.cpp:654) → lives on
+        // BuffScriptMetaData. Spell-side "non-dispellable" is the SpellData flag kSpellFlagNonDispellable
+        // (0x10) read by scriptBaseSpell::NonDispellable() (LuaScriptBaseSpell.cpp:121), NOT a script
+        // field; the Lua "NonDispellable" key is read only in scriptBaseBuff::InitBuff. See
+        // reference_spell_toggle_slot / BuffScriptMetaData.IsNonDispellable.
         public MissileParameters MissileParameters { get; set; } = null;
         public bool NotSingleTargetSpell { get; set; } = false;
+        
         // Never appears below 2?
         public int OnPreDamagePriority { get; set; } = 0;
         public bool OverrideCooldownCheck { get; set; } = false;
-        public bool PermeatesThroughDeath { get; set; } = false;
         public bool PersistsThroughDeath { get; set; } = false;
         public string PopupMessage1 { get; set; } = "";
         public float SetSpellDamageRatio { get; set; } = 0.0f;
         public float SpellDamageRatio { get; set; } = 0.0f;
-
-        public int SpellToggleSlot { get; set; } = 0;
 
         /// <summary>
         /// Determines whether or not the spell stops movement and triggers spell casts (and post).

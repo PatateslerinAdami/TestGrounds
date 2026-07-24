@@ -22,6 +22,7 @@ public class FrostShot : IBuffGameScript {
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         IsHidden = true,
         IsNonDispellable = true,
+        SpellToggleSlot = 1,
     };
 
     public StatsModifier StatsModifier { get; } = new();

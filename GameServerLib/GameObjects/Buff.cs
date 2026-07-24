@@ -2,6 +2,7 @@ using System;
 using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
@@ -202,6 +203,10 @@ namespace LeagueSandbox.GameServer.GameObjects
             // (Riot buff-script OnBuffAdded hook; spell-shields consume break-markers here — the
             // handler may synchronously DeactivateBuff this very buff, callers check Elapsed()).
             ApiEventManager.OnUnitBuffActivated.Publish(TargetUnit, this);
+
+            // Riot Spellbook::OnBuffActivate (4.17 Spellbook.cpp:799): a buff carrying
+            // SpellToggleSlot toggles the linked toggle-spell ON while it is active.
+            ApplySpellToggle(true);
         }
 
         public void DeactivateBuff()
@@ -231,6 +236,67 @@ namespace LeagueSandbox.GameServer.GameObjects
 
             ApiEventManager.OnBuffDeactivated.Publish(this);
             ApiEventManager.OnUnitBuffDeactivated.Publish(TargetUnit, this);
+
+            // Riot Spellbook::OnBuffDeactivate (4.17 Spellbook.cpp:811): toggle the linked
+            // toggle-spell back OFF when the buff ends.
+            ApplySpellToggle(false);
+
+            // Riot pet-duration buff (BuffManagerClient::GetPetDurationBuff, BuffManagerClient.cpp:654):
+            // when the buff that governs a pet's lifetime ends, the pet dies.
+            KillPetIfDurationBuff();
+        }
+
+        /// <summary>
+        /// Toggles the toggle-spell linked to this buff via <see cref="BuffScriptMetaData.SpellToggleSlot"/>
+        /// on or off, mirroring Riot Spellbook::OnBuffActivate/OnBuffDeactivate. The metadata value is the
+        /// 1-based Lua SpellToggleSlot (Q=1, W=2, E=3, R=4); Riot's Lua::GetToggleSlotFromBuffScript
+        /// subtracts 1 to reach the 0-based spellbook slot, and skips when the field is absent — the
+        /// default 0 falls through to -1 here and is caught by the same guard.
+        /// </summary>
+        private void ApplySpellToggle(bool toggle)
+        {
+            int slot = (BuffScript?.BuffMetaData?.SpellToggleSlot ?? 0) - 1;
+            // Slot range mirrors the decomp guard (0..62 = the 63 spellbook slots).
+            if (slot < 0 || slot > (int)SpellSlotType.PassiveSpellSlot)
+            {
+                return;
+            }
+
+            if (TargetUnit is ObjAIBase owner
+                && owner.Spells.TryGetValue((short)slot, out var spell)
+                && spell != null)
+            {
+                spell.SetSpellToggle(toggle);
+            }
+        }
+
+        /// <summary>
+        /// Kills the pet whose lifetime this buff governs, when the buff carries
+        /// <see cref="BuffScriptMetaData.IsPetDurationBuff"/>. Mirrors Riot's pet-duration model
+        /// (Spell::Buff::BuffManagerClient::GetPetDurationBuff): the flagged buff is the pet's own
+        /// CloneBuff, so the buff holder (<see cref="TargetUnit"/>) IS the pet to kill. Replaces the
+        /// per-script manual <c>unit.Die(...)</c> that pet buffs used to run in their OnDeactivate.
+        /// </summary>
+        private void KillPetIfDurationBuff()
+        {
+            if (!(BuffScript?.BuffMetaData?.IsPetDurationBuff ?? false))
+            {
+                return;
+            }
+
+            if (TargetUnit is Pet pet && !pet.IsDead)
+            {
+                pet.Die(new DeathData
+                {
+                    BecomeZombie = false,
+                    DieType = 0,
+                    Unit = pet,
+                    Killer = pet,
+                    DamageType = DamageType.DAMAGE_TYPE_TRUE,
+                    DamageSource = DamageSource.DAMAGE_SOURCE_INTERNALRAW,
+                    DeathDuration = 0f
+                });
+            }
         }
 
         public bool Elapsed()

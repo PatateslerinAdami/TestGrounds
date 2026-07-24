@@ -26,7 +26,6 @@ public class JinxQ : ISpellScript {
         TriggersSpellCasts = false,
         NotSingleTargetSpell = true,
         PersistsThroughDeath = true,
-        IsNonDispellable = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

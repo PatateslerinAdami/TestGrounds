@@ -20,7 +20,6 @@ namespace Spells
             NotSingleTargetSpell = false,
             DoesntBreakShields = true,
             TriggersSpellCasts = true,
-            SpellToggleSlot = 3,
             IsDamagingSpell = true
         };
 

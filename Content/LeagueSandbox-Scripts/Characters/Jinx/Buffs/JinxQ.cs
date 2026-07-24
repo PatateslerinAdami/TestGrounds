@@ -26,9 +26,10 @@ internal class JinxQ : IBuffGameScript {
     private          Buff      _buff;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-            PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
-        BuffAddType = BuffAddType.REPLACE_EXISTING
+        BuffAddType = BuffAddType.REPLACE_EXISTING,
+        PersistsThroughDeath = true,
+        IsNonDispellable = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();

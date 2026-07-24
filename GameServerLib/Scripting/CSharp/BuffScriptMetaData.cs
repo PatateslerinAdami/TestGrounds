@@ -22,6 +22,16 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         // (Guardian Angel, Morde COTG) and persist-across-respawn passives (Caitlyn headshot,
         // Wukong/Shyvana passives, mushroom managers) — must set this to true explicitly.
         public bool PersistsThroughDeath { get; set; } = false;
+        
+        public bool PermeatesThroughDeath { get; set; } = false; //TODO: Find what this should do and why it is only on Oracle buffs -> Spells\OracleSightBubble.lua, Spells\OracleElixirSight.lua, Spells\OracleExtractSight.lua
+        
+        public int SpellToggleSlot { get; set; } = 0;
+
+        // Riot reads IsPetDurationBuff from the buff script's Lua state in
+        // Spell::Buff::BuffManagerClient::GetPetDurationBuff (BuffManagerClient.cpp:654): the active
+        // buff carrying this flag governs a pet's lifetime, so when it deactivates the pet dies. In our
+        // model this is the pet's CloneBuff (sits on the pet itself). Wired in Buff.DeactivateBuff.
+        public bool IsPetDurationBuff { get; set; } = false;
 
         public bool IsDeathRecapSource { get; set; } = false;
 

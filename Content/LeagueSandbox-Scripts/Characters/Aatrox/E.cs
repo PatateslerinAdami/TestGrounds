@@ -24,7 +24,6 @@ public class AatroxE : ISpellScript {
         NotSingleTargetSpell = false,
         TriggersSpellCasts   = true,
         IsDamagingSpell      = true,
-        IsPetDurationBuff    = true,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

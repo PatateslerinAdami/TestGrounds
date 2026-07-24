@@ -24,7 +24,7 @@ namespace Spells
             // ChargeDuration is resolved at runtime by GetEffectiveChannelDuration from
             // SionR.json ChannelDuration = 8.0 (SpellTargeter blocks have no RangeGrowthDuration).
             TriggersSpellCasts = true,
-            AutoFaceDirection = true
+            //AutoFaceDirection = true
         };
 
         private ObjAIBase _sion;
@@ -85,6 +85,7 @@ namespace Spells
             // charge) blinks on/off. Toggle OFF is done centrally in StopCharge. The paired
             // ChangeSlotSpellData_OwnerOnly(IconIndex=1) icon swap Riot also sends is cosmetic (R
             // button art) and omitted for now.
+            
             spell.SetSpellToggle(true);
 
             Vector2 dir =

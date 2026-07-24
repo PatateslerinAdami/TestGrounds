@@ -22,7 +22,7 @@ public class SivirW : ISpellScript {
 
     public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
     {
-        AddBuff("SivirW", 6f, 1, spell, owner, owner);
+        AddBuff("SivirWMarker", 6f, 3, spell, owner, owner);
     }
 }
 

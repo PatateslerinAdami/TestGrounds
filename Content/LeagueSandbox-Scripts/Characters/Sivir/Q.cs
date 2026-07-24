@@ -110,7 +110,7 @@ public class SivirQMissile : ISpellScript
 
         target.TakeDamage(_sivir, dmg - dmg * modifier, DamageType.DAMAGE_TYPE_PHYSICAL,
             DamageSource.DAMAGE_SOURCE_SPELLAOE,
-            DamageResultType.RESULT_NORMAL);
+            DamageResultType.RESULT_NORMAL, sourceScript: _spell);
 
         _hitUnits.Add(target);
     }

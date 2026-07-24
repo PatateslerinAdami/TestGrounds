@@ -24,6 +24,8 @@ internal class InfernalGuardianBurning : IBuffGameScript
         BuffType = BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
         MaxStacks = 1,
+        // This is Tibbers' CloneBuff — its expiry drives the pet's death (engine-side, Buff.DeactivateBuff).
+        IsPetDurationBuff = true,
     };
 
     public StatsModifier StatsModifier { get; } = new();
@@ -79,12 +81,7 @@ internal class InfernalGuardianBurning : IBuffGameScript
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
     {
         ApiEventManager.OnDeath.RemoveListener(this, unit, OnDeath);
-        if (!unit.IsDead)
-        {
-            unit.Die(CreateDeathData(false, 0, unit, unit, DamageType.DAMAGE_TYPE_TRUE,
-                DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0.0f));
-        }
-
+        // The pet (unit) is killed by the engine because IsPetDurationBuff is set — no manual Die here.
         RemoveBuff(buff.SourceUnit, "InfernalGuardianTimer");
     }
 }

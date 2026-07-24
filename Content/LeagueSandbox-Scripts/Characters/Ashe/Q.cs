@@ -21,7 +21,6 @@ public class FrostShot : ISpellScript {
     public SpellScriptMetadata ScriptMetadata { get; }  = new () {
         NotSingleTargetSpell = true,
         TriggersSpellCasts = false,
-        SpellToggleSlot = 1,
     };
 
     public void OnActivate(ObjAIBase owner, Spell spell) {

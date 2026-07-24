@@ -20,7 +20,6 @@ public class InfernalGuardian : ISpellScript
     {
         TriggersSpellCasts = true,
         IsDamagingSpell = true,
-        IsPetDurationBuff = true,
         NotSingleTargetSpell = true,
         SpellDamageRatio = 0.5f,
     };

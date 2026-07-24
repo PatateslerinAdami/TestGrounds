@@ -14,7 +14,7 @@ internal class EvelynnPassive : IBuffGameScript {
     private ObjAIBase        _evelynn;
     private Spell    _spell;
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-            PersistsThroughDeath = true,
+        PersistsThroughDeath = true,
         BuffType    = BuffType.AURA,
         BuffAddType = BuffAddType.RENEW_EXISTING,
         MaxStacks   = 1

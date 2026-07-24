@@ -12,37 +12,44 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
 
-internal class SivirW : IBuffGameScript {
+internal class SivirWMarker : IBuffGameScript
+{
     private ObjAIBase _sivir;
-    private Spell     _spell;
     private Buff _buff;
-    private Particle  _p1;
-    private int _hitCount = 0;
+    private Particle _p1;
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_ENCHANCER,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType = BuffType.COMBAT_ENCHANCER,
+        BuffAddType = BuffAddType.STACKS_AND_RENEWS,
+        MaxStacks = 3
     };
 
-    public StatsModifier StatsModifier  { get; } = new();
+    public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         _sivir = buff.SourceUnit;
-        _spell = ownerSpell;
         _buff = buff;
-        _hitCount = 0;
         OverrideAutoAttack(_sivir, "SivirWAttack", true);
         ApiEventManager.OnLaunchAttack.AddListener(this, _sivir, OnLaunchAttack);
     }
 
-    private void OnLaunchAttack(Spell spell) {
+    private void OnLaunchAttack(Spell spell)
+    {
         if (!spell.CastInfo.IsAutoAttack) return;
-        _hitCount++;
-        if (_hitCount >= 3) _buff.DeactivateBuff();
+        if (GetBuffStackCount(_sivir, "SivirWMarker", _sivir) == 1)
+        {
+            RemoveBuff(_sivir, "SivirWMarker", _sivir);
+        }
+        else
+        {
+            EditBuff(_buff, GetBuffStackCount(_sivir, "SivirWMarker", _sivir) - 1);
+        }
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_p1);
         RemoveOverrideAutoAttack(_sivir);

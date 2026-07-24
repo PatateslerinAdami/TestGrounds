@@ -25,6 +25,7 @@ internal class TalonShadowAssaultBuff : IBuffGameScript {
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING,
+        SpellToggleSlot = 3
     };
 
     public StatsModifier StatsModifier { get; } = new();
