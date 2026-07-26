@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -30,6 +31,12 @@ namespace AIScripts
         private const float ATTACK_RANGE = 800F;
         private const float ATTACK_COOLDOWN_TIME = 2.0f;
 
+        private const float FLAT_MINION_CAPTURE_MANA = 2000f;
+
+        private const float REGEN_DELAY = 3.0f;   
+        private const float REGEN_RATE = 2500f;    
+        private float _timeSinceLastCombat = 0f;
+
         private enum CaptureState
         {
             Idle,
@@ -53,6 +60,45 @@ namespace AIScripts
             _self.SetStatus(StatusFlags.CanAttack, false);
 
             AddBuff("OdinGuardianBuff", 25000f, 1, _self.Spells.Values.FirstOrDefault(), _self, _self);
+
+            ApiEventManager.OnTakeDamage.AddListener(this, _self, OnNodeTakeDamage, false);
+        }
+
+        private void OnNodeTakeDamage(DamageData damageData)
+        {
+            if (damageData.Attacker is Minion minion && minion.Team != _self.Team)
+            {
+                _timeSinceLastCombat = 0f; 
+
+                if (_self.Team != TeamId.TEAM_NEUTRAL)
+                {
+                    _self.Stats.CurrentMana -= FLAT_MINION_CAPTURE_MANA;
+
+                    if (_self.Stats.CurrentMana <= MIN_MANA)
+                    {
+                        NeutralizePoint();
+                    }
+                }
+                else
+                {
+                    if (minion.Team == TeamId.TEAM_BLUE)
+                    {
+                        _self.Stats.CurrentMana += FLAT_MINION_CAPTURE_MANA;
+                        if (_self.Stats.CurrentMana >= MAX_MANA)
+                        {
+                            CapturePoint(TeamId.TEAM_BLUE);
+                        }
+                    }
+                    else if (minion.Team == TeamId.TEAM_PURPLE)
+                    {
+                        _self.Stats.CurrentMana -= FLAT_MINION_CAPTURE_MANA;
+                        if (_self.Stats.CurrentMana <= MIN_MANA)
+                        {
+                            CapturePoint(TeamId.TEAM_PURPLE);
+                        }
+                    }
+                }
+            }
         }
 
         public void AddCapturer(Champion champion)
@@ -67,11 +113,45 @@ namespace AIScripts
 
         public void OnUpdate(float diff)
         {
+            float deltaSec = diff / 1000f;
+
             if (_manaShiftPauseTimer > 0)
             {
-                _manaShiftPauseTimer -= diff / 1000f;
+                _manaShiftPauseTimer -= deltaSec;
             }
+
             _capturers.RemoveAll(c => c == null || c.IsDead || c.ChannelSpell == null);
+
+            if (_capturers.Count > 0)
+            {
+                _timeSinceLastCombat = 0f;
+            }
+            else
+            {
+                _timeSinceLastCombat += deltaSec;
+            }
+
+            if (_capturers.Count == 0 && _timeSinceLastCombat >= REGEN_DELAY)
+            {
+                if (_self.Team != TeamId.TEAM_NEUTRAL)
+                {
+                    if (_self.Stats.CurrentMana < MAX_MANA)
+                    {
+                        _self.Stats.CurrentMana = Math.Min(MAX_MANA, _self.Stats.CurrentMana + (REGEN_RATE * deltaSec));
+                    }
+                }
+                else
+                {
+                    if (_self.Stats.CurrentMana > HALF_MANA)
+                    {
+                        _self.Stats.CurrentMana = Math.Max(HALF_MANA, _self.Stats.CurrentMana - (REGEN_RATE * deltaSec));
+                    }
+                    else if (_self.Stats.CurrentMana < HALF_MANA)
+                    {
+                        _self.Stats.CurrentMana = Math.Min(HALF_MANA, _self.Stats.CurrentMana + (REGEN_RATE * deltaSec));
+                    }
+                }
+            }
 
             if (_capturers.Count > 0 && _stunBuff == null)
             {
@@ -104,7 +184,7 @@ namespace AIScripts
                 {
                     if (_attackCooldown > 0)
                     {
-                        _attackCooldown -= diff / 1000f;
+                        _attackCooldown -= deltaSec;
                     }
 
                     if (!_self.IsAttacking)
@@ -156,7 +236,7 @@ namespace AIScripts
                 {
                     if(_self.TargetUnit  != null && _self.TargetUnit == ai)
                     {
-                       _self.SetTargetUnit(null, true); 
+                        _self.SetTargetUnit(null, true);
                     }
                     continue;
                 }

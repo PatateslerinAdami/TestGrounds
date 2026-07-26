@@ -90,5 +90,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             Replication = new ReplicationMinion(this);
         }
-}
+        public override bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
+        {
+            bool success = base.SetWaypoints(newWaypoints, isForced);
+
+            if (success && !IsAttacking)
+            {
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, false, false, true, true, 0);
+            }
+
+            return success;
+        }
+
+
+
+
+    }
 }

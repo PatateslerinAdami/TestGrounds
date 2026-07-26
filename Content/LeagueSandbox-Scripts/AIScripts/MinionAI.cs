@@ -5,10 +5,10 @@ using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace AIScripts
 {
@@ -17,11 +17,17 @@ namespace AIScripts
         public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData();
         private Minion _minion;
         private Node _behaviorTree;
+
+        private static readonly Random _rnd = new Random();
         private float _thinkTimer = 0f;
+
+        private readonly SpellDataFlags _targetFlags = SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets;
 
         public void OnActivate(ObjAIBase owner)
         {
             _minion = owner as Minion;
+
+            _thinkTimer = (float)_rnd.NextDouble() * 250f;
 
             _behaviorTree = new Selector(
                 new Sequence(
@@ -35,7 +41,7 @@ namespace AIScripts
 
         public void OnUpdate(float diff)
         {
-            if (_minion.IsDead || _minion.IsAIPaused()) return;
+            if (_minion == null || _minion.IsDead || _minion.IsAIPaused()) return;
 
             _thinkTimer += diff;
             if (_thinkTimer >= 250f)
@@ -47,20 +53,27 @@ namespace AIScripts
 
         private NodeState CheckHasTarget()
         {
-            if (_minion.TargetUnit != null && !_minion.TargetUnit.IsDead) return NodeState.Success;
+            if (_minion.TargetUnit != null && ApiFunctionManager.IsValidTarget(_minion, _minion.TargetUnit, _targetFlags))
+            {
+                return NodeState.Success;
+            }
+
             _minion.SetTargetUnit(null, true);
             return NodeState.Failure;
         }
 
         private NodeState OrderAttackTarget()
         {
-            if (_minion.MoveOrder != OrderType.AttackTo) _minion.UpdateMoveOrder(OrderType.AttackTo);
+            if (_minion.MoveOrder != OrderType.AttackTo && _minion.MoveOrder != OrderType.Hold)
+            {
+                _minion.UpdateMoveOrder(OrderType.AttackTo);
+            }
             return NodeState.Success;
         }
 
         private NodeState ScanForTargets()
         {
-            var potentialTargets = ApiFunctionManager.GetUnitsInRange(_minion, _minion.Position, _minion.Stats.AcquisitionRange.Total, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets);
+            var potentialTargets = ApiFunctionManager.GetUnitsInRange(_minion, _minion.Position, _minion.Stats.AcquisitionRange.Total, true, _targetFlags);
 
             AttackableUnit bestTarget = null;
             int bestPriority = (int)ClassifyUnit.DEFAULT;
@@ -69,7 +82,7 @@ namespace AIScripts
 
             foreach (var u in potentialTargets)
             {
-                if (u.Status.HasFlag(StatusFlags.Targetable) && !ApiFunctionManager.UnitIsProtectionActive(u))
+                if (ApiFunctionManager.IsValidTarget(_minion, u, _targetFlags))
                 {
                     int priority = (int)_minion.ClassifyTarget(u);
                     float distSq = Vector2.DistanceSquared(_minion.Position, u.Position);

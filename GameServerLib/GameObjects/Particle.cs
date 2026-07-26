@@ -112,7 +112,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public Particle(Game game, GameObject caster, GameObject bindObj, GameObject target, string particleName,
             float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-            Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
+            Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, float lifetime = 0,
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
@@ -158,7 +158,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public Particle(Game game, GameObject caster, GameObject bindObj, Vector2 targetPos, string particleName,
                     float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, float lifetime = 0,
                     TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
                     FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
@@ -210,7 +210,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public Particle(Game game, GameObject caster, Vector2 startPos, Vector2 endPos, string particleName,
                     float scale = 1.0f, string boneName = "", string targetBoneName = "", uint netId = 0,
-                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = false, float lifetime = 0,
+                    Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, float lifetime = 0,
                     TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
                     FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,

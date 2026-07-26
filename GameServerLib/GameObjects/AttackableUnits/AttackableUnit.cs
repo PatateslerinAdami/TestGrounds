@@ -140,6 +140,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (isUnstoppable) _unstoppableModifiers++;
             else _unstoppableModifiers--;
         }
+        public List<ObjAIBase> TargetedBy { get; } = new List<ObjAIBase>();
         public AttackableUnit(
             Game game,
             string model,
@@ -754,7 +755,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 // Wards should not trigger on-hit proc pipelines; Therfore each basic attack consumes only one ward hit.
                 if (!targetIsWard)
                     ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
-                
+
                 //TODO: find a use case for these OnDodge OnBeingDodged and OnMiss
                 if (damageData.DamageResultType == DamageResultType.RESULT_DODGE)
                 {
@@ -819,12 +820,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (Vector2.DistanceSquared(attacker.Position, Position) <= revealRange * revealRange)
                 {
                     attacker.RevealSpecificUnit(GlobalData.AttackFlags.RevealAttackerTimeOut);
+                    if (Team != TeamId.TEAM_NEUTRAL)
+                    {
+                        ApiFunctionManager.AddPosPerceptionBubble(attacker.Position, 400.0f, GlobalData.AttackFlags.RevealAttackerTimeOut, Team, true, ignoresLoS: true);
+                    }
                 }
             }
 
             ApiEventManager.OnDealDamage.Publish(damageData.Attacker, damageData);
             ApiEventManager.OnTakeDamage.Publish(damageData.Target, damageData);
-            
+
             if (!IsDead && Stats.CurrentHealth <= 0)
             {
                 IsDead = true;
@@ -1153,7 +1158,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     if (MP.Duration > 0 && timeRemainingMs > 0)
                     {
-                        distToDest = 0; 
+                        distToDest = 0;
                     }
                     else
                     {
@@ -1176,7 +1181,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             distRemaining = Math.Min(distToDest, distRemaining);
 
             float timeMs = Math.Min(frameTime, timeRemainingMs);
-            float speed = MP.PathSpeedOverride * 0.001f; 
+            float speed = MP.PathSpeedOverride * 0.001f;
             float distPerFrame = speed * timeMs;
             float dist = 0;
 
@@ -1317,7 +1322,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         /// <param name="newWaypoints">New path of Vector2 coordinates that the unit will move to.</param>
         /// <param name="networked">Whether or not clients should be notified of this change in waypoints at the next ObjectManager.Update.</param>
-        public bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
+        public virtual bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
         {
             // Waypoints should always have an origin at the current position.
             // Dashes are excluded as their paths should be set before being applied.
@@ -2027,14 +2032,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (fadeTime == 0f)
             {
                 SetStatus(StatusFlags.Stealthed, true);
-                _game.ObjectManager.RefreshUnitVision(this); 
+                _game.ObjectManager.RefreshUnitVision(this);
             }
             else
             {
                 RegisterTimer(new GameScriptTimer(fadeTime, () =>
                 {
                     SetStatus(StatusFlags.Stealthed, true);
-                    _game.ObjectManager.RefreshUnitVision(this); 
+                    _game.ObjectManager.RefreshUnitVision(this);
                 }));
             }
 

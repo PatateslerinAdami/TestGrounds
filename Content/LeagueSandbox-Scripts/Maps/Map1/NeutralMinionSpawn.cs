@@ -125,10 +125,10 @@ namespace MapScripts.Map1
             });
 
             //Red Side GreatWraith (Old gromp)
-            var redGreatGromp = CreateJungleCamp(new Vector3(12337.0f, 60.0f, 6263.0f), 14, TeamId.TEAM_UNKNOWN, "LesserCamp", 125.0f * 1000);
+            var redGreatGromp = CreateJungleCamp(new Vector3(12224.842f, 60.0f, 6270.6777f), 14, TeamId.TEAM_UNKNOWN, "LesserCamp", 125.0f * 1000);
             MonsterCamps.Add(redGreatGromp, new List<Monster>
             {
-                CreateJungleMonster("GreatWraith14.1.1", "GreatWraith", new Vector2(12337.0f, 6263.0f), new Vector3(11826.0f, 52.0f, 4788.0f), redGreatGromp, aiScript: "BasicJungleMonsterAI")
+                CreateJungleMonster("GreatWraith14.1.1", "GreatWraith", new Vector2(12224.842f, 6270.6777f), new Vector3(11826.0f, 52.0f, 4788.0f), redGreatGromp, aiScript: "BasicJungleMonsterAI")
             });
         }
 

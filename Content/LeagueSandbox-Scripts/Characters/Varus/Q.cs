@@ -13,6 +13,7 @@ using System;
 using System.Numerics;
 using static GameServerCore.Content.HashFunctions;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using System.Collections.Generic;
 
 namespace Spells
 {
@@ -41,10 +42,17 @@ namespace Spells
             var timerAnm = new GameScriptTimer(0.2f, () =>
             {
                 // idk either couldnt find the right bone to attach to, or something wrong with the system
-                if(_owner.ChannelSpell != null && _owner.ChannelSpell.SpellName == "VarusQ") p1 = AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, "Weapon", "R_PARENTING_HAND_LOC"); // AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, "BUFFBONE_GLB_CHANNEL_LOC", "R_finger_b");
+                if(_owner.ChannelSpell != null && _owner.ChannelSpell.SpellName == "VarusQ") p1 = AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, boneNameHash: 4929107, targetBoneNameHash: 4866946); // AddParticleTarget(_owner, _owner, "varusqchannel.troy", _owner, 4f, 1, "BUFFBONE_GLB_CHANNEL_LOC", "R_finger_b");
             });
             _owner.RegisterTimer(timerAnm);
             p2 = AddParticle(_owner, _owner, "varusqchannel2", default, 4f, bone:"HEAD");//C_BUFFBONE_GLB_CENTER_LOC
+            var anims = new Dictionary<string, string>
+            {
+                { "RUN", "Spell1_Walk" },
+                { "ATTACK1", "Attack2" },
+                { "IDLE1", "SPELL1_IDLE" }
+            };
+            _owner.SetAnimStates(anims, this);
         }
 
         public void OnSpellChannelUpdate(Spell spell, Vector3 position, bool forceStop)
@@ -107,6 +115,7 @@ namespace Spells
             p1?.SetToRemove();
             p2?.SetToRemove();
             if(_owner.HasBuff(soundBuff)) _owner.RemoveBuff(soundBuff);
+            _owner.RemoveAnimStates(this);
         }
         private void ManaRefund()
         {

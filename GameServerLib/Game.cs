@@ -38,7 +38,7 @@ namespace LeagueSandbox.GameServer
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
-        protected const double REFRESH_RATE = 1000.0 / 60.0; // GameLoop called 60 times a second.
+        protected const double REFRESH_RATE = 1000.0 / 30.0; // GameLoop called 30 times a second.
         private HandleStartGame _gameStartHandler;
 
         // Server
@@ -156,7 +156,7 @@ namespace LeagueSandbox.GameServer
             // TODO: GameApp should send the Response/Request handlers
             _packetServer = server;
             // TODO: switch the notifier with ResponseHandler
-            PacketNotifier = new PacketNotifier(_packetServer.PacketHandlerManager, Map.NavigationGrid);
+            PacketNotifier = new PacketNotifier(_packetServer.PacketHandlerManager, Map.NavigationGrid, this);
 
             ObjectManager = new ObjectManager(this);
             ProtectionManager = new ProtectionManager(this);

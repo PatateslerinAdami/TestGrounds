@@ -12,6 +12,7 @@ using LeaguePackets.Game;
 using LeaguePackets.Game.Common;
 using LeaguePackets.Game.Events;
 using LeaguePackets.LoadScreen;
+using LeagueSandbox.GameServer;
 using LeagueSandbox.GameServer.Content.Navigation;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -43,6 +44,8 @@ namespace PacketDefinitions420
     {
         private readonly PacketHandlerManager _packetHandlerManager;
         private readonly NavigationGrid _navGrid;
+        private readonly Game _game;
+
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
         private Dictionary<int, List<ReplicationData>> _heldReplicationData = new Dictionary<int, List<ReplicationData>>();
 
@@ -51,10 +54,11 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="packetHandlerManager"></param>
         /// <param name="navGrid"></param>
-        public PacketNotifier(PacketHandlerManager packetHandlerManager, NavigationGrid navGrid)
+        public PacketNotifier(PacketHandlerManager packetHandlerManager, NavigationGrid navGrid, Game game = null)
         {
             _packetHandlerManager = packetHandlerManager;
             _navGrid = navGrid;
+            _game = game;
         }
 
         private static byte GetItemsInSlotForDisplay(ObjAIBase owner, Item item)
@@ -561,6 +565,10 @@ namespace PacketDefinitions420
                 case Monster monster:
                     return ConstructCreateNeutralPacket(monster, gameTime);
                 case LaneMinion minion:
+                    if (_game.Map.MapScript.MapScriptMetadata.OverrideSpawnPoints)
+                    {
+                        return ConstructMinionSpawnedPacket(minion);
+                    }
                     return ConstructLaneMinionSpawnedPacket(minion);
                 case Minion minion:
                     return ConstructMinionSpawnedPacket(minion);

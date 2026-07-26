@@ -56,36 +56,18 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         else
                         {
                             waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
-
-                            if (Vector2.Distance(champion.Position, waypoints[0]) < 150f)
+                            var target = waypoints[waypoints.Count - 1];
+                            if (!nav.IsWalkable(target, champion.PathfindingRadius))
                             {
-                                champion.SetPosition(waypoints[0], false);
+                                target = nav.GetClosestTerrainExit(target, champion.PathfindingRadius);
                             }
-
-                            waypoints[0] = champion.Position;
-
-                            for(int i = 0; i < waypoints.Count - 1; i++)
+                            var path = nav.GetPath(champion.Position, target, champion.PathfindingRadius);
+                            if(path != null && path.Count > 1)
                             {
-                                if(nav.CastCircle(waypoints[i], waypoints[i + 1], champion.PathfindingRadius, true))
-                                {
-                                    var ithWaypoint = waypoints[i];
-                                    var lastWaypoint = waypoints[waypoints.Count - 1];
-                                    var path = nav.GetPath(ithWaypoint, lastWaypoint, champion.PathfindingRadius);
-                                    waypoints.RemoveRange(i, waypoints.Count - i);
-                                    if(path != null)
-                                    {
-                                        waypoints.AddRange(path);
-                                    }
-                                    else
-                                    {
-                                        waypoints.Add(ithWaypoint);
-                                    }
-                                    break;
-                                }
+                                champion.UpdateMoveOrder(req.OrderType, true);
+                                champion.SetWaypoints(path);
+                                champion.SetTargetUnit(null);
                             }
-                            champion.UpdateMoveOrder(req.OrderType, true);
-                            champion.SetWaypoints(waypoints);
-                            champion.SetTargetUnit(null);
                         }
                         break;
                     case OrderType.PetHardAttack:

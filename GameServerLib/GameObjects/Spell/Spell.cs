@@ -16,6 +16,7 @@ using LeagueSandbox.GameServer.Logging;
 using log4net;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using GameServerLib.GameObjects;
 
 namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 {
@@ -168,7 +169,37 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 nameSpace = "ItemSpells";
             }
-            Script = CSharpScriptEngine.CreateObjectStatic<ISpellScript>(nameSpace, SpellName) ?? new SpellScriptEmpty();
+
+            Script = CSharpScriptEngine.CreateObjectStatic<ISpellScript>(nameSpace, SpellName);
+
+            if (Script == null)
+            {
+                string fallbackScript = "";
+
+                if (SpellName.Contains("Turret") && SpellName.EndsWith("BasicAttack"))
+                {
+                    fallbackScript = "TurretBasicAttack";
+                }
+                else if (CastInfo.Owner is Monster &&
+                         (SpellName.EndsWith("BasicAttack") ||
+                          SpellName.EndsWith("BasicAttack2") ||
+                          SpellName.EndsWith("BasicAttack3") ||
+                          SpellName.EndsWith("BasicAttack4") ||
+                          SpellName.Equals("WormAttack") ||
+                          SpellName.Equals("DragonBasicAttack")))
+                {
+                    fallbackScript = "MonsterBasicAttack";
+                }
+
+                if (!string.IsNullOrEmpty(fallbackScript))
+                {
+                    Script = CSharpScriptEngine.CreateObjectStatic<ISpellScript>(nameSpace, fallbackScript) ?? new SpellScriptEmpty();
+                }
+                else
+                {
+                    Script = new SpellScriptEmpty();
+                }
+            }
 
             if (Script.ScriptMetadata.TriggersSpellCasts)
             {

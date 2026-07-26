@@ -69,7 +69,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public override void Update(float diff)
         {
-            if (HasTarget() && !TargetUnit.IsDead && TargetUnit.Status.HasFlag(StatusFlags.Targetable))
+            bool isTargetValid = HasTarget() && !TargetUnit.IsDead &&
+                (TargetUnit.Status.HasFlag(StatusFlags.Targetable) || !TargetUnit.IsAffectedByFoW);//Return back to this, a temporary fix for dominion capture points.
+
+            if (isTargetValid)
             {
                 _timeSinceCreation += diff;
                 Move(diff);

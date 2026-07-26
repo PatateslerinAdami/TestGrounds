@@ -399,12 +399,6 @@ namespace LeagueSandbox.GameServer
                 return false;
             }
 
-            if (tested is AttackableUnit testedUnit
-                && testedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit))
-            {
-                return true;
-            }
-
             if (tested is AttackableUnit stealthedUnit
                 && stealthedUnit.Status.HasFlag(StatusFlags.Stealthed)
                 && !stealthedUnit.Status.HasFlag(StatusFlags.RevealSpecificUnit)

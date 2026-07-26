@@ -157,7 +157,8 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 runesTemp,
                 talents,
                 clientInfoTemp,
-                team: team
+                team: team //,
+                //AIScript: "BasicBotAI"
             );
 
             clientInfoTemp.Champion = c;

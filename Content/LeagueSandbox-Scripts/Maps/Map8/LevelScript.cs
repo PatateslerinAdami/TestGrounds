@@ -1,14 +1,16 @@
-﻿using System.Collections.Generic;
-using System;
-using System.Numerics;
-using GameServerCore.Domain;
+﻿using GameServerCore.Domain;
 using GameServerCore.Enums;
+using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.Content;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
-using static LeagueSandbox.GameServer.API.ApiGameEvents;
 using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using System;
+using System.Collections.Generic;
+using System.Numerics;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using static LeagueSandbox.GameServer.API.ApiGameEvents;
+using static LeagueSandbox.GameServer.API.ApiMapFunctionManager;
 
 namespace MapScripts.Map8
 {
@@ -24,9 +26,28 @@ namespace MapScripts.Map8
 
         public bool HasFirstBloodHappened { get; set; } = false;
         public long NextSpawnTime { get; set; } = 90 * 1000;
-        public string LaneMinionAI { get; set; } = "LaneMinionAI";
+        public string LaneMinionAI { get; set; } = "OdinLaneMinionAI";
 
-        //Values i got the values for 5 players from replay packets, the value for 1 player is just a guess of mine by using !coords command in-game
+        private float _minionSpawnTimer = 0f;
+        private const float MINION_SPAWN_INTERVAL = 15.0f * 1000f;
+        private const float FIRST_SPAWN_DELAY = 90.0f * 1000f;
+        private const float STAGGER_DELAY = 800f; 
+
+        private class PendingWave
+        {
+            public InfoPoint Source;
+            public InfoPoint Target;
+            public bool IsClockwise;
+            public TeamId Team;
+            public List<MinionSpawnType> WaveTypes;
+            public List<Vector2> Waypoints;
+            public string BarracksName;
+            public int CurrentMinionIndex = 0;
+            public float Timer = 0f;
+        }
+
+        private List<PendingWave> _activeWaves = new List<PendingWave>();
+
         public Dictionary<TeamId, Dictionary<int, Dictionary<int, Vector2>>> PlayerSpawnPoints { get; } = new Dictionary<TeamId, Dictionary<int, Dictionary<int, Vector2>>>
         {
             {TeamId.TEAM_BLUE, new Dictionary<int, Dictionary<int, Vector2>>{
@@ -54,10 +75,8 @@ namespace MapScripts.Map8
                     { 1, new Vector2(13310f, 4124f) }
                 }}
             }},
-
         };
 
-        //Minion models for this map
         public Dictionary<TeamId, Dictionary<MinionSpawnType, string>> MinionModels { get; set; } = new Dictionary<TeamId, Dictionary<MinionSpawnType, string>>
         {
             {TeamId.TEAM_BLUE, new Dictionary<MinionSpawnType, string>{
@@ -89,34 +108,6 @@ namespace MapScripts.Map8
         public Dictionary<string, List<MinionSpawnType>> MinionWaveTypes = new Dictionary<string, List<MinionSpawnType>>
         { {"RegularMinionWave", new List<MinionSpawnType>
         {
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER }
-        },
-        {"CannonMinionWave", new List<MinionSpawnType>{
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_CANNON,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER }
-        },
-        {"SuperMinionWave", new List<MinionSpawnType>{
-            MinionSpawnType.MINION_TYPE_SUPER,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER }
-        },
-        {"DoubleSuperMinionWave", new List<MinionSpawnType>{
-            MinionSpawnType.MINION_TYPE_SUPER,
-            MinionSpawnType.MINION_TYPE_SUPER,
             MinionSpawnType.MINION_TYPE_MELEE,
             MinionSpawnType.MINION_TYPE_MELEE,
             MinionSpawnType.MINION_TYPE_MELEE,
@@ -179,6 +170,18 @@ namespace MapScripts.Map8
 
             var gameTime = GameTime();
 
+            if (gameTime >= FIRST_SPAWN_DELAY)
+            {
+                _minionSpawnTimer += diff;
+                if (_minionSpawnTimer >= MINION_SPAWN_INTERVAL)
+                {
+                    _minionSpawnTimer = 0f;
+                    CheckAndSpawnMinionWaves();
+                }
+            }
+
+            UpdateStaggeredWaves(diff);
+
             if (!NotifiedAllInitialAnimations)
             {
                 InitialBaseAnimations(gameTime);
@@ -193,6 +196,149 @@ namespace MapScripts.Map8
                 UpdateScores(diff);
             }
         }
+
+        private void UpdateStaggeredWaves(float diff)
+        {
+            for (int i = _activeWaves.Count - 1; i >= 0; i--)
+            {
+                var wave = _activeWaves[i];
+                wave.Timer += diff;
+
+                if (wave.Timer >= STAGGER_DELAY || wave.CurrentMinionIndex == 0)
+                {
+                    wave.Timer = 0f;
+
+                    SpawnSingleOdinMinion(wave);
+
+                    wave.CurrentMinionIndex++;
+
+                    if (wave.CurrentMinionIndex >= wave.WaveTypes.Count)
+                    {
+                        _activeWaves.RemoveAt(i);
+                    }
+                }
+            }
+        }
+        private void SpawnSingleOdinMinion(PendingWave wave)
+        {
+            Vector2 spawnPos = wave.IsClockwise ? wave.Source.RightSpawnPoint : wave.Source.LeftSpawnPoint;
+
+            var minion = CreateLaneMinion(
+                wave.WaveTypes,
+                spawnPos,
+                wave.Team,
+                wave.CurrentMinionIndex,
+                wave.BarracksName,
+                wave.Waypoints,
+                LaneMinionAI
+            );
+            if (minion.AIScript is AIScripts.OdinLaneMinionAI odinAI)
+            {
+                odinAI.CurrentTargetNode = wave.Target;
+                odinAI.IsClockwise = wave.IsClockwise;
+            }
+        }
+        private void CheckAndSpawnMinionWaves()
+        {
+            var nodes = LevelScriptObjects.InfoPoints;
+            if (nodes == null || nodes.Count < 5) return;
+
+            for (int i = 0; i < 5; i++)
+            {
+                var currentNode = nodes[i];
+                TeamId currentTeam = currentNode.Point.Team;
+
+                if (currentTeam == TeamId.TEAM_NEUTRAL) continue;
+
+                int leftIndex = (i + 4) % 5;  
+                int rightIndex = (i + 1) % 5; // clokwise
+
+                var leftNode = nodes[leftIndex];
+                var rightNode = nodes[rightIndex];
+                if (leftNode.Point.Team != currentTeam && leftNode.Point.Team != TeamId.TEAM_NEUTRAL)
+                {
+                    QueueMinionWave(currentNode, leftNode, isClockwise: false);
+                }
+
+                if (rightNode.Point.Team != currentTeam && rightNode.Point.Team != TeamId.TEAM_NEUTRAL)
+                {
+                    QueueMinionWave(currentNode, rightNode, isClockwise: true);
+                }
+            }
+        }
+
+        public List<Vector2> BuildDominionPath(InfoPoint source, InfoPoint target, bool isClockwise)
+        {
+            var fullPath = new List<Vector2>();
+            var masterRing = LevelScriptObjects.OuterRingWaypoints;
+
+            if (masterRing == null || masterRing.Count == 0)
+            {
+                return new List<Vector2> { source.Point.Position, target.Point.Position };
+            }
+
+            int totalWaypoints = masterRing.Count;
+
+            if (isClockwise)
+            {
+                fullPath.Add(source.RightSpawnPoint);
+                fullPath.AddRange(source.RightGetToCircleWaypoints);
+
+                int currentIdx = source.RightCircleIndex;
+                int targetIdx = target.LeftCircleIndex;
+
+                while (true)
+                {
+                    fullPath.Add(masterRing[currentIdx]);
+                    if (currentIdx == targetIdx) break;
+
+                    currentIdx = (currentIdx + 1) % totalWaypoints;
+                }
+
+                fullPath.Add(target.Point.Position);
+            }
+            else
+            {
+                fullPath.Add(source.LeftSpawnPoint);
+                fullPath.AddRange(source.LeftGetToCircleWaypoints);
+
+                int currentIdx = source.LeftCircleIndex;
+                int targetIdx = target.RightCircleIndex;
+
+                while (true)
+                {
+                    fullPath.Add(masterRing[currentIdx]);
+                    if (currentIdx == targetIdx) break;
+
+                    currentIdx = (currentIdx - 1 + totalWaypoints) % totalWaypoints;
+                }
+
+                fullPath.Add(target.Point.Position);
+            }
+
+            return fullPath;
+        }
+
+        private void QueueMinionWave(InfoPoint source, InfoPoint target, bool isClockwise)
+        {
+            var waveTypes = MinionWaveTypes["RegularMinionWave"];
+            List<Vector2> waypoints = BuildDominionPath(source, target, isClockwise);
+            string barracksName = $"Barracks_{source.Id}_{(isClockwise ? "CW" : "CCW")}";
+
+            _activeWaves.Add(new PendingWave
+            {
+                Source = source,
+                Target = target,
+                IsClockwise = isClockwise,
+                Team = source.Point.Team,
+                WaveTypes = waveTypes,
+                Waypoints = waypoints,
+                BarracksName = barracksName,
+                CurrentMinionIndex = 0,
+                Timer = 0f
+            });
+        }
+
         private void UpdateScores(float diff)
         {
             _scoreTickTimer += diff;

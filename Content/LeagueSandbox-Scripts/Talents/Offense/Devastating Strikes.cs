@@ -4,15 +4,15 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace Talents
 {
-    internal class Talent_4213 : ITalentScript
+    internal class Talent_4152 : ITalentScript
     {
         public void OnActivate(ObjAIBase owner, byte rank)
         {
             var modifier = new StatsModifier();
-            float amount = 12.0f * rank;
-            modifier.HealthPoints.FlatBonus = amount;
+            float penetration = 0.02f * rank;
+            modifier.ArmorPenetration.PercentBaseBonus = penetration;
+            modifier.MagicPenetration.PercentBaseBonus = penetration;
             owner.AddStatModifier(modifier);
-            owner.Stats.CurrentHealth += amount;
         }
     }
 }

@@ -184,14 +184,14 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 return null;
             }
-            
+
             var fromNav = TranslateToNavGrid(from);
             var cellFrom = GetCell(fromNav, false);
             //var goal = GetClosestWalkableCell(to, distanceThreshold, true);
             to = GetClosestTerrainExit(to, distanceThreshold);
             var toNav = TranslateToNavGrid(to);
             var cellTo = GetCell(toNav, false);
-            
+
             if (cellFrom == null || cellTo == null)
             {
                 return null;
@@ -203,7 +203,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
             // A size large enough not to relocate the array while playing Summoner's Rift
             var priorityQueue = new PriorityQueue<(List<NavigationGridCell>, float), float>(1024);
-            
+
             var start = new List<NavigationGridCell>(1);
             start.Add(cellFrom);
             priorityQueue.Enqueue((start, 0), Vector2.Distance(fromNav, toNav));
@@ -247,41 +247,29 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     if(neighborCell.ID != cellTo.ID)
                     {
                         neighborCellCoord = neighborCell.GetCenter();
-                        
-                        Vector2 cellCoord = fromNav;
-                        if(cell.ID != cellFrom.ID)
-                        {
-                            cellCoord = cell.GetCenter();
-                        }
 
-                        // close cell if not walkable or circle LOS check fails (start cell skipped as it always fails)
-                        if
-                        (
-                            CastCircle(cellCoord, neighborCellCoord, distanceThreshold, false)
-                        )
+                        // Check walkability directly instead of running a CastCircle loop
+                        if (!IsWalkable(neighborCell, distanceThreshold))
                         {
                             closedList.Add(neighborCell.ID);
                             continue;
                         }
                     }
 
-                    // calculate the new path and cost +heuristic and add to the priority queue
                     var npath = new List<NavigationGridCell>(path.Count + 1);
-                    foreach(var pathCell in path)
+                    for (int i = 0; i < path.Count; i++)
                     {
-                        npath.Add(pathCell);
+                        npath.Add(path[i]);
                     }
                     npath.Add(neighborCell);
 
-                    // add 1 for every cell used
-                    float cost = currentCost + 1
-                        + neighborCell.ArrivalCost
-                        + neighborCell.AdditionalCost;
-                    
+                    // Ignore prebaked costs to treat all cells equally
+                    float cost = currentCost + 1.0f;
+
+                    // Removing neighborCell.Heuristic prevents the search queue from exploding, need to return after understanding how to use prebaked values better.
                     priorityQueue.Enqueue(
-                        (npath, cost), cost
-                        + neighborCell.Heuristic
-                        + Vector2.Distance(neighborCellCoord, toNav)
+                        (npath, cost),
+                        cost + Vector2.Distance(neighborCellCoord, toNav)
                     );
 
                     closedList.Add(neighborCell.ID);
@@ -297,7 +285,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             SmoothPath(path, distanceThreshold);
 
             var returnList = new List<Vector2>(path.Count);
-            
+
             returnList.Add(from);
             for (int i = 1; i < path.Count - 1; i++)
             {
@@ -786,14 +774,20 @@ namespace LeagueSandbox.GameServer.Content.Navigation
 
         public bool CastCircle(Vector2 orig, Vector2 dest, float radius, bool translate = true)
         {
-            if(translate)
+            Vector2 direction = dest - orig;
+            if (direction.LengthSquared() <= 0.0001f)
+            {
+                return false;
+            }
+
+            if (translate)
             {
                 orig = TranslateToNavGrid(orig);
                 dest = TranslateToNavGrid(dest);
             }
-            
+
             float tradius = radius / CellSize;
-            Vector2 p = (dest - orig).Normalized().Perpendicular() * tradius;
+            Vector2 p = direction.Normalized().Perpendicular() * tradius;
 
             var cells = GetAllCellsInRange(orig, radius, false)
             .Concat(GetAllCellsInRange(dest, radius, false))
@@ -835,7 +829,7 @@ namespace LeagueSandbox.GameServer.Content.Navigation
                     }
                 }
             }
-            
+
             return false;
         }
 
@@ -901,20 +895,33 @@ namespace LeagueSandbox.GameServer.Content.Navigation
         /// <returns>Vector2 position which can be pathed on.</returns>
         public Vector2 GetClosestTerrainExit(Vector2 location, float distanceThreshold = 0)
         {
-            double angle = Math.PI / 4;
-
-            // x = r * cos(angle)
-            // y = r * sin(angle)
-            // r = distance from center
-            // Draws spirals until it finds a walkable spot
-            for (int r = 1; !IsWalkable(location, distanceThreshold); r++)
+            if (IsWalkable(location, distanceThreshold))
             {
-                location.X += r * (float)Math.Cos(angle);
-                location.Y += r * (float)Math.Sin(angle);
-                angle += Math.PI / 4;
+                return location;
             }
 
-            return location;
+            Vector2 originalLocation = location;
+            double angle = 0;
+            float step = CellSize; 
+
+            for (float r = step; r < 2000f; r += step)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    angle = i * (Math.PI / 4);
+                    Vector2 testPoint = originalLocation + new Vector2(
+                        r * (float)Math.Cos(angle),
+                        r * (float)Math.Sin(angle)
+                    );
+
+                    if (IsWalkable(testPoint, distanceThreshold))
+                    {
+                        return testPoint;
+                    }
+                }
+            }
+
+            return originalLocation; 
         }
 
         public NavigationGridCell GetClosestWalkableCell(Vector2 coords, float distanceThreshold = 0, bool translate = true)
@@ -923,21 +930,34 @@ namespace LeagueSandbox.GameServer.Content.Navigation
             {
                 coords = TranslateToNavGrid(coords);
             }
-            float closestDist = 0;
-            NavigationGridCell closestCell = null;
-            foreach(var cell in Cells)
+
+            short startX = (short)Math.Clamp(coords.X, 0f, CellCountX - 1);
+            short startY = (short)Math.Clamp(coords.Y, 0f, CellCountY - 1);
+
+            for (short r = 0; r < 50; r++)
             {
-                if(IsWalkable(cell, distanceThreshold))
+                for (short dx = (short)-r; dx <= r; dx++)
                 {
-                    float dist = Vector2.DistanceSquared(cell.GetCenter(), coords);
-                    if(closestCell == null || dist < closestDist)
+                    for (short dy = (short)-r; dy <= r; dy++)
                     {
-                        closestCell = cell;
-                        closestDist = dist;
+                        if (Math.Abs(dx) != r && Math.Abs(dy) != r)
+                        {
+                            continue;
+                        }
+
+                        short tx = (short)(startX + dx);
+                        short ty = (short)(startY + dy);
+
+                        var cell = GetCell(tx, ty);
+                        if (cell != null && IsWalkable(cell, distanceThreshold))
+                        {
+                            return cell;
+                        }
                     }
                 }
             }
-            return closestCell;
+
+            return GetCell(startX, startY);
         }
     }
 }
