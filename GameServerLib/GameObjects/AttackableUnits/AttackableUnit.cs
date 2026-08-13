@@ -141,6 +141,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             else _unstoppableModifiers--;
         }
         public List<ObjAIBase> TargetedBy { get; } = new List<ObjAIBase>();
+        public override float VisionRadius => Stats?.PerceptionRange.Total ?? base.VisionRadius;
+
+        private int _stealthCount = 0;
         public AttackableUnit(
             Game game,
             string model,
@@ -184,6 +187,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             _scriptTimers = new List<GameScriptTimer>();
             _animOverrideStack = new Dictionary<string, List<AnimOverrideInfo>>(StringComparer.OrdinalIgnoreCase);
             animOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Stats.PerceptionRange.BaseValue = base.VisionRadius;
         }
 
         /// <summary>
@@ -217,7 +221,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         /// <param name="vec">Position to set.</param>
         /// <param name="repath">Whether or not to repath the AI from the given position (assuming it has a path).</param>
-        public void SetPosition(Vector2 vec, bool repath = true)
+        public virtual void SetPosition(Vector2 vec, bool repath = true)
         {
             Position = vec;
             _movementUpdated = true;
@@ -822,7 +826,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     attacker.RevealSpecificUnit(GlobalData.AttackFlags.RevealAttackerTimeOut);
                     if (Team != TeamId.TEAM_NEUTRAL)
                     {
-                        ApiFunctionManager.AddPosPerceptionBubble(attacker.Position, 400.0f, GlobalData.AttackFlags.RevealAttackerTimeOut, Team, true, ignoresLoS: true);
+                        ApiFunctionManager.AddPosPerceptionBubble(attacker.Position, 400.0f, GlobalData.AttackFlags.RevealAttackerTimeOut, Team, false, revealSpecificUnitOnly: attacker, ignoresLoS: true);
                     }
                 }
             }
@@ -1101,7 +1105,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>
-        public void TeleportTo(Vector2 position, bool repath = false)
+        public virtual void TeleportTo(Vector2 position, bool repath = false)
         {
             TeleportID++;
             _movementUpdated = true;
@@ -1116,6 +1120,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             else
             {
                 Position = position;
+                UpdateGrassState();
                 StopMovement();
             }
         }
@@ -1207,7 +1212,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
             else
             {
-                if (distRemaining <= distPerFrame && speed > 0)
+                if (distRemaining <= distPerFrame + 0.01f && speed > 0)
                 {
                     finished = true;
                     leftoverTimeMs = (distPerFrame - distRemaining) / speed;
@@ -1347,12 +1352,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public virtual void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl, bool networked = true)
         {
-            if (Waypoints.Count == 1) return;
             if (MovementParameters != null)
             {
                 SetDashingState(false, reason);
                 return;
             }
+            if (Waypoints.Count == 1) return;
 
             ResetWaypoints();
             if (networked)
@@ -2029,18 +2034,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             _revealSpecificUnitTimer = 0.0f;
             SetStatus(StatusFlags.RevealSpecificUnit, false);
 
-            if (fadeTime == 0f)
+            _stealthCount++;
+            if (_stealthCount == 1)
             {
-                SetStatus(StatusFlags.Stealthed, true);
-                _game.ObjectManager.RefreshUnitVision(this);
-            }
-            else
-            {
-                RegisterTimer(new GameScriptTimer(fadeTime, () =>
+                if (fadeTime == 0f)
                 {
                     SetStatus(StatusFlags.Stealthed, true);
                     _game.ObjectManager.RefreshUnitVision(this);
-                }));
+                }
+                else
+                {
+                    RegisterTimer(new GameScriptTimer(fadeTime, () =>
+                    {
+                        if (_stealthCount > 0)
+                        {
+                            SetStatus(StatusFlags.Stealthed, true);
+                            _game.ObjectManager.RefreshUnitVision(this);
+                        }
+                    }));
+                }
             }
 
             _game.PacketNotifier.NotifyUnitInvis(fadeTime, value, this);
@@ -2052,14 +2064,23 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
         public void ExitStealth()
         {
-            SetStatus(StatusFlags.Stealthed, false);
-            _game.PacketNotifier.NotifyUnitInvis(0, 1f, this);
-            if (this is Champion champ)
+            if (_stealthCount > 0)
             {
-                var tilt = new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 };
-                _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
+                _stealthCount--;
             }
-            _game.ObjectManager.RefreshUnitVision(this);
+            if (_stealthCount == 0)
+            {
+                SetStatus(StatusFlags.Stealthed, false);
+                _game.PacketNotifier.NotifyUnitInvis(0, 1f, this);
+
+                if (this is Champion champ)
+                {
+                    var tilt = new LeaguePackets.Game.Common.Color { Red = 0, Green = 0, Blue = 0, Alpha = 0 };
+                    _game.PacketNotifier.ColorRemapFx(champ, false, 0f, tilt, 0f);
+                }
+
+                _game.ObjectManager.RefreshUnitVision(this);
+            }
         }
 
         public ShieldValues GetCombinedShieldValues()

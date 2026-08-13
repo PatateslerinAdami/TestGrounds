@@ -153,6 +153,7 @@ namespace MapScripts.Map8
             foreach (var champion in GetAllPlayers())
             {
                 AddBuff("OdinPlayerBuff", 25000, 1, null, champion, null);
+                SetMovementRestriction(champion, GetFountainPosition(champion.Team), 400f, restrictCam: false);
             }
 
             foreach (var team in TeamScores.Keys)
@@ -405,6 +406,10 @@ namespace MapScripts.Map8
                 // The Battle Has Begun!
                 AnnounceStartGameMessage(2, 8);
                 AnnouncedEvents.Add(EventID.OnStartGameMessage2);
+                foreach (var champion in GetAllPlayers())
+                {
+                    SetMovementRestriction(champion, Vector2.Zero, 0f, restrictCam: false);
+                }
             }
             else if (time >= 50.0f * 1000 && !AnnouncedEvents.Contains(EventID.OnStartGameMessage1))
             {

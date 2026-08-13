@@ -330,6 +330,15 @@ namespace LeagueSandbox.GameServer
             {
                 return true;
             }
+            bool isStealthedEnemy = o is AttackableUnit au
+                                                && au.Team != team
+                                                && au.Status.HasFlag(StatusFlags.Stealthed)
+                                                && !au.Status.HasFlag(StatusFlags.RevealSpecificUnit);
+
+            if (!isStealthedEnemy && _game.Map.NavigationGrid.HasFlag(o.Position, NavigationGridCellFlags.HAS_GLOBAL_VISION))
+            {
+                return true;
+            }
 
             foreach (var p in _visionProviders[team])
             {
@@ -377,6 +386,10 @@ namespace LeagueSandbox.GameServer
 
         bool UnitHasVisionOn(GameObject observer, GameObject tested, bool nearSighted = false)
         {
+            if (observer == tested)
+            {
+                return true;
+            }
             if (!tested.IsAffectedByFoW)
             {
                 return true;
@@ -441,8 +454,9 @@ namespace LeagueSandbox.GameServer
                 return true;
             }
 
-            if (Vector2.DistanceSquared(observer.Position, tested.Position) >=
-                observer.VisionRadius * observer.VisionRadius)
+            float distSq = Vector2.DistanceSquared(observer.Position, tested.Position);
+
+            if (distSq >=observer.VisionRadius * observer.VisionRadius)
             {
                 return false;
             }
@@ -456,6 +470,17 @@ namespace LeagueSandbox.GameServer
             if (isSelfCheck)
             {
                 return true;
+            }
+            if (distSq < 1.0f)
+            {
+                return true;
+            }
+            bool observerInGrass = _game.Map.NavigationGrid.HasFlag(observer.Position, NavigationGridCellFlags.HAS_GRASS);
+            bool targetInGrass = _game.Map.NavigationGrid.HasFlag(tested.Position, NavigationGridCellFlags.HAS_GRASS);
+
+            if (targetInGrass && !observerInGrass)
+            {
+                return false;
             }
 
             return !_game.Map.NavigationGrid.IsAnythingBetween(observer, tested, true);

@@ -11,6 +11,7 @@ using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Quests;
+using LeagueSandbox.GameServer.Augments;
 using log4net;
 using System;
 using System.Collections.Generic;
@@ -45,7 +46,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public List<EventHistoryEntry> EventHistory { get; } = new List<EventHistoryEntry>();
         public bool teamChanged = false;
         public PlayerQuestManager PlayerQuestManager { get; private set; }
-
+        public PlayerAugmentManager PlayerAugmentManager { get; private set; }
         public Champion(Game game,
                         string model,
                         RuneCollection runeList,
@@ -89,6 +90,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsBot = false; // This change was necessary for my customized bot names to work. If you are going to be serious about bot dev and the true value of this is needed somewhere, feel free to revert it
             }
             PlayerQuestManager = new PlayerQuestManager(game, this);
+            PlayerAugmentManager = new PlayerAugmentManager(game, this);
         }
 
         public void AddGold(AttackableUnit source, float gold, bool notify = true)
@@ -426,6 +428,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void Die(DeathData data)
         {
+            SetTargetUnit(null, true);
+            CancelAutoAttack(true, true);
+            if (_castingSpell != null)
+            {
+                _castingSpell.CancelCast();
+            }
+            if (ChannelSpell != null)
+            {
+                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.Die);
+            }
+            ClearQueuedSpell();
+
             IsDead = true;
             RespawnTimer = _game.Map.MapData.DeathTimes[Stats.Level] * 1000.0f;
             ChampStats.Deaths++;

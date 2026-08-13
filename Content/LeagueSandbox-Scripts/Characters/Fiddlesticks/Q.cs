@@ -1,11 +1,12 @@
-﻿using System.Numerics;
-using Buffs;
+﻿using Buffs;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 
@@ -40,7 +41,7 @@ namespace Spells
             };*/
             AddBuff("Flee", duration, 1, spell, _target, _owner);
             //AddBuff(fear, "Fear", 1.25f, 1, spell, target, spell.CastInfo.Owner);
-
+            _target.TakeDamage(_owner, 40f, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
         }
     }
 }

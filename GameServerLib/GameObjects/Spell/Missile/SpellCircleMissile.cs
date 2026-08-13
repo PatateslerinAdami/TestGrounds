@@ -80,26 +80,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                                            || MathF.Abs(_circleRadialVelocity) > float.Epsilon;
             _useCircularPath = _useCircularReplicationDirection && SpellOrigin.SpellData.MissileLifetime > 0.0f;
 
-            _circleCenter = new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);
-            var circleReferenceEnd = overrideEndPos != default
-                ? overrideEndPos
-                : new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
-            var circleOffset = circleReferenceEnd - _circleCenter;
-
-            if (circleOffset.LengthSquared() <= float.Epsilon)
+            if (TargetUnit != null)
             {
-                var fallbackDir = new Vector2(CastInfo.Owner.Direction.X, CastInfo.Owner.Direction.Z);
-                if (fallbackDir.LengthSquared() <= float.Epsilon)
-                {
-                    fallbackDir = new Vector2(1.0f, 0.0f);
-                }
-
-                fallbackDir = Vector2.Normalize(fallbackDir);
-                circleOffset = fallbackDir * SpellOrigin.GetCurrentCastRange();
+                _circleCenter = TargetUnit.Position;
+                FollowCasterForCircularPath = true; 
+            }
+            else
+            {
+                _circleCenter = overrideEndPos != default ? overrideEndPos : new Vector2(CastInfo.TargetPosition.X, CastInfo.TargetPosition.Z);
             }
 
-            _circleRadius = circleOffset.Length();
-            _circleAngle = MathF.Atan2(circleOffset.Y, circleOffset.X);
+            Vector2 diffVector = Position - _circleCenter;
+            _circleRadius = diffVector.Length();
+            _circleAngle = MathF.Atan2(diffVector.Y, diffVector.X);
+
             _replicationDirection = new Vector3(_circleRadius, _circleAngle, 0.0f);
 
             if (_useCircularPath)

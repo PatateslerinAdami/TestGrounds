@@ -2403,6 +2403,8 @@ namespace LeagueSandbox.GameServer.API
         {
             if (champion != null)
             {
+                champion.MovementRestrictionCenter = center;
+                champion.MovementRestrictionRadius = radius;
                 _game.PacketNotifier.NotifySetCircularMovementRestriction(champion, center, radius, champion.ClientId, restrictCam);
             }
         }

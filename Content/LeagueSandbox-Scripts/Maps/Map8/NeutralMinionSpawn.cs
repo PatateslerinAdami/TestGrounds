@@ -29,8 +29,8 @@ namespace MapScripts.Map8
             {
                 if (!camp.IsAlive)
                 {
-                    AddPosPerceptionBubble(new Vector2(camp.Position.X, camp.Position.Z), 250.0f, 1.0f, TeamId.TEAM_BLUE);
-                    AddPosPerceptionBubble(new Vector2(camp.Position.X, camp.Position.Z), 250.0f, 1.0f, TeamId.TEAM_PURPLE);
+                    //AddPosPerceptionBubble(new Vector2(camp.Position.X, camp.Position.Z), 250.0f, 1.0f, TeamId.TEAM_BLUE);
+                    //AddPosPerceptionBubble(new Vector2(camp.Position.X, camp.Position.Z), 250.0f, 1.0f, TeamId.TEAM_PURPLE);
                     camp.AddMonster(SpeedShrines[camp]);
                 }
             }
@@ -142,8 +142,8 @@ namespace MapScripts.Map8
             var crystal = CreateMinion("OdinCenterRelic", "OdinCenterRelic", Position, team: Team, direction: new Vector3(0, 0, 1));
             NotifyAttachFlexParticle(crystal.NetId, 0, 0, 2);
 
-            Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_BLUE, collisionArea: 38.08f));
-            Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_PURPLE, collisionArea: 38.08f));
+            //Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_BLUE, collisionArea: 38.08f));
+            //Regions.Add(AddUnitPerceptionBubble(crystal, 350.0f, 25000.0f, TeamId.TEAM_PURPLE, collisionArea: 38.08f));
 
             ApiEventManager.OnDeath.AddListener(crystal, crystal, OnCrystalDeath, true);
             IsDead = false;

@@ -57,6 +57,19 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
                             var target = waypoints[waypoints.Count - 1];
+
+                            if (champion.MovementRestrictionRadius > 0)
+                            {
+                                float distSq = Vector2.DistanceSquared(champion.MovementRestrictionCenter, target);
+                                float radSq = champion.MovementRestrictionRadius * champion.MovementRestrictionRadius;
+
+                                if (distSq > radSq)
+                                {
+                                    Vector2 dir = Vector2.Normalize(target - champion.MovementRestrictionCenter);
+                                    target = champion.MovementRestrictionCenter + (dir * champion.MovementRestrictionRadius);
+                                }
+                            }
+
                             if (!nav.IsWalkable(target, champion.PathfindingRadius))
                             {
                                 target = nav.GetClosestTerrainExit(target, champion.PathfindingRadius);

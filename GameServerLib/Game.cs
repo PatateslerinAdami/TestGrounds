@@ -23,6 +23,8 @@ using GameServerCore.Packets.PacketDefinitions;
 using GameServerCore.Packets.PacketDefinitions.Requests;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Quests;
+using LeagueSandbox.GameServer.Augments;
+
 
 namespace LeagueSandbox.GameServer
 {
@@ -180,6 +182,7 @@ namespace LeagueSandbox.GameServer
                 PlayerManager.AddPlayer(p);
             }
             QuestManager.Initialize();
+            AugmentPool.Initialize();
             _logger.Info("Game is ready.");
         }
 

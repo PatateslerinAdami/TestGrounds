@@ -63,7 +63,15 @@ namespace LeagueSandbox.GameServer.GameObjects
             }
 
             BuffType = BuffScript.BuffMetaData.BuffType;
-            Duration = duration;
+            if (IsTenacityAffected(BuffType))
+            {
+                float tenacity = Math.Clamp(onto.Stats.Tenacity.Total, 0.0f, 1.0f);
+                Duration = duration * (1.0f - tenacity);
+            }
+            else
+            {
+                Duration = duration;
+            }
             Hidden = BuffScript.BuffMetaData.IsHidden;
             if (BuffScript.BuffMetaData.MaxStacks > 254 && BuffType != BuffType.COUNTER)
             {
@@ -312,6 +320,27 @@ namespace LeagueSandbox.GameServer.GameObjects
             if (!_infiniteDuration && TimeElapsed >= Duration)
             {
                 DeactivateBuff();
+            }
+        }
+        private bool IsTenacityAffected(BuffType type)
+        {
+            switch (type)
+            {
+                case BuffType.STUN:
+                case BuffType.SILENCE:
+                case BuffType.TAUNT:
+                case BuffType.POLYMORPH:
+                case BuffType.SLOW:
+                case BuffType.SNARE:
+                case BuffType.SLEEP:
+                case BuffType.FEAR:
+                case BuffType.CHARM:
+                case BuffType.BLIND:
+                case BuffType.FLEE:
+                case BuffType.DISARM:
+                    return true;
+                default:
+                    return false;
             }
         }
     }

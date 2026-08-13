@@ -1,5 +1,7 @@
 ﻿using GameServerLib.GameObjects.AttackableUnits;
 using LeaguePackets.Game.Events;
+using LeagueSandbox.GameServer.GameObjects;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.Logging;
 using log4net;
@@ -23,64 +25,81 @@ namespace LeagueSandbox.GameServer.API
         public static void AnnounceCapturePointCaptured(Minion turret, char point, Champion captor = null)
         {
             IEvent captured;
+            uint pointId = 0;
+
             switch (char.ToUpper(point))
             {
-                case 'A':
-                    captured = new OnCapturePointCaptured_A();
+                case 'A': 
+                    captured = new OnCapturePointCaptured_A(); 
+                    pointId = 0; 
                     break;
-                case 'B':
-                    captured = new OnCapturePointCaptured_B();
+                case 'B': 
+                    captured = new OnCapturePointCaptured_B(); 
+                    pointId = 1; 
                     break;
-                case 'C':
-                    captured = new OnCapturePointCaptured_C();
+                case 'C': 
+                    captured = new OnCapturePointCaptured_C(); 
+                    pointId = 2; 
                     break;
-                case 'D':
-                    captured = new OnCapturePointCaptured_D();
+                case 'D': 
+                    captured = new OnCapturePointCaptured_D(); 
+                    pointId = 3; 
                     break;
-                case 'E':
-                    captured = new OnCapturePointCaptured_E();
+                case 'E': 
+                    captured = new OnCapturePointCaptured_E(); 
+                    pointId = 4; 
                     break;
                 default:
-                    _logger.Warn($"Announcement with Id {point} doesn't exist! Please use numbers between 1 and 5");
+                    _logger.Warn($"Announcement with Id {point} doesn't exist! Please use letters between A and E");
                     return;
             }
 
-            if (captor != null)
-            {
-                captured.OtherNetID = captor.NetId;
-            }
+            var capArgs = (ArgsCapturePoint)captured;
+            capArgs.CapturePoint = pointId;
+            capArgs.OtherNetID = turret.NetId;
 
-            _game.PacketNotifier.NotifyOnEvent(captured, turret);
+            AttackableUnit source = captor != null ? (AttackableUnit)captor : turret;
+            _game.PacketNotifier.NotifyOnEvent(captured, source);
         }
 
         public static void AnnounceCapturePointNeutralized(Minion turret, char point)
         {
             IEvent neutralized;
+            uint pointId = 0;
+
             switch (char.ToUpper(point))
             {
-                case 'A':
-                    neutralized = new OnCapturePointNeutralized_A();
+                case 'A': 
+                    neutralized = new OnCapturePointNeutralized_A(); 
+                    pointId = 0; 
                     break;
-                case 'B':
-                    neutralized = new OnCapturePointNeutralized_B();
+                case 'B': 
+                    neutralized = new OnCapturePointNeutralized_B(); 
+                    pointId = 1; 
                     break;
-                case 'C':
-                    neutralized = new OnCapturePointNeutralized_C();
+                case 'C': 
+                    neutralized = new OnCapturePointNeutralized_C(); 
+                    pointId = 2; 
                     break;
-                case 'D':
-                    neutralized = new OnCapturePointNeutralized_D();
+                case 'D': 
+                    neutralized = new OnCapturePointNeutralized_D(); 
+                    pointId = 3; 
                     break;
-                case 'E':
-                    neutralized = new OnCapturePointNeutralized_E();
+                case 'E': 
+                    neutralized = new OnCapturePointNeutralized_E(); 
+                    pointId = 4; 
                     break;
                 default:
-                    _logger.Warn($"Announcement with Id {point} doesn't exist! Please use numbers between 1 and 5");
+                    _logger.Warn($"Announcement with Id {point} doesn't exist! Please use letters between A and E");
                     return;
             }
 
-            _game.PacketNotifier.NotifyOnEvent(neutralized, turret);
-        }
+            var neutArgs = (ArgsCapturePoint)neutralized;
+            neutArgs.CapturePoint = pointId;
+            neutArgs.OtherNetID = turret.NetId;
 
+            _game.PacketNotifier.NotifyS2C_OnEventWorld(neutralized);
+        }
         public static void AnnounceChampionAscended(Champion champion)
         {
             _game.PacketNotifier.NotifyS2C_OnEventWorld(new OnChampionAscended() { OtherNetID = champion.NetId }, champion);

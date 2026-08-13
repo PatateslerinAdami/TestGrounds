@@ -318,9 +318,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public bool CastCancelCheck()
         {
             if (CastInfo.Owner.IsDead
-            && !SpellData.CanOnlyCastWhileDead)
+                && !SpellData.CanOnlyCastWhileDead)
             {
-                ResetSpellCast();
+                CancelCast();
                 return true;
             }
 
@@ -339,13 +339,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 || (!spellTarget.GetIsTargetableToTeam(CastInfo.Owner.Team) && !spellTarget.CharData.IsUseable)
                 || spellTarget.IsDead)
                 {
-                    if (CastInfo.IsAutoAttack)
-                    {
-                        CastInfo.Owner.CancelAutoAttack(true);
-                        return true;
-                    }
-
-                    ResetSpellCast();
+                    CancelCast();
                     return true;
                 }
 
@@ -358,7 +352,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 || CastInfo.Owner.GetCastSpell() != null
                 || CastInfo.Owner.ChannelSpell != null))
                 {
-                    CastInfo.Owner.CancelAutoAttack(!CastInfo.Owner.HasAutoAttacked, true);
+                    CancelCast();
                     return true;
                 }
             }
@@ -366,7 +360,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 if (CastInfo.IsAutoAttack)
                 {
-                    CastInfo.Owner.CancelAutoAttack(true);
+                    CancelCast();
                     return true;
                 }
             }
@@ -382,7 +376,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
              || (CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Disarmed) || !status.HasFlag(StatusFlags.CanAttack)))
              || (!CastInfo.IsAutoAttack && (status.HasFlag(StatusFlags.Silenced) || !status.HasFlag(StatusFlags.CanCast))))
             {
-                ResetSpellCast();
+                CancelCast();
                 return true;
             }
 
@@ -533,11 +527,15 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     CastInfo.Owner.StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.Casting);
                 }
 
+                if (CastInfo.Owner.IsAttacking && !CastInfo.Owner.HasAutoAttacked && CastInfo.Owner.AutoAttackSpell != null && !CastInfo.Owner.AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                {
+                    CastInfo.Owner.CancelAutoAttack(true, true);
+                }
+
                 if (!SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
                 {
                     CastInfo.Owner.SetCastSpell(this);
                 }
-                CastInfo.Owner.AutoAttackSpell.CastCancelCheck();
             }
             // Prevents overriding current auto attack target
             else if (unit != null)
@@ -1436,7 +1434,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                             isServerOnly
                         );
                         break;
-                    }
+            }
             }
 
             // If the position is the same as the destination, the server will have destroyed the missile before notifying of creation, causing the client to crash.
@@ -1647,6 +1645,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             if (CastInfo.SpellSlot < 4)
             {
                 CastInfo.Owner.Stats.ManaCost[CastInfo.SpellSlot] = SpellData.ManaCost[CastInfo.SpellLevel];
+            }
+
+            if (CastInfo.SpellLevel == 1 && SpellData.MaxAmmo > 1)
+            {
+                CurrentAmmo = SpellData.MaxAmmo; // Or whatever the starting ammo should be so keep in mind if it breaks
+                CurrentAmmoCooldown = GetAmmoRechageTime();
+                _game.PacketNotifier.NotifyS2C_AmmoUpdate(this);
             }
         }
 
@@ -1947,7 +1952,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     break;
             }
 
-            if (p == null || (p is SpellCircleMissile c && c.Position == c.Destination) || p.Position == p.GetTargetPosition())
+            if (p == null || p.Position == p.GetTargetPosition())//if (p == null || (p is SpellCircleMissile c && c.Position == c.Destination) || p.Position == p.GetTargetPosition())
             {
                 return null;
             }
@@ -2036,6 +2041,22 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     AddAmmo(Script.ScriptMetadata.AmmoPerCharge);
                 }
+            }
+        }
+        public void CancelCast()
+        {
+            if (CastInfo.IsAutoAttack)
+            {
+                CastInfo.Owner.CancelAutoAttack(true, true);
+            }
+            else
+            {
+                ResetSpellCast();
+                if (CastInfo.Owner.GetCastSpell() == this)
+                {
+                    CastInfo.Owner.SetCastSpell(null);
+                }
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(CastInfo.Owner, false);
             }
         }
     }

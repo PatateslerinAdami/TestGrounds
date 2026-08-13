@@ -63,8 +63,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                     return false;
                 }
 
-                _game.PacketNotifier.NotifyNPC_UpgradeSpellAns(userId, champion.NetId, req.Slot, s.CastInfo.SpellLevel, champion.SkillPoints);
                 champion.Stats.SetSpellEnabled(req.Slot, true);
+                _game.PacketNotifier.NotifyNPC_UpgradeSpellAns(userId, champion.NetId, req.Slot, s.CastInfo.SpellLevel, champion.SkillPoints);
+                //champion.Stats.SetSpellEnabled(req.Slot, true);
 
                 return true;
             }

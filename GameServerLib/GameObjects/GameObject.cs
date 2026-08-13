@@ -85,7 +85,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// <summary>
         /// Radius of the circle which is used for vision; detecting if objects are visible given terrain, and if so, networked to the player (or team) that owns this game object.
         /// </summary>
-        public float VisionRadius { get; protected set; }
+        public virtual float VisionRadius { get; protected set; }
 
         public virtual bool IsAffectedByFoW => false;
         public virtual bool SpawnShouldBeHidden => false;

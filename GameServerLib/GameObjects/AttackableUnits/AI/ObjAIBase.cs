@@ -130,7 +130,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private bool _charScriptActivated;
         private bool _charScriptPostActivated;
         private bool _scriptsEnabled = true;
-
+        public Vector2 MovementRestrictionCenter { get; set; }
+        public float MovementRestrictionRadius { get; set; }
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
             Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "", bool enableScripts = true) :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
@@ -2067,6 +2068,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || MoveOrder == OrderType.Hold)
             {
                 ClearQueuedSpell();
+                if (_castingSpell != null && !_castingSpell.SpellData.CantCancelWhileWindingUp)
+                {
+                    _castingSpell.CancelCast();
+                }
+
+                if (IsAttacking && !HasAutoAttacked && AutoAttackSpell != null && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                {
+                    CancelAutoAttack(true, true);
+                }
             }
         }
 
@@ -2185,6 +2195,54 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Model = model;
             _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this, skinID: (uint)SkinID);
             return true;
+        }
+        public override void SetPosition(Vector2 vec, bool repath = true)
+        {
+            if (MovementRestrictionRadius > 0)
+            {
+                float distSq = Vector2.DistanceSquared(MovementRestrictionCenter, vec);
+                float radSq = MovementRestrictionRadius * MovementRestrictionRadius;
+
+                if (distSq > radSq)
+                {
+                    Vector2 dir = Vector2.Normalize(vec - MovementRestrictionCenter);
+                    vec = MovementRestrictionCenter + (dir * MovementRestrictionRadius);
+                }
+            }
+
+            base.SetPosition(vec, repath);
+        }
+        public override void TeleportTo(Vector2 position, bool repath = false)
+        {
+            if (MovementRestrictionRadius > 0)
+            {
+                float distSq = Vector2.DistanceSquared(MovementRestrictionCenter, position);
+                float radSq = MovementRestrictionRadius * MovementRestrictionRadius;
+
+                if (distSq > radSq)
+                {
+                    Vector2 dir = Vector2.Normalize(position - MovementRestrictionCenter);
+                    position = MovementRestrictionCenter + (dir * MovementRestrictionRadius);
+                }
+            }
+
+            base.TeleportTo(position, repath);
+        }
+        public override void Die(DeathData data)
+        {
+            SetTargetUnit(null, true);
+            CancelAutoAttack(true, true);
+            if (_castingSpell != null)
+            {
+                _castingSpell.CancelCast();
+            }
+            if (ChannelSpell != null)
+            {
+                StopChanneling(ChannelingStopCondition.Cancel, ChannelingStopSource.Die);
+            }
+            ClearQueuedSpell();
+
+            base.Die(data);
         }
     }
 }

@@ -57,7 +57,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public Stat SpellVamp { get; }
         public Stat Tenacity { get; }
         public Stat AcquisitionRange { get; set; }
-
+        public Stat PerceptionRange { get; }
         public float Gold { get; set; }
         public byte Level { get; set; }
         public float Experience { get; set; }
@@ -126,6 +126,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             SpellVamp = new Stat();
             Tenacity = new Stat();
             AcquisitionRange = new Stat();
+            PerceptionRange = new Stat();
         }
 
         public void LoadStats(CharData charData)
@@ -178,10 +179,19 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             AddPenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.ApplyStatModifier(modifier.ManaPoints);
             ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
+            PerceptionRange.ApplyStatModifier(modifier.PerceptionRange);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
                 _slows.Add(modifier.MoveSpeed.PercentBonus);
+                var tempMod = new StatModifier { 
+                    BaseValue = modifier.MoveSpeed.BaseValue, 
+                    BaseBonus = modifier.MoveSpeed.BaseBonus, 
+                    PercentBaseBonus = modifier.MoveSpeed.PercentBaseBonus, 
+                    FlatBonus = modifier.MoveSpeed.FlatBonus, 
+                    PercentBonus = 0 
+                };
+                MoveSpeed.ApplyStatModifier(tempMod);
             }
             else
             {
@@ -217,10 +227,21 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             RemovePenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
             ManaPoints.RemoveStatModifier(modifier.ManaPoints);
             ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
+            PerceptionRange.RemoveStatModifier(modifier.PerceptionRange);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
             {
-                _slows.Remove(modifier.MoveSpeed.PercentBonus);
+                int index = _slows.FindIndex(s => Math.Abs(s - modifier.MoveSpeed.PercentBonus) < 0.0001f);
+                if (index >= 0) _slows.RemoveAt(index);
+
+                var tempMod = new StatModifier { 
+                    BaseValue = modifier.MoveSpeed.BaseValue, 
+                    BaseBonus = modifier.MoveSpeed.BaseBonus, 
+                    PercentBaseBonus = modifier.MoveSpeed.PercentBaseBonus, 
+                    FlatBonus = modifier.MoveSpeed.FlatBonus, 
+                    PercentBonus = 0 
+                };
+                MoveSpeed.RemoveStatModifier(tempMod);
             }
             else
             {
@@ -532,29 +553,33 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public void CalculateTrueMoveSpeed()
         {
-            float speed = MoveSpeed.BaseValue + MoveSpeed.FlatBonus;
-            if (speed > 490.0f)
-            {
-                speed = speed * 0.5f + 230.0f;
-            }
-            else if (speed >= 415.0f)
-            {
-                speed = speed * 0.8f + 83.0f;
-            }
-            else if (speed < 220.0f)
-            {
-                speed = speed * 0.5f + 110.0f;
-            }
+            float rawSpeed = MoveSpeed.BaseValue + MoveSpeed.FlatBonus;
 
-            speed = speed * (1 + MoveSpeed.PercentBonus) * (1 + MultiplicativeSpeedBonus);
+            rawSpeed *= (1.0f + MoveSpeed.PercentBonus) * (1.0f + MultiplicativeSpeedBonus);
 
             if (_slows.Count > 0)
             {
-                //Only takes into account the highest slow
-                speed *= 1 + _slows.Min(z => z) * (1 - SlowResistPercent);
+                float maxSlow = _slows.Min();
+                float actualSlow = maxSlow * (1.0f - SlowResistPercent);
+                actualSlow = Math.Max(-1.0f, actualSlow); 
+                rawSpeed *= (1.0f + actualSlow);
             }
 
-            _trueMoveSpeed = speed;
+            float finalSpeed = rawSpeed;
+            if (rawSpeed > 490.0f)
+            {
+                finalSpeed = (rawSpeed * 0.5f) + 245.0f;
+            }
+            else if (rawSpeed > 415.0f)
+            {
+                finalSpeed = (rawSpeed * 0.8f) + 83.0f;
+            }
+            else if (rawSpeed < 220.0f)
+            {
+                finalSpeed = (rawSpeed * 0.5f) + 110.0f;
+            }
+
+            _trueMoveSpeed = finalSpeed;
         }
     }
 }

@@ -307,6 +307,15 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public override void Update(float diff)
         {
+            if (BindObject != null)
+            {
+                Position = BindObject.Position;
+            }
+            else if (TargetObject != null)
+            {
+                Position = TargetObject.Position;
+            }
+            
             _currentTime += diff / 1000.0f;
             if (_currentTime >= Lifetime && Lifetime >= 0 && !isInfinite)
             {

@@ -208,17 +208,17 @@ namespace MapScripts.Map8
         }
         public static void SyncStateForPlayer(int userId)
         {
-            CreateTimer(3.0f, () =>
+            CreateTimer(0.3f, () =>
             {
-            });
-            foreach (var infoPoint in InfoPoints)
-            {
-                uint netId = infoPoint.Point.NetId;
-                byte cpIndex = infoPoint.Index;
+                foreach (var infoPoint in InfoPoints)
+                {
+                    uint netId = infoPoint.Point.NetId;
+                    byte cpIndex = infoPoint.Index;
 
                     NotifyAttachFlexParticle(netId, 0, cpIndex, 1, userId);
                     NotifyHandleCapturePointUpdate(cpIndex, netId, 0, (byte)0, (CapturePointUpdateCommand)0, userId);
-            }
+                }
+            });
         }
     }
 
@@ -253,8 +253,8 @@ namespace MapScripts.Map8
             NotifyAttachFlexParticle(Point.NetId, 0, Index, 1);
             NotifyHandleCapturePointUpdate(Index, Point.NetId, 0, (byte)0, (CapturePointUpdateCommand)0);
 
-            AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_BLUE, false, collisionArea: 120.0f, grassRadius: 150f, regionType: RegionType.Unknown2);
-            AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_PURPLE, false, collisionArea: 120.0f, grassRadius: 150f, regionType:RegionType.Unknown2);
+            //AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_BLUE, false, collisionArea: 120.0f, grassRadius: 150f, regionType: RegionType.Unknown2);
+            //AddPosPerceptionBubble(Point.Position, 1600, 25000.0f, TeamId.TEAM_PURPLE, false, collisionArea: 120.0f, grassRadius: 150f, regionType:RegionType.Unknown2);
             CreateTimer(0.1f, () =>
             {
             });

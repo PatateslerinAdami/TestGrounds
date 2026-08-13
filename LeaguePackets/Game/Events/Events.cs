@@ -515,43 +515,43 @@ namespace LeaguePackets.Game.Events
     {
         public EventID ID => EventID.OnNexusCrystalStart;
     }
-    public class OnCapturePointNeutralized_A : ArgsBase, IEventEmptyHistory // 128
+    public class OnCapturePointNeutralized_A : ArgsCapturePoint, IEventEmptyHistory // 128
     {
         public EventID ID => EventID.OnCapturePointNeutralized_A;
     }
-    public class OnCapturePointNeutralized_B : ArgsBase, IEventEmptyHistory // 129
+    public class OnCapturePointNeutralized_B : ArgsCapturePoint, IEventEmptyHistory // 129
     {
         public EventID ID => EventID.OnCapturePointNeutralized_B;
     }
-    public class OnCapturePointNeutralized_C : ArgsBase, IEventEmptyHistory // 130
+    public class OnCapturePointNeutralized_C : ArgsCapturePoint, IEventEmptyHistory // 130
     {
         public EventID ID => EventID.OnCapturePointNeutralized_C;
     }
-    public class OnCapturePointNeutralized_D : ArgsBase, IEventEmptyHistory // 131
+    public class OnCapturePointNeutralized_D : ArgsCapturePoint, IEventEmptyHistory // 131
     {
         public EventID ID => EventID.OnCapturePointNeutralized_D;
     }
-    public class OnCapturePointNeutralized_E : ArgsBase, IEventEmptyHistory // 132
+    public class OnCapturePointNeutralized_E : ArgsCapturePoint, IEventEmptyHistory // 132
     {
         public EventID ID => EventID.OnCapturePointNeutralized_E;
     }
-    public class OnCapturePointCaptured_A : ArgsBase, IEventEmptyHistory // 133
+    public class OnCapturePointCaptured_A : ArgsCapturePoint, IEventEmptyHistory // 133
     {
         public EventID ID => EventID.OnCapturePointCaptured_A;
     }
-    public class OnCapturePointCaptured_B : ArgsBase, IEventEmptyHistory // 134
+    public class OnCapturePointCaptured_B : ArgsCapturePoint, IEventEmptyHistory // 134
     {
         public EventID ID => EventID.OnCapturePointCaptured_B;
     }
-    public class OnCapturePointCaptured_C : ArgsBase, IEventEmptyHistory // 135
+    public class OnCapturePointCaptured_C : ArgsCapturePoint, IEventEmptyHistory // 135
     {
         public EventID ID => EventID.OnCapturePointCaptured_C;
     }
-    public class OnCapturePointCaptured_D : ArgsBase, IEventEmptyHistory // 136
+    public class OnCapturePointCaptured_D : ArgsCapturePoint, IEventEmptyHistory // 136
     {
         public EventID ID => EventID.OnCapturePointCaptured_D;
     }
-    public class OnCapturePointCaptured_E : ArgsBase, IEventEmptyHistory // 137
+    public class OnCapturePointCaptured_E : ArgsCapturePoint, IEventEmptyHistory // 137
     {
         public EventID ID => EventID.OnCapturePointCaptured_E;
     }

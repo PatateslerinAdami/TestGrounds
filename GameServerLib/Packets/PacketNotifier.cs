@@ -1575,7 +1575,8 @@ namespace PacketDefinitions420
                 SenderNetID = particle.NetId,
                 NetID = particle.NetId
             };
-            _packetHandlerManager.BroadcastPacketVision(particle, fxKill.GetBytes(), Channel.CHL_S2C);
+            //_packetHandlerManager.BroadcastPacketVision(particle, fxKill.GetBytes(), Channel.CHL_S2C);
+            _packetHandlerManager.BroadcastPacket(fxKill.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -2815,7 +2816,7 @@ namespace PacketDefinitions420
         public void NotifyS2C_ChainMissileSync(SpellMissile m)
         {
             if (!m.HasTarget())
-            {
+            { 
                 return;
             }
 
@@ -4373,8 +4374,8 @@ namespace PacketDefinitions420
                 {
                     SyncID = (uint)Environment.TickCount,
                     ReplicationData = new List<ReplicationData>(1){
-                        u.Replication.GetData(false)
-                    }
+                u.Replication.GetData(false)
+            }
                 };
 
                 if (userId < 0)
@@ -4382,35 +4383,38 @@ namespace PacketDefinitions420
                     _packetHandlerManager.BroadcastPacketTeam(team, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.BroadcastPacketTeam(team, healthbarPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.BroadcastPacketTeam(team, us.GetBytes(), Channel.CHL_S2C);
+                    NotifyS2C_OnEnterTeamVisibility(obj, team);
                 }
                 else
                 {
                     _packetHandlerManager.SendPacket(userId, visibilityPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.SendPacket(userId, healthbarPacket.GetBytes(), Channel.CHL_S2C);
                     _packetHandlerManager.SendPacket(userId, us.GetBytes(), Channel.CHL_S2C);
+                    NotifyS2C_OnEnterTeamVisibility(obj, team, userId);
                 }
             }
             else //if(obj is IRegion || obj is ISpellMissile || obj is ILevelProp || obj is IParticle)
             {
-                var packet = spawnPacket;
-                if (packet == null)
+                var creationPacket = spawnPacket ?? ConstructSpawnPacket(obj, team);
+                GamePacket visPacket = null;
+                if (obj is Particle p)
                 {
-                    if (obj is Particle p)
-                    {
-                        packet = ConstructFXEnterTeamVisibilityPacket(p, team);
-                    }
-                    else
-                    {
-                        packet = ConstructOnEnterTeamVisibilityPacket(obj, team); // Generic visibility packet
-                    }
-                };
-                if (userId < 0)
-                {
-                    _packetHandlerManager.BroadcastPacketTeam(team, packet.GetBytes(), Channel.CHL_S2C);
+                    visPacket = ConstructFXEnterTeamVisibilityPacket(p, team);
                 }
                 else
                 {
-                    _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+                    visPacket = ConstructOnEnterTeamVisibilityPacket(obj, team); // Generic visibility packet
+                }
+
+                if (userId < 0)
+                {
+                    if (creationPacket != null) _packetHandlerManager.BroadcastPacketTeam(team, creationPacket.GetBytes(), Channel.CHL_S2C);
+                    if (visPacket != null) _packetHandlerManager.BroadcastPacketTeam(team, visPacket.GetBytes(), Channel.CHL_S2C);
+                }
+                else
+                {
+                    if (creationPacket != null) _packetHandlerManager.SendPacket(userId, creationPacket.GetBytes(), Channel.CHL_S2C);
+                    if (visPacket != null) _packetHandlerManager.SendPacket(userId, visPacket.GetBytes(), Channel.CHL_S2C);
                 }
             }
         }
@@ -4425,6 +4429,7 @@ namespace PacketDefinitions420
             if (obj is AttackableUnit)
             {
                 NotifyLeaveVisibilityClient(obj, team, userId);
+                NotifyS2C_OnLeaveTeamVisibility(obj, team, userId);
             }
             else
             {

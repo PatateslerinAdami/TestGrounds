@@ -399,6 +399,17 @@ namespace AIScripts
             var capturer = _capturers.Find(c => c.Team == newTeam);
             ApiGameEvents.AnnounceCapturePointCaptured(_self, GetPointLetter(), capturer);
 
+            foreach (var c in _capturers)
+            {
+                if (c.Team == TeamId.TEAM_BLUE)
+                {
+                    c.PlayerAugmentManager.OfferAugments(3, new[] { "Base", "Hider" });
+                }
+                else
+                {
+                    c.PlayerAugmentManager.OfferAugments(3, new[] { "Base", "Seeker" });
+                }
+            }
             InterruptAllCapturers();
         }
 

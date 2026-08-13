@@ -203,7 +203,12 @@ namespace LeagueSandbox.GameServer.GameObjects
                 var units = _game.ObjectManager.GetUnitsInRange(Position, VisionRadius, true);
                 foreach (var unit in units)
                 {
-                    if (unit == null || unit.IsDead || unit == CollisionUnit)
+                    if (unit == null || unit.IsDead)
+                    {
+                        continue;
+                    }
+
+                    if (unit == CollisionUnit && unit != VisionTarget)
                     {
                         continue;
                     }

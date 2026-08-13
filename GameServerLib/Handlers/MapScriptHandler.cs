@@ -61,8 +61,12 @@ namespace LeagueSandbox.GameServer.Handlers
         {
             _game = game;
             Id = _game.Config.GameConfig.Map;
+            string scriptName = _game.Config.GameConfig.Mutator;
 
-            string scriptName = game.Config.GameConfig.GameMode;
+            if (string.IsNullOrEmpty(scriptName))
+            {
+                scriptName = _game.Config.GameConfig.GameMode;
+            }
             MapScript = CSharpScriptEngine.CreateObjectStatic<IMapScript>($"MapScripts.Map{Id}", scriptName) ?? new EmptyMapScript();
             ScriptNameHash = HashString(scriptName);
 

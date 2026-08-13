@@ -122,7 +122,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// <returns></returns>
         public float GetTimeSinceCreation()
         {
-            return _timeSinceCreation;
+            return _timeSinceCreation / 1000;
         }
 
         /// <summary>

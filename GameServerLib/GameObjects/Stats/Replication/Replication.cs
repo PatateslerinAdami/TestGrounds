@@ -103,13 +103,19 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
                         if (rep.IsFloat)
                         {
                             var source = BitConverter.GetBytes(rep.Value);
-
-                            if (source[0] >= 0xFE)
+                            if (source[0] == 0 && source[1] == 0 && source[2] == 0 && source[3] == 0)
                             {
-                                bytes.Add((byte)0xFE);
+                                bytes.Add(0xFF);
                             }
-
-                            bytes.AddRange(source);
+                            else if (source[0] >= 0xFE)
+                            {
+                                bytes.Add(0xFE);
+                                bytes.AddRange(source);
+                            }
+                            else
+                            {
+                                bytes.AddRange(source);
+                            }
                         }
                         else
                         {
