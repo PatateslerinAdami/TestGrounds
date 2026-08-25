@@ -42,7 +42,7 @@ namespace LeagueSandbox.GameServer
         private float _nextSyncTime = 10 * 1000;
         protected const double REFRESH_RATE = 1000.0 / 30.0; // GameLoop called 30 times a second.
         private HandleStartGame _gameStartHandler;
-
+        public float TimeScale { get; set; } = 1.0f;
         // Server
 
         /// <summary>
@@ -230,6 +230,7 @@ namespace LeagueSandbox.GameServer
             RequestHandler.Register<UnpauseRequest>(new HandleUnpauseReq(this).HandlePacket);
             RequestHandler.Register<UseObjectRequest>(new HandleUseObject(this).HandlePacket);
             RequestHandler.Register<ViewRequest>(new HandleView(this).HandlePacket);
+            RequestHandler.Register<CustomModPacketRequest>(new HandleCustomModPacket(this).HandlePacket);
         }
 
         /// <summary>
@@ -339,7 +340,7 @@ namespace LeagueSandbox.GameServer
                     // To avoid Update(0)
                     deltaTime = (float)refreshRate;
                 }
-
+                deltaTime *= TimeScale;
                 if (IsPaused)
                 {
                     if (wasNotPaused)

@@ -37,7 +37,6 @@ namespace AIScripts
         private static readonly Random _rnd = new Random();
         private bool _wasCC = false;
 
-        private static readonly float[] LANE_SLOTS = new float[] { 0f, 40f, -40f, 80f, -80f };
 
         public void OnActivate(ObjAIBase owner)
         {
@@ -116,7 +115,6 @@ namespace AIScripts
                 {
                     _laneMinion.CancelAutoAttack(false, true);
                     _laneMinion.SetTargetUnit(null, true);
-                    _laneMinion.LaneOffset = float.NaN;
                 }
                 return NodeState.Failure;
             }
@@ -125,7 +123,6 @@ namespace AIScripts
             {
                 Ignore(currentTarget);
                 _laneMinion.SetTargetUnit(null, true);
-                _laneMinion.LaneOffset = float.NaN;
                 return NodeState.Failure;
             }
 
@@ -214,7 +211,6 @@ namespace AIScripts
                 if (_laneMinion.TargetUnit != bestTarget)
                 {
                     _laneMinion.SetTargetUnit(bestTarget, true);
-                    _laneMinion.LaneOffset = float.NaN;
                 }
                 _timeSinceLastAttack = 0f;
                 return NodeState.Success;
@@ -222,36 +218,6 @@ namespace AIScripts
 
             return NodeState.Failure;
         }
-
-        private float SelectDeconflictedSlot(float rawOffset, Vector2 searchCenter)
-        {
-            var sortedSlots = LANE_SLOTS.OrderBy(s => Math.Abs(s - rawOffset)).ToArray();
-
-            var nearbyAllies = ApiFunctionManager.GetUnitsInRange(
-                _laneMinion,
-                searchCenter,
-                250f,
-                true,
-                SpellDataFlags.AffectFriends | SpellDataFlags.AffectMinions
-            ).OfType<LaneMinion>().Where(m => m != _laneMinion && !m.IsDead && !float.IsNaN(m.LaneOffset)).ToList();
-
-            HashSet<float> occupiedSlots = new HashSet<float>();
-            foreach (var ally in nearbyAllies)
-            {
-                occupiedSlots.Add(ally.LaneOffset);
-            }
-
-            foreach (float slot in sortedSlots)
-            {
-                if (!occupiedSlots.Contains(slot))
-                {
-                    return slot;
-                }
-            }
-
-            return sortedSlots[0];
-        }
-
         private NodeState FollowLaneWaypoints()
         {
             if (_laneMinion.PathingWaypoints == null || _laneMinion.PathingWaypoints.Count == 0) return NodeState.Failure;
@@ -289,13 +255,6 @@ namespace AIScripts
                         lateral = -lateral;
                     }
 
-                    if (float.IsNaN(_laneMinion.LaneOffset))
-                    {
-                        float rawOffset = Vector2.Dot(_laneMinion.Position - prevWaypoint, lateral);
-                        _laneMinion.LaneOffset = SelectDeconflictedSlot(rawOffset, _laneMinion.Position);
-                    }
-
-                    parallelDestination = rawWaypoint + (lateral * _laneMinion.LaneOffset);
 
                     if (!ApiFunctionManager.IsWalkable(parallelDestination.X, parallelDestination.Y, _laneMinion.PathfindingRadius))
                     {

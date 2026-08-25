@@ -2412,5 +2412,23 @@ namespace LeagueSandbox.GameServer.API
         {
             return _game.PlayerManager.GetPeerInfo(userId)?.Champion;
         }
+        public static float GetGravityForDashHeight(float distance, float speed, float desiredMaxHeight)
+        {
+            if (speed <= 0 || distance <= 0) return 0f;
+
+            float travelTime = distance / speed;
+
+            return desiredMaxHeight / (20.671875f * travelTime * travelTime);
+        }
+        public static (float Speed, float Gravity) GetDashParameters(float distance, float durationSeconds, float desiredMaxHeight)
+        {
+            if (durationSeconds <= 0) return (0f, 0f);
+
+            float speed = distance / durationSeconds;
+
+            float gravity = desiredMaxHeight / (20.671875f * durationSeconds * durationSeconds);
+
+            return (speed, gravity);
+        }
     }
 }

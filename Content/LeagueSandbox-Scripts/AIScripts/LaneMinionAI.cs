@@ -33,8 +33,6 @@ namespace AIScripts
         private static readonly Random _rnd = new Random();
         private bool _wasCC = false;
 
-        private static readonly float[] LANE_SLOTS = new float[] { 0f, 40f, -40f, 80f, -80f };
-
         public void OnActivate(ObjAIBase owner)
         {
             _laneMinion = owner as LaneMinion;
@@ -78,6 +76,15 @@ namespace AIScripts
                 _timeSinceLastAttack += diff;
             }
 
+            if (_laneMinion.StuckTime > 0.25f && _laneMinion.TargetUnit != null)
+            {
+                Ignore(_laneMinion.TargetUnit, 100f);
+                _laneMinion.SetTargetUnit(null, true);
+                _laneMinion.StuckTime = 0f;
+
+                _thinkTimer = 200f;
+            }
+
             _thinkTimer += diff;
             if (_thinkTimer >= 200f)
             {
@@ -112,7 +119,6 @@ namespace AIScripts
                 {
                     _laneMinion.CancelAutoAttack(false, true);
                     _laneMinion.SetTargetUnit(null, true);
-                    _laneMinion.LaneOffset = float.NaN; 
                 }
                 return NodeState.Failure;
             }
@@ -121,37 +127,7 @@ namespace AIScripts
             {
                 Ignore(currentTarget);
                 _laneMinion.SetTargetUnit(null, true);
-                _laneMinion.LaneOffset = float.NaN;
                 return NodeState.Failure;
-            }
-
-            float currentAttackRange = _laneMinion.Stats.Range.Total + currentTarget.CollisionRadius;
-            bool currentIsInRange = Vector2.DistanceSquared(_laneMinion.Position, currentTarget.Position) <= (currentAttackRange * currentAttackRange);
-
-            if (!currentIsInRange)
-            {
-                var nearbyEnemies = ApiFunctionManager.GetUnitsInRange(
-                    _laneMinion,
-                    _laneMinion.Position,
-                    _laneMinion.Stats.AcquisitionRange.Total,
-                    true,
-                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets
-                );
-
-                foreach (var candidate in nearbyEnemies)
-                {
-                    if (candidate == currentTarget || !IsValidTarget(candidate) || _temporaryIgnored.ContainsKey(candidate.NetId))
-                        continue;
-
-                    float candAttackRange = _laneMinion.Stats.Range.Total + candidate.CollisionRadius;
-                    if (Vector2.DistanceSquared(_laneMinion.Position, candidate.Position) <= (candAttackRange * candAttackRange))
-                    {
-                        _laneMinion.SetTargetUnit(candidate, true);
-                        _laneMinion.LaneOffset = float.NaN;
-                        _timeSinceLastAttack = 0f;
-                        return NodeState.Success;
-                    }
-                }
             }
 
             return NodeState.Success;
@@ -240,42 +216,12 @@ namespace AIScripts
                 if (_laneMinion.TargetUnit != bestTarget)
                 {
                     _laneMinion.SetTargetUnit(bestTarget, true);
-                    _laneMinion.LaneOffset = float.NaN;
                 }
                 _timeSinceLastAttack = 0f;
                 return NodeState.Success;
             }
 
             return NodeState.Failure;
-        }
-
-        private float SelectDeconflictedSlot(float rawOffset, Vector2 searchCenter)
-        {
-            var sortedSlots = LANE_SLOTS.OrderBy(s => Math.Abs(s - rawOffset)).ToArray();
-
-            var nearbyAllies = ApiFunctionManager.GetUnitsInRange(
-                _laneMinion,
-                searchCenter,
-                250f,
-                true,
-                SpellDataFlags.AffectFriends | SpellDataFlags.AffectMinions
-            ).OfType<LaneMinion>().Where(m => m != _laneMinion && !m.IsDead && !float.IsNaN(m.LaneOffset)).ToList();
-
-            HashSet<float> occupiedSlots = new HashSet<float>();
-            foreach (var ally in nearbyAllies)
-            {
-                occupiedSlots.Add(ally.LaneOffset);
-            }
-
-            foreach (float slot in sortedSlots)
-            {
-                if (!occupiedSlots.Contains(slot))
-                {
-                    return slot;
-                }
-            }
-
-            return sortedSlots[0];
         }
 
         private NodeState FollowLaneWaypoints()
@@ -289,43 +235,13 @@ namespace AIScripts
 
             if (_currentWaypointIndex < _laneMinion.PathingWaypoints.Count)
             {
-                Vector2 rawWaypoint = _laneMinion.PathingWaypoints[_currentWaypointIndex];
-                Vector2 prevWaypoint = _currentWaypointIndex > 0
-                    ? _laneMinion.PathingWaypoints[_currentWaypointIndex - 1]
-                    : _laneMinion.Position;
-
-                Vector2 segmentDir = rawWaypoint - prevWaypoint;
-                Vector2 parallelDestination = rawWaypoint;
-
-                if (segmentDir.LengthSquared() > 0.001f)
-                {
-                    Vector2 forward = Vector2.Normalize(segmentDir);
-                    Vector2 lateral = new Vector2(-forward.Y, forward.X);
-
-                    if (_laneMinion.Team == TeamId.TEAM_PURPLE)
-                    {
-                        lateral = -lateral;
-                    }
-
-                    if (float.IsNaN(_laneMinion.LaneOffset))
-                    {
-                        float rawOffset = Vector2.Dot(_laneMinion.Position - prevWaypoint, lateral);
-                        _laneMinion.LaneOffset = SelectDeconflictedSlot(rawOffset, _laneMinion.Position);
-                    }
-
-                    parallelDestination = rawWaypoint + (lateral * _laneMinion.LaneOffset);
-
-                    if (!ApiFunctionManager.IsWalkable(parallelDestination.X, parallelDestination.Y, _laneMinion.PathfindingRadius))
-                    {
-                        parallelDestination = rawWaypoint;
-                    }
-                }
+                Vector2 nextWaypoint = _laneMinion.PathingWaypoints[_currentWaypointIndex];
 
                 Vector2 currentDestination = _laneMinion.Waypoints.LastOrDefault();
-                if (Vector2.DistanceSquared(currentDestination, parallelDestination) > 2500f)
+                if (Vector2.DistanceSquared(currentDestination, nextWaypoint) > 2500f)
                 {
-                    var path = ApiFunctionManager.GetPath(_laneMinion.Position, parallelDestination, _laneMinion.PathfindingRadius);
-                    if (path == null || path.Count == 0) path = new List<Vector2> { _laneMinion.Position, parallelDestination };
+                    var path = ApiFunctionManager.GetPath(_laneMinion.Position, nextWaypoint, _laneMinion.PathfindingRadius);
+                    if (path == null || path.Count == 0) path = new List<Vector2> { _laneMinion.Position, nextWaypoint };
                     _laneMinion.SetWaypoints(path);
                 }
 

@@ -273,5 +273,18 @@ namespace PacketDefinitions420
             rq.Read(data);
             return new SpellChargeUpdateReq(rq.Slot, rq.IsSummonerSpellBook, rq.Position, rq.ForceStop);
         }
+        [PacketType(GamePacketID.Unused221, Channel.CHL_GAMEPLAY)]
+        public static CustomModPacketRequest ReadCustomModPacket(byte[] data)
+        {
+
+            byte[] payloadBytes = new byte[data.Length - 2];
+            Array.Copy(data, 2, payloadBytes, 0, payloadBytes.Length);
+
+            return new CustomModPacketRequest
+            {
+                CommandId = data[1],
+                Payload = payloadBytes
+            };
+        }
     }
 }

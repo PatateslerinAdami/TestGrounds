@@ -205,6 +205,7 @@ namespace AIScripts
                             var target = _self.TargetUnit;
 
                             _self.GetSpell("OdinGuardianSpellAttackCast").Cast(_self.Position, target.Position, target);
+                            _self.CancelAutoAttack(true);
                             _self.GetSpell("OdinGuardianSpellAttack").Cast(_self.Position, target.Position, target);
                         }
                     }
@@ -395,6 +396,7 @@ namespace AIScripts
 
 
             _guardianParticle = AddParticleTarget(_self, _self, "OdinNeutralGuardian_Green.troy", _self, 25000f, enemyParticle: "OdinNeutralGuardian_Red.troy", boneNameHash: 178301468);
+            _guardianParticle.DisableFoW = true;
 
             var capturer = _capturers.Find(c => c.Team == newTeam);
             ApiGameEvents.AnnounceCapturePointCaptured(_self, GetPointLetter(), capturer);

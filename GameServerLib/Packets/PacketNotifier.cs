@@ -1559,7 +1559,7 @@ namespace PacketDefinitions420
                 return;
             }
 
-            var fxVisPacket = ConstructFXEnterTeamVisibilityPacket(particle, team);
+            var fxVisPacket = ConstructFXCreateGroupPacket(particle, team);
             _packetHandlerManager.BroadcastPacketTeam(team, fxVisPacket.GetBytes(), Channel.CHL_S2C);
         }
 
@@ -1596,25 +1596,19 @@ namespace PacketDefinitions420
                 return;
             }
 
-            var fxVisPacket = new S2C_FX_OnLeaveTeamVisibility
+            var fxKill = new FX_Kill
             {
                 SenderNetID = particle.NetId,
                 NetID = particle.NetId
             };
 
-            fxVisPacket.VisibilityTeam = 0;
-            if (team == TeamId.TEAM_PURPLE || team == TeamId.TEAM_ALL)
-            {
-                fxVisPacket.VisibilityTeam = 1;
-            }
-
             if (userId < 0)
             {
-                _packetHandlerManager.BroadcastPacketTeam(team, fxVisPacket.GetBytes(), Channel.CHL_S2C);
+                _packetHandlerManager.BroadcastPacketTeam(team, fxKill.GetBytes(), Channel.CHL_S2C);
             }
             else
             {
-                _packetHandlerManager.SendPacket(userId, fxVisPacket.GetBytes(), Channel.CHL_S2C);
+                _packetHandlerManager.SendPacket(userId, fxKill.GetBytes(), Channel.CHL_S2C);
             }
         }
 
@@ -4800,6 +4794,24 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_S2C);
+        }
+        public void NotifyCustomModPacket(byte commandId, byte[] payload, int userId = -1)
+        {
+            byte[] response = new byte[2 + payload.Length];
+
+            response[0] = 221; 
+            response[1] = commandId;
+
+            Array.Copy(payload, 0, response, 2, payload.Length);
+
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacket(response, Channel.CHL_S2C, PacketFlags.RELIABLE);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, response, Channel.CHL_S2C, PacketFlags.RELIABLE);
+            }
         }
     }
 }

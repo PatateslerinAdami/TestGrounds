@@ -132,6 +132,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private bool _scriptsEnabled = true;
         public Vector2 MovementRestrictionCenter { get; set; }
         public float MovementRestrictionRadius { get; set; }
+        public Vector2 Velocity { get; set; } = Vector2.Zero;
+        public float StuckTime { get; set; } = 0f;
         public ObjAIBase(Game game, string model, string name = "", int collisionRadius = 0,
             Vector2 position = new Vector2(), int visionRadius = 0, int skinId = 0, uint netId = 0, TeamId team = TeamId.TEAM_NEUTRAL, Stats stats = null, string aiScript = "", bool enableScripts = true) :
             base(game, model, collisionRadius, position, visionRadius, netId, team, stats)
@@ -583,10 +585,17 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || MoveOrder == OrderType.Stop
                 || MoveOrder == OrderType.Taunt)
             {
+                Velocity = Vector2.Zero;
                 return false;
             }
 
-            return base.Move(diff);
+            Vector2 oldPosition = Position;
+
+            bool result = base.Move(diff);
+
+            Velocity = Position - oldPosition;
+
+            return result;
         }
 
         /// <summary>

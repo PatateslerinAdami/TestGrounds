@@ -25,6 +25,7 @@ namespace Spells
         private const float MaxDashRange = 650f;
         private const float JumpToDashDelaySeconds = 0.30f;
         private const float LandingDashDurationS = 0.30f;
+        float desiredJumpHeight = 500;
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
@@ -96,13 +97,17 @@ namespace Spells
             Vector2 jumpTarget = _aatrox.Position;
             Vector2 jumpTargetFal = _aatrox.Position - (direction * jumpDistance);
 
+            var dashParams = GetDashParameters(jumpDistance, 0.6f, desiredJumpHeight);
+
             var jumpParams = new ForceMovementParameters
             {
                 TargetPosition = jumpTarget,
                 ParabolicStartPoint = jumpTargetFal,
-                Duration = JumpToDashDelaySeconds, 
-                ParabolicGravity = 1f,
-                PathSpeedOverride = 0.5f,
+                Duration = JumpToDashDelaySeconds,
+
+                PathSpeedOverride = dashParams.Speed,
+                ParabolicGravity = dashParams.Gravity,
+
                 IgnoreTerrain = true,
                 MovementName = "AatroxQJump",
                 Animation = "Spell1",

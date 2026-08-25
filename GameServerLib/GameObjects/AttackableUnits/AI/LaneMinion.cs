@@ -59,18 +59,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _steerTimer = (float)_rnd.NextDouble() * 250f;
         }
 
-        public override void Update(float diff)
-        {
-            base.Update(diff);
-
-            _steerTimer += diff;
-            if (_steerTimer >= 250f)
-            {
-                _steerTimer = 0f;
-                PredictiveSteer();
-            }
-        }
-
         public override void RefreshWaypoints(float idealRange)
         {
             if (MovementParameters != null) return;
@@ -270,63 +258,84 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return new List<Vector2> { start, target };
         }
 
-        private void PredictiveSteer()
+        public override bool Move(float delta)
         {
-            if (Waypoints.Count <= 1 || IsAttacking || MovementParameters != null)
+            if (MoveOrder == OrderType.CastSpell
+                || MoveOrder == OrderType.OrderNone
+                || MoveOrder == OrderType.Stop
+                || MoveOrder == OrderType.Taunt)
             {
-                return;
+                return false;
             }
 
-            if (TargetUnit != null && !TargetUnit.IsDead)
+            if (CurrentWaypointKey < Waypoints.Count)
             {
-                float attackRange = Stats.Range.Total + TargetUnit.CollisionRadius;
-                if (Vector2.DistanceSquared(Position, TargetUnit.Position) <= attackRange * attackRange)
+                float speed = GetMoveSpeed() * 0.001f;
+                var maxDist = speed * delta;
+
+                var dir = CurrentWaypoint - Position;
+                var dist = dir.Length();
+
+                Vector2 desiredMovement;
+                if (maxDist < dist)
                 {
-                    return;
+                    desiredMovement = (dir / dist) * maxDist;
                 }
-            }
-
-            Vector2 currentDest = Waypoints.Last();
-            Vector2 direction = currentDest - Position;
-            if (direction.LengthSquared() <= 0.001f)
-            {
-                return;
-            }
-            direction = Vector2.Normalize(direction);
-
-            float lookAheadDist = GetMoveSpeed() * 0.5f;
-            Vector2 lookAheadPoint = Position + (direction * lookAheadDist);
-
-            float checkRadius = CollisionRadius * 1.5f;
-            var obstacles = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(lookAheadPoint, checkRadius))
-                .OfType<ObjAIBase>()
-                .Where(u => u.Team == Team && u != this && !u.IsDead);
-
-            foreach (var obs in obstacles)
-            {
-                bool obsMoving = obs.Waypoints.Count > 1 && !obs.IsAttacking;
-                if (obsMoving)
+                else
                 {
-                    Vector2 obsDir = obs.Waypoints.Last() - obs.Position;
-                    if (obsDir.LengthSquared() > 0.001f)
+                    desiredMovement = dir; 
+                }
+
+                var neighbors = _game.Map.CollisionHandler.GetNearestObjects(new System.Activities.Presentation.View.Circle(Position, 300f))
+                    .OfType<ObjAIBase>();
+
+                bool isStuck;
+                Vector2 steeredMovement = MinColl.CalculateSteeredMovement(this, desiredMovement, maxDist, delta / 1000f, neighbors, out isStuck);
+
+                if (isStuck)
+                {
+                    var blockingEnemy = neighbors.FirstOrDefault(n => n.Team != this.Team && Vector2.DistanceSquared(n.Position, this.Position) < 25000f);
+                    if (blockingEnemy != null && CanAttack())
                     {
-                        obsDir = Vector2.Normalize(obsDir);
-                        if (Vector2.Dot(direction, obsDir) > 0.7f && obs.GetMoveSpeed() >= GetMoveSpeed()) continue;
+                        SetTargetUnit(blockingEnemy, true);
+                        UpdateMoveOrder(OrderType.AttackTo, true);
+                        return false;
+                    }
+                    return false;
+                }
+
+                Vector2 nextPos = Position + steeredMovement;
+
+                if (!_game.Map.PathingHandler.IsWalkable(nextPos, PathfindingRadius))
+                {
+                    nextPos = Position + desiredMovement;
+                    if (!_game.Map.PathingHandler.IsWalkable(nextPos, PathfindingRadius))
+                    {
+                        nextPos = _game.Map.NavigationGrid.GetClosestTerrainExit(nextPos, PathfindingRadius);
                     }
                 }
-                Vector2 right = new Vector2(-direction.Y, direction.X);
-                Vector2 toObs = Vector2.Normalize(obs.Position - Position);
-                if (Vector2.Dot(right, toObs) > 0) right = -right;
 
-                Vector2 steerPos = Position + (direction * lookAheadDist * 0.5f) + (right * CollisionRadius * 2.5f);
-
-                if (_game.Map.PathingHandler.IsWalkable(steerPos, PathfindingRadius))
+                if (Vector2.DistanceSquared(desiredMovement, steeredMovement) > 1.0f) //Pam pam spam
                 {
-                    SetWaypoints(new List<Vector2> { Position, steerPos }, isForced: true);
-                    return;
+                    _movementUpdated = true;
                 }
+
+                Velocity = nextPos - Position;
+                Position = nextPos;
+
+                if (maxDist >= dist)
+                {
+                    CurrentWaypointKey++;
+                    if (CurrentWaypointKey == Waypoints.Count)
+                    {
+                        return true; 
+                    }
+                }
+                return true;
             }
 
+            Velocity = Vector2.Zero;
+            return false;
         }
     }
 }
