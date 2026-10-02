@@ -36,6 +36,11 @@ namespace LeagueSandbox.GameServer
         private Dictionary<uint, SpellMissile> _missiles;
         private Dictionary<TeamId, List<GameObject>> _visionProviders;
 
+        // Reuse answers only inside a synchronous visibility query. Never retain
+        // them across movement, script callbacks, or changes to terrain/stealth.
+        private readonly Dictionary<(TeamId, GameObject), bool> _visionQueryResults = new();
+        private int _visionQueryDepth;
+
         private bool _currentlyInUpdate = false;
 
         // Locks for each dictionary. Depricated since #1302.
@@ -80,15 +85,16 @@ namespace LeagueSandbox.GameServer
         public void Update(float diff)
         {
             _currentlyInUpdate = true;
+            _game.MovementManager.BeginFrame();
 
-            // For all existing objects
             foreach (var obj in _objects.Values)
             {
                 obj.Update(diff);
             }
 
-            // It is now safe to call RemoveObject at any time,
-            // but compatibility with the older remove method remains.
+            _game.MovementManager.Update(diff);
+            _game.Map.CollisionHandler.Update();
+
             foreach (var obj in _objects.Values)
             {
                 if (obj.IsToRemove())
@@ -113,12 +119,15 @@ namespace LeagueSandbox.GameServer
 
             _objectsToAdd.Clear();
 
-            var players = _game.PlayerManager.GetPlayers(includeBots: false);
+            var players =
+                _game.PlayerManager.GetPlayers(includeBots: false);
 
             int i = 0;
+
             foreach (GameObject obj in _objects.Values)
             {
                 UpdateTeamsVision(obj);
+
                 if (i++ < oldObjectsCount)
                 {
                     obj.LateUpdate(diff);
@@ -281,19 +290,39 @@ namespace LeagueSandbox.GameServer
             }
         }
 
+        
+        internal AttackableUnit FindAttackMoveTarget(ObjAIBase actor)
+        {
+            float rangeSquared = actor.Stats.AcquisitionRange.Total * actor.Stats.AcquisitionRange.Total;
+            float bestDistance = 25000f * 25000f;
+            AttackableUnit best = null;
+            foreach (var obj in _objects.Values)
+            {
+                if (obj is not AttackableUnit unit || unit.IsDead || unit.Team == actor.Team
+                    || !unit.Status.HasFlag(StatusFlags.Targetable)) continue;
+                float distance = Vector2.DistanceSquared(actor.Position, unit.Position);
+                if (distance > rangeSquared || !(distance < bestDistance)) continue;
+                bestDistance = distance;
+                best = unit;
+            }
+            return best;
+        }
+
+        internal void CollectMovementUnits(List<ObjAIBase> result)
+        {
+            result.Clear();
+            foreach (var obj in _objects.Values)
+                if (obj is ObjAIBase unit && !unit.IsToRemove() && unit is not BaseTurret)
+                    result.Add(unit);
+        }
+
         /// <summary>
         /// Gets a new Dictionary of all NetID,GameObject pairs present in the dictionary of objects in ObjectManager.
         /// </summary>
         /// <returns>Dictionary of NetIDs and the GameObjects that they refer to.</returns>
         public Dictionary<uint, GameObject> GetObjects()
         {
-            var ret = new Dictionary<uint, GameObject>();
-            foreach (var obj in _objects)
-            {
-                ret.Add(obj.Key, obj.Value);
-            }
-
-            return ret;
+            return new Dictionary<uint, GameObject>(_objects);
         }
 
         /// <summary>
@@ -320,6 +349,26 @@ namespace LeagueSandbox.GameServer
         /// <param name="o">GameObject to check.</param>
         /// <returns>true/false; networked or not.</returns>
         public bool TeamHasVisionOn(TeamId team, GameObject o)
+        {
+            if (o == null) return false;
+            var key = (team, o);
+            if (_visionQueryDepth != 0 && _visionQueryResults.TryGetValue(key, out bool cached))
+                return cached;
+            _visionQueryDepth++;
+            try
+            {
+                _visionQueryResults[key] = false;
+                bool visible = TeamHasVisionOnCore(team, o);
+                _visionQueryResults[key] = visible;
+                return visible;
+            }
+            finally
+            {
+                if (--_visionQueryDepth == 0) _visionQueryResults.Clear();
+            }
+        }
+
+        private bool TeamHasVisionOnCore(TeamId team, GameObject o)
         {
             if (o == null)
             {
@@ -374,6 +423,10 @@ namespace LeagueSandbox.GameServer
                 {
                     continue;
                 }
+
+                if (o is not Particle && o != p && o.Team != p.Team
+                    && Vector2.DistanceSquared(p.Position, o.Position) >= p.VisionRadius * p.VisionRadius)
+                    continue;
 
                 if (UnitHasVisionOn(p, o))
                 {
@@ -434,6 +487,12 @@ namespace LeagueSandbox.GameServer
                 {
                     return false;
                 }
+
+                if ((tested.Team != observer.Team || nearSighted)
+                    && !particle.ShouldAutoRevealForObserverTeam(observer.Team)
+                    && Vector2.DistanceSquared(observer.Position, tested.Position)
+                        >= observer.VisionRadius * observer.VisionRadius)
+                    return false;
 
                 if (!particle.IgnoreCasterVisibility && particle.Caster != null)
                 {

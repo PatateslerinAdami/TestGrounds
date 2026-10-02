@@ -94,12 +94,12 @@ namespace LeagueSandbox.GameServer.Handlers
         }
 
         /// <summary>
-        /// Function called every tick of the game. Updates CollisionHandler, MapProperties, and executes AnnouncerEvents.
+        /// Function called every tick of the game. Updates pathing, map scripts, and surrender votes.
         /// </summary>
         /// <param name="diff">Number of milliseconds since this tick occurred.</param>
         public void Update(float diff)
         {
-            CollisionHandler.Update();
+            // ObjectManager runs collision callbacks after movement is integrated.
             PathingHandler.Update(diff);
             MapScript.Update(diff);
 

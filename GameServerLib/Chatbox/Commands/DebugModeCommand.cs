@@ -172,6 +172,7 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
             {
                 if (_circleParticles[u.NetId] != null)
                 {
+                    _circleParticles[u.NetId].SetToRemove();
                     _circleParticles.Remove(u.NetId);
                 }
             }
@@ -187,6 +188,10 @@ namespace LeagueSandbox.GameServer.Chatbox.Commands
                 {
                     if (_arrowParticlesList[u.NetId].Count != 0)
                     {
+                        foreach (var p in _arrowParticlesList[u.NetId])
+                        {
+                            p.SetToRemove();
+                        }
                         _arrowParticlesList[u.NetId].Clear();
                         _arrowParticlesList.Remove(u.NetId);
                     }

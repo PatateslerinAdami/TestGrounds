@@ -1,31 +1,127 @@
+using System;
+using System.Numerics;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using LeaguePackets.Game;
-using LeagueSandbox.GameServer.API;
+using ItemHelpers;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
-using static LeaguePackets.Game.Common.CastInfo;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemSpells
 {
-    public class ItemSwordOfFeastAndFamine : ISpellScript
+    public class ItemSwordOfFeastAndFamine : ItemActiveSpell
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            // TODO
-        };
+        protected override float Cooldown => 90;
 
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        protected override bool Use(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 position)
         {
-            SpellCastItem(owner, "ItemSwordOfFeastAndFamineTransfuse", true, target, Vector2.Zero);
+            if (target is not Champion || target.IsDead || target.Team == owner.Team
+                || !target.GetIsTargetableToTeam(owner.Team)
+                || Vector2.DistanceSquared(owner.Position, target.Position) > 550 * 550)
+            {
+                return false;
+            }
+
+            var haste = new BuffVariables();
+            haste.Set("speedFlat", target.GetMoveSpeed() * 0.25f);
+            var slow = new BuffVariables();
+            slow.Set("slow", 0.25f);
+            AddBuff("ItemSwordOfFeastAndFamine", 3, 1, spell, target, owner, buffVariables: slow);
+            AddBuff("ItemSwordOfFeastAndFamineSelf", 3, 1, spell, owner, owner, buffVariables: haste);
+            var damage = target.TakeDamage(
+                owner,
+                Math.Max(100, target.Stats.HealthPoints.Total * 0.1f),
+                DamageType.DAMAGE_TYPE_PHYSICAL,
+                DamageSource.DAMAGE_SOURCE_PROC,
+                false
+            );
+            AddParticleTarget(owner, owner, "piratecutlass_cas.troy", owner, 1f);
+            owner.SetSpell(
+                "ItemSwordOfFeastAndFamineTransfuse",
+                (byte)SpellSlotType.TempItemSlot,
+                true,
+                networked: false
+            );
+            CreateCustomMissile(
+                owner,
+                0,
+                SpellSlotType.TempItemSlot,
+                target.Position,
+                owner.Position,
+                new MissileParameters { Type = MissileType.Target },
+                target: owner
+            );
+            float healthBefore = owner.Stats.CurrentHealth;
+            owner.TakeHeal(owner, damage.PostMitigationDamage, HealType.SelfHeal);
+            if (owner.Stats.CurrentHealth > healthBefore)
+            {
+                AddParticleTarget(owner, owner, "vampheal.troy", owner, 1f);
+            }
+
+            return true;
+        }
+    }
+}
+
+namespace Buffs
+{
+    public class ItemSwordOfFeastAndFamine : ItemFrozenMalletSlow, IBuffGameScript
+    {
+        public ItemSwordOfFeastAndFamine()
+        {
+            BuffMetaData.IsHidden = false;
+        }
+
+        private Particle _slow;
+        public override void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            base.OnActivate(unit, buff, spell);
+            _slow = AddParticleTarget(
+                buff.SourceUnit,
+                unit,
+                "global_slow.troy",
+                unit,
+                buff.Duration,
+                bone: "C_BUFFBONE_GLB_GROUND_LOC",
+                ignoreCasterVisibility: true
+            );
+        }
+
+        public override void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            base.OnDeactivate(unit, buff, spell);
+            RemoveParticle(_slow);
+        }
+    }
+
+    public class ItemSwordOfFeastAndFamineSelf : ItemDistortionHaste, IBuffGameScript
+    {
+        public ItemSwordOfFeastAndFamineSelf()
+        {
+            BuffMetaData.IsHidden = false;
+        }
+
+        private Particle _haste;
+        public override void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            StatsModifier.MoveSpeed.FlatBonus = buff.Variables.GetFloat("speedFlat");
+            unit.AddStatModifier(StatsModifier);
+            _haste = AddParticleTarget(
+                buff.SourceUnit,
+                unit,
+                "global_haste.troy",
+                unit,
+                buff.Duration,
+                bone: "C_BUFFBONE_GLB_GROUND_LOC"
+            );
+        }
+
+        public override void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            RemoveParticle(_haste);
         }
     }
 }
@@ -34,88 +130,10 @@ namespace Spells
 {
     public class ItemSwordOfFeastAndFamineTransfuse : ISpellScript
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata
         {
-            MissileParameters = new MissileParameters
-            {
-                Type = MissileType.Target
-            }
-            // TODO
+            CooldownIsAffectedByCDR = false,
+            DoesntBreakShields = true
         };
-
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, true);
-        }
-
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
-        {
-            var owner = spell.CastInfo.Owner;
-            var DealTargetHealthPercentDamage = target.Stats.HealthPoints.Total * 0.10f;
-            AddBuff("BladeOfTheRuinedKing", 3.0f, 1, spell, target, owner);
-            AddBuff("BladeOfTheRuinedKingSelf", 3.0f, 1, spell, owner, owner);
-            target.TakeDamage(owner, DealTargetHealthPercentDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_DEFAULT, false);
-            owner.TakeHeal(owner, DealTargetHealthPercentDamage, HealType.SelfHeal);
-            missile.SetToRemove();
-        }
-    }
-}
-
-
-namespace Buffs
-{
-    internal class BladeOfTheRuinedKing : IBuffGameScript
-    {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
-        {
-            BuffType = BuffType.SLOW,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            MaxStacks = 1
-        };
-
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-
-        Particle _transfuseParticle;
-
-        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            var StolenMovementSpeed = 0.25f;
-            StatsModifier.MoveSpeed.PercentBonus -= StolenMovementSpeed;
-            unit.AddStatModifier(StatsModifier);
-            _transfuseParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "VladTransfusionHeal_mis_bloodless", unit, buff.Duration);
-        }
-
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            RemoveParticle(_transfuseParticle);
-        }
-    }
-}
-
-namespace Buffs
-{
-    internal class BladeOfTheRuinedKingSelf : IBuffGameScript
-    {
-        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
-        {
-            BuffType = BuffType.HASTE,
-            BuffAddType = BuffAddType.REPLACE_EXISTING,
-            MaxStacks = 1
-        };
-
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-
-
-        public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-            var StolenMovementSpeed = 0.25f;
-            StatsModifier.MoveSpeed.PercentBonus += StolenMovementSpeed;
-            unit.AddStatModifier(StatsModifier);
-        }
-
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
-        {
-
-        }
     }
 }

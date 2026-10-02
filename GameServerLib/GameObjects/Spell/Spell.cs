@@ -35,6 +35,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         private readonly NetworkIdManager _networkIdManager;
         private float _overrrideCastRange;
         private AttackType _attackType;
+        private bool _cancelledInPreCast;
         private bool _scriptActivated;
         private bool _scriptPostActivated;
         private static ILog _logger = LoggerProvider.GetLogger();
@@ -132,7 +133,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 if (CastInfo.SpellSlot != (int)SpellSlotType.PassiveSpellSlot)
                 {
                     LoadScript();
-                    HasEmptyScript = Script.GetType() == typeof(SpellScriptEmpty);
+                    HasEmptyScript = Script is SpellScriptEmpty;
                 }
                 else
                 {
@@ -160,7 +161,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void LoadScript()
         {
-            ApiEventManager.RemoveAllListenersForOwner(Script);
+            if (Script != null) ApiEventManager.RemoveAllListenersForOwner(Script);
             _scriptActivated = false;
             _scriptPostActivated = false;
 
@@ -170,7 +171,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 nameSpace = "ItemSpells";
             }
 
-            Script = CSharpScriptEngine.CreateObjectStatic<ISpellScript>(nameSpace, SpellName);
+            Script = _game.ScriptEngine.CreateObject<ISpellScript>(nameSpace, SpellName);
 
             if (Script == null)
             {
@@ -193,7 +194,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 if (!string.IsNullOrEmpty(fallbackScript))
                 {
-                    Script = CSharpScriptEngine.CreateObjectStatic<ISpellScript>(nameSpace, fallbackScript) ?? new SpellScriptEmpty();
+                    Script = _game.ScriptEngine.CreateObject<ISpellScript>(nameSpace, fallbackScript) ?? new SpellScriptEmpty();
                 }
                 else
                 {
@@ -309,6 +310,24 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         private bool IsBasicAttackSlotSpell()
         {
             return CastInfo.SpellSlot >= (byte)SpellSlotType.BasicAttackNormalSlots;
+        }
+
+        private void SetAttackWindupTiming()
+        {
+            var attacks = CastInfo.Owner.CharData.BasicAttacks;
+            int index = CastInfo.SpellSlot - (int)SpellSlotType.BasicAttackNormalSlots;
+            if (index < 0 || index >= attacks.Count) index = 0;
+            var attack = attacks[index];
+            float modifier = Math.Max(0.0001f, CastInfo.AttackSpeedModifier);
+            CastInfo.AttackSpeedModifier = modifier;
+            float duration = SpellData.GetCharacterAttackCastDelay(modifier,
+                attack.AttackDelayOffsetPercent, attack.AttackDelayCastOffsetPercent,
+                attack.AttackDelayCastOffsetPercentAttackSpeedRatio);
+
+            CastInfo.DesignerCastTime = duration * modifier;
+            if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
+                CastInfo.DesignerTotalTime = SpellData.GetCharacterAttackDelay(modifier,
+                    attack.AttackDelayOffsetPercent) * modifier;
         }
 
         /// <summary>
@@ -543,6 +562,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 CastInfo.Owner.SetTargetUnit(unit, true);
             }
 
+            _cancelledInPreCast = false;
             try
             {
                 Script.OnSpellPreCast(CastInfo.Owner, this, unit, start, end);
@@ -551,6 +571,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _logger.Error(null, e);
             }
+            if (_cancelledInPreCast) return false;
             if (CastInfo.Owner.Status.HasFlag(StatusFlags.Stealthed) && Script.ScriptMetadata.CastingBreaksStealth)
             {
                 var packetInfo = new DelayedSpellPacketInfo(this, _game.GameTime);
@@ -622,8 +643,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     index = 0;
                 }
 
-                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
-                CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
+                SetAttackWindupTiming();
 
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
                 {
@@ -637,7 +657,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     }
                 }
 
-                if (CastInfo.UseAttackCastTime)
+                if (CastInfo.UseAttackCastTime && !(CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()))
                 {
                     // TODO: Verify
                     CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
@@ -740,6 +760,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             var start = new Vector2(CastInfo.TargetPosition.X, CastInfo.TargetPosition.Z);
             var end = new Vector2(CastInfo.TargetPositionEnd.X, CastInfo.TargetPositionEnd.Z);
 
+            _cancelledInPreCast = false;
             try
             {
                 Script.OnSpellPreCast(CastInfo.Owner, this, castInfo.Targets[0].Unit, start, end);
@@ -749,6 +770,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 _logger.Error(null, e);
             }
 
+            if (_cancelledInPreCast) return false;
             var stats = CastInfo.Owner.Stats;
 
             if (cast)
@@ -886,8 +908,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     index = 0;
                 }
 
-                float autoAttackTotalTime = GlobalData.GlobalCharacterDataConstants.AttackDelay * (1.0f + CastInfo.Owner.CharData.BasicAttacks[0].AttackDelayOffsetPercent);
-                CastInfo.DesignerCastTime = autoAttackTotalTime * (GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + CastInfo.Owner.CharData.BasicAttacks[index].AttackDelayCastOffsetPercent);
+                SetAttackWindupTiming();
 
                 // TODO: Verify if this should be affected by cast variable.
                 if (CastInfo.IsAutoAttack && IsBasicAttackSlotSpell())
@@ -902,7 +923,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                     }
                 }
 
-                if (CastInfo.UseAttackCastTime)
+                if (CastInfo.UseAttackCastTime && !(CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()))
                 {
                     // TODO: Verify
                     CastInfo.DesignerTotalTime = CastInfo.DesignerCastTime + trueChannel;
@@ -1180,7 +1201,10 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                 {
                     CastInfo.Owner.HasMadeInitialAttack = true;
                 }
-                if (!CastInfo.Owner.IsMelee)
+                bool resolveAttackOnCast = CastInfo.Owner.IsMelee
+                    || (HasEmptyScript && CastInfo.IsAutoAttack && IsBasicAttackSlotSpell()
+                        && SpellData.MissileSpeed <= 0.0f);
+                if (!resolveAttackOnCast)
                 {
                     if (HasEmptyScript)
                     {
@@ -1434,7 +1458,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
                             isServerOnly
                         );
                         break;
-            }
+                    }
             }
 
             // If the position is the same as the destination, the server will have destroyed the missile before notifying of creation, causing the client to crash.
@@ -1555,9 +1579,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
                 var level = Math.Clamp(CastInfo.SpellLevel, (byte)0, (byte)(SpellData.Cooldown.Length - 1));
                 var cd = SpellData.Cooldown[level];
-                if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
+                if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true && CastInfo.SpellSlot < 4)
                 {
-                    cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                    cd *= 1 + Math.Max(-0.4f, CastInfo.Owner.Stats.CooldownReduction.Total);
+                }
+                if ((SpellName == "SummonerFlash" || SpellName == "SummonerHaste" || SpellName == "SummonerTeleport")
+                    && CastInfo.Owner.GetBuffWithName("ItemBootEffects")?.Variables.GetBool("distortion") == true)
+                {
+                    cd *= 0.8f;
                 }
                 return cd;
             }
@@ -1576,9 +1605,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             var level = Math.Clamp(spellLevel - 1, 0, SpellData.AmmoRechargeTime.Length - 1);
             var cd = SpellData.AmmoRechargeTime[level];
 
-            if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true)
+            if (Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true && CastInfo.SpellSlot < 4)
             {
-                cd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                cd *= 1 + Math.Max(-0.4f, CastInfo.Owner.Stats.CooldownReduction.Total);
             }
 
             return cd;
@@ -1657,7 +1686,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
 
         public void LowerCooldown(float lowerValue)
         {
-            SetCooldown(CurrentCooldown - lowerValue);
+            SetCooldown(CurrentCooldown - lowerValue, true);
         }
 
         public void ResetSpellCast()
@@ -1677,7 +1706,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             CastInfo.AddTarget(target);
 
             if ((State == SpellState.STATE_CASTING || State == SpellState.STATE_CHANNELING)
-                && CastInfo.Targets.Count == 0)
+                && CastInfo.Targets.Count == 1 && CastInfo.Targets[0].Unit != null)
             {
                 RefreshCurrentTarget();
             }
@@ -1719,10 +1748,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         /// <param name="target">Unit to target.</param>
         public void SetCurrentTarget(AttackableUnit target)
         {
-            if (target != null && target != CastInfo.Owner)
+            if (target != null && target != CastInfo.Owner
+                && (CastInfo.Targets.Count == 0 || CastInfo.Targets[0].Unit != target))
             {
                 CastInfo.SetTarget(target, 0);
-                RefreshCurrentTarget();
+                if (State == SpellState.STATE_CASTING || State == SpellState.STATE_CHANNELING)
+                    RefreshCurrentTarget();
             }
         }
 
@@ -1812,6 +1843,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             {
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, 0, 0);
                 SetPassiveCooldownStats(0);
+                CurrentCooldown = 0;
                 // Changing the state of the spell to READY during casting prevents the spell from finishing casting, thus locking the player in the move order CastSpell.
                 if (State != SpellState.STATE_CASTING && State != SpellState.STATE_CHANNELING)
                 {
@@ -1821,9 +1853,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
             }
             else
             {
-                if (!ignoreCDR)
+                if (!ignoreCDR && Script?.ScriptMetadata?.CooldownIsAffectedByCDR == true && CastInfo.SpellSlot < 4)
                 {
-                    newCd *= 1 + CastInfo.Owner.Stats.CooldownReduction.Total;
+                    newCd *= 1 + Math.Max(-0.4f, CastInfo.Owner.Stats.CooldownReduction.Total);
                 }
 
                 _game.PacketNotifier.NotifyCHAR_SetCooldown(CastInfo.Owner, CastInfo.SpellSlot, newCd, GetCooldown());
@@ -2045,6 +2077,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         }
         public void CancelCast()
         {
+            _cancelledInPreCast = true;
             if (CastInfo.IsAutoAttack)
             {
                 CastInfo.Owner.CancelAutoAttack(true, true);

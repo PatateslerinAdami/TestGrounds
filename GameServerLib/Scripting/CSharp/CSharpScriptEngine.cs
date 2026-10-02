@@ -28,9 +28,11 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         private static readonly string _assemblyName = "CSharpScriptEngine_Compiler";
         private readonly List<Assembly> _scriptAssembly = new List<Assembly>();
         private readonly Dictionary<string, Type> _types = new Dictionary<string, Type>();
+        private readonly HashSet<string> _reportedMissingScripts = new();
 
         public CompilationStatus LoadSubDirectoryScripts(string folder)
         {
+            _reportedMissingScripts.Clear();
             string basePath = Path.GetFullPath(folder);
             var allFiles = Directory.GetFiles(folder, "*.cs", SearchOption.AllDirectories).Where(pathString =>
             {
@@ -196,13 +198,12 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
             scriptClass = scriptClass.Replace(" ", "_");
             string fullClassName = scriptNamespace + "." + scriptClass;
 
-            if (_types.ContainsKey(fullClassName))
-            {
-                Type classType = _types[fullClassName];
+            if (_types.TryGetValue(fullClassName, out Type classType))
                 return (T)Activator.CreateInstance(classType);
-            }
 
-            _logger.Warn($"Could not find script: {scriptNamespace}.{scriptClass}");
+
+            if (_reportedMissingScripts.Add(fullClassName))
+                _logger.Warn($"Could not find script: {scriptNamespace}.{scriptClass}");
             return default;
         }
 

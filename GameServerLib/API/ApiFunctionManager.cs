@@ -815,6 +815,20 @@ namespace LeagueSandbox.GameServer.API
         }
 
         /// <summary>
+        /// Despawns a temporary minion on clients and the server without kill rewards or death procs.
+        /// </summary>
+        public static void DespawnMinion(Minion minion)
+        {
+            if (minion == null || minion.IsToRemove()) return;
+
+            minion.MoveOrder = OrderType.Stop;
+            _game.ObjectManager.StopTargeting(minion);
+            _game.PacketNotifier.NotifyNPC_Die_Broadcast(CreateDeathData(false, 0, minion, minion,
+                DamageType.DAMAGE_TYPE_TRUE, DamageSource.DAMAGE_SOURCE_INTERNALRAW, 0f));
+            minion.SetToRemove();
+        }
+
+        /// <summary>
         /// Creates a stationary perception bubble at the given location.
         /// </summary>
         /// <param name="position">Position to spawn the perception bubble at.</param>
@@ -2232,6 +2246,14 @@ namespace LeagueSandbox.GameServer.API
         {
             return new Pet(_game, owner, spell, cloned, position, buffName, lifeTime, stats, cloneInventory,
                 showMinimapIfClone, disallowPlayerControl, doFade, AIScript);
+        }
+
+        public static void SetItemCharges(ObjAIBase owner, byte slot, int charges)
+        {
+            var item = owner.Inventory.GetItem(slot);
+            if (item == null) return;
+            item.SetSpellCharges(charges);
+            _game.PacketNotifier.NotifyS2C_SetItemCharges(owner, slot, (byte)charges);
         }
 
         public static float GetPetReturnRadius(Minion minion = null)

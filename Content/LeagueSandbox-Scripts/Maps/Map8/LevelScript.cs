@@ -23,7 +23,8 @@ namespace MapScripts.Map8
             RecallSpellItemId = 2005,
             InitialLevel = 3,
         };
-
+        private float _blueDrainAccumulator = 0f;
+        private float _purpleDrainAccumulator = 0f;
         public bool HasFirstBloodHappened { get; set; } = false;
         public long NextSpawnTime { get; set; } = 90 * 1000;
         public string LaneMinionAI { get; set; } = "OdinLaneMinionAI";
@@ -31,7 +32,7 @@ namespace MapScripts.Map8
         private float _minionSpawnTimer = 0f;
         private const float MINION_SPAWN_INTERVAL = 15.0f * 1000f;
         private const float FIRST_SPAWN_DELAY = 90.0f * 1000f;
-        private const float STAGGER_DELAY = 800f; 
+        private const float STAGGER_DELAY = 800f;
 
         private class PendingWave
         {
@@ -81,15 +82,15 @@ namespace MapScripts.Map8
         {
             {TeamId.TEAM_BLUE, new Dictionary<MinionSpawnType, string>{
                 {MinionSpawnType.MINION_TYPE_MELEE, "Blue_Minion_Basic"},
-                {MinionSpawnType.MINION_TYPE_CASTER, "Blue_Minion_Wizard"},
+                {MinionSpawnType.MINION_TYPE_CASTER, "Odin_Blue_Minion_Caster"},
                 {MinionSpawnType.MINION_TYPE_CANNON, "Blue_Minion_MechCannon"},
-                {MinionSpawnType.MINION_TYPE_SUPER, "Blue_Minion_MechMelee"}
+                {MinionSpawnType.MINION_TYPE_SUPER, "OdinBlueSuperminion"}
             }},
             {TeamId.TEAM_PURPLE, new Dictionary<MinionSpawnType, string>{
                 {MinionSpawnType.MINION_TYPE_MELEE, "Red_Minion_Basic"},
-                {MinionSpawnType.MINION_TYPE_CASTER, "Red_Minion_Wizard"},
+                {MinionSpawnType.MINION_TYPE_CASTER, "Odin_Red_Minion_Caster"},
                 {MinionSpawnType.MINION_TYPE_CANNON, "Red_Minion_MechCannon"},
-                {MinionSpawnType.MINION_TYPE_SUPER, "Red_Minion_MechMelee"}
+                {MinionSpawnType.MINION_TYPE_SUPER, "OdinRedSuperminion"}
             }}
         };
         //Turret Items
@@ -107,14 +108,12 @@ namespace MapScripts.Map8
         //List of every wave type
         public Dictionary<string, List<MinionSpawnType>> MinionWaveTypes = new Dictionary<string, List<MinionSpawnType>>
         { {"RegularMinionWave", new List<MinionSpawnType>
-        {
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_MELEE,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER,
-            MinionSpawnType.MINION_TYPE_CASTER }
-        }};
+            {
+                MinionSpawnType.MINION_TYPE_SUPER,
+                MinionSpawnType.MINION_TYPE_CASTER,
+                MinionSpawnType.MINION_TYPE_CASTER,
+            }}
+        };
 
         public Dictionary<TeamId, LevelProp> TeamStairs = new Dictionary<TeamId, LevelProp>();
         public Dictionary<TeamId, LevelProp> Nexus = new Dictionary<TeamId, LevelProp>();
@@ -128,7 +127,18 @@ namespace MapScripts.Map8
 
             LevelScriptObjects.LoadObjects(mapObjects);
             CreateLevelProps.CreateProps(this);
+            ApiEventManager.OnQuestComplete.AddListener(this, TeamId.TEAM_BLUE, OnQuestCompletedDrainScore, false);
+            ApiEventManager.OnQuestComplete.AddListener(this, TeamId.TEAM_PURPLE, OnQuestCompletedDrainScore, false);
         }
+        private void OnQuestCompletedDrainScore(TeamId losingTeam, int amountToDrain)
+        {
+            DrainScore(losingTeam, amountToDrain);
+        }
+        private Dictionary<TeamId, bool[]> _thresholdsHit = new Dictionary<TeamId, bool[]>
+        {
+            { TeamId.TEAM_BLUE, new bool[3] },
+            { TeamId.TEAM_PURPLE, new bool[3] }
+        };
 
         Dictionary<TeamId, int> TeamScores = new Dictionary<TeamId, int> { { TeamId.TEAM_BLUE, 500 }, { TeamId.TEAM_PURPLE, 500 } };
         private float _scoreTickTimer = 0f;
@@ -153,7 +163,7 @@ namespace MapScripts.Map8
             foreach (var champion in GetAllPlayers())
             {
                 AddBuff("OdinPlayerBuff", 25000, 1, null, champion, null);
-                SetMovementRestriction(champion, GetFountainPosition(champion.Team), 400f, restrictCam: false);
+                //SetMovementRestriction(champion, GetFountainPosition(champion.Team), 400f, restrictCam: false);
             }
 
             foreach (var team in TeamScores.Keys)
@@ -251,7 +261,7 @@ namespace MapScripts.Map8
 
                 if (currentTeam == TeamId.TEAM_NEUTRAL) continue;
 
-                int leftIndex = (i + 4) % 5;  
+                int leftIndex = (i + 4) % 5;
                 int rightIndex = (i + 1) % 5; // clokwise
 
                 var leftNode = nodes[leftIndex];
@@ -342,43 +352,69 @@ namespace MapScripts.Map8
 
         private void UpdateScores(float diff)
         {
-            _scoreTickTimer += diff;
+            int bluePoints = 0;
+            int purplePoints = 0;
 
-            if (_scoreTickTimer >= 1000f)
+            foreach (var infoPoint in LevelScriptObjects.InfoPoints)
             {
-                _scoreTickTimer -= 1000f;
+                if (infoPoint.Point.Team == TeamId.TEAM_BLUE) bluePoints++;
+                else if (infoPoint.Point.Team == TeamId.TEAM_PURPLE) purplePoints++;
+            }
 
-                int bluePoints = 0;
-                int purplePoints = 0;
+            int blueAdvantage = bluePoints - purplePoints;
+            int purpleAdvantage = purplePoints - bluePoints;
 
-                foreach (var infoPoint in LevelScriptObjects.InfoPoints)
+            if (blueAdvantage > 0)
+            {
+                _purpleDrainAccumulator += blueAdvantage * (diff / 1000f);
+                while (_purpleDrainAccumulator >= 1f)
                 {
-                    if (infoPoint.Point.Team == TeamId.TEAM_BLUE) bluePoints++;
-                    else if (infoPoint.Point.Team == TeamId.TEAM_PURPLE) purplePoints++;
+                    _purpleDrainAccumulator -= 1f;
+                    DrainScore(TeamId.TEAM_PURPLE, 1);
                 }
-
-                if (bluePoints > purplePoints)
+            }
+            else if (purpleAdvantage > 0)
+            {
+                _blueDrainAccumulator += purpleAdvantage * (diff / 1000f);
+                while (_blueDrainAccumulator >= 1f)
                 {
-                    int damage = bluePoints - purplePoints;
-                    DrainScore(TeamId.TEAM_PURPLE, damage);
-                }
-                else if (purplePoints > bluePoints)
-                {
-                    int damage = purplePoints - bluePoints;
-                    DrainScore(TeamId.TEAM_BLUE, damage);
+                    _blueDrainAccumulator -= 1f;
+                    DrainScore(TeamId.TEAM_BLUE, 1);
                 }
             }
         }
 
-        private void DrainScore(TeamId team, int amount)
+
+        public void DrainScore(TeamId team, int amount)
         {
+            if (_gameEnded) return;
+
             TeamScores[team] = Math.Max(0, TeamScores[team] - amount);
             NotifyGameScore(team, TeamScores[team]);
+
+            CheckVictoryPointThresholds(team, TeamScores[team]);
 
             if (TeamScores[team] <= 0)
             {
                 _gameEnded = true;
                 EndGame(team, Nexus[team].GetPosition3D());
+            }
+        }
+        private void CheckVictoryPointThresholds(TeamId team, int currentScore)
+        {
+            int[] thresholds = { 375, 250, 125 };
+
+            for (int i = 0; i < 3; i++)
+            {
+                if (currentScore <= thresholds[i] && !_thresholdsHit[team][i])
+                {
+                    _thresholdsHit[team][i] = true;
+
+                    if (LevelScriptObjects.AnnouncementUnits.TryGetValue(team, out var announcerUnit))
+                    {
+                        ApiGameEvents.AnnounceVictoryPointThreshold(announcerUnit, i + 1);
+                    }
+                }
             }
         }
         public void SpawnAllCamps()

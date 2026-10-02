@@ -1,4 +1,5 @@
 ﻿using System;
+using LeagueSandbox.GameServer.GameObjects;
 using System.Collections.Generic;
 using System.Linq;
 using GameServerCore.Enums;
@@ -19,6 +20,7 @@ namespace LeagueSandbox.GameServer.Inventory
         private InventoryManager _owner;
         private static ILog _logger = LoggerProvider.GetLogger();
         public Dictionary<int, IItemScript> ItemScripts = new Dictionary<int, IItemScript>();
+        public Dictionary<string, float> SoldActiveCooldowns { get; } = new Dictionary<string, float>();
         public Item[] Items { get; }
 
         public Inventory(InventoryManager owner)
@@ -32,48 +34,49 @@ namespace LeagueSandbox.GameServer.Inventory
             return Items.Take(BASE_INVENTORY_SIZE).ToArray();
         }
 
-        public Item AddItem(ItemData item, ObjAIBase owner)
+        public Item AddItem(ItemData item, ObjAIBase owner, BuffVariables state = null)
         {
             if (item.ItemGroup.ToLower().Equals("relicbase"))
             {
                 return AddTrinketItem(item, owner);
             }
 
-            if (owner != null)
+            var addedItem = item.MaxStacks > 1 ? AddStackingItem(item) : AddNewItem(item, state);
+            if (addedItem != null && owner != null)
             {
-                LoadOwnerStats(item, owner);
+                LoadOwnerStats(item, owner, GetItemSlot(addedItem));
             }
 
-            if (item.MaxStacks > 1)
-            {
-                return AddStackingItem(item);
-            }
-
-            return AddNewItem(item);
+            return addedItem;
         }
 
-        public Item SetItemToSlot(ItemData item, ObjAIBase owner, byte slot)
+        public Item SetItemToSlot(ItemData item, ObjAIBase owner, byte slot, BuffVariables state = null)
         {
             if (item.ItemGroup.ToLower().Equals("relicbase"))
             {
                 return AddTrinketItem(item, owner);
             }
 
+            var addedItem = SetItem(slot, item, state);
             if (owner != null)
             {
-                LoadOwnerStats(item, owner);
+                LoadOwnerStats(item, owner, slot);
             }
 
-            return SetItem(slot, item);
+            return addedItem;
         }
 
-        private void LoadOwnerStats(ItemData item, ObjAIBase owner)
+        private void LoadOwnerStats(ItemData item, ObjAIBase owner, byte slot)
         {
             owner.AddStatModifier(item);
 
             if (!string.IsNullOrEmpty(item.SpellName))
             {
-                owner.SetSpell(item.SpellName, (byte)(owner.Inventory.GetItemSlot(GetItem(item.SpellName)) + (byte)SpellSlotType.InventorySlots), true);
+                // A different purchased item must not inherit the previous slot occupant's cooldown.
+                owner.Spells[(short)(slot + (byte)SpellSlotType.InventorySlots)].SetCooldown(0, true);
+                owner.SetSpell(item.SpellName, (byte)(slot + (byte)SpellSlotType.InventorySlots), true, networked: false);
+                if (SoldActiveCooldowns.TryGetValue(ItemCooldownGroups.Get(item.SpellName), out var remaining) && remaining > 0)
+                    owner.Spells[(short)(slot + (byte)SpellSlotType.InventorySlots)].SetCooldown(remaining, true);
             }
 
             //Checks if the item's script was already loaded before
@@ -102,9 +105,9 @@ namespace LeagueSandbox.GameServer.Inventory
             return SetItem(slot, item);
         }
 
-        private Item SetItem(byte slot, ItemData item)
+        private Item SetItem(byte slot, ItemData item, BuffVariables state = null)
         {
-            Items[slot] = Item.CreateFromType(item);
+            Items[slot] = Item.CreateFromType(item, state);
             return Items[slot];
         }
 
@@ -156,6 +159,22 @@ namespace LeagueSandbox.GameServer.Inventory
                 if (owner != null)
                 {
                     owner.RemoveStatModifier(Items[slot].ItemData);
+                    if (!string.IsNullOrEmpty(Items[slot].ItemData.SpellName))
+                    {
+                        var spellSlot = (byte)(slot + (byte)SpellSlotType.InventorySlots);
+                        if (owner.Spells.TryGetValue(spellSlot, out var spell))
+                        {
+                            var remainingCooldown = spell.CurrentCooldown;
+                            var key = ItemCooldownGroups.Get(Items[slot].ItemData.SpellName);
+                            SoldActiveCooldowns[key] = Math.Max(remainingCooldown, SoldActiveCooldowns.TryGetValue(key, out var saved) ? saved : 0);
+                            owner.RemoveSpell(spellSlot);
+                            // Keep the slot's cooldown so selling and immediately rebuying cannot reset an active.
+                            if (remainingCooldown > 0.0f)
+                            {
+                                owner.Spells[spellSlot].SetCooldown(remainingCooldown, true);
+                            }
+                        }
+                    }
                 }
 
                 Items[slot] = null;
@@ -238,7 +257,8 @@ namespace LeagueSandbox.GameServer.Inventory
             {
                 if (!string.IsNullOrEmpty(item.SpellName))
                 {
-                    owner.SetSpell(item.SpellName, TRINKET_SLOT + (byte)SpellSlotType.InventorySlots, true);
+                    owner.Spells[(short)(TRINKET_SLOT + (byte)SpellSlotType.InventorySlots)].SetCooldown(0, true);
+                    owner.SetSpell(item.SpellName, TRINKET_SLOT + (byte)SpellSlotType.InventorySlots, true, networked: false);
                 }
                 //Checks if the item's script was already loaded before
                 if (!ItemScripts.ContainsKey(item.ItemId))
@@ -282,7 +302,7 @@ namespace LeagueSandbox.GameServer.Inventory
             }
             return AddNewItem(item);
         }
-        private Item AddNewItem(ItemData item)
+        private Item AddNewItem(ItemData item, BuffVariables state = null)
         {
             for (var i = 0; i < BASE_INVENTORY_SIZE; i++)
             {
@@ -296,7 +316,7 @@ namespace LeagueSandbox.GameServer.Inventory
                     continue;
                 }
 
-                return SetItem((byte)i, item);
+                return SetItem((byte)i, item, state);
             }
 
             return null;

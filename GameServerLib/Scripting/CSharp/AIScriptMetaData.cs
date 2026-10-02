@@ -6,6 +6,7 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
     {
         public byte BehaviorTree { get; set; } = 0;
         public uint MinionRoamState { get; set; } = 0;
+        public bool HandlesTargetAcquisition { get; set; } = false;
         public bool HandlesCallsForHelp { get; set; } = false;
     }
 }

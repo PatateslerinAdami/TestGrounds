@@ -2,6 +2,8 @@
 using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
 using System.Numerics;
+using System;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using System.Collections.Generic;
 using LeagueSandbox.GameServer.Players;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
@@ -57,6 +59,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                         {
                             waypoints = req.Waypoints.ConvertAll(TranslateFromCenteredCoordinates);
                             var target = waypoints[waypoints.Count - 1];
+                            if (!float.IsFinite(target.X) || !float.IsFinite(target.Y)) return false;
 
                             if (champion.MovementRestrictionRadius > 0)
                             {
@@ -74,7 +77,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                             {
                                 target = nav.GetClosestTerrainExit(target, champion.PathfindingRadius);
                             }
-                            var path = nav.GetPath(champion.Position, target, champion.PathfindingRadius);
+                            // Testing of a possibility, return later
+                            var path = ValidateClientRoute(champion, waypoints, target)
+                                ?? nav.GetPath(champion.Position, target, champion.PathfindingRadius);
                             if(path != null && path.Count > 1)
                             {
                                 champion.UpdateMoveOrder(req.OrderType, true);
@@ -121,6 +126,27 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             return true;
+        }
+
+        private List<Vector2> ValidateClientRoute(Champion champion, List<Vector2> proposed, Vector2 destination)
+        {
+            if (proposed.Count == 0 || proposed.Count > 64) return null;
+            var nav = _game.Map.NavigationGrid;
+            var result = new List<Vector2>(proposed.Count + 1) { champion.Position };
+            int start = proposed.Count > 1 ? 1 : 0;
+            for (int i = start; i < proposed.Count; i++)
+            {
+                var next = i == proposed.Count - 1 ? destination : proposed[i];
+                if (!float.IsFinite(next.X) || !float.IsFinite(next.Y)) return null;
+                if (champion.MovementRestrictionRadius > 0
+                    && Vector2.DistanceSquared(next, champion.MovementRestrictionCenter)
+                        > champion.MovementRestrictionRadius * champion.MovementRestrictionRadius) return null;
+                var previous = result[result.Count - 1];
+                if (nav.CastCircle(previous, next, champion.PathfindingRadius)) return null;
+                if (previous != next) result.Add(next);
+            }
+            if (result.Count == 1) result.Add(champion.Position);
+            return result;
         }
 
         private Vector2 TranslateFromCenteredCoordinates(Vector2 vector)

@@ -16,23 +16,43 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemPassives;
-
-public class ItemID_3093 : IItemScript {
+public class ItemID_3093 : IItemScript
+{
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(ObjAIBase owner) {
+    private ObjAIBase _owner;
+    public void OnActivate(ObjAIBase owner)
+    {
+        _owner = owner;
         StatsModifier.GoldPerSecond.FlatBonus = 0.3f;
         owner.AddStatModifier(StatsModifier);
-        ApiEventManager.OnKill.AddListener(this, owner, OnKill);
-    }
-
-    private void OnKill(DeathData data) {
-        if (data.Killer is Champion champion) {
-            champion.AddGold(champion, 2f, true);
+        ApiEventManager.OnKillUnit.AddListener(this, owner, OnKill);
+        if (owner is Champion champion)
+        {
+            ApiEventManager.OnAmbientGold.AddListener(
+                this,
+                champion,
+                gold => ItemHelpers.ItemEffectHelpers.TrackGold(owner, 3093, "avariceGoldEarned", StatsModifier.GoldPerSecond.FlatBonus, 0)
+            );
         }
     }
 
-    public void OnDeactivate(ObjAIBase owner) {
-        ApiEventManager.OnKill.RemoveListener(this, owner, OnKill);
+    private void OnKill(DeathData data)
+    {
+        if (data.Killer is Champion champion)
+        {
+            champion.AddGold(champion, 2f, true);
+            ItemHelpers.ItemEffectHelpers.TrackGold(_owner, 3093, "avariceGoldEarned", 2, 0);
+        }
+    }
+
+    public void OnUpdate(float diff)
+    {
+        ItemHelpers.ItemEffectHelpers.TrackGold(_owner, 3093, "avariceGoldEarned", 0, 0);
+    }
+
+    public void OnDeactivate(ObjAIBase owner)
+    {
+        ApiEventManager.RemoveAllListenersForOwner(this);
     }
 }

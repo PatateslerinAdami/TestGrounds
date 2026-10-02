@@ -10,9 +10,8 @@ namespace ItemPassives
 
         public void OnActivate(ObjAIBase owner)
         {
-            StatsModifier.CooldownReduction.FlatBonus = 0.1f;
+            StatsModifier.CooldownReduction.FlatBonus = -0.1f;
             owner.AddStatModifier(StatsModifier);
         }
     }
 }
-

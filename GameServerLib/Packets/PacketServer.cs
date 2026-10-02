@@ -46,7 +46,7 @@ namespace PacketDefinitions420
                 var key = Convert.FromBase64String(blowfishKeys[i]);
                 if (key.Length <= 0)
                 {
-                    throw new Exception($"Invalid blowfish key supplied({ key })");
+                    throw new Exception($"Invalid blowfish key supplied({key})");
                 }
                 blowfishes[i] = new BlowFish(key);
             }
@@ -60,8 +60,19 @@ namespace PacketDefinitions420
         public void NetLoop(uint timeout = 0)
         {
             var enetEvent = new Event();
-            while (_server.HostService(enetEvent, timeout) > 0)
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            // One budget for the entire pump, not a fresh timeout per event.
+            // Over budget simulation ticks still get a short nonblocking drain.
+            double budgetMs = timeout > 0 ? timeout : 2.0;
+            int handled = 0;
+            while (true)
             {
+                double elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - started)
+                    * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                if (handled > 0 && (elapsedMs >= budgetMs || handled >= 256)) break;
+                uint remaining = timeout == 0 ? 0u : (uint)Math.Max(0, Math.Floor(budgetMs - elapsedMs));
+                if (_server.HostService(enetEvent, remaining) <= 0) break;
+                handled++;
                 switch (enetEvent.Type)
                 {
                     case EventType.CONNECT:

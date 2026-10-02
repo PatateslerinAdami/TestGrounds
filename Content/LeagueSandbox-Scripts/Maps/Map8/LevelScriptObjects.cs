@@ -19,7 +19,7 @@ namespace MapScripts.Map8
         static Dictionary<TeamId, List<LaneTurret>> TurretList = new Dictionary<TeamId, List<LaneTurret>> { { TeamId.TEAM_BLUE, new List<LaneTurret>() }, { TeamId.TEAM_PURPLE, new List<LaneTurret>() } };
 
         //Turret netIds are used for the capture point announcements
-        static Dictionary<TeamId, LaneTurret> AnnouncementUnits = new Dictionary<TeamId, LaneTurret>();
+        public static Dictionary<TeamId, LaneTurret> AnnouncementUnits = new Dictionary<TeamId, LaneTurret>();
         public static Dictionary<TeamId, string> TowerModels { get; set; } = new Dictionary<TeamId, string>
         {
             {TeamId.TEAM_BLUE, "OdinOrderTurretShrine" },
@@ -271,6 +271,6 @@ namespace MapScripts.Map8
             RightSpawnPoint = spawn;
             RightGetToCircleWaypoints = getToList ?? new List<Vector2>();
             RightCircleIndex = circleIndex;
-        } 
+        }
     }
 }

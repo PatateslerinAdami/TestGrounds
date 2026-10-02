@@ -33,8 +33,8 @@ namespace AIScripts
 
         private const float FLAT_MINION_CAPTURE_MANA = 2000f;
 
-        private const float REGEN_DELAY = 3.0f;   
-        private const float REGEN_RATE = 2500f;    
+        private const float REGEN_DELAY = 3.0f;
+        private const float REGEN_RATE = 2500f;
         private float _timeSinceLastCombat = 0f;
 
         private enum CaptureState
@@ -68,7 +68,7 @@ namespace AIScripts
         {
             if (damageData.Attacker is Minion minion && minion.Team != _self.Team)
             {
-                _timeSinceLastCombat = 0f; 
+                _timeSinceLastCombat = 0f;
 
                 if (_self.Team != TeamId.TEAM_NEUTRAL)
                 {
@@ -76,7 +76,7 @@ namespace AIScripts
 
                     if (_self.Stats.CurrentMana <= MIN_MANA)
                     {
-                        NeutralizePoint();
+                        NeutralizePoint(damageData.Attacker);
                     }
                 }
                 else
@@ -235,7 +235,7 @@ namespace AIScripts
 
                 if (u is ObjAIBase ai && ai.ChannelSpell != null && ai.ChannelSpell.SpellName == "OdinCaptureChannel")
                 {
-                    if(_self.TargetUnit  != null && _self.TargetUnit == ai)
+                    if(_self.TargetUnit!= null && _self.TargetUnit == ai)
                     {
                         _self.SetTargetUnit(null, true);
                     }
@@ -359,11 +359,13 @@ namespace AIScripts
                 return;
             }
             float manaShift = BASE_CAPTURE_RATE * netOwnerPower * (diff / 1000f);
+
+            TeamId enemyTeam = _self.Team == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
+            Champion dominantEnemyCapturer = _capturers.FirstOrDefault(c => c.Team == enemyTeam);
+
             if (netOwnerPower < 0)
             {
-                TeamId enemyTeam = _self.Team == TeamId.TEAM_BLUE ? TeamId.TEAM_PURPLE : TeamId.TEAM_BLUE;
-                Champion dominantCapturer = _capturers.FirstOrDefault(c => c.Team == enemyTeam);
-                SetVisualState(CaptureState.Emptying, dominantCapturer);
+                SetVisualState(CaptureState.Emptying, dominantEnemyCapturer);
                 manaShift *= 2.0f;
             }
             else
@@ -380,7 +382,7 @@ namespace AIScripts
             }
             else if (_self.Stats.CurrentMana <= MIN_MANA)
             {
-                NeutralizePoint();
+                NeutralizePoint(dominantEnemyCapturer);
             }
         }
 
@@ -394,12 +396,19 @@ namespace AIScripts
 
             _guardianParticle?.SetToRemove();
 
-
             _guardianParticle = AddParticleTarget(_self, _self, "OdinNeutralGuardian_Green.troy", _self, 25000f, enemyParticle: "OdinNeutralGuardian_Red.troy", boneNameHash: 178301468);
             _guardianParticle.DisableFoW = true;
 
             var capturer = _capturers.Find(c => c.Team == newTeam);
             ApiGameEvents.AnnounceCapturePointCaptured(_self, GetPointLetter(), capturer);
+            ApiEventManager.OnCapturePoint.Publish(_self, capturer);
+
+            if (capturer != null)
+            {
+                capturer.Stats.Points += 40.0f;
+                var scoreData = new ScoreData(capturer, 40.0f, ScoreCategory.Objective, ScoreEvent.NodeCapture, true);
+                ApiMapFunctionManager.NotifyS2C_IncrementPlayerScore(scoreData);
+            }
 
             foreach (var c in _capturers)
             {
@@ -415,7 +424,7 @@ namespace AIScripts
             InterruptAllCapturers();
         }
 
-        private void NeutralizePoint()
+        private void NeutralizePoint(AttackableUnit neutralizer = null)
         {
             _self.SetTeam(TeamId.TEAM_NEUTRAL);
             _self.Stats.CurrentMana = HALF_MANA;
@@ -431,7 +440,14 @@ namespace AIScripts
             _guardianParticle?.SetToRemove();
             _guardianParticle = null;
 
-            ApiGameEvents.AnnounceCapturePointNeutralized(_self, GetPointLetter());
+            ApiGameEvents.AnnounceCapturePointNeutralized(_self, GetPointLetter(), neutralizer);
+
+            if (neutralizer != null && neutralizer is Champion ch)
+            {
+                neutralizer.Stats.Points += 40.0f;
+                var scoreData = new ScoreData(ch, 40.0f, ScoreCategory.Objective, ScoreEvent.NodeNeutralize, true);
+                ApiMapFunctionManager.NotifyS2C_IncrementPlayerScore(scoreData);
+            }
         }
 
         private void InterruptAllCapturers()

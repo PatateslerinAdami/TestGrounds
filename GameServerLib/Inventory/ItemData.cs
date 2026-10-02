@@ -12,6 +12,8 @@ namespace LeagueSandbox.GameServer.Inventory
 
         // General
         public int MaxStacks { get; private set; }
+        public int RequiredLevel { get; private set; }
+        public string RequiredChampion { get; private set; }
         public int Price { get; private set; }
         public string ItemGroup { get; private set; }
         public bool Consumed { get; private set; }
@@ -53,6 +55,8 @@ namespace LeagueSandbox.GameServer.Inventory
 
             ItemId = Convert.ToInt32(file.MetaData["Id"]);
             MaxStacks = file.GetInt("Data", "MaxStack");
+            RequiredLevel = file.GetInt("Data", "RequiredLevel");
+            RequiredChampion = file.GetString("Data", "RequiredChampion");
             Price = file.GetInt("Data", "Price");
             ItemGroup = file.GetString("Data", "ItemGroup");
             Consumed = file.GetBool("Data", "Consumed");
@@ -74,19 +78,25 @@ namespace LeagueSandbox.GameServer.Inventory
             AttackDamage.PercentBonus = file.GetFloat("Data", "PercentPhysicalDamageMod");
             AttackSpeed.FlatBonus = file.GetFloat("Data", "PercentAttackSpeedMod");
 
+            CooldownReduction.FlatBonus = file.GetFloat("Data", "PercentCooldownMod");
+
             CriticalChance.FlatBonus = file.GetFloat("Data", "FlatCritChanceMod");
             CriticalDamage.FlatBonus = file.GetFloat("Data", "FlatCritDamageMod");
             CriticalDamage.PercentBonus = file.GetFloat("Data", "PercentCritDamageMod");
 
             HealthPoints.FlatBonus = file.GetFloat("Data", "FlatHPPoolMod");
             HealthPoints.PercentBonus = file.GetFloat("Data", "PercentHPPoolMod");
-            HealthRegeneration.PercentBonus = file.GetFloat("Data", "PercentBaseHPRegenMod");
+            HealthRegeneration.FlatBonus = file.GetFloat("Data", "FlatHPRegenMod");
+            HealthRegeneration.PercentBaseBonus = file.GetFloat("Data", "PercentBaseHPRegenMod");
+            HealthRegeneration.PercentBonus = file.GetFloat("Data", "PercentHPRegenMod");
             
             LifeSteal.FlatBonus = file.GetFloat("Data", "PercentLifeStealMod");
             
             ManaPoints.FlatBonus = file.GetFloat("Data", "FlatMPPoolMod");
             ManaPoints.PercentBonus = file.GetFloat("Data", "PercentMPPoolMod");
-            ManaRegeneration.PercentBonus = file.GetFloat("Data", "PercentBaseMPRegenMod");
+            ManaRegeneration.FlatBonus = file.GetFloat("Data", "FlatMPRegenMod");
+            ManaRegeneration.PercentBaseBonus = file.GetFloat("Data", "PercentBaseMPRegenMod");
+            ManaRegeneration.PercentBonus = file.GetFloat("Data", "PercentMPRegenMod");
             
             ArmorPenetration.FlatBonus = file.GetFloat("Data", "FlatArmorPenetrationMod", file.GetFloat("Data", "rFlatArmorPenetrationMod"));
             ArmorPenetration.PercentBaseBonus = file.GetFloat("Data", "PercentArmorPenetrationMod", file.GetFloat("Data", "rPercentArmorPenetrationMod"));

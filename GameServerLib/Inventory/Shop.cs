@@ -1,4 +1,5 @@
 using System.Linq;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 
 namespace LeagueSandbox.GameServer.Inventory
@@ -35,7 +36,8 @@ namespace LeagueSandbox.GameServer.Inventory
         public bool HandleItemBuyRequest(int itemId)
         {
             var itemTemplate = _game.ItemManager.SafeGetItemType(itemId);
-            if (itemTemplate == null)
+            if (itemTemplate == null || _owner.Stats.Level < itemTemplate.RequiredLevel
+                || (!string.IsNullOrEmpty(itemTemplate.RequiredChampion) && itemTemplate.RequiredChampion != _owner.Model))
             {
                 return false;
             }
@@ -44,6 +46,10 @@ namespace LeagueSandbox.GameServer.Inventory
             var inventory = _owner.Inventory;
             var price = itemTemplate.TotalPrice;
             var ownedItems = inventory.GetAvailableItems(itemTemplate.Recipe.GetItems());
+            // Gold income items are limited to one; an upgrade may consume the currently owned item.
+            if (itemTemplate.ItemGroup == "GoldBase"
+                && inventory.GetAllItems().Except(ownedItems).Any(item => item.ItemData.ItemGroup == "GoldBase"))
+                return false;
             if (ownedItems.Count != 0)
             {
                 price -= ownedItems.Sum(item => item.ItemData.TotalPrice);
@@ -52,12 +58,16 @@ namespace LeagueSandbox.GameServer.Inventory
                     return false;
                 }
 
+                var state = new BuffVariables();
+                foreach (var component in ownedItems)
+                    foreach (var value in component.GetState().Values) state.Set(value.Key, value.Value);
+
                 foreach (var items in ownedItems)
                 {
                     _owner.Inventory.RemoveItem(inventory.GetItemSlot(items), _owner);
                 }
 
-                _owner.Inventory.AddItem(itemTemplate, _owner);
+                _owner.Inventory.AddItem(itemTemplate, _owner, state);
             }
             else if (stats.Gold < price || !_owner.Inventory.AddItem(itemTemplate, _owner).Value)
             {

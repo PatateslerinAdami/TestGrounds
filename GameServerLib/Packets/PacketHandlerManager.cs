@@ -177,6 +177,7 @@ namespace PacketDefinitions420
 
         public bool BroadcastPacket(byte[] data, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
+            if (_peers.Length == 0) return true;
             if (data.Length >= 8)
             {
                 // send packet to all peers and save failed ones

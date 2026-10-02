@@ -1,4 +1,5 @@
 using System;
+using LeagueSandbox.GameServer.GameObjects;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.Other;
 using static GameServerCore.Content.HashFunctions;
@@ -11,9 +12,13 @@ namespace LeagueSandbox.GameServer.Inventory
         public ItemData ItemData { get; }
         public int SpellCharges { get; private set; }
 
-        private Item(ItemData data)
+        private readonly BuffVariables _state;
+        public BuffVariables GetState() => _state;
+
+        private Item(ItemData data, BuffVariables state = null)
         {
             ItemData = data;
+            _state = state?.Clone() ?? new BuffVariables();
             StackCount = 1;
             SpellCharges = 0;
         }
@@ -45,9 +50,9 @@ namespace LeagueSandbox.GameServer.Inventory
             SpellCharges = newCharges;
         }
 
-        public static Item CreateFromType(ItemData item)
+        public static Item CreateFromType(ItemData item, BuffVariables state = null)
         {
-            return new Item(item);
+            return new Item(item, state);
         }
     }
 }

@@ -96,14 +96,14 @@ namespace PacketDefinitions420
 
         private static List<CompressedWaypoint> GetCenteredWaypoints(AttackableUnit unit, NavigationGrid grid)
         {
-            var currentWaypoints = new List<Vector2>(unit.Waypoints);
-            currentWaypoints[0] = unit.Position;
+            var currentWaypoints = new List<Vector2> { unit.Position };
 
-            int count = 2 + ((currentWaypoints.Count - 1) - unit.CurrentWaypointKey);
-            if (count >= 2)
-            {
-                currentWaypoints.RemoveRange(1, currentWaypoints.Count - count);
-            }
+            if (unit.MovementParameters == null
+                && unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase actor
+                && actor.NavigationState.Waiting)
+                return currentWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
+            for (int i = Math.Max(1, unit.CurrentWaypointKey); i < unit.Waypoints.Count; i++)
+                currentWaypoints.Add(unit.Waypoints[i]);
 
             return currentWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
 
@@ -118,7 +118,8 @@ namespace PacketDefinitions420
         public static MovementData CreateMovementDataNormalIfPossible(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
             // Prevent 0 waypoints packet error.
-            if (unit.Waypoints.Count < 1)
+            if (unit.Waypoints.Count < 1 || (!useTeleportID && unit.MovementParameters == null &&
+                (unit.IsPathEnded() || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase { NavigationState.Waiting: true })))
             {
                 return CreateMovementDataStop(unit);
             }
@@ -164,7 +165,7 @@ namespace PacketDefinitions420
             }
             else if(unit.MovementParameters == null)
             {
-                return CreateMovementDataNormal(unit, grid, useTeleportID);
+                return CreateMovementDataNormalIfPossible(unit, grid, useTeleportID);
             }
             return CreateMovementDataWithSpeed(unit, grid, useTeleportID);
         }

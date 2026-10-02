@@ -125,6 +125,9 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<AttackableUnit, DamageData> OnDealDamage
             = new DataOnlyDispatcher<AttackableUnit, DamageData>();
 
+        public static DataOnlyDispatcher<ObjAIBase, DeathData> OnNearbyDeath
+            = new DataOnlyDispatcher<ObjAIBase, DeathData>();
+
         public static DataOnlyDispatcher<AttackableUnit, DeathData> OnDeath
             = new DataOnlyDispatcher<AttackableUnit, DeathData>();
 
@@ -237,6 +240,18 @@ namespace LeagueSandbox.GameServer.API
         public static Dispatcher<AttackableUnit, Buff> OnUnitBuffDeactivated
             = new Dispatcher<AttackableUnit, Buff>();
 
+        public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreApplyDamage
+            = new DataOnlyDispatcher<AttackableUnit, DamageData>();
+
+        public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreDeathDamage
+            = new DataOnlyDispatcher<AttackableUnit, DamageData>();
+
+        public static DataOnlyDispatcher<Champion, float> OnAmbientGold
+            = new DataOnlyDispatcher<Champion, float>();
+
+        public static DataOnlyDispatcher<ObjAIBase, Shield> OnShieldAdded
+            = new DataOnlyDispatcher<ObjAIBase, Shield>();
+
         public static Dispatcher<Shield> OnShieldBreak
             = new Dispatcher<Shield>();
 
@@ -262,7 +277,10 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<AttackableUnit> OnLeaveGrass
             = new Dispatcher<AttackableUnit>();
-
+        public static Dispatcher<AttackableUnit, Champion> OnCapturePoint
+            = new Dispatcher<AttackableUnit, Champion>();
+        public static Dispatcher<TeamId, int> OnQuestComplete
+            = new Dispatcher<TeamId, int>();
         public abstract class DispatcherBase
         {
             public DispatcherBase()

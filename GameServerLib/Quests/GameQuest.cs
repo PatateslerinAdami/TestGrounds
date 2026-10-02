@@ -7,6 +7,7 @@ namespace LeagueSandbox.GameServer.Quests
     {
         public string QuestId { get; }
         public QuestState State { get; protected set; }
+        public bool IsTeamQuest { get; protected set; } = false;
 
         public event Action<GameQuest> OnQuestActivated;
         public event Action<GameQuest, Champion, Champion> OnQuestCompleted;

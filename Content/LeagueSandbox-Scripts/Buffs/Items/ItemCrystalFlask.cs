@@ -1,42 +1,55 @@
+using System;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Buffs;
+namespace Buffs
+{
+    public class ItemCrystalFlask : IBuffGameScript
+    {
+        public BuffScriptMetaData BuffMetaData { get; } = new BuffScriptMetaData
+        {
+            BuffType= BuffType.COMBAT_ENCHANCER,
+            BuffAddType = BuffAddType.REPLACE_EXISTING
+        };
+        public StatsModifier StatsModifier { get; } = new StatsModifier();
 
-internal class ItemCrystalFlask : IBuffGameScript {
-    private       ObjAIBase      _owner;
-    private const float          Health     = 120f;
-    private const float          Mana       = 60f;
-    private const float          IntervalMs = 1000f;
-    private       PeriodicTicker _periodicTicker;
+        private AttackableUnit _owner;
+        private Buff _buff;
+        private float _pending;
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            _owner = unit;
+            _buff = buff;
+        }
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_ENCHANCER,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
-    };
+        public void OnUpdate(float diff)
+        {
+            float seconds = Math.Min(diff / 1000, Math.Max(0, _buff.Duration - _buff.TimeElapsed + diff / 1000));
+            if (_owner.IsDead)
+            {
+                LeagueSandbox.GameServer.API.ApiFunctionManager.RemoveBuff(_buff);
+                return;
+            }
 
-    public StatsModifier StatsModifier { get; } = new();
+            _pending += seconds;
+            while (_pending + 0.00001f >= 0.5f)
+            {
+                _pending -= 0.5f;
+                _owner.TakeHeal(_owner, 5, HealType.HealthRegeneration);
+                _owner.IncreasePAR(_owner, 2.5f);
+            }
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner = ownerSpell.CastInfo.Owner;
-    }
-
-    public void OnUpdate(float diff) {
-        var ticks = _periodicTicker.ConsumeTicks(diff, IntervalMs, fireImmediately: true, maxTicksPerUpdate: 1, maxTotalTicks: 12);
-        if (ticks != 1) return;
-        _owner.TakeHeal(_owner, Health  /12f, HealType.HealthRegeneration);
-        _owner.IncreasePAR(_owner, Mana /12f);
-    }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        
+            if (_buff.TimeElapsed >= _buff.Duration && _pending > 0)
+            {
+                _owner.TakeHeal(_owner, 10 * _pending, HealType.HealthRegeneration);
+                _owner.IncreasePAR(_owner, 5 * _pending);
+                _pending = 0;
+            }
+        }
     }
 }

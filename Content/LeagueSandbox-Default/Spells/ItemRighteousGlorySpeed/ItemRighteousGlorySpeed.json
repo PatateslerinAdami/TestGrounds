@@ -6,6 +6,9 @@
         "ResourcePath": "DATA/Spells/ItemRighteousGlorySpeed.inibin"
     },
     "Values": {
+        "BuffData": {
+            "DynamicTooltip": "game_buff_tooltip_Haste"
+        },
         "SpellData": {
             "AfterEffectName": "Disintegrate_tar.troy",
             "AlternateName": "ShurelyasSpell",

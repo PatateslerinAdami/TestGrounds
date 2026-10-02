@@ -883,7 +883,7 @@ namespace PacketDefinitions420
         /// <param name="nextAttackFlag">Whether or this basic attack is not the first time this basic attack has been performed on the given target.</param>
         public void NotifyBasic_Attack(ObjAIBase attacker, AttackableUnit target, uint futureProjNetId, bool isCrit, bool nextAttackFlag)
         {
-            var targetPos = MovementVector.ToCenteredScaledCoordinates(target.Position, _navGrid);
+            var targetPos = target.Position;
 
             // TODO: Remove attacker, target, and futureProjNetId parameters and replace with CastInfo
             var basicAttackData = new BasicAttackData
@@ -892,7 +892,7 @@ namespace PacketDefinitions420
                 ExtraTime = attacker.AutoAttackSpell.CastInfo.ExtraCastTime, // TODO: Verify, maybe related to CastInfo.ExtraCastTime?
                 MissileNextID = futureProjNetId,
                 AttackSlot = attacker.AutoAttackSpell.CastInfo.SpellSlot,
-                TargetPosition = new Vector3(targetPos.X, _navGrid.GetHeightAtLocation(targetPos), targetPos.Y)
+                TargetPosition = new Vector3(targetPos.X, target.GetHeight(), targetPos.Y)
             };
 
             // Based on DesignerCastTime. Always negative. Value range from replays: [-0.14, 0].
@@ -916,7 +916,7 @@ namespace PacketDefinitions420
         /// <param name="isCrit">Whether or not the auto attack is a critical.</param>
         public void NotifyBasic_Attack_Pos(ObjAIBase attacker, AttackableUnit target, uint futureProjNetId, bool isCrit)
         {
-            var targetPos = MovementVector.ToCenteredScaledCoordinates(target.Position, _navGrid);
+            var targetPos = target.Position;
 
             // TODO: Remove attacker, target, and futureProjNetId parameters and replace with CastInfo
             var basicAttackData = new BasicAttackData
@@ -984,19 +984,32 @@ namespace PacketDefinitions420
 
         public void NotifySetItem(ObjAIBase ai, Item itemInstance)
         {
+            if (ai is Champion)
+            {
+                NotifySetItem(ai, ai.Inventory.GetItemSlot(itemInstance));
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds a client inventory slot, including sending an empty slot.
+        /// </summary>
+        public void NotifySetItem(ObjAIBase ai, byte slot)
+        {
             if (!(ai is Champion champion))
             {
                 return;
             }
 
+            var itemInstance = ai.Inventory.GetItem(slot);
             var packet = new SetItem
             {
+                SenderNetID = ai.NetId,
                 Item = new LeaguePackets.Game.Common.ItemData
                 {
-                    ItemID = (uint)itemInstance.ItemData.ItemId,
-                    Slot = ai.Inventory.GetItemSlot(itemInstance),
-                    ItemsInSlot = GetItemsInSlotForDisplay(ai, itemInstance),
-                    SpellCharges = (byte)itemInstance.SpellCharges
+                    ItemID = (uint)(itemInstance?.ItemData.ItemId ?? 0),
+                    Slot = slot,
+                    ItemsInSlot = itemInstance == null ? (byte)0 : GetItemsInSlotForDisplay(ai, itemInstance),
+                    SpellCharges = (byte)(itemInstance?.SpellCharges ?? 0)
                 }
             };
 
@@ -1995,7 +2008,7 @@ namespace PacketDefinitions420
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
                 BuffType = (byte)b.BuffType,
-                Count = (byte)b.StackCount,
+                Count = b.BuffType == BuffType.COUNTER ? (byte)1 : (byte)b.StackCount,
                 IsHidden = b.IsHidden,
                 BuffNameHash = HashString(b.Name),
                 PackageHash = b.TargetUnit.GetObjHash(),
@@ -2007,6 +2020,10 @@ namespace PacketDefinitions420
                 addPacket.CasterNetID = b.SourceUnit.NetId;
             }
             _packetHandlerManager.BroadcastPacket(addPacket.GetBytes(), Channel.CHL_S2C);
+            if (b.BuffType == BuffType.COUNTER)
+            {
+                NotifyNPC_BuffUpdateNumCounter(b);
+            }
         }
 
         /// <summary>
@@ -2165,11 +2182,12 @@ namespace PacketDefinitions420
         /// <param name="runningTime">Time since the buff's creation.</param>
         public void NotifyNPC_BuffUpdateCount(Buff b, float duration, float runningTime)
         {
+            if (b.IsHidden) return;
             var updatePacket = new NPC_BuffUpdateCount
             {
                 SenderNetID = b.TargetUnit.NetId,
                 BuffSlot = b.Slot,
-                Count = (byte)b.StackCount,
+                Count = b.BuffType == BuffType.COUNTER ? (byte)1 : (byte)b.StackCount,
                 Duration = duration,
                 RunningTime = runningTime,
                 CasterNetID = 0
@@ -2179,6 +2197,10 @@ namespace PacketDefinitions420
                 updatePacket.CasterNetID = b.SourceUnit.NetId;
             }
             _packetHandlerManager.BroadcastPacketVision(b.TargetUnit, updatePacket.GetBytes(), Channel.CHL_S2C);
+            if (b.BuffType == BuffType.COUNTER)
+            {
+                NotifyNPC_BuffUpdateNumCounter(b);
+            }
         }
 
         /// <summary>
@@ -2223,6 +2245,7 @@ namespace PacketDefinitions420
         /// <param name="b">Buff who's stacks will be updated.</param>
         public void NotifyNPC_BuffUpdateNumCounter(Buff b)
         {
+            if (b.IsHidden) return;
             var updateNumPacket = new NPC_BuffUpdateNumCounter
             {
                 SenderNetID = b.TargetUnit.NetId,
@@ -2810,7 +2833,7 @@ namespace PacketDefinitions420
         public void NotifyS2C_ChainMissileSync(SpellMissile m)
         {
             if (!m.HasTarget())
-            { 
+            {
                 return;
             }
 
@@ -4047,7 +4070,7 @@ namespace PacketDefinitions420
                     Flags = 3
                 },
                 // Turret Range Indicators and others (taken from Map11 replay)
-                GameFeatures = 662166610
+                GameFeatures = 662166610UL | (ulong)GameFeatures.NewHudInventory
             };
 
             for (int i = 0; i < players.Count; i++)
@@ -4538,6 +4561,7 @@ namespace PacketDefinitions420
             if (userId < 0)
             {
                 _packetHandlerManager.BroadcastPacketVision(u, packet.GetBytes(), Channel.CHL_LOW_PRIORITY);
+                if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
             }
             else
             {
@@ -4565,6 +4589,7 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+            if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
         }
 
         /// <summary>
@@ -4654,6 +4679,7 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+            if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
         }
 
         /// <summary>
@@ -4776,6 +4802,7 @@ namespace PacketDefinitions420
             };
 
             _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+            if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
         }
         public void NotifyS2C_HandleQuestUpdate(int userId, uint questId, string objective, string tooltip, string icon, byte command, QuestType questType, bool success)
         {
@@ -4799,7 +4826,7 @@ namespace PacketDefinitions420
         {
             byte[] response = new byte[2 + payload.Length];
 
-            response[0] = 221; 
+            response[0] = 221;
             response[1] = commandId;
 
             Array.Copy(payload, 0, response, 2, payload.Length);

@@ -1,4 +1,5 @@
 ﻿using System;
+using LeagueSandbox.GameServer.GameObjects;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,9 +23,9 @@ namespace LeagueSandbox.GameServer.Inventory
             _inventory = new Inventory(this);
         }
 
-        public KeyValuePair<Item, bool> AddItem(ItemData itemData, ObjAIBase owner = null)
+        public KeyValuePair<Item, bool> AddItem(ItemData itemData, ObjAIBase owner = null, BuffVariables state = null)
         {
-            var item = _inventory.AddItem(itemData, owner);
+            var item = _inventory.AddItem(itemData, owner, state);
 
             if (item == null)
             {
@@ -35,14 +36,14 @@ namespace LeagueSandbox.GameServer.Inventory
             {
                 InitializeItemSpellCharges(owner, item);
                 //This packet seems to break when buying more than 3 of one of the 250Gold elixirs
-                _packetNotifier.NotifyBuyItem(owner, item);
+                NotifyItemPurchase(owner, item);
             }
             return KeyValuePair.Create(item, true);
         }
 
-        public KeyValuePair<Item, bool> AddItemToSlot(ItemData itemData, ObjAIBase owner, byte slot)
+        public KeyValuePair<Item, bool> AddItemToSlot(ItemData itemData, ObjAIBase owner, byte slot, BuffVariables state = null)
         {
-            var item = _inventory.SetItemToSlot(itemData, owner, slot);
+            var item = _inventory.SetItemToSlot(itemData, owner, slot, state);
 
             if (item == null)
             {
@@ -53,10 +54,24 @@ namespace LeagueSandbox.GameServer.Inventory
             {
                 InitializeItemSpellCharges(owner, item);
                 //This packet seems to break when buying more than 3 of one of the 250Gold elixirs
-                _packetNotifier.NotifyBuyItem(owner, item);
+                NotifyItemPurchase(owner, item);
             }
 
             return KeyValuePair.Create(item, true);
+        }
+
+        private void NotifyItemPurchase(ObjAIBase owner, Item item)
+        {
+            _packetNotifier.NotifyBuyItem(owner, item);
+
+            if (!string.IsNullOrEmpty(item.ItemData.SpellName))
+            {
+                var spellSlot = (byte)(_inventory.GetItemSlot(item) + (byte)SpellSlotType.InventorySlots);
+                if (owner.Spells.TryGetValue(spellSlot, out var spell) && spell.CurrentCooldown > 0)
+                {
+                    _packetNotifier.NotifyCHAR_SetCooldown(owner, spellSlot, spell.CurrentCooldown, spell.GetCooldown());
+                }
+            }
         }
 
         private void InitializeItemSpellCharges(ObjAIBase owner, Item item)
@@ -266,9 +281,27 @@ namespace LeagueSandbox.GameServer.Inventory
             return _inventory.Items.GetEnumerator();
         }
 
+        public void LowerActiveCooldown(ObjAIBase owner, string spellName, float seconds)
+        {
+            var group = ItemCooldownGroups.Get(spellName);
+            foreach (var item in GetAllItems().Where(item => ItemCooldownGroups.Get(item.ItemData.SpellName) == group))
+            {
+                var spell = owner.Spells[(short)(6 + GetItemSlot(item))];
+                spell.SetCooldown(Math.Max(0, spell.CurrentCooldown - seconds), true);
+            }
+            if (_inventory.SoldActiveCooldowns.TryGetValue(group, out var remaining))
+                _inventory.SoldActiveCooldowns[group] = Math.Max(0, remaining - seconds);
+        }
+
         public void OnUpdate(float diff)
         {
-            foreach (var item in _inventory.ItemScripts)
+            foreach (var key in _inventory.SoldActiveCooldowns.Keys.ToArray())
+            {
+                var remaining = _inventory.SoldActiveCooldowns[key] - diff / 1000.0f;
+                if (remaining <= 0) _inventory.SoldActiveCooldowns.Remove(key);
+                else _inventory.SoldActiveCooldowns[key] = remaining;
+            }
+            foreach (var item in _inventory.ItemScripts.ToArray())
             {
                 try
                 {

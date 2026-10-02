@@ -31,7 +31,9 @@ namespace LeaguePackets.Game.Common
                 attack = new BasicAttackData();
             }
             writer.WriteUInt32(attack.TargetNetID);
-            writer.WriteByte((byte)((int)(attack.ExtraTime * 100.0f) + 128));
+            float extraTime = float.IsNaN(attack.ExtraTime) ? 0 : attack.ExtraTime;
+            extraTime = Math.Clamp(extraTime, -1.28f, 1.27f);
+            writer.WriteByte((byte)Math.Clamp((int)(extraTime * 100.0f) + 128, 0, 255));
             writer.WriteUInt32(attack.MissileNextID);
             writer.WriteByte(attack.AttackSlot);
             writer.WriteVector3(attack.TargetPosition);

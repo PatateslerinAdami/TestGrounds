@@ -169,6 +169,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             Move(diff);
             ApiEventManager.OnSpellMissileUpdate.Publish(this, diff);
+
+            if (_atDestination)
+            {
+                SetToRemove();
+            }
         }
 
         public override void OnCollision(GameObject collider, bool isTerrain = false)
@@ -199,6 +204,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             if (_useCircularPath)
             {
                 MoveCircular(diff);
+                return;
+            }
+
+            var acceleration = SpellOrigin.SpellData.MissileAccel;
+            if (acceleration != 0.0f)
+            {
+                MoveAccelerated(diff, acceleration);
                 return;
             }
 
@@ -248,6 +260,42 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 {
                     _atDestination = true;
                 }
+            }
+        }
+
+        private void MoveAccelerated(float diff, float acceleration)
+        {
+            if (diff <= 0.0f)
+            {
+                return;
+            }
+
+            var seconds = diff * 0.001f;
+            var minimum = MathF.Max(0.0f, SpellOrigin.SpellData.MissileMinSpeed);
+            var maximum = SpellOrigin.SpellData.MissileMaxSpeed > 0.0f
+                ? SpellOrigin.SpellData.MissileMaxSpeed : float.MaxValue;
+            var speed = Math.Clamp(GetSpeed(), minimum, maximum);
+            var limit = acceleration > 0.0f ? maximum : minimum;
+            var acceleratingSeconds = Math.Clamp((limit - speed) / acceleration, 0.0f, seconds);
+            var finalSpeed = Math.Clamp(speed + acceleration * acceleratingSeconds, minimum, maximum);
+            var distance = speed * acceleratingSeconds
+                         + 0.5f * acceleration * acceleratingSeconds * acceleratingSeconds
+                         + finalSpeed * (seconds - acceleratingSeconds);
+            SetSpeed(finalSpeed);
+
+            var remaining = Destination - Position;
+            var remainingDistance = remaining.Length();
+            if (remainingDistance > 0.0f)
+            {
+                var direction = remaining / remainingDistance;
+                Direction = new Vector3(direction.X, 0.0f, direction.Y);
+                Position += direction * MathF.Min(distance, remainingDistance);
+            }
+
+            if (distance >= remainingDistance)
+            {
+                Position = Destination;
+                _atDestination = true;
             }
         }
 

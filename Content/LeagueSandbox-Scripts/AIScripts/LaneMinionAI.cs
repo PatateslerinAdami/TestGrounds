@@ -1,4 +1,4 @@
-﻿using GameServerCore.Enums;
+using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerCore.Scripting.CSharp.BehaviorTree;
 using LeagueSandbox.GameServer.API;
@@ -16,6 +16,7 @@ namespace AIScripts
     {
         public AIScriptMetaData AIScriptMetaData { get; set; } = new AIScriptMetaData
         {
+            HandlesTargetAcquisition = true,
             HandlesCallsForHelp = true
         };
 
@@ -26,16 +27,20 @@ namespace AIScripts
         private float _localTime = 0f;
         private float _timeSinceLastAttack = 0f;
         private int _currentWaypointIndex = 0;
+        private Vector2 _laneStart;
+        private bool _routeInitialized;
 
         private Dictionary<uint, float> _temporaryIgnored = new Dictionary<uint, float>();
-        private Dictionary<AttackableUnit, int> _unitsAttackingAllies = new Dictionary<AttackableUnit, int>();
-        private bool _callsForHelpMayBeCleared = false;
+        private LaneMinionTargetSelection _targetSelection;
         private static readonly Random _rnd = new Random();
         private bool _wasCC = false;
 
         public void OnActivate(ObjAIBase owner)
         {
             _laneMinion = owner as LaneMinion;
+            _targetSelection = new LaneMinionTargetSelection(_laneMinion, IsValidTarget,
+                u => _temporaryIgnored.ContainsKey(u.NetId),
+                u => (int)_laneMinion.ClassifyTarget(u));
             _thinkTimer = (float)_rnd.NextDouble() * 200f;
 
             _behaviorTree = new Selector(
@@ -51,9 +56,20 @@ namespace AIScripts
         public void OnUpdate(float diff)
         {
             _localTime += diff;
+            _targetSelection?.Advance(diff);
 
             if (_laneMinion == null || _laneMinion.IsDead || _laneMinion.IsAIPaused())
                 return;
+
+            if (!_routeInitialized)
+            {
+                if (_laneMinion.PathingWaypoints == null) return;
+                _laneStart = _laneMinion.Position;
+                _routeInitialized = true;
+            }
+
+            while (_laneMinion.PathingWaypoints != null && _currentWaypointIndex < _laneMinion.PathingWaypoints.Count && WaypointReached())
+                _currentWaypointIndex++;
 
             if (!_laneMinion.CanIssueMoveOrders())
             {
@@ -67,7 +83,10 @@ namespace AIScripts
                 _thinkTimer = 200f;
             }
 
-            if (_laneMinion.IsAttacking || _laneMinion.TargetUnit == null)
+            if (_laneMinion.IsAttacking || _laneMinion.TargetUnit == null
+                || _laneMinion.NavigationState.BlockedSeconds < .5f
+                || Vector2.DistanceSquared(_laneMinion.Position, _laneMinion.TargetUnit.Position)
+                    <= MathF.Pow(_laneMinion.Stats.Range.Total + _laneMinion.TargetUnit.CollisionRadius, 2))
             {
                 _timeSinceLastAttack = 0f;
             }
@@ -76,37 +95,25 @@ namespace AIScripts
                 _timeSinceLastAttack += diff;
             }
 
-            if (_laneMinion.StuckTime > 0.25f && _laneMinion.TargetUnit != null)
-            {
-                Ignore(_laneMinion.TargetUnit, 100f);
-                _laneMinion.SetTargetUnit(null, true);
-                _laneMinion.StuckTime = 0f;
-
-                _thinkTimer = 200f;
-            }
 
             _thinkTimer += diff;
-            if (_thinkTimer >= 200f)
+            if (_thinkTimer >= 200f || _targetSelection.Pending)
             {
                 _thinkTimer = 0f;
                 FilterTemporaryIgnoredList();
                 _behaviorTree.Evaluate();
 
-                if (_callsForHelpMayBeCleared)
-                {
-                    _callsForHelpMayBeCleared = false;
-                    _unitsAttackingAllies.Clear();
-                }
             }
         }
 
         public void OnCallForHelp(AttackableUnit attacker, AttackableUnit victim)
         {
-            if (_unitsAttackingAllies != null)
-            {
-                int priority = Math.Min(_unitsAttackingAllies.GetValueOrDefault(attacker, (int)ClassifyUnit.DEFAULT), (int)_laneMinion.ClassifyTarget(attacker, victim));
-                _unitsAttackingAllies[attacker] = priority;
-            }
+            _targetSelection?.ReceiveHelp(attacker, victim);
+        }
+
+        public void OnMovementOverlap()
+        {
+            _targetSelection?.RequestOverlap();
         }
 
         private NodeState CheckHasTarget()
@@ -119,6 +126,7 @@ namespace AIScripts
                 {
                     _laneMinion.CancelAutoAttack(false, true);
                     _laneMinion.SetTargetUnit(null, true);
+                    _laneMinion.StopMovement();
                 }
                 return NodeState.Failure;
             }
@@ -127,10 +135,11 @@ namespace AIScripts
             {
                 Ignore(currentTarget);
                 _laneMinion.SetTargetUnit(null, true);
+                _laneMinion.StopMovement();
                 return NodeState.Failure;
             }
 
-            return NodeState.Success;
+            return _targetSelection.Pending ? NodeState.Failure : NodeState.Success;
         }
 
         private NodeState OrderAttackTarget()
@@ -142,83 +151,27 @@ namespace AIScripts
             return NodeState.Success;
         }
 
-        private float ScoreTarget(AttackableUnit u, bool isCurrentTarget)
-        {
-            float score = 0f;
 
-            int priority = _unitsAttackingAllies.ContainsKey(u)
-                ? _unitsAttackingAllies[u]
-                : (int)_laneMinion.ClassifyTarget(u);
-            score += priority * 100f;
-
-            int targetingAllies = u.TargetedBy.Count(ally =>
-                ally.Team == _laneMinion.Team &&
-                ally != _laneMinion &&
-                !ally.IsDead);
-            score += targetingAllies * 150f;
-
-            float attackRange = _laneMinion.Stats.Range.Total + u.CollisionRadius;
-            float distSq = Vector2.DistanceSquared(_laneMinion.Position, u.Position);
-            bool inAttackRange = distSq <= (attackRange * attackRange);
-
-            if (inAttackRange)
-            {
-                score -= 1000f;
-            }
-            else
-            {
-                score += (float)Math.Sqrt(distSq);
-            }
-
-            if (isCurrentTarget && inAttackRange)
-            {
-                score -= 300f;
-            }
-
-            return score;
-        }
 
         private NodeState ScanForTargets()
         {
-            _callsForHelpMayBeCleared = true;
-            AttackableUnit bestTarget = null;
-            float bestScore = float.MaxValue;
-
-            var potentialTargets = _unitsAttackingAllies.Keys.ToList();
-            if (potentialTargets.Count == 0)
-            {
-                potentialTargets = ApiFunctionManager.GetUnitsInRange(
-                    _laneMinion,
-                    _laneMinion.Position,
-                    _laneMinion.Stats.AcquisitionRange.Total,
-                    true,
-                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets
-                );
-            }
-
-            foreach (var u in potentialTargets)
-            {
-                if (IsValidTarget(u) && !_temporaryIgnored.ContainsKey(u.NetId))
-                {
-                    bool isCurrent = (u == _laneMinion.TargetUnit);
-                    float score = ScoreTarget(u, isCurrent);
-
-                    if (score < bestScore)
-                    {
-                        bestScore = score;
-                        bestTarget = u;
-                    }
-                }
-            }
+            var bestTarget = _targetSelection.Select(ApiFunctionManager.EnumerateValidUnitsInRange(
+                _laneMinion, _laneMinion.Position, _laneMinion.Stats.AcquisitionRange.Total, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes
+                | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets));
 
             if (bestTarget != null)
             {
                 if (_laneMinion.TargetUnit != bestTarget)
                 {
+                    _timeSinceLastAttack = 0f;
+                    // Retargeting must not reuse a cancellable windup aimed at the old unit.
+                    if (_laneMinion.IsAttacking && !_laneMinion.HasAutoAttacked
+                        && !_laneMinion.AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                        _laneMinion.CancelAutoAttack(false, true);
                     _laneMinion.SetTargetUnit(bestTarget, true);
                 }
-                _timeSinceLastAttack = 0f;
-                return NodeState.Success;
+                return OrderAttackTarget();
             }
 
             return NodeState.Failure;
@@ -226,36 +179,73 @@ namespace AIScripts
 
         private NodeState FollowLaneWaypoints()
         {
-            if (_laneMinion.PathingWaypoints == null || _laneMinion.PathingWaypoints.Count == 0) return NodeState.Failure;
+            if (_laneMinion.PathingWaypoints == null
+                || _laneMinion.PathingWaypoints.Count == 0)
+            {
+                return NodeState.Failure;
+            }
 
-            while (_currentWaypointIndex < _laneMinion.PathingWaypoints.Count && WaypointReached())
+            while (_currentWaypointIndex < _laneMinion.PathingWaypoints.Count
+                && WaypointReached())
             {
                 _currentWaypointIndex++;
             }
 
-            if (_currentWaypointIndex < _laneMinion.PathingWaypoints.Count)
+            if (_currentWaypointIndex >= _laneMinion.PathingWaypoints.Count)
             {
-                Vector2 nextWaypoint = _laneMinion.PathingWaypoints[_currentWaypointIndex];
-
-                Vector2 currentDestination = _laneMinion.Waypoints.LastOrDefault();
-                if (Vector2.DistanceSquared(currentDestination, nextWaypoint) > 2500f)
+                if (_laneMinion.MoveOrder != OrderType.Stop)
                 {
-                    var path = ApiFunctionManager.GetPath(_laneMinion.Position, nextWaypoint, _laneMinion.PathfindingRadius);
-                    if (path == null || path.Count == 0) path = new List<Vector2> { _laneMinion.Position, nextWaypoint };
-                    _laneMinion.SetWaypoints(path);
+                    _laneMinion.UpdateMoveOrder(OrderType.Stop);
                 }
 
-                if (_laneMinion.MoveOrder != OrderType.AttackMove) _laneMinion.UpdateMoveOrder(OrderType.AttackMove);
-                return NodeState.Running;
+                return NodeState.Success;
             }
 
-            if (_laneMinion.MoveOrder != OrderType.Stop) _laneMinion.UpdateMoveOrder(OrderType.Stop);
-            return NodeState.Success;
+            Vector2 nextWaypoint =
+                _laneMinion.PathingWaypoints[_currentWaypointIndex];
+
+            Vector2 currentDestination =
+                _laneMinion.Waypoints.LastOrDefault();
+
+            bool needsPath =
+                _laneMinion.IsPathEnded()
+                || Vector2.DistanceSquared(
+                    currentDestination,
+                    nextWaypoint) > 2500.0f;
+
+            if (needsPath)
+            {
+                var path = ApiFunctionManager.GetPath(
+                    _laneMinion.Position,
+                    nextWaypoint,
+                    _laneMinion.PathfindingRadius
+                );
+
+                if (path != null && path.Count > 1)
+                {
+                    _laneMinion.SetWaypoints(path);
+                }
+                else
+                {
+                    return NodeState.Running;
+                }
+            }
+
+            if (_laneMinion.MoveOrder != OrderType.AttackMove)
+            {
+                _laneMinion.UpdateMoveOrder(OrderType.AttackMove);
+            }
+
+            return NodeState.Running;
         }
 
         private bool IsValidTarget(AttackableUnit u)
         {
-            return u != null && !u.IsDead && u.Team != _laneMinion.Team && Vector2.DistanceSquared(_laneMinion.Position, u.Position) < (_laneMinion.Stats.AcquisitionRange.Total * _laneMinion.Stats.AcquisitionRange.Total) && u.IsVisibleByTeam(_laneMinion.Team) && u.Status.HasFlag(StatusFlags.Targetable) && !ApiFunctionManager.UnitIsProtectionActive(u);
+            if (u == null || u.IsDead || u.IsToRemove() || u.Team == _laneMinion.Team) return false;
+            float range = _targetSelection.AcquisitionRange(u, _laneMinion.Stats.AcquisitionRange.Total);
+            return Vector2.DistanceSquared(_laneMinion.Position, u.Position) < range * range
+                && u.IsVisibleByTeam(_laneMinion.Team) && u.GetIsTargetableToTeam(_laneMinion.Team)
+                && !ApiFunctionManager.UnitIsProtectionActive(u);
         }
 
         private void Ignore(AttackableUnit unit, float time = 5000f)
@@ -271,7 +261,19 @@ namespace AIScripts
 
         private bool WaypointReached()
         {
-            return Vector2.DistanceSquared(_laneMinion.Position, _laneMinion.PathingWaypoints[_currentWaypointIndex]) <= 150f * 150f;
+            var waypoint = _laneMinion.PathingWaypoints[_currentWaypointIndex];
+            var position = _laneMinion.Position;
+            if (Vector2.DistanceSquared(position, waypoint) <= 150f * 150f) return true;
+            var previous = _currentWaypointIndex > 0
+                ? _laneMinion.PathingWaypoints[_currentWaypointIndex - 1] : _laneStart;
+            var segment = waypoint - previous;
+            float lengthSquared = segment.LengthSquared();
+            if (lengthSquared < .001f) return false;
+            var offset = position - waypoint;
+            float beyond = Vector2.Dot(offset, segment);
+            float cross = offset.X * segment.Y - offset.Y * segment.X;
+            return beyond >= 0
+                && cross * cross <= 150f * 150f * lengthSquared;
         }
     }
 }

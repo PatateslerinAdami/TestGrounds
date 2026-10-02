@@ -1,23 +1,29 @@
-﻿using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
-using GameServerCore.Scripting.CSharp;
+﻿using System.Numerics;
+using ItemHelpers;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemSpells
 {
-    public class YoumusBlade : ISpellScript
+    public class YoumusBlade : ItemActiveSpell
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            // TODO
-        };
+        protected override float Cooldown => 45;
 
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        protected override bool Use(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 position)
         {
-            AddBuff("YoumuusGhostblade", 6.0f, 1, spell, owner, owner);
+            AddParticleTarget(
+                owner,
+                owner,
+                "spectral_fury_cas.troy",
+                owner,
+                1f,
+                bone: "C_BUFFBONE_GLB_GROUND_LOC",
+                ignoreCasterVisibility: true
+            );
+            AddBuff("SpectralFury", 6, 1, spell, owner, owner);
+            return true;
         }
     }
 }

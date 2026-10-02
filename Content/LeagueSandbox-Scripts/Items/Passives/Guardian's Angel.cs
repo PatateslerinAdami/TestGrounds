@@ -1,12 +1,7 @@
-using Buffs;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
-using LeaguePackets.Game.Events;
 using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -14,49 +9,42 @@ namespace ItemPassives
 {
     public class ItemID_3026 : IItemScript
     {
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-        private ObjAIBase owner;
-        private Particle p;
-        private bool onCooldown = false;
+        public StatsModifier StatsModifier { get; } = new StatsModifier();
 
+        private ObjAIBase _owner;
         public void OnActivate(ObjAIBase owner)
         {
-            this.owner = owner;
-            owner.AddStatModifier(StatsModifier);
-            ApiEventManager.OnTakeDamage.AddListener(this, owner, OnTakeDamage, false);
-            AddBuff("WillRevive", float.MaxValue, 1, null, owner, owner);
+            _owner = owner;
+            ApiEventManager.OnPreDeathDamage.AddListener(this, owner, Hit);
+            OnUpdate(0);
         }
 
-        public void OnTakeDamage(DamageData data)
+        private void Hit(DamageData data)
         {
-            if (onCooldown) return;
-
-            if (owner.Stats.CurrentHealth <= data.PostMitigationDamage)
+            if (_owner.IsDead || !_owner.CanTakeDamage(data.DamageType) || _owner.HasBuff("HasBeenRevived")
+                || _owner.Stats.CurrentHealth > data.PostMitigationDamage)
             {
-                onCooldown = true;
-                data.PostMitigationDamage = 0f;
-                AddBuff("GuardianAngel", 4f, 1, null, owner, owner);
-                RemoveParticle(p);
+                return;
             }
+
+            data.PostMitigationDamage = 0;
+            AddBuff("HasBeenRevived", 300, 1, null, _owner, _owner);
+            AddBuff("GuardianAngel", 4, 1, null, _owner, _owner);
+            RemoveBuff(_owner, "WillRevive");
         }
-       
+
         public void OnUpdate(float diff)
         {
-            onCooldown = owner.HasBuff("HasBeenRevived");
-
-            if (!onCooldown && !owner.HasBuff("WillRevive"))
+            if (!_owner.HasBuff("HasBeenRevived") && !_owner.HasBuff("WillRevive"))
             {
-                AddBuff("WillRevive", float.MaxValue, 1, null, owner, owner);
-            }
-            else if (onCooldown && owner.HasBuff("WillRevive"))
-            {
-                RemoveBuff(owner, "WillRevive");
+                AddBuff("WillRevive", 0, 1, null, _owner, _owner, true);
             }
         }
 
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        public void OnDeactivate(ObjAIBase owner)
         {
-            RemoveParticle(p);
+            ApiEventManager.RemoveAllListenersForOwner(this);
+            RemoveBuff(owner, "WillRevive");
         }
     }
 }

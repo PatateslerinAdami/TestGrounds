@@ -3,12 +3,13 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 
 namespace ItemPassives;
-
-public class ItemID_3114 : IItemScript {
+public class ItemID_3114 : IItemScript
+{
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(ObjAIBase owner) {
-        StatsModifier.CooldownReduction.FlatBonus = 0.1f;
+    public void OnActivate(ObjAIBase owner)
+    {
+        StatsModifier.CooldownReduction.FlatBonus = -0.1f;
         owner.AddStatModifier(StatsModifier);
     }
 }

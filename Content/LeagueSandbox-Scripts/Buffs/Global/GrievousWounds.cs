@@ -12,19 +12,21 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 namespace Buffs;
 
 internal class GrievousWounds : IBuffGameScript {
-    private const float HealMultiplier = 0.4f;
+    private const float HealMultiplier = 0.5f;
     private Particle _grievousWoundsOverheadParticle;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
+        IsHidden = true,
         BuffType    = BuffType.COMBAT_DEHANCER,
         BuffAddType = BuffAddType.REPLACE_EXISTING
     };
 
-    public StatsModifier StatsModifier { get; }
+    public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        ItemHelpers.NativeItemPresentation.Show(buff, "GrievousWound");
         ApiEventManager.OnReceiveHeal.AddListener(this, unit, OnTakeHeal);
-        _grievousWoundsOverheadParticle = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "global_grievousWound_tar", unit,
+        _grievousWoundsOverheadParticle = AddParticleTarget(buff.SourceUnit, unit, "global_grievousWound_tar", unit,
             buff.Duration,             bone: "C_BUFFBONE_GLB_OVERHEAD_LOC");
     }
 
@@ -36,5 +38,6 @@ internal class GrievousWounds : IBuffGameScript {
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         ApiEventManager.RemoveAllListenersForOwner(this);
         RemoveParticle(_grievousWoundsOverheadParticle);
+        ItemHelpers.NativeItemPresentation.Remove(buff);
     }
 }

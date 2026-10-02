@@ -309,7 +309,8 @@ namespace LeagueSandbox.GameServer.Content
             float attackMaximumDelay = 5.0f
         )
         {
-            float result = ((attackDelayOffsetPercent + 1.0f) * 1.600f) / attackSpeedMod;
+            float result = ((attackDelayOffsetPercent + 1.0f) * GlobalData.GlobalCharacterDataConstants.AttackDelay)
+                / System.Math.Max(0.0001f, attackSpeedMod);
             return System.Math.Clamp(result, attackMinimumDelay, attackMaximumDelay);
         }
 
@@ -323,9 +324,9 @@ namespace LeagueSandbox.GameServer.Content
             float attackMaximumDelay = 5.0f
         )
         {
-            float castPercent = System.Math.Min(0.300f + attackDelayCastOffsetPercent, 0.0f);
+            float castPercent = System.Math.Max(GlobalData.GlobalCharacterDataConstants.AttackDelayCastPercent + attackDelayCastOffsetPercent, 0.0f);
             float percentDelay = GetCharacterAttackDelay(1.0f, attackDelayOffsetPercent, attackMinimumDelay, attackMaximumDelay) * castPercent;
-            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayCastOffsetPercent, attackMinimumDelay, attackMaximumDelay);
+            float attackDelay = GetCharacterAttackDelay(attackSpeedMod, attackDelayOffsetPercent, attackMinimumDelay, attackMaximumDelay);
             float result = (((attackDelay * castPercent) - percentDelay) * attackDelayCastOffsetPercentAttackSpeedRatio) + percentDelay;
             return System.Math.Min(result, attackDelay);
         }
@@ -515,7 +516,7 @@ namespace LeagueSandbox.GameServer.Content
             UseChargeTargeting = file.GetBool("SpellData", "UseChargeTargeting", UseChargeTargeting);
             UseGlobalLineIndicator = file.GetBool("SpellData", "UseGlobalLineIndicator", UseGlobalLineIndicator);
             UseMinimapTargeting = file.GetBool("SpellData", "UseMinimapTargeting", UseMinimapTargeting);
-        
+
             return this;
         }
     }

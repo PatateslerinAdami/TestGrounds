@@ -158,6 +158,40 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             CalculateTrueMoveSpeed();
         }
 
+        private readonly List<float> _tenacityFactors = new List<float>();
+        private readonly List<float> _attackSpeedSlowFactors = new List<float>();
+        private readonly List<float> _slowResistFactors = new List<float>();
+        private static float Product(List<float> factors) => factors.Aggregate(1f, (value, factor) => value * factor);
+        private static float ChangeFactors(List<float> factors, float factor, bool remove)
+        {
+            float previous = Product(factors);
+            if (remove)
+            {
+                int index = factors.FindIndex(value => Math.Abs(value - factor) < 0.0001f);
+                if (index >= 0) factors.RemoveAt(index);
+            }
+            else factors.Add(factor);
+            return previous - Product(factors);
+        }
+        private void ApplyTenacity(StatModifier modifier, bool remove)
+        {
+            if (remove) Tenacity.RemoveStatModifier(modifier); else Tenacity.ApplyStatModifier(modifier);
+            if (modifier.FlatBonus <= 0) return;
+            float linear = remove ? -modifier.FlatBonus : modifier.FlatBonus;
+            Tenacity.FlatBonus += ChangeFactors(_tenacityFactors, 1 - Math.Clamp(modifier.FlatBonus, 0, 1), remove) - linear;
+        }
+        private void ApplyAttackSpeed(StatModifier modifier, bool remove)
+        {
+            if (remove) AttackSpeedMultiplier.RemoveStatModifier(modifier); else AttackSpeedMultiplier.ApplyStatModifier(modifier);
+            if (modifier.PercentBonus >= 0) return;
+            float linear = remove ? -modifier.PercentBonus : modifier.PercentBonus;
+            AttackSpeedMultiplier.PercentBonus += -ChangeFactors(_attackSpeedSlowFactors, 1 + Math.Max(-1, modifier.PercentBonus), remove) - linear;
+        }
+        private void ApplySlowResistance(float resistance, bool remove)
+        {
+            if (resistance > 0) SlowResistPercent += ChangeFactors(_slowResistFactors, 1 - Math.Clamp(resistance, 0, 1), remove);
+            else SlowResistPercent += remove ? -resistance : resistance;
+        }
         public void AddModifier(StatsModifier modifier)
         {
             AbilityPower.ApplyStatModifier(modifier.AbilityPower);
@@ -165,7 +199,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             AddPenetrationModifier(ArmorPenetration, modifier.ArmorPenetration, _armorPenPercentMultipliers, _armorPenBonusPercentMultipliers);
             AttackDamage.ApplyStatModifier(modifier.AttackDamage);
             AttackDamagePerLevel.ApplyStatModifier(modifier.AttackDamagePerLevel);
-            AttackSpeedMultiplier.ApplyStatModifier(modifier.AttackSpeed);
+            ApplyAttackSpeed(modifier.AttackSpeed, false);
             CooldownReduction.ApplyStatModifier(modifier.CooldownReduction);
             CriticalChance.ApplyStatModifier(modifier.CriticalChance);
             CriticalDamage.ApplyStatModifier(modifier.CriticalDamage);
@@ -197,14 +231,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             {
                 MoveSpeed.ApplyStatModifier(modifier.MoveSpeed);
             }
-            CalculateTrueMoveSpeed();
-
             Range.ApplyStatModifier(modifier.Range);
             Size.ApplyStatModifier(modifier.Size);
             SpellVamp.ApplyStatModifier(modifier.SpellVamp);
-            Tenacity.ApplyStatModifier(modifier.Tenacity);
-            SlowResistPercent += modifier.SlowResistPercent;
+            ApplyTenacity(modifier.Tenacity, false);
+            ApplySlowResistance(modifier.SlowResistPercent, false);
             MultiplicativeSpeedBonus += modifier.MultiplicativeSpeedBonus;
+            CalculateTrueMoveSpeed();
         }
 
         public void RemoveModifier(StatsModifier modifier)
@@ -213,7 +246,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Armor.RemoveStatModifier(modifier.Armor);
             RemovePenetrationModifier(ArmorPenetration, modifier.ArmorPenetration, _armorPenPercentMultipliers, _armorPenBonusPercentMultipliers);
             AttackDamage.RemoveStatModifier(modifier.AttackDamage);
-            AttackSpeedMultiplier.RemoveStatModifier(modifier.AttackSpeed);
+            ApplyAttackSpeed(modifier.AttackSpeed, true);
             CooldownReduction.RemoveStatModifier(modifier.CooldownReduction);
             CriticalChance.RemoveStatModifier(modifier.CriticalChance);
             CriticalDamage.RemoveStatModifier(modifier.CriticalDamage);
@@ -247,14 +280,13 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             {
                 MoveSpeed.RemoveStatModifier(modifier.MoveSpeed);
             }
-            CalculateTrueMoveSpeed();
-
             Range.RemoveStatModifier(modifier.Range);
             Size.RemoveStatModifier(modifier.Size);
             SpellVamp.RemoveStatModifier(modifier.SpellVamp);
-            Tenacity.RemoveStatModifier(modifier.Tenacity);
-            SlowResistPercent -= modifier.SlowResistPercent;
+            ApplyTenacity(modifier.Tenacity, true);
+            ApplySlowResistance(modifier.SlowResistPercent, true);
             MultiplicativeSpeedBonus -= modifier.MultiplicativeSpeedBonus;
+            CalculateTrueMoveSpeed();
         }
 
         public float GetTotalAttackSpeed()

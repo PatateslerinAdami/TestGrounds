@@ -180,6 +180,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
 
         public virtual void HitUnit(AttackableUnit unit)
         {
+            if (IsToRemove()) return;
+
             if (SpellOrigin != null)
             {
                 SpellOrigin.ApplyEffects(unit, null, this);
@@ -191,8 +193,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
             }
 
             ObjectsHit.Add(unit);
+            HitCount++;
 
-            if (Parameters.MaximumHits > 0 && ObjectsHit.Count >= Parameters.MaximumHits)
+            if (Parameters.MaximumHits > 0 && HitCount >= Parameters.MaximumHits)
             {
                 SetToRemove();
             }
@@ -211,7 +214,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
                 // We can consecutively hit this same unit until we reach MaximumHits.
                 if (Parameters.CanHitSameTargetConsecutively)
                 {
-                    valid = true;
+                    valid = SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit, Parameters.OverrideFlags);
                 }
             }
 
@@ -228,17 +231,20 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
             if (_unitsToHit.Count > 0)
             {
                 _unitsToHit = _unitsToHit.OrderByDescending(unit => Vector2.DistanceSquared(this.Position, unit.Position)).ToList();
-                
+
                 for (int i = _unitsToHit.Count - 1; i >= 0; i--)
                 {
+                    if (IsToRemove()) break;
                     var unit = _unitsToHit[i];
-                    if (unit.IsCollidingWith(this) && FilterCollisions(unit))
+                    if (!unit.IsToRemove() && SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit, Parameters.OverrideFlags)
+                        && unit.IsCollidingWith(this) && FilterCollisions(unit))
                     {
                         HitUnit(_unitsToHit[i]);
                     }
 
                     _unitsToHit.RemoveAt(i);
                 }
+                _unitsToHit.Clear();
             }
 
             if (Parameters.SingleTick)

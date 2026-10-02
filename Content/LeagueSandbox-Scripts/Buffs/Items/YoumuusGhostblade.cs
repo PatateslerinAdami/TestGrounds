@@ -9,28 +9,34 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 
 namespace Buffs
 {
-    internal class YoumuusGhostblade : IBuffGameScript
+    public class SpectralFury : IBuffGameScript
     {
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
+            BuffAddType = BuffAddType.REPLACE_EXISTING
         };
-
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
-        Particle p;
-
+        private Buff _buff;
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            p = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "spectral_fury_activate_speed", unit, buff.Duration, size: 2);
+            _buff = buff;
             StatsModifier.MoveSpeed.PercentBonus = 0.2f;
-            StatsModifier.AttackSpeed.PercentBonus = 0.4f;
+            StatsModifier.AttackSpeed.FlatBonus = 0.4f;
             unit.AddStatModifier(StatsModifier);
         }
 
-        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+        public void OnUpdate(float diff)
         {
-            RemoveParticle(p);
+            if (_buff.TargetUnit.IsDead)
+            {
+                RemoveBuff(_buff);
+            }
         }
+    }
+
+    internal class YoumuusGhostblade : SpectralFury
+    {
     }
 }

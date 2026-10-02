@@ -26,7 +26,8 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             var champion = _playerManager.GetPeerInfo(userId).Champion;
             if (req.IsEvolve)
             {
-                if (champion.Stats.EvolvePoints <= 0)
+                if (req.Slot > 3 || champion.Stats.EvolvePoints <= 0 || (champion.Stats.EvolveFlags & (1u << req.Slot)) != 0
+                    || (champion.Model == "Viktor" && req.Slot == 3))
                 {
                     return false;
                 }

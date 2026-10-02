@@ -29,25 +29,25 @@ namespace LeagueSandbox.GameServer.API
 
             switch (char.ToUpper(point))
             {
-                case 'A': 
-                    captured = new OnCapturePointCaptured_A(); 
-                    pointId = 0; 
+                case 'A':
+                    captured = new OnCapturePointCaptured_A();
+                    pointId = 0;
                     break;
-                case 'B': 
-                    captured = new OnCapturePointCaptured_B(); 
-                    pointId = 1; 
+                case 'B':
+                    captured = new OnCapturePointCaptured_B();
+                    pointId = 1;
                     break;
-                case 'C': 
-                    captured = new OnCapturePointCaptured_C(); 
-                    pointId = 2; 
+                case 'C':
+                    captured = new OnCapturePointCaptured_C();
+                    pointId = 2;
                     break;
-                case 'D': 
-                    captured = new OnCapturePointCaptured_D(); 
-                    pointId = 3; 
+                case 'D':
+                    captured = new OnCapturePointCaptured_D();
+                    pointId = 3;
                     break;
-                case 'E': 
-                    captured = new OnCapturePointCaptured_E(); 
-                    pointId = 4; 
+                case 'E':
+                    captured = new OnCapturePointCaptured_E();
+                    pointId = 4;
                     break;
                 default:
                     _logger.Warn($"Announcement with Id {point} doesn't exist! Please use letters between A and E");
@@ -56,38 +56,38 @@ namespace LeagueSandbox.GameServer.API
 
             var capArgs = (ArgsCapturePoint)captured;
             capArgs.CapturePoint = pointId;
-            capArgs.OtherNetID = turret.NetId;
+            capArgs.OtherNetID = captor != null ? captor.NetId : turret.NetId;
 
             AttackableUnit source = captor != null ? (AttackableUnit)captor : turret;
             _game.PacketNotifier.NotifyOnEvent(captured, source);
         }
 
-        public static void AnnounceCapturePointNeutralized(Minion turret, char point)
+        public static void AnnounceCapturePointNeutralized(Minion turret, char point, AttackableUnit neutralizer = null)
         {
             IEvent neutralized;
             uint pointId = 0;
 
             switch (char.ToUpper(point))
             {
-                case 'A': 
-                    neutralized = new OnCapturePointNeutralized_A(); 
-                    pointId = 0; 
+                case 'A':
+                    neutralized = new OnCapturePointNeutralized_A();
+                    pointId = 0;
                     break;
-                case 'B': 
-                    neutralized = new OnCapturePointNeutralized_B(); 
-                    pointId = 1; 
+                case 'B':
+                    neutralized = new OnCapturePointNeutralized_B();
+                    pointId = 1;
                     break;
-                case 'C': 
-                    neutralized = new OnCapturePointNeutralized_C(); 
-                    pointId = 2; 
+                case 'C':
+                    neutralized = new OnCapturePointNeutralized_C();
+                    pointId = 2;
                     break;
-                case 'D': 
-                    neutralized = new OnCapturePointNeutralized_D(); 
-                    pointId = 3; 
+                case 'D':
+                    neutralized = new OnCapturePointNeutralized_D();
+                    pointId = 3;
                     break;
-                case 'E': 
-                    neutralized = new OnCapturePointNeutralized_E(); 
-                    pointId = 4; 
+                case 'E':
+                    neutralized = new OnCapturePointNeutralized_E();
+                    pointId = 4;
                     break;
                 default:
                     _logger.Warn($"Announcement with Id {point} doesn't exist! Please use letters between A and E");
@@ -96,8 +96,9 @@ namespace LeagueSandbox.GameServer.API
 
             var neutArgs = (ArgsCapturePoint)neutralized;
             neutArgs.CapturePoint = pointId;
-            neutArgs.OtherNetID = turret.NetId;
+            neutArgs.OtherNetID = neutralizer != null ? neutralizer.NetId : turret.NetId;
 
+            AttackableUnit source = neutralizer != null ? (AttackableUnit)neutralizer : turret;
             _game.PacketNotifier.NotifyS2C_OnEventWorld(neutralized);
         }
         public static void AnnounceChampionAscended(Champion champion)
@@ -186,7 +187,7 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyS2C_OnEventWorld(annoucement);
         }
 
-        public static void AnnounceVictoryPointThreshold(LaneTurret turret, int index)
+        public static void AnnounceVictoryPointThreshold(AttackableUnit sourceUnit, int index)
         {
             IEvent pointThreshHold;
             switch (index)
@@ -208,7 +209,7 @@ namespace LeagueSandbox.GameServer.API
                     return;
             }
 
-            _game.PacketNotifier.NotifyOnEvent(pointThreshHold, turret);
+            _game.PacketNotifier.NotifyOnEvent(pointThreshHold, sourceUnit);
         }
     }
 }

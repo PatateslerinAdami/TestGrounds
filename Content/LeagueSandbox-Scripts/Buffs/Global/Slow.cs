@@ -16,6 +16,7 @@ internal class Slow : IBuffGameScript {
     private AttackableUnit _unit;
 
     private Particle _slow;
+    private Buff _presentation;
 
     public BuffScriptMetaData BuffMetaData { get; set; } = new() {
         BuffType    = BuffType.SLOW,
@@ -26,6 +27,11 @@ internal class Slow : IBuffGameScript {
     public StatsModifier StatsModifier { get; } = new();
 
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+        if (ItemHelpers.NativeItemPresentation.IsIndicator(buff)) 
+        { 
+            _presentation = buff; 
+            return; 
+        }
         _unit    = unit;
         _owner = ownerSpell.CastInfo.Owner;
         var movementSlowAmount = buff.Variables.GetFloat("slowPercent");
@@ -41,4 +47,9 @@ internal class Slow : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) { RemoveParticle(_slow); }
+    public void OnUpdate(float diff) 
+    { 
+        if (_presentation != null) 
+            ItemHelpers.NativeItemPresentation.Sync(_presentation, diff); 
+    }
 }

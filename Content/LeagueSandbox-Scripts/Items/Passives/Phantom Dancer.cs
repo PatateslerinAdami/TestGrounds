@@ -1,22 +1,22 @@
-using GameServerCore.Enums;
-using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace ItemPassives
 {
-    public class ItemID_3046 : IItemScript
+    public class ItemID_3046 : UniqueStatItem
     {
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-
-        public void OnActivate(ObjAIBase owner)
+        protected override void Configure()
         {
-            owner.SetStatus(StatusFlags.Ghosted, true);
-            owner.AddStatModifier(StatsModifier);
         }
-        public void OnDeactivate(ObjAIBase owner)
+
+        public override void OnActivate(ObjAIBase owner)
         {
-            owner.SetStatus(StatusFlags.Ghosted, false);
+            AddBuff("ItemPhantomDancer", 0, 1, null, owner, owner, true);
+        }
+
+        public override void OnDeactivate(ObjAIBase owner)
+        {
+            RemoveBuff(owner, "ItemPhantomDancer");
         }
     }
 }

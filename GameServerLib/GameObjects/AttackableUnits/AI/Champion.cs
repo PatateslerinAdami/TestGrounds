@@ -268,7 +268,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
                 if (_goldTimer <= 0)
                 {
-                    AddGold(null, Stats.GoldPerGoldTick.Total, false);
+                    float generatedGold = Stats.GoldPerGoldTick.Total;
+                    AddGold(null, generatedGold, false);
+                    ApiEventManager.OnAmbientGold.Publish(this, generatedGold);
                     _goldTimer = GlobalData.ChampionVariables.AmbientGoldInterval;
                 }
             }

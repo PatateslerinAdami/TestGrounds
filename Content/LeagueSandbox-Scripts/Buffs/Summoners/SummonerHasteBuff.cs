@@ -13,15 +13,15 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.HASTE,
-            BuffAddType = BuffAddType.STACKS_AND_OVERLAPS,
-            MaxStacks = 5
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            MaxStacks = 1
         };
 
         public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            StatsModifier.MoveSpeed.PercentBonus = 27 / 100.0f;
+            StatsModifier.MoveSpeed.PercentBonus = unit.GetBuffWithName("ItemBootEffects")?.Variables.GetBool("distortion") == true ? 0.4f : 0.27f;
             unit.AddStatModifier(StatsModifier);
         }
     }

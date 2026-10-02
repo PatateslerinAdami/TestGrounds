@@ -51,7 +51,7 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 {
                     if (s.CastInfo.SpellSlot >= (int)SpellSlotType.InventorySlots && s.CastInfo.SpellSlot < (int)SpellSlotType.BluePillSlot)
                     {
-                        var item = s.CastInfo.Owner.Inventory.GetItem(s.SpellName);
+                        var item = s.CastInfo.Owner.Inventory.GetItem((byte)(s.CastInfo.SpellSlot - (byte)SpellSlotType.InventorySlots));
                         if (item != null)
                         {
                             _game.PacketNotifier.NotifyUseItemAns(userId, owner, item);

@@ -461,6 +461,10 @@ namespace LeagueSandbox.GameServer.API
         {
             _game.PacketNotifier.NotifyS2C_MapPing(position, (Pings)ping, sourceNetId, team);
         }
+        public static void NotifyS2C_IncrementPlayerScore(ScoreData scoreData)
+        {
+            _game.PacketNotifier.NotifyS2C_IncrementPlayerScore(scoreData);
         }
     }
+}
  

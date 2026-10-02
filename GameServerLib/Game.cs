@@ -1,13 +1,22 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Packets.Handlers;
+using GameServerCore.Packets.PacketDefinitions;
+using GameServerCore.Packets.PacketDefinitions.Requests;
+using GameServerLib;
+using GameServerLib.Handlers;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.Augments;
 using LeagueSandbox.GameServer.Chatbox;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.Handlers;
+using LeagueSandbox.GameServer.Inventory;
 using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Packets;
+using LeagueSandbox.GameServer.Packets.PacketHandlers;
 using LeagueSandbox.GameServer.Players;
+using LeagueSandbox.GameServer.Quests;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net;
-using LeagueSandbox.GameServer.Inventory;
 using PacketDefinitions420;
 using System;
 using System.Collections.Generic;
@@ -16,14 +25,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Timer = System.Timers.Timer;
-using LeagueSandbox.GameServer.Packets.PacketHandlers;
-using LeagueSandbox.GameServer.Handlers;
-using GameServerLib.Handlers;
-using GameServerCore.Packets.PacketDefinitions;
-using GameServerCore.Packets.PacketDefinitions.Requests;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.Quests;
-using LeagueSandbox.GameServer.Augments;
 
 
 namespace LeagueSandbox.GameServer
@@ -36,6 +37,7 @@ namespace LeagueSandbox.GameServer
         // Crucial Game Vars
         private PacketServer _packetServer;
         private List<GameScriptTimer> _gameScriptTimers;
+        private readonly List<GameScriptTimer> _gameScriptTimersToUpdate = new();
 
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
@@ -123,7 +125,7 @@ namespace LeagueSandbox.GameServer
 
         internal FileSystemWatcher ScriptsHotReloadWatcher { get; private set; }
         public QuestManager QuestManager { get; private set; }
-
+        public MovementManager MovementManager { get; private set; }
         /// <summary>
         /// Instantiates all game managers and handlers.
         /// </summary>
@@ -137,6 +139,7 @@ namespace LeagueSandbox.GameServer
             RequestHandler = new NetworkHandler<ICoreRequest>();
             ResponseHandler = new NetworkHandler<ICoreRequest>();
             QuestManager = new QuestManager(this);
+            MovementManager = new MovementManager(this);
         }
 
         /// <summary>
@@ -390,8 +393,9 @@ namespace LeagueSandbox.GameServer
                 }
 
                 double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                double oversleep = lastSleepDuration - timeout;
-                timeout = Math.Max(0, refreshRate - lastUpdateDuration - oversleep);
+                // The elapsed loop time already includes the previous update.
+                // Wait only for the remainder of the current frame.
+                timeout = Math.Max(0, refreshRate - lastUpdateDuration);
                 
                 _packetServer.NetLoop((uint)timeout);
             }
@@ -426,8 +430,7 @@ namespace LeagueSandbox.GameServer
             // Protection (TODO: Move this into ObjectManager).
             ProtectionManager.Update(diff);
             ChatCommandManager.GetCommands().ForEach(command => command.Update(diff));
-            _gameScriptTimers.ForEach(gsTimer => gsTimer.Update(diff));
-            _gameScriptTimers.RemoveAll(gsTimer => gsTimer.IsDead());
+            UpdateGameScriptTimers(diff);
 
             // By default, synchronize the game time between server and clients every 10 seconds
             _nextSyncTime += diff;
@@ -435,6 +438,28 @@ namespace LeagueSandbox.GameServer
             {
                 PacketNotifier.NotifySynchSimTimeS2C(GameTime);
                 _nextSyncTime = 0;
+            }
+        }
+
+        private void UpdateGameScriptTimers(float diff)
+        {
+            // Callbacks can add or cancel timers. New timers start next tick.
+            _gameScriptTimersToUpdate.Clear();
+            _gameScriptTimersToUpdate.AddRange(_gameScriptTimers);
+            try
+            {
+                foreach (var timer in _gameScriptTimersToUpdate)
+                {
+                    if (_gameScriptTimers.Contains(timer) && !timer.IsDead())
+                    {
+                        timer.Update(diff);
+                    }
+                }
+            }
+            finally
+            {
+                _gameScriptTimersToUpdate.Clear();
+                _gameScriptTimers.RemoveAll(timer => timer.IsDead());
             }
         }
 

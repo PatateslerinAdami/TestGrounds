@@ -16,6 +16,7 @@ using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using log4net;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -125,6 +126,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         private List<GameScriptTimer> _scriptTimers;
         internal LinkedList<Shield> Shields { get; } = new LinkedList<Shield>();
         private float _revealSpecificUnitTimer = 0.0f;
+        private float _persistentRevealSpecificUnitTimer = 0.0f;
         private class AnimOverrideInfo
         {
             public string OverrideValue { get; set; }
@@ -176,6 +178,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 StatusFlags.CanMove | StatusFlags.CanMoveEver |
                 StatusFlags.Targetable, true
             );
+            SetStatus(StatusFlags.NoRender, CharData.NeverRender);
             MovementParameters = null;
             Stats.AttackSpeedMultiplier.BaseValue = 1.0f;
 
@@ -281,23 +284,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             Replication.Update();
 
-            if (CanMove())
+            // Walking is integrated by MovementManager. Only forced movement
+            // belongs to the regular unit update.
+            if (CanMove() && MovementParameters != null)
             {
-                float remainingFrameTime = diff;
-                bool moved = false;
-                if (MovementParameters != null)
-                {
-                    remainingFrameTime = DashMove(diff);
-                    moved = true;
-                }
-                if (MovementParameters == null)
-                {
-                    moved = Move(remainingFrameTime);
-                }
-                if (moved)
-                {
-                    UpdateGrassState();
-                }
+                DashMove(diff);
+                UpdateGrassState();
             }
             UpdateFacing();
             if (IsDead && _death != null)
@@ -313,17 +305,30 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="durationSeconds">Reveal duration in seconds.</param>
         public void RevealSpecificUnit(float durationSeconds)
         {
+            RevealSpecificUnit(durationSeconds, false);
+        }
+
+        /// <summary>
+        /// Reveals a unit, optionally retaining detection when it enters stealth.
+        /// </summary>
+        public void RevealSpecificUnit(float durationSeconds, bool persistsThroughStealth)
+        {
             if (durationSeconds <= 0.0f)
             {
                 return;
             }
 
             _revealSpecificUnitTimer = Math.Max(_revealSpecificUnitTimer, durationSeconds);
+            if (persistsThroughStealth)
+            {
+                _persistentRevealSpecificUnitTimer = Math.Max(_persistentRevealSpecificUnitTimer, durationSeconds);
+            }
             SetStatus(StatusFlags.RevealSpecificUnit, true);
         }
 
         private void UpdateRevealSpecificUnit(float diff)
         {
+            _persistentRevealSpecificUnitTimer = Math.Max(0.0f, _persistentRevealSpecificUnitTimer - diff / 1000.0f);
             if (_revealSpecificUnitTimer <= 0.0f)
             {
                 return;
@@ -780,6 +785,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
             ApiEventManager.OnPreDealDamage.Publish(damageData.Attacker, damageData);
             ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
+            ApiEventManager.OnPreApplyDamage.Publish(this, damageData);
             var postMitigationDamage = damageData.PostMitigationDamage;
             if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
@@ -816,6 +822,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 postMitigationDamage = damageData.PostMitigationDamage;
             }
             damageData.PostMitigationDamage = postMitigationDamage;
+            ApiEventManager.OnPreDeathDamage.Publish(this, damageData);
+            postMitigationDamage = damageData.PostMitigationDamage;
             Stats.CurrentHealth = Math.Max(0.0f, Stats.CurrentHealth - postMitigationDamage);
 
             if (attacker != null && attacker.Team != Team && postMitigationDamage > 0.0f)
@@ -895,6 +903,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             SetToRemove();
 
             ApiEventManager.OnDeath.Publish(data.Unit, data);
+            foreach (var observer in _game.ObjectManager.GetChampionsInRangeFromTeam(Position, 1400, CustomConvert.GetEnemyTeam(Team), true))
+                ApiEventManager.OnNearbyDeath.Publish(observer, data);
             if (data.Unit is ObjAIBase obj)
             {
                 if (!(obj is Monster))
@@ -1068,19 +1078,29 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             _buffEffectsToEnable = 0;
             _buffEffectsToDisable = 0;
 
-            var tempBuffs = new List<Buff>(BuffList);
-            foreach (Buff buff in tempBuffs)
+            int count = BuffList.Count;
+            if (count > 0)
             {
-                if (buff.Elapsed())
+                var snapshot = ArrayPool<Buff>.Shared.Rent(count);
+                try
                 {
-                    RemoveBuff(buff);
+                    BuffList.CopyTo(snapshot, 0);
+                    for (int i = 0; i < count; i++)
+                    {
+                        Buff buff = snapshot[i];
+                        if (buff.Elapsed()) RemoveBuff(buff);
+                        else
+                        {
+                            buff.Update(diff);
+                            _buffEffectsToEnable |= buff.StatusEffectsToEnable;
+                            _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+                        }
+                    }
                 }
-                else
+                finally
                 {
-                    buff.Update(diff);
-
-                    _buffEffectsToEnable |= buff.StatusEffectsToEnable;
-                    _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+                    Array.Clear(snapshot, 0, count);
+                    ArrayPool<Buff>.Shared.Return(snapshot);
                 }
             }
 
@@ -1090,7 +1110,6 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             // Set the status effects of this unit.
             SetStatus(StatusFlags.None, true);
         }
-
         /// <summary>
         /// Teleports this unit to the given position, and optionally repaths from the new position.
         /// </summary>
@@ -1286,17 +1305,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 return true;
             }
 
-            PathHasTrueEnd = true;
-            PathTrueEnd = location;
-
             if (CanChangeWaypoints())
             {
                 var nav = _game.Map.NavigationGrid;
                 var path = nav.GetPath(Position, location, PathfindingRadius);
-                if (path != null)
+                if (path != null && SetWaypoints(path))
                 {
-                    SetWaypoints(path); // resets `PathHasTrueEnd`
                     PathHasTrueEnd = true;
+                    PathTrueEnd = location;
                     return true;
                 }
             }
@@ -1336,6 +1352,28 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             if (newWaypoints == null || newWaypoints.Count <= 1 || newWaypoints[0] != Position || (!isForced && !CanChangeWaypoints()))
             {
                 return false;
+            }
+            if (!isForced)
+            {
+                var nav = _game.Map.NavigationGrid;
+                var validated = new List<Vector2> { Position };
+                for (int i = 1; i < newWaypoints.Count; i++)
+                {
+                    var start = validated[validated.Count - 1];
+                    var end = newWaypoints[i];
+                    if (nav.CastCircle(start, end, PathfindingRadius))
+                    {
+                        var detour = nav.GetPath(start, end, PathfindingRadius);
+                        if (detour == null || detour.Count < 2) return false;
+                        validated.AddRange(detour.GetRange(1, detour.Count - 1));
+                    }
+                    else if (end != start)
+                    {
+                        validated.Add(end);
+                    }
+                }
+                if (validated.Count == 1) validated.Add(Position);
+                newWaypoints = validated;
             }
 
             _movementUpdated = true;
@@ -1534,11 +1572,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <returns>Slot of the given buff or an empty slot.</returns>
         private byte GetBuffSlot(Buff buffToLookFor = null)
         {
-            for (byte i = 1; i < BuffSlots.Length; i++) // Find the first open slot or the slot corresponding to buff
+            for (int i = 1; i < BuffSlots.Length && i <= byte.MaxValue; i++) // Byte increment would wrap at slot 255.
             {
                 if (BuffSlots[i] == buffToLookFor)
                 {
-                    return i;
+                    return (byte)i;
                 }
             }
 
@@ -1760,6 +1798,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             }
 
             Shields.AddLast(shield);
+            if (shield.Amount > 0 && shield.SourceUnit != null)
+                ApiEventManager.OnShieldAdded.Publish(shield.SourceUnit, shield);
             _game.PacketNotifier.NotifyModifyShield(this, shield.Amount, shield.Physical, shield.Magical, true);
         }
 
@@ -2031,8 +2071,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
         public void EnterStealth(float fadeTime = 0f, float value = 0.3f, bool IsFadingIn = true, float FadeTime = 0.0f, float MaxWeight = 0.2f)
         {
-            _revealSpecificUnitTimer = 0.0f;
-            SetStatus(StatusFlags.RevealSpecificUnit, false);
+            _revealSpecificUnitTimer = _persistentRevealSpecificUnitTimer;
+            SetStatus(StatusFlags.RevealSpecificUnit, _persistentRevealSpecificUnitTimer > 0.0f);
 
             _stealthCount++;
             if (_stealthCount == 1)

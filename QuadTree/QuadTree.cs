@@ -79,7 +79,7 @@ namespace System.Activities.Presentation.View
             Height = height;
         }
     }
-    
+
     /// <summary>
     /// This class efficiently stores and retrieves arbitrarily sized and positioned
     /// objects in a quad-tree data structure.  This can be used to do efficient hit
@@ -91,7 +91,7 @@ namespace System.Activities.Presentation.View
     {
         Rect bounds; // overall bounds we are indexing.
         Quadrant root;
- 
+
         public QuadTree(float top, float left, float width, float height)
         {
             bounds = new Rect(top, left, width, height);
@@ -116,10 +116,10 @@ namespace System.Activities.Presentation.View
             {
                 this.root = new Quadrant(null, this.bounds);
             }
- 
+
             Quadrant parent = this.root.Insert(node, bounds);
         }
- 
+
         /// <summary>
         /// Get a list of the nodes within the specified range of a target position.
         /// </summary>
@@ -143,27 +143,37 @@ namespace System.Activities.Presentation.View
                 yield return n.Node;
             }
         }
- 
+
         /// <summary>
         /// Get list of nodes that intersect the given bounds.
         /// </summary>
         /// <param name="bounds">The bounds to test</param>
         /// <returns>The list of nodes intersecting the given bounds</returns>
+        private readonly System.Collections.Concurrent.ConcurrentBag<List<QuadNode>> _queryBuffers = new();
+
         IEnumerable<QuadNode> GetNodes(Circle bounds)
         {
-            List<QuadNode> result = new List<QuadNode>();
-            if (this.root != null)
+            if (!_queryBuffers.TryTake(out var result)) result = new List<QuadNode>();
+            try
             {
-                this.root.GetIntersectingNodes(result, bounds);
+                // Materialize before yielding, retaining snapshot/order semantics
+                // even if a collision callback inserts objects or clears the tree.
+                if (this.root != null) this.root.GetIntersectingNodes(result, bounds);
+                foreach (var node in result) yield return node;
             }
-            return result;
+            finally
+            {
+                result.Clear();
+                // Avoid permanently retaining pathological query capacities.
+                if (result.Capacity <= 4096) _queryBuffers.Add(result);
+            }
         }
 
         public void Clear()
         {
             this.root = null;
         }
- 
+
         /// <summary>
         /// Each node stored in the tree has a position, width & height.
         /// </summary>
@@ -172,7 +182,7 @@ namespace System.Activities.Presentation.View
             public Circle Bounds;
             public QuadNode Next; // linked in a circular list.
             public T Node; // the actual visual object being stored here.
- 
+
             /// <summary>
             /// Construct new QuadNode to wrap the given node with given bounds
             /// </summary>
@@ -184,8 +194,8 @@ namespace System.Activities.Presentation.View
                 Bounds = bounds;
             }
         }
- 
- 
+
+
         /// <summary>
         /// The canvas is split up into four Quadrants and objects are stored in the quadrant that contains them
         /// and each quadrant is split up into four child Quadrants recurrsively.  Objects that overlap more than
@@ -195,17 +205,17 @@ namespace System.Activities.Presentation.View
         {
             Quadrant parent;
             Rect bounds; // quadrant bounds.
- 
+
             QuadNode nodes; // nodes that overlap the sub quadrant boundaries.
- 
+
             // The quadrant is subdivided when nodes are inserted that are 
             // completely contained within those subdivisions.
             Quadrant topLeft;
             Quadrant topRight;
             Quadrant bottomLeft;
             Quadrant bottomRight;
- 
- 
+
+
             /// <summary>
             /// Construct new Quadrant with a given bounds all nodes stored inside this quadrant
             /// will fit inside this bounds.  
@@ -222,7 +232,7 @@ namespace System.Activities.Presentation.View
                 }
                 this.bounds = bounds;
             }
- 
+
             /// <summary>
             /// Insert the given node
             /// </summary>
@@ -231,13 +241,13 @@ namespace System.Activities.Presentation.View
             /// <returns></returns>
             internal Quadrant Insert(T node, Circle bounds)
             {
- 
+
                 Debug.Assert(!bounds.isEmpty, "Cannot have empty bound");
                 if (bounds.isEmpty)
                 {
                     throw new ArgumentException("Bounds must be non zero");
                 }
- 
+
                 Quadrant toInsert = this;
                 while (true)
                 {
@@ -251,17 +261,17 @@ namespace System.Activities.Presentation.View
                     {
                         h = 1;
                     }
- 
+
                     // assumption that the Rect struct is almost as fast as doing the operations
                     // manually since Rect is a value type.
- 
+
                     Rect topLeft = new Rect(toInsert.bounds.Left, toInsert.bounds.Top, w, h);
                     Rect topRight = new Rect(toInsert.bounds.Left + w, toInsert.bounds.Top, w, h);
                     Rect bottomLeft = new Rect(toInsert.bounds.Left, toInsert.bounds.Top + h, w, h);
                     Rect bottomRight = new Rect(toInsert.bounds.Left + w, toInsert.bounds.Top + h, w, h);
- 
+
                     Quadrant child = null;
- 
+
                     // See if any child quadrants completely contain this node.
                     if (bounds.ContainedBy(topLeft))
                     {
@@ -295,7 +305,7 @@ namespace System.Activities.Presentation.View
                         }
                         child = toInsert.bottomRight;
                     }
- 
+
                     if (child != null)
                     {
                         toInsert = child;
@@ -319,7 +329,7 @@ namespace System.Activities.Presentation.View
                     }
                 }
             }
- 
+
             /// <summary>
             /// Returns all nodes in this quadrant that intersect the given bounds.
             /// The nodes are returned in pretty much random order as far as the caller is concerned.
@@ -333,33 +343,33 @@ namespace System.Activities.Presentation.View
 
                 float w = this.bounds.Width / 2;
                 float h = this.bounds.Height / 2;
- 
+
                 // assumption that the Rect struct is almost as fast as doing the operations manually since Rect is a value type.
- 
+
                 // See if any child quadrants completely contain this node.
                 if ((doNotCheck || bounds.IntersectsWith(new Rect(this.bounds.Left, this.bounds.Top, w, h))) && this.topLeft != null)
                 {
                     this.topLeft.GetIntersectingNodes(nodes, bounds, doNotCheck);
                 }
- 
+
                 if ((doNotCheck || bounds.IntersectsWith(new Rect(this.bounds.Left + w, this.bounds.Top, w, h))) && this.topRight != null)
                 {
                     this.topRight.GetIntersectingNodes(nodes, bounds, doNotCheck);
                 }
- 
+
                 if ((doNotCheck || bounds.IntersectsWith(new Rect(this.bounds.Left, this.bounds.Top + h, w, h))) && this.bottomLeft != null)
                 {
                     this.bottomLeft.GetIntersectingNodes(nodes, bounds, doNotCheck);
                 }
- 
+
                 if ((doNotCheck || bounds.IntersectsWith(new Rect(this.bounds.Left + w, this.bounds.Top + h, w, h))) && this.bottomRight != null)
                 {
                     this.bottomRight.GetIntersectingNodes(nodes, bounds, doNotCheck);
                 }
- 
+
                 GetIntersectingNodes(this.nodes, nodes, bounds, doNotCheck);
             }
- 
+
             /// <summary>
             /// Walk the given linked list of QuadNodes and check them against the given bounds.
             /// Add all nodes that intersect the bounds in to the list.

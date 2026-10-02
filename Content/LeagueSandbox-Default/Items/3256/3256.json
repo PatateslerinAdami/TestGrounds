@@ -42,6 +42,7 @@
             "FlatHPPoolMod": "0",
             "FlatHPRegenMod": "0",
             "FlatMagicDamageMod": "0",
+            "FlatMagicPenetrationMod": 15,
             "FlatMovementSpeedMod": 45,
             "FlatMPPoolMod": "0",
             "FlatMPRegenMod": "0",

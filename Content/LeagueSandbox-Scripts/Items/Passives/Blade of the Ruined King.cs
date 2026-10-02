@@ -1,38 +1,28 @@
-using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.API;
+using System;
+using GameServerCore.Enums;
 using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using GameServerCore.Enums;
 
 namespace ItemPassives
 {
-    public class ItemID_3153 : IItemScript
+    public class ItemID_3153 : OnHitItem
     {
-        public StatsModifier StatsModifier { get; private set; } = new StatsModifier();
-        private ObjAIBase _owner;
-
-        public void OnActivate(ObjAIBase owner)
-        {   _owner = owner;
-            ApiEventManager.OnHitUnit.AddListener(this, owner, TargetExecute, false);
-            owner.AddStatModifier(StatsModifier);
-        }
-        public void TargetExecute(DamageData data)
+        protected override void OnHit(DamageData data)
         {
-            if (data.Target is not LaneTurret)
+            float damage = Math.Max(10, data.Target.Stats.CurrentHealth * 0.08f);
+            if (data.Target is not Champion)
             {
-                var TargetHealth = data.Target.Stats.CurrentHealth;
-                float TargetHealthPercentDamage = 0.08f;
-                float AppliedBORKDamage = TargetHealth * TargetHealthPercentDamage;
-
-                data.Target.TakeDamage(_owner, AppliedBORKDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
-                // TODO: cap the bonus damage to minions and monsters to 60.
+                damage = Math.Min(60, damage);
             }
-        }
 
-        public void OnDeactivate(ObjAIBase owner)
-        {
-            ApiEventManager.OnHitUnit.RemoveListener(this);
+            var result = data.Target.TakeDamage(
+                Owner,
+                damage,
+                DamageType.DAMAGE_TYPE_PHYSICAL,
+                DamageSource.DAMAGE_SOURCE_PROC,
+                false
+            );
+            Owner.TakeHeal(Owner, result.PostMitigationDamage * Owner.Stats.LifeSteal.Total, HealType.LifeSteal);
         }
     }
 }

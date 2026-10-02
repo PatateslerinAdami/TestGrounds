@@ -25,7 +25,7 @@ namespace LeagueSandbox.GameServer.Content
         public float ArmorPerLevel { get; private set; } = 1.0f;
         public float AttackCastTime { get; private set; } = 0.0f;
         public float AttackDelayCastOffsetPercent { get; private set; } = 0.0f;
-        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 0.0f;
+        public float AttackDelayCastOffsetPercentAttackSpeedRatio { get; private set; } = 1.0f;
         public float AttackDelayOffsetPercent { get; private set; } = 0.0f;
         public float AttackRange { get; private set; } = 100.0f;
         public float AttackSpeedPerLevel { get; private set; }
@@ -63,6 +63,7 @@ namespace LeagueSandbox.GameServer.Content
         public int MoveSpeed { get; private set; } = 100;
         public float MpPerLevel { get; private set; } = 10.0f;
         public float MpRegenPerLevel { get; private set; }
+        public bool NeverRender { get; private set; } = false;
         public PrimaryAbilityResourceType ParType { get; private set; } = PrimaryAbilityResourceType.MANA;
         public float PathfindingCollisionRadius { get; private set; } = -1.0f;
         public float PerceptionBubbleRadius { get; private set; } = 0.0f;
@@ -112,7 +113,7 @@ namespace LeagueSandbox.GameServer.Content
             BaseStaticMpRegen = file.GetFloat("Data", "BaseStaticMPRegen", BaseStaticMpRegen);
 
             CritAttackDelayCastOffsetPercent = file.GetFloat("Data", "CritAttack_AttackDelayCastOffsetPercent", CritAttackDelayCastOffsetPercent);
-            CritAttackDelayCastOffsetPercentAttackSpeedRatio = file.GetFloat("Data", "CritAttack_AttackDelayCastOffsetPercentAttackSpeedRatio", CritAttackDelayCastOffsetPercentAttackSpeedRatio);
+            CritAttackDelayCastOffsetPercentAttackSpeedRatio = file.GetFloat("Data", "CritAttack_AttackDelayCastOffsetPercentAttackSpeedRatio", AttackDelayCastOffsetPercentAttackSpeedRatio);
             CritAttackDelayOffsetPercent = file.GetFloat("Data", "CritAttack_AttackDelayOffsetPercent", CritAttackDelayOffsetPercent);
             CritDamageBonus = file.GetFloat("Data", "CritDamageBonus", CritDamageBonus);
 
@@ -131,6 +132,7 @@ namespace LeagueSandbox.GameServer.Content
             MoveSpeed = file.GetInt("Data", "MoveSpeed", MoveSpeed);
             MpRegenPerLevel = file.GetFloat("Data", "MPRegenPerLevel", MpRegenPerLevel);
             MpPerLevel = file.GetFloat("Data", "MPPerLevel", MpPerLevel);
+            NeverRender = file.GetBool("Data", "NeverRender", NeverRender);
             PathfindingCollisionRadius = file.GetFloat("Data", "PathfindingCollisionRadius", PathfindingCollisionRadius);
             PerceptionBubbleRadius = file.GetFloat("Data", "PerceptionBubbleRadius", PerceptionBubbleRadius);
             ShouldFaceTarget = file.GetBool("Data", "ShouldFaceTarget", ShouldFaceTarget);
@@ -207,9 +209,10 @@ namespace LeagueSandbox.GameServer.Content
                     nameIndex++;
                     continue;
                 }
-                float offsetPercent = AttackDelayCastOffsetPercent = file.GetFloat("Data", $"ExtraAttack{i}_AttackDelayCastOffsetPercent", AttackDelayCastOffsetPercent);
+                float offsetPercent = file.GetFloat("Data", $"ExtraAttack{i}_AttackDelayCastOffsetPercent", AttackDelayCastOffsetPercent);
 
-                BasicAttacks[i] = new BasicAttackInfo(AttackDelayOffsetPercent, offsetPercent, AttackDelayCastOffsetPercentAttackSpeedRatio)
+                BasicAttacks[i] = new BasicAttackInfo(AttackDelayOffsetPercent, offsetPercent,
+                    file.GetFloat("Data", $"ExtraAttack{i}_AttackDelayCastOffsetPercentAttackSpeedRatio", AttackDelayCastOffsetPercentAttackSpeedRatio))
                 {
                     Name = attackName,
                     AttackCastTime = file.GetFloat("Data", $"ExtraAttack{i}_AttackCastTime", AttackCastTime),
@@ -238,7 +241,8 @@ namespace LeagueSandbox.GameServer.Content
                 float delayOffset = file.GetFloat("Data", $"{attackName}_AttackDelayOffsetPercent", AttackDelayOffsetPercent);
                 float delayCastOffsetPercent = file.GetFloat("Data", $"{attackName}_AttackDelayCastOffsetPercent", CritAttackDelayCastOffsetPercent);
 
-                BasicAttacks[index] = new BasicAttackInfo(delayOffset, delayCastOffsetPercent, CritAttackDelayCastOffsetPercentAttackSpeedRatio)
+                BasicAttacks[index] = new BasicAttackInfo(delayOffset, delayCastOffsetPercent,
+                    file.GetFloat("Data", $"ExtraCritAttack{i}_AttackDelayCastOffsetPercentAttackSpeedRatio", AttackDelayCastOffsetPercentAttackSpeedRatio))
                 {
                     Name = attackName,
                     AttackCastTime = AttackCastTime,

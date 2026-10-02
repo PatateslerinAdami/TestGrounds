@@ -1,4 +1,5 @@
 using GameServerCore.Scripting.CSharp;
+using ItemHelpers;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
@@ -15,6 +16,17 @@ namespace ItemPassives
             this.owner = owner;
             StatsModifier.AbilityPower.PercentBonus = 0.3f;
             owner.AddStatModifier(StatsModifier);
+            UpdateTooltip();
+        }
+
+        private void UpdateTooltip()
+        {
+            ItemEffectHelpers.UpdateAbilityPowerTooltip(owner, 3089, 0.3f);
+        }
+
+        public void OnUpdate(float diff)
+        {
+            UpdateTooltip();
         }
     }
 }

@@ -23,13 +23,23 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public uint NetID => Owner.NetId;
         public byte Slot { get; private set; }
         // 16 ToolTip slots per spell.
-        public ToolTipValue[] Values { get; private set; } = new ToolTipValue[16];
+        private ToolTipValue[] _values;
+        public ToolTipValue[] Values
+        {
+            get
+            {
+                if (_values == null)
+                {
+                    _values = new ToolTipValue[16];
+                    Populate(_values);
+                }
+                return _values;
+            }
+        }
         public bool Changed { get; private set; }
 
         public ToolTipData(AttackableUnit owner, Spell spell, Buff buff = null)
         {
-            Populate(Values);
-
             Owner = owner;
             Spell = spell;
             Buff = buff;
@@ -96,7 +106,8 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         // TODO: Find a use case for this.
         public void MarkAsUnchanged()
         {
-            foreach (var x in Values)
+            if (_values == null) { Changed = false; return; }
+            foreach (var x in _values)
             {
                 if (x != null)
                 {

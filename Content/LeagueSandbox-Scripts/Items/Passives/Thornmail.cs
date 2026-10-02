@@ -22,10 +22,19 @@ namespace ItemPassives
             var ReturnedIncomingDamage = damageData.Damage * 0.3f;
             var Attacker = damageData.Attacker;
             var ThornmailOwner = damageData.Target;
-
-            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
+            if (damageData.IsAutoAttack && damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
+                && damageData.Attacker != null
+                && !damageData.Attacker.IsDead
+                && damageData.DamageResultType != DamageResultType.RESULT_DODGE
+                && damageData.DamageResultType != DamageResultType.RESULT_MISS)
             {
-                Attacker.TakeDamage(ThornmailOwner, ReturnedIncomingDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false);
+                Attacker.TakeDamage(
+                    ThornmailOwner,
+                    ReturnedIncomingDamage,
+                    DamageType.DAMAGE_TYPE_MAGICAL,
+                    DamageSource.DAMAGE_SOURCE_REACTIVE,
+                    false
+                );
             }
         }
 

@@ -12,53 +12,77 @@ using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs;
-
-internal class ElixirOfSorcery : IBuffGameScript {
-    private const float BonusTrueDamage           = 25f;
+internal class ElixirOfSorcery : IBuffGameScript
+{
+    private const float BonusTrueDamage= 25f;
     private const float ChampionCooldownDurationMs = 5000f;
-
     private ObjAIBase      _owner;
+
     private bool           _isApplyingBonusDamage;
     private readonly Dictionary<uint, float> _championCooldownsMs = new();
-    
-
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_ENCHANCER,
+    public BuffScriptMetaData BuffMetaData { get; set; } = new()
+    {
+        BuffType= BuffType.COMBAT_ENCHANCER,
         BuffAddType = BuffAddType.RENEW_EXISTING,
-        MaxStacks   = 1
+        MaxStacks= 1
     };
-
     public StatsModifier StatsModifier { get; } = new();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _owner                          = ownerSpell.CastInfo.Owner;
-        StatsModifier.AbilityPower.FlatBonus     = 40f;
-        StatsModifier.ManaRegeneration.FlatBonus = 15f;
+    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
+        _owner= buff.SourceUnit;
+        StatsModifier.AbilityPower.FlatBonus = 40f;
+        StatsModifier.ManaRegeneration.FlatBonus = 3f;
         unit.AddStatModifier(StatsModifier);
         ApiEventManager.OnDealDamage.AddListener(this, _owner, OnDealDamage);
     }
 
-    private void OnDealDamage(DamageData data) {
-        if (_owner == null || data?.Target == null || _isApplyingBonusDamage) return;
-        if (data.PostMitigationDamage <= 0f) return;
-
-        var enemyChampion   = data.Target as Champion;
-        var isEnemyChampion = enemyChampion != null &&
-                              IsValidTarget(_owner, enemyChampion, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes);
-        var isEnemyTurret   = IsValidTarget(_owner, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectTurrets);
-        if (!isEnemyChampion && !isEnemyTurret) return;
-
-        if (isEnemyChampion && _championCooldownsMs.TryGetValue(enemyChampion.NetId, out var cooldownRemaining) &&
-            cooldownRemaining > 0f) {
+    private void OnDealDamage(DamageData data)
+    {
+        if (_owner == null || data?.Target == null || _isApplyingBonusDamage)
+        {
             return;
         }
 
-        if (isEnemyChampion) {
+        if (data.PostMitigationDamage <= 0f)
+        {
+            return;
+        }
+
+        var enemyChampion= data.Target as Champion;
+        var isEnemyChampion = enemyChampion != null && IsValidTarget(
+            _owner,
+            enemyChampion,
+            SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes
+        );
+        var isEnemyTurret= data.Target is BaseTurret && data.Target.Team != _owner.Team;
+        if (!isEnemyChampion && !isEnemyTurret)
+        {
+            return;
+        }
+
+        if (isEnemyChampion && _championCooldownsMs.TryGetValue(enemyChampion.NetId, out var cooldownRemaining)
+            && cooldownRemaining > 0f)
+        {
+            return;
+        }
+
+        if (isEnemyChampion)
+        {
             _championCooldownsMs[enemyChampion.NetId] = ChampionCooldownDurationMs;
         }
 
+        AddParticleTarget(
+            _owner,
+            data.Target,
+            "global_item_elixirofsorcery_tar.troy",
+            data.Target,
+            1f,
+            bone: "C_BUFFBONE_GLB_CHEST_LOC"
+        );
         _isApplyingBonusDamage = true;
-        try {
+        try
+        {
             data.Target.TakeDamage(
                 _owner,
                 BonusTrueDamage,
@@ -66,30 +90,43 @@ internal class ElixirOfSorcery : IBuffGameScript {
                 DamageSource.DAMAGE_SOURCE_PROC,
                 DamageResultType.RESULT_NORMAL
             );
-        } finally {
+        }
+        finally
+        {
             _isApplyingBonusDamage = false;
         }
     }
 
-    public void OnUpdate(float diff) {
-        if (_championCooldownsMs.Count == 0) return;
+    public void OnUpdate(float diff)
+    {
+        if (_championCooldownsMs.Count == 0)
+        {
+            return;
+        }
 
         var trackedChampions = new List<uint>(_championCooldownsMs.Keys);
-        foreach (var championNetId in trackedChampions) {
+        foreach (var championNetId in trackedChampions)
+        {
             _championCooldownsMs[championNetId] -= diff;
         }
 
         var expiredCooldowns = new List<uint>();
-        foreach (var cooldown in _championCooldownsMs) {
-            if (cooldown.Value <= 0f) expiredCooldowns.Add(cooldown.Key);
+        foreach (var cooldown in _championCooldownsMs)
+        {
+            if (cooldown.Value <= 0f)
+            {
+                expiredCooldowns.Add(cooldown.Key);
+            }
         }
 
-        foreach (var championNetId in expiredCooldowns) {
+        foreach (var championNetId in expiredCooldowns)
+        {
             _championCooldownsMs.Remove(championNetId);
         }
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
+    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
+    {
         ApiEventManager.RemoveAllListenersForOwner(this);
         _championCooldownsMs.Clear();
     }

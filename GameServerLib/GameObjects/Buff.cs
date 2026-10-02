@@ -104,7 +104,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public BuffAddType BuffAddType { get; }
         public BuffType BuffType { get; } /// TODO: Add comments to BuffType enum.
-        public float Duration { get; }
+        public float Duration { get; private set; }
         public bool Hidden { get; set; }
         public bool IsHidden => Hidden;
         public string Name { get; }
@@ -208,7 +208,6 @@ namespace LeagueSandbox.GameServer.GameObjects
             if (TargetUnit is Champion champ)
             {
                 champ.AddToolTipChange(ToolTipData);
-                LoggerProvider.GetLogger().Info("should change tooltip");
             }
         }
 
@@ -220,6 +219,13 @@ namespace LeagueSandbox.GameServer.GameObjects
         public bool IsBuffSame(string buffName)
         {
             return buffName == Name;
+        }
+
+        public void ExtendDuration(float seconds)
+        {
+            if (seconds <= 0 || _infiniteDuration || Remove) return;
+            Duration += seconds;
+            _game.PacketNotifier.NotifyNPC_BuffUpdateCount(this, Duration, TimeElapsed);
         }
 
         public void ResetTimeElapsed()

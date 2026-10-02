@@ -26,7 +26,8 @@ namespace GameServerLib.GameObjects.AttackableUnits
             float consumed = 0;
             if ((damageData.DamageType != DamageType.DAMAGE_TYPE_PHYSICAL || !Physical) &&
                 (damageData.DamageType != DamageType.DAMAGE_TYPE_MAGICAL || !Magical) &&
-                damageData.DamageType != DamageType.DAMAGE_TYPE_MIXED)
+                damageData.DamageType != DamageType.DAMAGE_TYPE_MIXED &&
+                !(damageData.DamageType == DamageType.DAMAGE_TYPE_TRUE && Physical && Magical))
             {
                 return consumed;
             }

@@ -15,6 +15,11 @@ namespace GameServerCore.Scripting.CSharp
         {
         }
 
+        // Queued by local movement, implementations must not mutate movement here.
+        void OnMovementOverlap()
+        {
+        }
+
         void OnCallForHelp(AttackableUnit attacker, AttackableUnit victium)
         {
         }

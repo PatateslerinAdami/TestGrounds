@@ -18,18 +18,26 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
         public override bool HandlePacket(int userId, SwapItemsRequest req)
         {
-            if (req.Source > 6 || req.Destination > 6)
+            if (req.Source >= 6 || req.Destination >= 6 || req.Source == req.Destination)
             {
                 return false;
             }
 
             var champion = _playerManager.GetPeerInfo(userId).Champion;
 
-            // "Holy shit this needs refactoring" - Mythic, April 13th 2016
+            var sourceSpellSlot = (byte)(req.Source + Shop.ITEM_ACTIVE_OFFSET);
+            var destinationSpellSlot = (byte)(req.Destination + Shop.ITEM_ACTIVE_OFFSET);
             champion.Inventory.SwapItems(req.Source, req.Destination);
+
+            champion.SwapSpells(sourceSpellSlot, destinationSpellSlot, networked: false);
             _game.PacketNotifier.NotifySwapItemAns(champion, req.Source, req.Destination);
-            champion.SwapSpells((byte)(req.Source + Shop.ITEM_ACTIVE_OFFSET),
-                (byte)(req.Destination + Shop.ITEM_ACTIVE_OFFSET));
+
+            foreach (var slot in new[] { sourceSpellSlot, destinationSpellSlot })
+            {
+                var spell = champion.Spells[slot];
+                _game.PacketNotifier.NotifyCHAR_SetCooldown(champion, slot, spell.CurrentCooldown,
+                    spell.GetCooldown(), userId);
+            }
             return true;
         }
     }

@@ -13,6 +13,7 @@ using log4net;
 using System;
 using System.Activities.Presentation.View;
 using System.Collections.Generic;
+using System.Buffers;
 using System.Linq;
 using System.Numerics;
 
@@ -276,7 +277,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 CharScript = new CharScriptEmpty();
             }
 
-            AIScript = game.ScriptEngine.CreateObject<IAIScript>($"AIScripts", aiScript) ?? new EmptyAIScript();
+            AIScript = string.IsNullOrEmpty(aiScript)
+                || aiScript == "Core.Scripting.CSharp.EmptyAIScript"
+                || aiScript == typeof(EmptyAIScript).FullName
+                ? new EmptyAIScript()
+                : game.ScriptEngine.CreateObject<IAIScript>("AIScripts", aiScript) ?? new EmptyAIScript();
             if (enableScripts)
             {
                 try
@@ -319,7 +324,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public void LoadCharScript(Spell spell = null)
         {
-            CharScript = CSharpScriptEngine.CreateObjectStatic<ICharScript>("CharScripts", $"CharScript{Model}") ?? new CharScriptEmpty();
+            CharScript = _game.ScriptEngine.CreateObject<ICharScript>("CharScripts", $"CharScript{Model}") ?? new CharScriptEmpty();
             _charScriptActivated = false;
             _charScriptPostActivated = false;
         }
@@ -409,8 +414,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override bool CanMove()
         {
-            return (!IsDead
-                && MovementParameters != null)
+            return !IsDead && ((MovementParameters != null)
                 || (Status.HasFlag(StatusFlags.CanMove) && Status.HasFlag(StatusFlags.CanMoveEver)
                 && (MoveOrder != OrderType.CastSpell && _castingSpell == null)
                 && (ChannelSpell == null || (ChannelSpell != null && ChannelSpell.SpellData.CanMoveWhileChanneling))
@@ -419,7 +423,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || Status.HasFlag(StatusFlags.Rooted)
                 || Status.HasFlag(StatusFlags.Sleep)
                 || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)));
+                || Status.HasFlag(StatusFlags.Suppressed))));
         }
 
         public override bool CanChangeWaypoints()
@@ -476,6 +480,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="spell">Spell to check.</param>
         public bool CanCast(Spell spell = null)
         {
+            if (IsDead && spell?.SpellData.CanOnlyCastWhileDead == true)
+                return ApiEventManager.OnCanCast.Publish(this, spell);
+
             // TODO: Verify if all cases are accounted for.
             return ApiEventManager.OnCanCast.Publish(this, spell)
                 && Status.HasFlag(StatusFlags.CanCast)
@@ -532,6 +539,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     // Minion attacking an allied champion.
                     case Minion _ when victium is Champion:
                         return ClassifyUnit.MINION_ATTACKING_CHAMPION;
+                    case Minion _ when victium is Champion:
+                        return ClassifyUnit.MINION_ATTACKING_CHAMPION;
                     // Minion attacking lane minion
                     case Minion _ when victium is LaneMinion:
                         return ClassifyUnit.MINION_ATTACKING_MINION;
@@ -577,25 +586,372 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             return ClassifyUnit.DEFAULT;
         }
 
+        private Movement.NavigationActorState _navigationState;
+        public Movement.NavigationActorState NavigationState => _navigationState ??= new();
+        private bool _applyingRecoveryPath;
+        private const float LaneMinionCollisionRefreshMs = 500.0f;
+        private float _collisionCorrectionMs;
+        private Vector2 _collisionErrorDisplacement;
+        private bool _collisionRefreshPending;
+
+        public void OnMovementSnapshotCreated()
+        {
+            _collisionCorrectionMs = 0;
+            _collisionErrorDisplacement = Vector2.Zero;
+            _collisionRefreshPending = false;
+        }
+
+        public override bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
+        {
+            if (!base.SetWaypoints(newWaypoints, isForced)) return false;
+            var goal = Waypoints.Last();
+            bool changedGoal = !NavigationState.Goal.HasValue
+                || Vector2.DistanceSquared(NavigationState.Goal.Value, goal) > 1;
+            if (!_applyingRecoveryPath)
+            {
+                NavigationState.Goal = goal;
+                if (changedGoal || this is Champion) NavigationState.NewPath();
+                else NavigationState.RepairedPath();
+            }
+            else NavigationState.RepairedPath();
+            NavigationState.Waiting = false;
+            OnMovementSnapshotCreated();
+            return true;
+        }
+
+        public override void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl, bool networked = true)
+        {
+            NavigationState.Goal = null;
+            NavigationState.Waiting = false;
+            NavigationState.Progress();
+            base.StopMovement(reason, networked);
+        }
+
+        public void RepairCrowdPath()
+        {
+            var state = NavigationState;
+            if (this is LaneMinion lane && TargetUnit != null && !TargetUnit.IsDead)
+            {
+                lane.TryUpdateAttackApproach(Stats.Range.Total + TargetUnit.CollisionRadius, recovery: true);
+                return;
+            }
+            if (!state.Goal.HasValue || state.RetrySeconds > 0
+                || !_game.MovementManager.TryReservePathSearch(this)) return;
+            var path = _game.Map.PathingHandler.GetActorPath(this, state.Goal.Value, allowPartial: true);
+            ApplyRecoveryPath(path);
+            state.RepathAttempt(this is Champion || this is Pet);
+        }
+
+        protected void ApplyRecoveryPath(List<Vector2> path)
+        {
+            var state = NavigationState;
+            _applyingRecoveryPath = true;
+            try
+            {
+                if (path != null && path.Count > 1 && SetWaypoints(path)) state.LastReason = "route repaired";
+                else state.LastReason = "waiting for route";
+            }
+            finally { _applyingRecoveryPath = false; }
+        }
+
+        private float RemainingRouteDistance()
+        {
+            float distance = 0;
+            var start = Position;
+            for (int i = CurrentWaypointKey; i < Waypoints.Count; i++)
+            {
+                distance += Vector2.Distance(start, Waypoints[i]);
+                start = Waypoints[i];
+            }
+            return distance;
+        }
+
         public override bool Move(float diff)
         {
-            // If we have waypoints, but our move order is one of these, we shouldn't move.
-            if (MoveOrder == OrderType.CastSpell
-                || MoveOrder == OrderType.OrderNone
-                || MoveOrder == OrderType.Stop
-                || MoveOrder == OrderType.Taunt)
+            if (!float.IsFinite(diff) || diff <= 0) return false;
+            bool moved = false;
+            var tickStart = Position;
+            float remaining = diff;
+            int limit = Waypoints.Count + 1;
+
+            while (remaining > 0.0001f && limit-- > 0)
+            {
+                int before = CurrentWaypointKey;
+                float slice = remaining;
+                if (before < Waypoints.Count && GetMoveSpeed() > 0)
+                {
+                    float distance = Vector2.Distance(Position, Waypoints[before]);
+                    if (distance > 0.00001f)
+                        slice = Math.Min(slice, distance / GetMoveSpeed() * 1000.0f);
+                }
+                moved |= MoveSegment(slice);
+                remaining -= slice;
+                if (CurrentWaypointKey <= before || IsPathEnded()) break;
+            }
+            Velocity = Position - tickStart;
+            NavigationState.LastDeltaSeconds = diff / 1000.0f;
+            NavigationState.AcceptedMovement = Velocity;
+            _game.Map.CollisionHandler.Actors.Update(this);
+            return moved;
+        }
+
+        private bool MoveSegment(float diff)
+        {
+            if (MoveOrder == OrderType.CastSpell || MoveOrder == OrderType.OrderNone
+                || MoveOrder == OrderType.Stop || MoveOrder == OrderType.Taunt)
             {
                 Velocity = Vector2.Zero;
                 return false;
             }
+            var state = NavigationState;
+            if (IsPathEnded())
+            {
+                if (state.Goal.HasValue && Vector2.DistanceSquared(Position, state.Goal.Value) > 1)
+                    RepairCrowdPath();
+                if (IsPathEnded()) { Velocity = Vector2.Zero; return false; }
+            }
+            if (_game.Map.NavigationGrid.CastCircle(Position, CurrentWaypoint, PathfindingRadius))
+            {
+                RepairCrowdPath();
+                if (_game.Map.NavigationGrid.CastCircle(Position, CurrentWaypoint, PathfindingRadius))
+                {
+                    state.LastReason = "terrain blocked";
+                    if (!state.Waiting) _movementUpdated = true;
+                    state.Waiting = true;
+                    Velocity = Vector2.Zero;
+                    return false;
+                }
+            }
+            var oldPosition = Position;
+            int oldWaypointKey = CurrentWaypointKey;
+            var desired = BuildDesiredPathMovement(diff, out int idealWaypointKey);
+            state.RequestedMovement += desired;
+            if (desired.LengthSquared() <= 1e-8f)
+            {
+                CurrentWaypointKey = idealWaypointKey;
+                Velocity = Vector2.Zero;
+                if (IsPathEnded())
+                {
+                    _movementUpdated = true;
+                    if (state.Goal.HasValue && Vector2.DistanceSquared(Position, state.Goal.Value) <= 1)
+                        state.Goal = null;
+                }
+                return true;
+            }
+            float seconds = diff * .001f;
+            var movement = this is Champion champion
+                ? _game.MovementManager.Champions.Solve(champion, desired, seconds)
+                : _game.MovementManager.AiPaths.Solve(this, desired, seconds);
+            state.CandidateMovement += movement;
+            // All collision and overlap work is already included in this displacement.
+            Position = oldPosition + movement;
+            Velocity = movement;
+            bool waiting = movement.LengthSquared() < .01f;
+            if (waiting != state.Waiting)
+            {
+                _movementUpdated = true;
+            }
+            state.Waiting = waiting;
+            bool followsPath = Vector2.DistanceSquared(movement, desired) <= .0001f;
+            if (followsPath)
+                CurrentWaypointKey = idealWaypointKey;
+            else
+            {
+                CurrentWaypointKey = oldWaypointKey;
+                AdvanceWaypointsFromActualMovement(oldPosition, Position);
+            }
 
-            Vector2 oldPosition = Position;
+            if (!waiting)
+            {
+                _collisionCorrectionMs += diff;
+                _collisionErrorDisplacement += this is LaneMinion
+                    ? state.SolverConstraintDelta : movement - desired;
+                // Remember even brief steering until a fresh origin is sent.
+                // A later straight step or cancelling adjustment must not erase it.
+                _collisionRefreshPending |= this is LaneMinion && !followsPath;
+            }
+            float correctionThreshold = Math.Max(8, PathfindingRadius * .5f);
+            bool constraintCorrectionDue = _collisionCorrectionMs >= 250
+                && _collisionErrorDisplacement.LengthSquared() >= correctionThreshold * correctionThreshold;
+            bool steeringRefreshDue = !waiting && _collisionRefreshPending
+                && _collisionCorrectionMs >= LaneMinionCollisionRefreshMs;
+            if (constraintCorrectionDue || steeringRefreshDue)
+            {
+                _movementUpdated = true;
+            }
+            if (state.ObserveProgress(seconds, RemainingRouteDistance(), GetMoveSpeed()))
+            {
+                StuckTime += seconds;
+                state.LastReason = "recovering blocked route";
+                RepairCrowdPath();
+            }
+            else
+            {
+                StuckTime = 0;
+                state.LastReason = waiting ? "yielding" : "moving";
+            }
+            if (IsPathEnded())
+            {
+                _movementUpdated = true;
+                if (state.Goal.HasValue && Vector2.DistanceSquared(Position, state.Goal.Value) <= 1)
+                    state.Goal = null;
+            }
+            return movement.LengthSquared() > 0;
+        }
+        private Vector2 BuildDesiredPathMovement(
+    float diff,
+    out int resultingWaypointKey)
+        {
+            resultingWaypointKey =
+                CurrentWaypointKey;
 
-            bool result = base.Move(diff);
+            Vector2 simulatedPosition =
+                Position;
 
-            Velocity = Position - oldPosition;
+            float remainingDistance =
+                GetMoveSpeed() * 0.001f * diff;
 
-            return result;
+            while (resultingWaypointKey < Waypoints.Count)
+            {
+                Vector2 waypoint =
+                    Waypoints[resultingWaypointKey];
+
+                Vector2 direction =
+                    waypoint - simulatedPosition;
+
+                float distance =
+                    direction.Length();
+
+                if (distance <= 0.00001f)
+                {
+                    simulatedPosition = waypoint;
+                    resultingWaypointKey++;
+                    continue;
+                }
+
+                if (remainingDistance < distance)
+                {
+                    simulatedPosition +=
+                        direction / distance
+                        * remainingDistance;
+
+                    remainingDistance = 0.0f;
+                    break;
+                }
+
+                simulatedPosition = waypoint;
+                resultingWaypointKey++;
+                break;
+            }
+
+            return simulatedPosition - Position;
+        }
+
+        private void AdvanceWaypointsFromActualMovement(
+            Vector2 start,
+            Vector2 end)
+        {
+            float reachRadius =
+                Math.Clamp(
+                    PathfindingRadius * 0.25f,
+                    4.0f,
+                    16.0f
+                );
+
+            float reachRadiusSq =
+                reachRadius * reachRadius;
+
+            while (CurrentWaypointKey < Waypoints.Count)
+            {
+                Vector2 waypoint =
+                    Waypoints[CurrentWaypointKey];
+
+                
+                if (Vector2.DistanceSquared(
+                        end,
+                        waypoint) <= reachRadiusSq)
+                {
+                    if (CurrentWaypointKey + 1 < Waypoints.Count
+                        && _game.Map.NavigationGrid.CastCircle(end,
+                            Waypoints[CurrentWaypointKey + 1], PathfindingRadius)) break;
+                    // The final destination must actually be reached, not just passed nearby.
+                    if (CurrentWaypointKey == Waypoints.Count - 1
+                        && Vector2.DistanceSquared(end, waypoint) > 0.25f) break;
+                    start = waypoint;
+                    CurrentWaypointKey++;
+                    continue;
+                }
+
+                Vector2 movement =
+                    end - start;
+
+                float movementLengthSq =
+                    movement.LengthSquared();
+
+                if (movementLengthSq <= 0.00001f)
+                {
+                    break;
+                }
+
+                // Did our actual movement segment pass close enough
+                // to this waypoint?
+                float t =
+                    Vector2.Dot(
+                        waypoint - start,
+                        movement
+                    ) / movementLengthSq;
+
+                t = Math.Clamp(t, 0.0f, 1.0f);
+
+                Vector2 closest =
+                    start + movement * t;
+
+                if (Vector2.DistanceSquared(
+                        closest,
+                        waypoint) <= reachRadiusSq)
+                {
+                    if (CurrentWaypointKey + 1 < Waypoints.Count
+                        && _game.Map.NavigationGrid.CastCircle(end,
+                            Waypoints[CurrentWaypointKey + 1], PathfindingRadius)) break;
+                    // The final destination must actually be reached, not just passed nearby.
+                    if (CurrentWaypointKey == Waypoints.Count - 1
+                        && Vector2.DistanceSquared(end, waypoint) > 0.25f) break;
+                    start = waypoint;
+                    CurrentWaypointKey++;
+                    continue;
+                }
+
+                break;
+            }
+        }
+        public void UpdatePathMovement(float diff)
+        {
+            NavigationState.AdvanceTime(diff * .001f);
+
+            if (MovementParameters != null)
+            {
+                return;
+            }
+
+            if (!CanMove())
+            {
+                Velocity = Vector2.Zero;
+                StuckTime = 0.0f;
+                return;
+            }
+
+            bool moved = Move(diff);
+
+            if (moved)
+            {
+                UpdateGrassState();
+            }
+            else
+            {
+                Velocity = Vector2.Zero;
+            }
+
+            UpdateFacing();
         }
 
         /// <summary>
@@ -1055,6 +1411,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 return cooldown;
             }
 
+            if (spell.CastInfo.SpellSlot >= (byte)SpellSlotType.BasicAttackNormalSlots)
+                // Windup/animation timing must not determine attack cadence.
+                // Use the same authoritative attack speed exposed by Stats.
+                return cooldown;
+
             // Auto-attack overrides in non-basic slots can have longer cycle times.
             if (spell.CastInfo.SpellSlot < (byte)SpellSlotType.BasicAttackNormalSlots)
             {
@@ -1379,8 +1740,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="slot">Slot of the spell to replace.</param>
         /// <param name="enabled">Whether or not the new spell should be enabled.</param>
         /// <param name="networkOld">Whether or not to notify clients of this change using an older packet method.</param>
+        /// <param name="networked">Whether to send spell-name changes. Item purchases install their client spells through BuyItemAns.</param>
         /// <returns>Newly created spell set.</returns>
-        public Spell SetSpell(string name, byte slot, bool enabled, bool networkOld = false)
+        public Spell SetSpell(string name, byte slot, bool enabled, bool networkOld = false, bool networked = true)
         {
             if (!Spells.ContainsKey(slot) || Spells[slot].CastInfo.IsAutoAttack)
             {
@@ -1412,7 +1774,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Stats.SetSpellEnabled(slot, enabled);
             }
 
-            if (this is Champion champion)
+            if (networked && this is Champion champion)
             {
                 int userId = _game.PlayerManager.GetClientInfoByChampion(champion).ClientId;
                 // TODO: Verify if this is all that is needed.
@@ -1622,7 +1984,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         /// <param name="slot1">Slot of the spell to put into slot2.</param>
         /// <param name="slot2">Slot of the spell to put into slot1.</param>
-        public void SwapSpells(byte slot1, byte slot2)
+        public void SwapSpells(byte slot1, byte slot2, bool networked = true)
         {
             if (Spells[slot1].CastInfo.IsAutoAttack || Spells[slot2].CastInfo.IsAutoAttack)
             {
@@ -1640,11 +2002,18 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             Spells[slot1].CastInfo.SpellSlot = slot1;
             Spells[slot2].CastInfo.SpellSlot = slot2;
+            Spells[slot1].ToolTipData.SetSlot((byte)(slot1 + 60));
+            Spells[slot2].ToolTipData.SetSlot((byte)(slot2 + 60));
+            if (this is Champion tooltipOwner)
+            {
+                tooltipOwner.AddToolTipChange(Spells[slot1].ToolTipData);
+                tooltipOwner.AddToolTipChange(Spells[slot2].ToolTipData);
+            }
 
             Stats.SetSpellEnabled(slot1, Stats.GetSpellEnabled(slot2));
             Stats.SetSpellEnabled(slot2, enabledBuffer);
 
-            if (this is Champion champion)
+            if (networked && this is Champion champion)
             {
                 int clientId = _game.PlayerManager.GetClientInfoByChampion(champion).ClientId;
                 _game.PacketNotifier.NotifyS2C_SetSpellData(clientId, NetId, slot2Name, slot1);
@@ -1697,6 +2066,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void OnAfterSync()
         {
+            if (_movementUpdated) OnMovementSnapshotCreated();
             base.OnAfterSync();
             TryPostActivateCharScript();
             TryPostActivateSpellScripts();
@@ -1704,6 +2074,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void Update(float diff)
         {
+            // Elapsed time belongs to the existing cooldown, never an attack
+            // started by scripts or targeting later in this update.
+            if (_autoAttackCurrentCooldown > 0)
+                _autoAttackCurrentCooldown = Math.Max(0, _autoAttackCurrentCooldown - diff / 1000.0f);
             if (delayedSpellPackets.Count > 0) invisSent = true;
             base.Update(diff);
             try
@@ -1727,10 +2101,24 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
             }
 
-            // bit of a hack
-            foreach (var s in new List<Spell>(Spells.Values))
             {
-                s.Update(diff);
+                // Keep snapshot semantics, a script may replace spells while updating.
+                // Local rented storage also remains safe if a callback reenters an update.
+                int count = Spells.Count;
+                if (count > 0)
+                {
+                    var snapshot = ArrayPool<Spell>.Shared.Rent(count);
+                    try
+                    {
+                        Spells.Values.CopyTo(snapshot, 0);
+                        for (int i = 0; i < count; i++) snapshot[i].Update(diff);
+                    }
+                    finally
+                    {
+                        Array.Clear(snapshot, 0, count);
+                        ArrayPool<Spell>.Shared.Return(snapshot);
+                    }
+                }
             }
 
             if (Inventory != null)
@@ -1738,13 +2126,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Inventory.OnUpdate(diff);
             }
 
-            UpdateAssistMarkers();
-            UpdateTarget();
-
-            if (_autoAttackCurrentCooldown > 0)
             {
-                _autoAttackCurrentCooldown -= diff / 1000.0f;
+                UpdateAssistMarkers();
+                UpdateTarget();
             }
+
 
             if (_lastPetSpawned != null && _lastPetSpawned.IsDead)
             {
@@ -1800,37 +2186,38 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
         }
 
+        private float _nextCallForHelpMs;
+        private AttackableUnit _lastHelpAttacker;
+
         public override void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
             base.TakeDamage(damageData, damageText, sourceScript);
-
             var attacker = damageData.Attacker;
-            var objects = _game.ObjectManager.GetObjects();
-            foreach (var it in objects)
+            if (attacker == null || attacker == this || attacker.Team == Team
+                || damageData.DamageSource == DamageSource.DAMAGE_SOURCE_INTERNALRAW
+                || Status.HasFlag(StatusFlags.SuppressCallForHelp)
+                || attacker.Status.HasFlag(StatusFlags.CallForHelpSuppressor)) return;
+
+            var settings = Content.GlobalData.CallForHelpVariables;
+            float now = _game.GameTime;
+            // A new attacker must not be hidden by a previous attacker's rate limit.
+            if (attacker == _lastHelpAttacker && now < _nextCallForHelpMs) return;
+            _lastHelpAttacker = attacker;
+            _nextCallForHelpMs = now + Math.Max(0, settings.Delay) * 1000f;
+            float radius = Math.Max(0, settings.Radius);
+            var responders = _game.Map.CollisionHandler.GetAIUnitsInRadius(Position, radius);
+            foreach (var u in responders)
             {
-                if (it.Value is ObjAIBase u)
-                {
-                    float acquisitionRange = Stats.AcquisitionRange.Total;
-                    float acquisitionRangeSquared = acquisitionRange * acquisitionRange;
-                    if (
-                        u != this
-                        && !u.IsDead
-                        && u.Team == Team
-                        && u.AIScript.AIScriptMetaData.HandlesCallsForHelp
-                        && Vector2.DistanceSquared(u.Position, Position) <= acquisitionRangeSquared
-                        && Vector2.DistanceSquared(u.Position, attacker.Position) <= acquisitionRangeSquared
-                    )
-                    {
-                        try
-                        {
-                            u.AIScript.OnCallForHelp(attacker, this);
-                        }
-                        catch (Exception e)
-                        {
-                            _logger.Error(null, e);
-                        }
-                    }
-                }
+                if (u == this || u.IsDead || u.Team != Team || u.IsToRemove()
+                    || !u.AIScript.AIScriptMetaData.HandlesCallsForHelp
+                    || u.Status.HasFlag(StatusFlags.IgnoreCallForHelp)
+                    || Vector2.DistanceSquared(u.Position, Position) > radius * radius) continue;
+                float buffer = u is BaseTurret ? settings.TurretRadius
+                    : u.IsMelee ? settings.MeleeRadius : settings.RangedRadius;
+                float responseRange = Math.Max(0, u.Stats.Range.Total + attacker.CollisionRadius + buffer);
+                if (Vector2.DistanceSquared(u.Position, attacker.Position) > responseRange * responseRange) continue;
+                try { u.AIScript.OnCallForHelp(attacker, this); }
+                catch (Exception e) { _logger.Error(null, e); }
             }
         }
 
@@ -1991,38 +2378,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     // Acquires the closest target.
                     // TODO: Make a function which uses this method and use it for every case of target acquisition (ex minions, turrets, attackmove).
-                    if (MoveOrder == OrderType.AttackMove)
+                    if (MoveOrder == OrderType.AttackMove && !AIScript.AIScriptMetaData.HandlesTargetAcquisition)
                     {
                         if (_autoAttackCurrentCooldown > 0)
                         {
                             return;
                         }
 
-                        var objects = _game.ObjectManager.GetObjects();
-                        var distanceSqrToTarget = 25000f * 25000f;
-                        AttackableUnit nextTarget = null;
-                        // Previously `Math.Max(Stats.Range.Total, Stats.AcquisitionRange.Total)` which is incorrect
-                        var range = Stats.AcquisitionRange.Total;
-
-                        foreach (var it in objects)
-                        {
-                            if (!(it.Value is AttackableUnit u) ||
-                                u.IsDead ||
-                                u.Team == Team ||
-                                Vector2.DistanceSquared(Position, u.Position) > range * range ||
-                                !u.Status.HasFlag(StatusFlags.Targetable))
-                            {
-                                continue;
-                            }
-
-                            if (!(Vector2.DistanceSquared(Position, u.Position) < distanceSqrToTarget))
-                            {
-                                continue;
-                            }
-
-                            distanceSqrToTarget = Vector2.DistanceSquared(Position, u.Position);
-                            nextTarget = u;
-                        }
+                        var nextTarget = _game.ObjectManager.FindAttackMoveTarget(this);
 
                         if (nextTarget != null)
                         {

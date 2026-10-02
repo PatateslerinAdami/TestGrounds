@@ -37,6 +37,7 @@ namespace GameServerCore.Enums
         RegisterWithLocalServiceDiscovery = 1 << 0x1A,
         MinionFarmingBounty = 1 << 0x1B,
         TeleportToDestroyedTowers = 1 << 0x1C,
-        NonRefCountedCharacterStates = 1 << 0x1D
+        NonRefCountedCharacterStates = 1 << 0x1D,
+        NewHudInventory = 1UL << 0x20
     }
 }

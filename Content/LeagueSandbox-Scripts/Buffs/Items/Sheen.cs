@@ -20,19 +20,23 @@ namespace Buffs
             BuffAddType = BuffAddType.REPLACE_EXISTING,
             MaxStacks = 1
         };
-
         public StatsModifier StatsModifier { get; } = new StatsModifier();
 
         private ObjAIBase _owner;
         private Buff _buff;
-
+        private Buff _presentation;
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
+            if (ItemHelpers.NativeItemPresentation.IsIndicator(buff))
+            {
+                _presentation = buff;
+                return;
+            }
+
             if (unit is ObjAIBase ai)
             {
                 _owner = ai;
                 _buff = buff;
-
                 ApiEventManager.OnHitUnit.AddListener(this, _owner, OnHitUnit);
             }
         }
@@ -48,21 +52,31 @@ namespace Buffs
             {
                 float SheenBonusDamage = _owner.Stats.AttackDamage.BaseValue;
                 float TrinityBonusDamage = _owner.Stats.AttackDamage.BaseValue * 2f;
-
                 Spell sheenItemSpell = GetSheenSpell();
                 Spell TrinitySheenItemSpell = GetTrinitySheenSpell();
-
                 if (sheenItemSpell != null)
                 {
                     sheenItemSpell.SetCooldown(1.5f, true);
                     RemoveBuff(_buff);
-                    damageData.Target.TakeDamage(_owner, SheenBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                    damageData.Target.TakeDamage(
+                        _owner,
+                        SheenBonusDamage,
+                        DamageType.DAMAGE_TYPE_PHYSICAL,
+                        DamageSource.DAMAGE_SOURCE_PROC,
+                        false
+                    );
                 }
                 else if (TrinitySheenItemSpell != null)
                 {
                     TrinitySheenItemSpell.SetCooldown(1.5f, true);
                     RemoveBuff(_buff);
-                    damageData.Target.TakeDamage(_owner, TrinityBonusDamage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                    damageData.Target.TakeDamage(
+                        _owner,
+                        TrinityBonusDamage,
+                        DamageType.DAMAGE_TYPE_PHYSICAL,
+                        DamageSource.DAMAGE_SOURCE_PROC,
+                        false
+                    );
                 }
                 else
                 {
@@ -85,6 +99,7 @@ namespace Buffs
                     }
                 }
             }
+
             return null;
         }
 
@@ -102,7 +117,16 @@ namespace Buffs
                     }
                 }
             }
+
             return null;
+        }
+
+        public void OnUpdate(float diff)
+        {
+            if (_presentation != null)
+            {
+                ItemHelpers.NativeItemPresentation.Sync(_presentation, diff);
+            }
         }
     }
 }

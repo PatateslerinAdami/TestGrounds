@@ -20,6 +20,7 @@ namespace LeagueSandbox.GameServer.Quests
             _allQuests.Add(new TheHuntIsOnQuest(_game));
             _allQuests.Add(new ReachLevel3Quest(_game));
             _allQuests.Add(new KillZacQuest(_game));
+            _allQuests.Add(new OdinQuest(_game));
             EvaluateQuestsForMatch();
         }
 
@@ -63,7 +64,18 @@ namespace LeagueSandbox.GameServer.Quests
             {
                 if (player.Champion == null) continue;
 
-                bool success = (player.Champion == winner);
+                bool success = false;
+                if (winner != null)
+                {
+                    if (quest.IsTeamQuest)
+                    {
+                        success = (player.Champion.Team == winner.Team);
+                    }
+                    else
+                    {
+                        success = (player.Champion == winner);
+                    }
+                }
 
                 player.Champion.PlayerQuestManager.CompleteQuest(quest.QuestId, success);
 

@@ -1,3 +1,4 @@
+using System;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
@@ -14,6 +15,7 @@ namespace Buffs
         public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData
         {
             BuffType = BuffType.HEAL,
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
             IsHidden = true
         };
 
@@ -21,8 +23,10 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.Stats.CurrentHealth += 94 + 13 * (unit.Stats.Level - 1);
-            unit.Stats.CurrentMana += 90 + 14 * (unit.Stats.Level - 1);
+            unit.Stats.CurrentHealth = Math.Min(unit.Stats.HealthPoints.Total,
+                unit.Stats.CurrentHealth + 94 + 13 * (unit.Stats.Level - 1));
+            unit.Stats.CurrentMana = Math.Min(unit.Stats.ManaPoints.Total,
+                unit.Stats.CurrentMana + 90 + 14 * (unit.Stats.Level - 1));
             AddParticleTarget(unit, unit, "odin_healthpackheal", unit);
             AddParticleTarget(unit, unit, "summoner_mana", unit);
         }
