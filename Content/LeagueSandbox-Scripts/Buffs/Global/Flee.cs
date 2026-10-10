@@ -138,7 +138,9 @@ internal class Flee : IBuffGameScript {
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        if (!IsMovementOverriddenByHardCc()) {
+        bool hasOtherFear = unit.GetBuffs().Exists(other => other != buff && !other.Elapsed()
+            && other.StatusEffectsToEnable.HasFlag(StatusFlags.Feared));
+        if (!hasOtherFear && !IsMovementOverriddenByHardCc()) {
             unit.StopMovement();
         }
 

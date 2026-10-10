@@ -163,6 +163,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 foreach (var spell in Spells)
                 {
                     var castInfo = spell.Value.CastInfo;
+                    if (spell.Value.IconIndex != 0)
+                        _game.PacketNotifier.NotifySpellIcon(userId, spell.Value);
+                    if (spell.Value.HasManaCostOverride)
+                        _game.PacketNotifier.NotifySpellManaCostOverride(userId, spell.Value);
                     if (castInfo.SpellLevel > 0)
                     {
                         // NotifyNPC_UpgradeSpellAns has no effect here

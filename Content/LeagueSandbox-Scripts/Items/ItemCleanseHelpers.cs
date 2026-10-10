@@ -16,17 +16,25 @@ namespace ItemHelpers
                 BuffType.TAUNT,
                 BuffType.FEAR,
                 BuffType.SILENCE,
-                BuffType.SLOW
+                BuffType.SLOW,
+                BuffType.CHARM,
+                BuffType.FLEE,
+                BuffType.SLEEP,
+                BuffType.POLYMORPH,
+                BuffType.BLIND,
+                BuffType.DISARM
             };
             foreach (var buff in unit.GetBuffs().ToArray())
             {
-                if (types.Contains(buff.BuffType) || (allDebuffs && buff.SourceUnit != null
+                if (types.Contains(buff.BuffType) || (allDebuffs && buff.BuffType == BuffType.SUPPRESSION)
+                    || (allDebuffs && buff.SourceUnit != null
                     && buff.SourceUnit.Team != unit.Team
                     && buff.BuffType != BuffType.AURA))
                 {
                     RemoveBuff(buff);
                 }
             }
+            unit.RefreshBuffStatus();
         }
     }
 }

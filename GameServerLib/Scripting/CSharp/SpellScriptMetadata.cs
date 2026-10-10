@@ -64,6 +64,20 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
     /// </summary>
     public class MissileParameters
     {
+        /// <summary>Send complete creation data at launch when a native client cast may be replaced.</summary>
+        public bool ReplicateOnLaunch { get; set; }
+        /// <summary>Use complete launch replication instead of starting another client cast. Requires ReplicateOnLaunch.</summary>
+        public bool SkipCastPacket { get; set; }
+        /// <summary>Client effect that ends on contact without spell-hit or attack events.</summary>
+        public bool IsVisualOnly { get; set; }
+        /// <summary>Optional client trail elevation; collision stays on the ground.</summary>
+        public float? ReplicationHeightOffset { get; set; }
+        /// <summary>Optional destination elevation independent of the replicated launch height.</summary>
+        public float? ReplicationEndHeightOffset { get; set; }
+        /// <summary>Custom missile launch height, relative to terrain or absolute world Y.</summary>
+        public MissileHeight? LaunchHeight { get; set; }
+        /// <summary>Custom missile destination height, relative to terrain or absolute world Y.</summary>
+        public MissileHeight? DestinationHeight { get; set; }
         /// <summary>
         /// Whether or not the missile should be able to hit something multiple times.
         /// Will only hit again if the missile has bounced to a different unit.
@@ -100,6 +114,8 @@ namespace LeagueSandbox.GameServer.Scripting.CSharp
         /// Optional object the sector should be bound to. The sector will be attached to this object and will use its facing direction.
         /// </summary>
         public GameObject BindObject { get; set; } = null;
+        /// <summary>Optional fixed aim for a polygon, independent of its bound object's facing.</summary>
+        public Vector3? DirectionOverride { get; set; } = null;
         /// <summary>
         /// Distance from the bottom of the sector to the top.
         /// If this is larger than Width, it will be used as the area around the sector to check for collisions.

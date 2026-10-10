@@ -22,7 +22,7 @@ namespace ItemPassives
 
         private void OnHit(DamageData data)
         {
-            if (ItemEffectHelpers.IsSuccessfulBasicAttack(_owner, data) && data.Target is ObjAIBase
+            if (ItemEffectHelpers.IsSuccessfulBasicDamage(_owner, data) && data.Target is ObjAIBase
                 && data.Target is not BaseTurret
                 && data.Target is not Minion { IsWard: true })
             {

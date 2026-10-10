@@ -7,50 +7,39 @@ using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Numerics;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
 namespace Spells
 {
-    public class ShacoBoxBasicAttack : ISpellScript
+    public class ShacoBoxSpell : ISpellScript
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata
         {
-            MissileParameters = new MissileParameters
-            {
-                Type = MissileType.Target
-            },
-            TriggersSpellCasts = true,
-            CastingBreaksStealth = true,
-        };
-        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
-        {
-
-        }
-    } 
-
-    public class ShacoBoxAttackMissile : ISpellScript
-    {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
-        {
-            IsDamagingSpell = true,
+            MissileParameters = new MissileParameters { Type = MissileType.Target },
+            IsDamagingSpell = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+            ApiEventManager.OnSpellHit.AddListener(this, spell, OnHit);
         }
-        private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
-        {
-            var owner = spell.CastInfo.Owner as Minion;
-            if (owner == null)
-            {
-                return;
-            }
 
-            float damage = owner.DamageBonus;
-            target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_PET, false);
-            AddParticleTarget(owner, target, "JackInTheBox_Tar.troy", target, 1.0f);
-            missile.SetToRemove();
+        private void OnHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        {
+            missile?.SetToRemove();
+            var box = spell.CastInfo.Owner as Minion;
+            if (box == null || target == null || target.IsDead || box.Owner == null) return;
+
+            target.TakeDamage(box.Owner, box.Stats.AttackDamage.Total, DamageType.DAMAGE_TYPE_MAGICAL,
+                DamageSource.DAMAGE_SOURCE_PET, false);
+        }
+
+        public void OnDeactivate(ObjAIBase owner, Spell spell)
+        {
+            ApiEventManager.OnSpellHit.RemoveListener(this);
         }
     }
+
+    public class ShacoBoxSpell2 : ShacoBoxSpell { }
+    public class ShacoBoxBasicAttack : ShacoBoxSpell { }
+    public class ShacoBoxAttackMissile : ShacoBoxSpell { }
 }

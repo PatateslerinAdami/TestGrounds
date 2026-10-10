@@ -26,8 +26,8 @@ namespace LeaguePackets.Game
         public string BuffName { get; set; }
         public uint CloneID { get; set; }
         public bool CloneInventory { get; set; }
+        public bool ClearFocusTarget { get; set; }
         public bool ShowMinimapIconIfClone { get; set; }
-        public bool DisallowPlayerControl { get; set; }
         public bool DoFade { get; set; }
         string AIscript { get; set; }
 
@@ -50,8 +50,8 @@ namespace LeaguePackets.Game
 
             byte bitfield = reader.ReadByte();
             this.CloneInventory = (bitfield & 1) != 0;
-            this.ShowMinimapIconIfClone = (bitfield & 2) != 0;
-            this.DisallowPlayerControl = (bitfield & 4) != 0;
+            this.ClearFocusTarget = (bitfield & 2) != 0;
+            this.ShowMinimapIconIfClone = (bitfield & 4) != 0;
             this.DoFade = (bitfield & 8) != 0;
 
             this.AIscript = reader.ReadFixedStringLast(32);
@@ -74,9 +74,10 @@ namespace LeaguePackets.Game
             byte bitfield = 0;
             if (CloneInventory)
                 bitfield |= 1;
-            if (ShowMinimapIconIfClone)
+            // copy inventory = 1, clear focus = 2, champion minimap icon = 4.
+            if (ClearFocusTarget)
                 bitfield |= 2;
-            if (DisallowPlayerControl)
+            if (ShowMinimapIconIfClone)
                 bitfield |= 4;
             if (DoFade)
                 bitfield |= 8;

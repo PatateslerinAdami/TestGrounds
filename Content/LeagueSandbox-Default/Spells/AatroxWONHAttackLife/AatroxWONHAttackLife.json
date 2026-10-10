@@ -6,6 +6,11 @@
         "ResourcePath": "DATA/Characters/Aatrox/Spells/AatroxWONHAttackLife.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevel": 0,
+            "ClientAmmoUsed": 1,
+            "IsSecondAutoAttack": false
+        },
         "OffsetTargeting": {
             "OT_AreaRadius": 0,
             "OT_AreaRadius1": 0,

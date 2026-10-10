@@ -203,7 +203,6 @@ namespace ItemPassives
 
         protected override void Configure()
         {
-            StatsModifier.CooldownReduction.FlatBonus = -0.2f;
         }
     }
 
@@ -266,7 +265,6 @@ namespace ItemPassives
 
         protected override void Configure()
         {
-            StatsModifier.CooldownReduction.FlatBonus = -0.2f;
         }
     }
 

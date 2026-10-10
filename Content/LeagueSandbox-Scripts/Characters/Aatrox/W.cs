@@ -1,78 +1,76 @@
-﻿using GameServerCore.Scripting.CSharp;
+using GameServerCore.Enums;
+using System.Numerics;
+using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
-using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
+using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+
 namespace Spells
 {
     public class AatroxW : ISpellScript
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata()
         {
             TriggersSpellCasts = true,
-            AutoFaceDirection = false
+            AutoFaceDirection = false,
+            CooldownIsAffectedByCDR = false
         };
 
-        private ObjAIBase _owner;
+        public float? GetCooldown(Spell spell, byte rank)
+        {
+            return 0.5f;
+        }
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            _owner = owner;
-            if (spell.CastInfo.SpellLevel == 0)
-            {
-                ApiEventManager.OnLevelUpSpell.AddListener(this, spell, OnLevelUpSpell, true);
-            }
+            ApiEventManager.OnLevelUpSpell.AddListener(this, spell, _ => owner.CharScript.OnUpdate(0));
         }
 
-        private void OnLevelUpSpell(Spell spell)
+        public void OnDeactivate(ObjAIBase owner, Spell spell)
         {
-            AddBuff("AatroxWLife", 1f, 1, spell, _owner, _owner, true);
-            ApiEventManager.OnLevelUpSpell.RemoveListener(this, spell);
+            ApiEventManager.RemoveAllListenersForOwner(this);
         }
 
-        public void OnSpellCast(Spell spell)
+        public virtual void OnSpellPostCast(Spell spell)
         {
-            if (_owner.GetBuffWithName("AatroxWLife") is Buff b)
-            {
-                b.DeactivateBuff();
-            }
+            Toggle(spell, true);
+        }
 
-            _owner.RegisterTimer(new GameScriptTimer(0.01f, () =>
+        protected static void Toggle(Spell spell, bool power)
+        {
+            var owner = spell.CastInfo.Owner;
+            RemoveBuff(owner, power ? "AatroxWLife" : "AatroxWPower");
+            AddBuff(power ? "AatroxWPower" : "AatroxWLife", 25000, 1, spell, owner, owner, true);
+            SetSpell(owner, power ? "AatroxW2" : "AatroxW", SpellSlotType.SpellSlots, 1);
+            owner.Spells[1].SetSpellToggle(power);
+            owner.Spells[1].SetCooldown(0.5f, true);
+            if (owner.GetBuffWithName("AatroxWONHBuff") is { Remove: false, BuffScript: Buffs.AatroxWONHBuff w })
             {
-                AddBuff("AatroxWPower", 1f, 1, spell, _owner, _owner, true);
-                _owner.GetSpell("AatroxW2").SetCooldown(0.5f, true);
-            }));
+                w.RefreshIndicator();
+            }
         }
     }
-    public class AatroxW2 : ISpellScript
+
+    public class AatroxW2 : AatroxW
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        public override void OnSpellPostCast(Spell spell)
         {
-            TriggersSpellCasts = true,
-            AutoFaceDirection = false
-        };
-
-        private ObjAIBase _owner;
-
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _owner = owner;
+            Toggle(spell, false);
         }
+    }
 
-        public void OnSpellCast(Spell spell)
+    public class AatroxWHeal : ISpellScript
+    {
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata()
         {
-            if (_owner.GetBuffWithName("AatroxWPower") is Buff b)
+            MissileParameters = new MissileParameters()
             {
-                b.DeactivateBuff();
+                Type = MissileType.Target,
+                IsVisualOnly = true
             }
-
-            _owner.RegisterTimer(new GameScriptTimer(0.01f, () =>
-            {
-                AddBuff("AatroxWLife", 1f, 1, spell, _owner, _owner, true);
-                _owner.GetSpell("AatroxW").SetCooldown(0.5f, true);
-            }));
-        }
+        };
     }
 }

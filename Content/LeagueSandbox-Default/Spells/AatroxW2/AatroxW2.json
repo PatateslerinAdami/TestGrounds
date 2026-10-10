@@ -6,6 +6,9 @@
         "ResourcePath": "DATA/Characters/Aatrox/Spells/AatroxW2.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_AatroxW"
         },

@@ -6,6 +6,11 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoBasicAttack6.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellSlot": 49,
+            "ClientSpellLevel": 0,
+            "IsSecondAutoAttack": 0
+        },
         "OffsetTargeting": {
             "OT_AreaRadius": 0,
             "OT_AreaRadius1": 0,

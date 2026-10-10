@@ -1,4 +1,5 @@
 ﻿using System;
+using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.GameObjects;
 using System.Collections;
 using System.Collections.Generic;
@@ -181,6 +182,12 @@ namespace LeagueSandbox.GameServer.Inventory
             }
 
             return toReturn;
+        }
+
+        public List<StatsModifier> GetPassiveStatModifiers()
+        {
+            return _inventory.ItemScripts.Values.Select(script => script.StatsModifier)
+                .Where(modifier => modifier != null).ToList();
         }
 
         public bool HasItemWithID(int ItemID)

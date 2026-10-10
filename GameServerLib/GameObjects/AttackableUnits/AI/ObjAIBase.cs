@@ -19,6 +19,14 @@ using System.Numerics;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 {
+    public class CharacterModelOverride
+    {
+        public string Model { get; internal set; }
+        public uint SkinID { get; internal set; }
+        public uint ID { get; internal set; }
+        internal object Source { get; set; }
+    }
+
     public class DelayedSpellPacketInfo
     {
         public Spell SpellToPacketize { get; }
@@ -33,16 +41,25 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
     public class SpellQueueEntry
     {
         public Spell Spell { get; }
+        public byte SpellSlot { get; }
         public Vector2 Start { get; }
         public Vector2 End { get; }
         public AttackableUnit TargetUnit { get; }
+        public float ExpiresAt { get; }
+        public ForceMovementParameters AwaitedMovement { get; set; }
+        public Action OnSuccess { get; }
 
-        public SpellQueueEntry(Spell spell, Vector2 start, Vector2 end, AttackableUnit targetUnit)
+        public SpellQueueEntry(Spell spell, Vector2 start, Vector2 end, AttackableUnit targetUnit,
+            float expiresAt, ForceMovementParameters awaitedMovement = null, Action onSuccess = null)
         {
             Spell = spell;
+            SpellSlot = spell.CastInfo.SpellSlot;
             Start = start;
             End = end;
             TargetUnit = targetUnit;
+            ExpiresAt = expiresAt;
+            AwaitedMovement = awaitedMovement;
+            OnSuccess = onSuccess;
         }
     }
     /// <summary>
@@ -61,6 +78,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         private Spell _lastAutoAttack;
         private Spell _lastOverrideAutoAttack;
         private SpellQueueEntry _queuedSpellCast;
+        private Action _spellToCastOnSuccess;
+        private bool _spellToCastIsPlayerInput;
+        private byte _spellToCastInputSlot;
+        private int _moveOrderRevision;
+        private ForceMovementParameters _movementOrderToResume;
+        private bool _updatingMovement;
         private readonly Random _random = new Random();
         private readonly List<Spell> _autoAttackOverrideSpells = new List<Spell>();
         private readonly Dictionary<Spell, float> _autoAttackOverrideWeights = new Dictionary<Spell, float>();
@@ -87,6 +110,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// The ID of the skin this unit should use for its model.
         /// </summary>
         public int SkinID { get; set; }
+        private readonly List<CharacterModelOverride> _modelOverrides = new List<CharacterModelOverride>();
+        public IReadOnlyList<CharacterModelOverride> ModelOverrides
+        {
+            get { return _modelOverrides; }
+        }
         public bool HasAutoAttacked { get; set; }
         /// <summary>
         /// Whether or not this AI has made their first auto attack against their current target. Refreshes after untargeting or targeting another unit.
@@ -121,6 +149,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Unit this AI will auto attack or use a spell on when in range.
         /// </summary>
         public AttackableUnit TargetUnit { get; set; }
+        public bool KeepChasingDuringAttackCooldown { get; set; }
         public Dictionary<short, Spell> Spells { get; }
         public ICharScript CharScript { get; private set; }
         public bool IsBot { get; set; }
@@ -324,9 +353,37 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public void LoadCharScript(Spell spell = null)
         {
+            DeactivateCharScript();
             CharScript = _game.ScriptEngine.CreateObject<ICharScript>("CharScripts", $"CharScript{Model}") ?? new CharScriptEmpty();
             _charScriptActivated = false;
             _charScriptPostActivated = false;
+        }
+
+        private void DeactivateCharScript()
+        {
+            if (!_charScriptActivated || CharScript == null) return;
+            _charScriptActivated = false;
+            _charScriptPostActivated = false;
+            try
+            {
+                CharScript.OnDeactivate(this, Spells.GetValueOrDefault<short, Spell>((int)SpellSlotType.PassiveSpellSlot));
+            }
+            catch (Exception e) 
+            { 
+                _logger.Error(null, e); 
+            }
+            finally 
+            { 
+                ApiEventManager.RemoveAllListenersForOwner(CharScript); 
+            }
+        }
+
+        public override void OnRemoved()
+        {
+            foreach (var spell in Spells.Values.ToArray()) spell?.Deactivate();
+            DeactivateCharScript();
+            foreach (var buff in GetBuffs().ToArray()) RemoveBuff(buff);
+            base.OnRemoved();
         }
 
         private void TryPostActivateCharScript()
@@ -400,8 +457,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 DamageResultType = isCrit ? DamageResultType.RESULT_CRITICAL : DamageResultType.RESULT_NORMAL
             };
 
-            // TODO: Verify if we should use MissChance instead.
-            if (HasBuffType(BuffType.BLIND))
+            if (HasBuffType(BuffType.BLIND)
+                || _random.NextDouble() < Math.Clamp(Stats.BasicAttackMissChance, 0.0f, 1.0f))
             {
                 target.TakeDamage(this, 0, DamageType.DAMAGE_TYPE_PHYSICAL,
                                              DamageSource.DAMAGE_SOURCE_ATTACK,
@@ -418,7 +475,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || (Status.HasFlag(StatusFlags.CanMove) && Status.HasFlag(StatusFlags.CanMoveEver)
                 && (MoveOrder != OrderType.CastSpell && _castingSpell == null)
                 && (ChannelSpell == null || (ChannelSpell != null && ChannelSpell.SpellData.CanMoveWhileChanneling))
-                && (!IsAttacking || !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
+                && (!IsAttacking || HasAutoAttacked || AutoAttackSpell.State != SpellState.STATE_CASTING
+                    || !AutoAttackSpell.SpellData.CantCancelWhileWindingUp)
                 && !(Status.HasFlag(StatusFlags.Netted)
                 || Status.HasFlag(StatusFlags.Rooted)
                 || Status.HasFlag(StatusFlags.Sleep)
@@ -478,26 +536,144 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Whether or not this AI is able to cast spells.
         /// </summary>
         /// <param name="spell">Spell to check.</param>
-        public bool CanCast(Spell spell = null)
+        /// <param name="ignoreCurrentCast">Ignore the current spell windup when validating buffered input.</param>
+        public bool CanCast(Spell spell = null, bool ignoreCurrentCast = false, bool ignoreForcedMovement = false)
         {
-            if (IsDead && spell?.SpellData.CanOnlyCastWhileDead == true)
-                return ApiEventManager.OnCanCast.Publish(this, spell);
+            if (!CanCastByStatus(spell, ignoreForcedMovement))
+            {
+                return false;
+            }
 
-            // TODO: Verify if all cases are accounted for.
-            return ApiEventManager.OnCanCast.Publish(this, spell)
-                && Status.HasFlag(StatusFlags.CanCast)
-                && !Status.HasFlag(StatusFlags.Charmed)
-                && !Status.HasFlag(StatusFlags.Feared)
-                // TODO: Verify what pacified is
-                && !Status.HasFlag(StatusFlags.Pacified)
-                && !Status.HasFlag(StatusFlags.Silenced)
-                && !Status.HasFlag(StatusFlags.Sleep)
-                && !Status.HasFlag(StatusFlags.Stunned)
-                && !Status.HasFlag(StatusFlags.Suppressed)
-                && !Status.HasFlag(StatusFlags.Taunted)
-                && _castingSpell == null
-                && (ChannelSpell == null || (ChannelSpell != null && !ChannelSpell.SpellData.CantCancelWhileChanneling))
-                && (!IsAttacking || (IsAttacking && !AutoAttackSpell.SpellData.CantCancelWhileWindingUp));
+            bool instant = spell?.SpellData.Flags.HasFlag(SpellDataFlags.InstantCast) == true;
+            return (ignoreCurrentCast || !IsSpellBlockedByWindup(spell))
+                && (ChannelSpell == null || spell?.SpellData.DoesntBreakChannels == true
+                    || !ChannelSpell.SpellData.CantCancelWhileChanneling)
+                && (instant || !IsAttacking || HasAutoAttacked
+                    || AutoAttackSpell?.SpellData.CantCancelWhileWindingUp != true)
+                && ApiEventManager.OnCanCast.Publish(this, spell);
+        }
+
+        private bool IsSpellBlockedByWindup(Spell spell)
+        {
+            if (_castingSpell == null)
+            {
+                return false;
+            }
+
+            if (spell?.SpellData.Flags.HasFlag(SpellDataFlags.InstantCast) != true)
+            {
+                return true;
+            }
+
+            if (spell.CastInfo.IsAutoAttack
+                || spell.CastInfo.SpellSlot >= (byte)SpellSlotType.SummonerSpellSlots)
+            {
+                return false;
+            }
+
+            if (_castingSpell.CastInfo.IsAutoAttack
+                || (_castingSpell.CastInfo.SpellSlot >= (byte)SpellSlotType.SummonerSpellSlots
+                    && _castingSpell.CastInfo.SpellSlot < (byte)SpellSlotType.ExtraSlots))
+            {
+                return false;
+            }
+
+            if (_castingSpell.State != SpellState.STATE_CASTING
+                || _castingSpell.CurrentCastTime <= 0
+                || !_castingSpell.SpellData.CantCancelWhileWindingUp)
+            {
+                return false;
+            }
+
+            var incoming = spell.SpellData.ClientCastBehavior;
+            var pending = _castingSpell.SpellData.ClientCastBehavior;
+            if (incoming == null || pending == null)
+            {
+                return false;
+            }
+
+            // Toggles/recasts and separate spellbooks keep their existing admission paths.
+            if (!incoming.InstantCast
+                || incoming.BelongsToAvatar
+                || incoming.DoesntBreakChannels
+                || incoming.IsToggleSpell)
+            {
+                return false;
+            }
+
+            if (pending.InstantCast
+                || pending.BelongsToAvatar
+                || pending.DoesntBreakChannels
+                || pending.IsToggleSpell)
+            {
+                return false;
+            }
+
+            return pending.TriggersGlobalCooldown.HasValue
+                && incoming.SubjectToGlobalCooldown.HasValue
+                && _castingSpell.SpellData.TriggersGlobalCooldown
+                && spell.SpellData.SubjectToGlobalCooldown;
+        }
+
+        /// <summary>
+        /// Checks spell specific CC permissions without considering active casts or script listeners.
+        /// Ignoring forced movement preserves all independently applied buff and base restrictions.
+        /// </summary>
+        public bool CanCastByStatus(Spell spell = null, bool ignoreForcedMovement = false)
+        {
+            var data = spell?.SpellData;
+            bool allowedByMovement = spell != null
+                && MovementParameters?.AllowedSpellSlots?.Contains(spell.CastInfo.SpellSlot) == true;
+            var status = ignoreForcedMovement ? GetStatusWithoutForcedMovement() : Status;
+            if (allowedByMovement && !ignoreForcedMovement)
+            {
+                status = (status & ~StatusFlags.CanCast)
+                    | (GetStatusWithoutForcedMovement() & StatusFlags.CanCast);
+            }
+            if (!ignoreForcedMovement && spell != null
+                && MovementParameters?.BlockedSpellSlots?.Contains(spell.CastInfo.SpellSlot) == true)
+            {
+                return false;
+            }
+            if (IsDead)
+            {
+                return data?.CanOnlyCastWhileDead == true;
+            }
+            if (data?.CanOnlyCastWhileDead == true)
+            {
+                return false;
+            }
+
+            if (status.HasFlag(StatusFlags.Suppressed) && data?.CannotBeSuppressed != true)
+            {
+                return false;
+            }
+
+            const StatusFlags castDisables = StatusFlags.Charmed | StatusFlags.Feared
+                | StatusFlags.Pacified | StatusFlags.Silenced | StatusFlags.Sleep | StatusFlags.Stunned;
+            bool castDisabled = !status.HasFlag(StatusFlags.CanCast) || (status & castDisables) != 0;
+            bool taunted = status.HasFlag(StatusFlags.Taunted);
+
+            const StatusFlags moveDisables = StatusFlags.Charmed | StatusFlags.Feared
+                | StatusFlags.Immovable | StatusFlags.Netted | StatusFlags.Rooted | StatusFlags.Sleep
+                | StatusFlags.Stunned | StatusFlags.Suppressed | StatusFlags.Taunted;
+            bool moveDisabled = !status.HasFlag(StatusFlags.CanMove) || !status.HasFlag(StatusFlags.CanMoveEver)
+                || (status & moveDisables) != 0;
+            if (data?.CantCastWhileRooted == true && moveDisabled)
+            {
+                return false;
+            }
+
+            bool disabled = castDisabled || moveDisabled || taunted
+                || !status.HasFlag(StatusFlags.CanAttack)
+                || status.HasFlag(StatusFlags.Disarmed) || status.HasFlag(StatusFlags.Suppressed);
+            if (data?.CanOnlyCastWhileDisabled == true && !disabled)
+            {
+                return false;
+            }
+
+            return data?.CanCastWhileDisabled == true
+                || (!castDisabled && (!taunted || data?.Flags.HasFlag(SpellDataFlags.AllowWhileTaunted) == true));
         }
 
         public bool CanLevelUpSpell(Spell s)
@@ -621,6 +797,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void StopMovement(MoveStopReason reason = MoveStopReason.CrowdControl, bool networked = true)
         {
+            Velocity = Vector2.Zero;
+            NavigationState.AcceptedMovement = Vector2.Zero;
             NavigationState.Goal = null;
             NavigationState.Waiting = false;
             NavigationState.Progress();
@@ -629,6 +807,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public void RepairCrowdPath()
         {
+            if (!CanMove() || MovementParameters != null) return;
             var state = NavigationState;
             if (this is LaneMinion lane && TargetUnit != null && !TargetUnit.IsDead)
             {
@@ -958,7 +1137,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Cancels any auto attacks this AI is performing and resets the time between the next auto attack if specified.
         /// </summary>
         /// <param name="reset">Whether or not to reset the delay between the next auto attack.</param>
-        public void CancelAutoAttack(bool reset, bool fullCancel = false)
+        /// <param name="notifyClient">False when the replacing cast sends its own native handoff packet.</param>
+        public void CancelAutoAttack(bool reset, bool fullCancel = false, bool notifyClient = true)
         {
             AutoAttackSpell.SetSpellState(SpellState.STATE_READY);
             if (reset)
@@ -972,7 +1152,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 IsAttacking = false;
                 HasMadeInitialAttack = false;
             }
-            if (reset || fullCancel) _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+            // The client stop packet also stops non-attack spells in this book.
+            // Resetting an attack must preserve an unrelated windup or channel.
+            if (notifyClient
+                && (reset || fullCancel)
+                && _castingSpell == null
+                && ChannelSpell == null)
+            {
+                _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false);
+            }
         }
 
         /// <summary>
@@ -1000,14 +1188,10 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
            float travelTime = 0,
            bool consideredCC = true,
            string movementName = "",
-           AttackableUnit caster = null
+           AttackableUnit caster = null,
+           ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER
        )
         {
-            if (this is ObjAIBase ai)
-            {
-                ai.SetTargetUnit(target, true);
-            }
-
             var parameters = new ForceMovementParameters
             {
                 FollowNetID = target.NetId,
@@ -1021,10 +1205,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 FollowTravelTime = travelTime,
                 MovementName = movementName,
                 Caster = caster ?? this,
+                MovementOrdersType = movementOrdersType,
                 SetStatus = consideredCC ? (StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove) : StatusFlags.None
             };
 
             StartForcedMovement(parameters);
+            if (MovementParameters == parameters && movementOrdersType != ForceMovementOrdersType.CANCEL_ORDER)
+            {
+                SetTargetUnit(target, true);
+            }
         }
 
         /// <summary>
@@ -1060,7 +1249,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public virtual void RefreshWaypoints(float idealRange)
         {
-            if (MovementParameters != null)
+            if (MovementParameters != null || !CanMove())
             {
                 return;
             }
@@ -1116,6 +1305,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             if (MoveOrder == OrderType.AttackTo && targetPos != Vector2.Zero)
             {
+                if (KeepChasingDuringAttackCooldown
+                    && IsMelee
+                    && SpellToCast == null
+                    && _autoAttackCurrentCooldown > 0
+                    && TargetUnit is ObjAIBase movingTarget
+                    && !movingTarget.IsPathEnded())
+                {
+                    idealRange = Math.Min(idealRange, CollisionRadius + movingTarget.CollisionRadius);
+                }
+
                 if (Vector2.DistanceSquared(Position, targetPos) <= idealRange * idealRange)
                 {
                     bool isReadyToAttack = CanAttack() &&
@@ -1123,28 +1322,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     AutoAttackSpell != null &&
                     AutoAttackSpell.State == SpellState.STATE_READY;
 
-                    if (isReadyToAttack)
-                    {
-                        StopMovement(networked: false);
-                    }
-                    else
-                    {
-                        UpdateMoveOrder(OrderType.Hold, true);
-                    }
+                    if (!IsPathEnded()) StopMovement(networked: !isReadyToAttack);
                 }
                 else
                 {
-                    Vector2 direction = targetPos - Position;
-                    if (direction != Vector2.Zero)
-                    {
-                        direction = Vector2.Normalize(direction);
-                    }
-                    else
-                    {
-                        direction = new Vector2(1, 0);
-                    }
-
-                    Vector2 pathDestination = targetPos + direction * 250f;
+                    Vector2 pathDestination = targetPos;
 
                     if (!_game.Map.PathingHandler.IsWalkable(pathDestination, PathfindingRadius))
                     {
@@ -1155,7 +1337,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     if (Waypoints != null && !IsPathEnded())
                     {
                         Vector2 currentDestination = Waypoints.Last();
-                        if (Vector2.DistanceSquared(currentDestination, pathDestination) < 300f * 300f)
+                        if (Vector2.DistanceSquared(currentDestination, pathDestination) < 50f * 50f)
                         {
                             needsNewPath = false;
                         }
@@ -1180,6 +1362,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <returns>Random auto attack spell.</returns>
         public Spell GetNewAutoAttack()
         {
+            var selected = CharScript?.SelectAutoAttack(this, IsNextAutoCrit);
+            if (selected != null && selected.CastInfo.Owner == this && selected.CastInfo.IsAutoAttack
+                && Spells.TryGetValue(selected.CastInfo.SpellSlot, out var owned) && owned == selected)
+            {
+                _lastAutoAttack = selected;
+                return selected;
+            }
             var candidates = new List<(Spell spell, float weight)>();
 
             if (IsNextAutoCrit)
@@ -1498,7 +1687,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 Spells[slot].Deactivate();
             }
             Spells[slot] = new Spell(_game, this, "BaseSpell", slot); // Replace previous spell with empty spell.
-            Stats.SetSpellEnabled(slot, false);
+            SetSpellInputEnabled(slot, false);
         }
 
         public Spell OverrideBasicAttackSlot(byte slot, string newSpellName)
@@ -1751,11 +1940,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             var toReturn = Spells[slot];
             var oldSpell = Spells[slot];
+            var oldCurrentCooldown = oldSpell?.CurrentCooldown ?? 0.0f;
+            var oldTotalCooldown = oldSpell?.CooldownTotalTime ?? 0.0f;
+            bool replaced = name != oldSpell.SpellName;
 
-            if (name != Spells[slot].SpellName)
+            if (replaced)
             {
                 var oldLevel = oldSpell?.CastInfo.SpellLevel ?? (byte)0;
-                var oldCurrentCooldown = oldSpell?.CurrentCooldown ?? 0.0f;
 
                 if (oldSpell != null)
                 {
@@ -1765,14 +1956,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 toReturn = new Spell(_game, this, name, slot);
                 toReturn.SetLevel(oldLevel);
 
-                if (oldCurrentCooldown > 0.0f)
-                {
-                    toReturn.SetCooldown(oldCurrentCooldown, true);
-                }
+                toReturn.ToolTipData.CopyFrom(oldSpell.ToolTipData);
+                if (this is Champion tipOwner && toReturn.ToolTipData.Changed)
+                    tipOwner.AddToolTipChange(toReturn.ToolTipData);
 
                 Spells[slot] = toReturn;
-                Stats.SetSpellEnabled(slot, enabled);
             }
+            SetSpellInputEnabled(slot, enabled);
 
             if (networked && this is Champion champion)
             {
@@ -1785,8 +1975,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 }
             }
 
+            if (replaced && oldCurrentCooldown > 0.0f)
+                toReturn.SetCooldown(oldCurrentCooldown, true, oldTotalCooldown);
             return toReturn;
         }
+
+        private void SetSpellInputEnabled(byte slot, bool enabled)
+        {
+            if (slot == 4 || slot == 5) Stats.SetSummonerSpellEnabled((byte)(slot - 4), enabled);
+            else Stats.SetSpellEnabled(slot, enabled);
+        }
+
+        private bool GetSpellInputEnabled(byte slot) => slot == 4 || slot == 5
+            ? Stats.GetSummonerSpellEnabled((byte)(slot - 4)) : Stats.GetSpellEnabled(slot);
 
         /// <summary>
         /// Sets the spell that this unit will cast when it gets in range of the spell's target.
@@ -1798,6 +1999,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         public void SetSpellToCast(Spell s, Vector2 location, AttackableUnit unit = null)
         {
             SpellToCast = s;
+            _spellToCastOnSuccess = null;
+            _spellToCastIsPlayerInput = false;
 
             if (s == null)
             {
@@ -1835,23 +2038,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         /// <summary>
         /// Sets the spell this unit is currently casting.
-        /// When clearing the cast (s == null), automatically attempts to fire any buffered spell.
+        /// Buffered input is released after cast lifecycle callbacks finish, during Update.
         /// </summary>
         /// <param name="s">Spell that is being cast, or null when the cast ends.</param>
         public void SetCastSpell(Spell s)
         {
             _castingSpell = s;
-
-            if (s == null && _queuedSpellCast != null)
-            {
-                var queued = _queuedSpellCast;
-                _queuedSpellCast = null;
-
-                if (CanCast(queued.Spell) && queued.Spell.State == SpellState.STATE_READY)
-                {
-                    queued.Spell.Cast(queued.Start, queued.End, queued.TargetUnit);
-                }
-            }
         }
 
         /// <summary>
@@ -1864,8 +2056,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
 
         /// <summary>
-        /// Buffers a spell cast to be fired once the current cast ends.
-        /// Only valid when blocked solely by an active cast — CC/silence/etc. should be checked before calling.
+        /// Buffers input blocked by a spell windup or an opted in forced movement.
+        /// CC permissions, resources, slot identity and script conditions still apply.
         /// Newer input overwrites older input (one-slot buffer).
         /// </summary>
         /// <param name="s">Spell to queue.</param>
@@ -1873,28 +2065,173 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="end">End position of the cast.</param>
         /// <param name="unit">Target unit, if any.</param>
         /// <returns>True if the spell was successfully queued; false if conditions don't allow buffering.</returns>
-        public bool TryQueueSpell(Spell s, Vector2 start, Vector2 end, AttackableUnit unit)
+        public bool TryQueueSpell(Spell s, Vector2 start, Vector2 end, AttackableUnit unit, Action onSuccess = null)
         {
-            if (_castingSpell == null)
+            if (!IsSpellReadyForInput(s) || !IsValidSpellInput(s, start, end, unit))
             {
                 return false;
             }
-
-            if (!Status.HasFlag(StatusFlags.CanCast)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || Status.HasFlag(StatusFlags.Feared)
-                || Status.HasFlag(StatusFlags.Pacified)
-                || Status.HasFlag(StatusFlags.Silenced)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-                || Status.HasFlag(StatusFlags.Taunted))
+            bool movementBlocks = MovementParameters != null && !CanCastByStatus(s)
+                && CanCastByStatus(s, ignoreForcedMovement: true);
+            bool castBlocks = IsSpellBlockedByWindup(s);
+            if ((!movementBlocks && !castBlocks)
+                || (movementBlocks && !MovementParameters.BufferSpellCasts)
+                || !CanCast(s, ignoreCurrentCast: true, ignoreForcedMovement: movementBlocks))
             {
                 return false;
             }
-
-            _queuedSpellCast = new SpellQueueEntry(s, start, end, unit);
+            float window = movementBlocks ? MovementParameters.SpellBufferWindow : 0.5f;
+            if (!float.IsFinite(window) || window <= 0) return false;
+            _queuedSpellCast = new SpellQueueEntry(s, start, end, unit,
+                _game.GameTime + window * 1000, movementBlocks ? MovementParameters : null, onSuccess);
             return true;
+        }
+
+        /// <summary>Validates input readiness without changing spell or targeting state.</summary>
+        public bool IsSpellReadyForInput(Spell spell)
+        {
+            if (spell?.CastInfo == null || spell.CastInfo.Owner != this || spell.CastInfo.IsAutoAttack
+                || spell.CastInfo.SpellSlot >= (byte)SpellSlotType.PassiveSpellSlot
+                || !Spells.TryGetValue(spell.CastInfo.SpellSlot, out var current) || current != spell
+                // Items and recall use rank zero, only champion abilities need a learned rank.
+                || (spell.CastInfo.SpellSlot < (byte)SpellSlotType.SummonerSpellSlots && spell.CastInfo.SpellLevel == 0)
+                || spell.State != SpellState.STATE_READY
+                || spell.CurrentCooldown > 0 || spell.CurrentAmmo <= 0)
+            {
+                return false;
+            }
+            byte slot = spell.CastInfo.SpellSlot;
+            bool enabled = GetSpellInputEnabled(slot);
+            int level = spell.CastInfo.SpellLevel;
+            return enabled && level < spell.SpellData.ManaCost.Length
+                && (_game?.Config?.GameFeatures.HasFlag(FeatureFlags.EnableManaCosts) != true
+                    || spell.GetManaCost(level) * (1 - Stats.SpellCostReduction) <= Stats.CurrentMana);
+        }
+
+        private bool IsValidSpellInput(Spell spell, Vector2 start, Vector2 end, AttackableUnit unit)
+        {
+            return float.IsFinite(start.X) && float.IsFinite(start.Y)
+                && float.IsFinite(end.X) && float.IsFinite(end.Y)
+                && (unit != null || spell.SpellData.TargetingType != TargetingType.Target)
+                && (unit == null || unit == this || (!unit.IsToRemove()
+                    && spell.SpellData.IsValidTarget(this, unit)));
+        }
+
+        /// <summary>Accepts a player request, with one completion callback for actual execution.</summary>
+        public bool TryCastRequestedSpell(Spell spell, Vector2 start, Vector2 end, AttackableUnit unit = null, Action onSuccess = null)
+        {
+            // A newer cast input supersedes an older deferred request even if it is rejected.
+            ClearQueuedSpell();
+            SetSpellToCast(null, Vector2.Zero);
+            if (!IsSpellReadyForInput(spell) || !IsValidSpellInput(spell, start, end, unit)) return false;
+            if (!CanCast(spell))
+            {
+                TryQueueSpell(spell, start, end, unit, onSuccess);
+                return false;
+            }
+            return ExecuteRequestedSpell(spell, start, end, unit, onSuccess);
+        }
+
+        private bool ExecuteRequestedSpell(Spell spell, Vector2 start, Vector2 end, AttackableUnit unit, Action onSuccess)
+        {
+            if (spell.Cast(start, end, unit))
+            {
+                onSuccess?.Invoke();
+                return true;
+            }
+            if (SpellToCast == spell)
+            {
+                _spellToCastOnSuccess = onSuccess;
+                _spellToCastIsPlayerInput = true;
+                _spellToCastInputSlot = spell.CastInfo.SpellSlot;
+            }
+            return false;
+        }
+
+        /// <summary>Revalidates and executes a buffered input once its temporary locks finish.</summary>
+        public void FlushQueuedSpell()
+        {
+            var queued = _queuedSpellCast;
+            if (queued == null) return;
+            if (_game.GameTime > queued.ExpiresAt || IsDead || !IsSpellReadyForInput(queued.Spell)
+                || queued.Spell.CastInfo.SpellSlot != queued.SpellSlot
+                || !IsValidSpellInput(queued.Spell, queued.Start, queued.End, queued.TargetUnit))
+            {
+                ClearQueuedSpell();
+                return;
+            }
+            if (queued.AwaitedMovement != null)
+            {
+                if (MovementParameters == queued.AwaitedMovement) return;
+                ClearQueuedSpell();
+                return;
+            }
+            if (IsSpellBlockedByWindup(queued.Spell))
+            {
+                return;
+            }
+            ClearQueuedSpell();
+            if (CanCast(queued.Spell))
+                ExecuteRequestedSpell(queued.Spell, queued.Start, queued.End, queued.TargetUnit, queued.OnSuccess);
+        }
+
+        /// <summary>Called after landing scripts; interrupted or replaced movements discard their input.</summary>
+        public void OnForcedMovementEnded(ForceMovementParameters parameters, MoveStopReason reason)
+        {
+            if (reason == MoveStopReason.Finished && MovementParameters == null)
+            {
+                _movementOrderToResume = parameters;
+                ResumePostponedMovementOrder();
+            }
+            if (_queuedSpellCast?.AwaitedMovement != parameters) return;
+            if (reason != MoveStopReason.Finished || MovementParameters != null)
+            {
+                ClearQueuedSpell();
+                return;
+            }
+            _queuedSpellCast.AwaitedMovement = null;
+            // During Update the elapsed frame belongs to existing spells, release after their updates.
+            if (!_updatingMovement) FlushQueuedSpell();
+        }
+
+        internal void PrepareForcedMovementOrder(ForceMovementParameters parameters, ForceMovementParameters previous)
+        {
+            _movementOrderToResume = null;
+            if (parameters.MovementOrdersType == ForceMovementOrdersType.CANCEL_ORDER)
+            {
+                ClearQueuedSpell();
+                SetSpellToCast(null, Vector2.Zero);
+                SetTargetUnit(null, true);
+                MoveOrder = OrderType.Stop;
+                _moveOrderRevision++;
+                return;
+            }
+            parameters.PostponedOrderRevision = _moveOrderRevision;
+            if (TargetUnit == null && (MoveOrder == OrderType.MoveTo || MoveOrder == OrderType.AttackMove))
+            {
+                if (!IsPathEnded()) parameters.PostponedDestination = Waypoints.Last();
+                else if (previous?.PostponedOrderRevision == _moveOrderRevision)
+                    parameters.PostponedDestination = previous.PostponedDestination;
+            }
+        }
+
+        internal void ResumePostponedMovementOrder()
+        {
+            var parameters = _movementOrderToResume;
+            if (parameters?.PostponedDestination == null) 
+            { 
+                _movementOrderToResume = null; return; 
+            }
+            if (parameters.PostponedOrderRevision != _moveOrderRevision || IsDead || TargetUnit != null
+                || (MoveOrder != OrderType.MoveTo && MoveOrder != OrderType.AttackMove)
+                || MovementParameters != null || !IsPathEnded())
+            {
+                _movementOrderToResume = null;
+                return;
+            }
+            if (!CanMove() || !CanChangeWaypoints()) return;
+            SetPathTrueEnd(parameters.PostponedDestination.Value);
+            _movementOrderToResume = null;
         }
 
         /// <summary>
@@ -1906,6 +2243,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             _queuedSpellCast = null;
         }
 
+        public bool HasQueuedSpell(Spell spell) => _queuedSpellCast?.Spell == spell;
+
         /// <summary>
         /// Forces this unit to stop targeting the given unit.
         /// Applies to attacks, spell casts, spell channels, and any queued spell casts.
@@ -1913,6 +2252,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// <param name="target"></param>
         public void Untarget(AttackableUnit target)
         {
+            if (_queuedSpellCast?.TargetUnit == target) ClearQueuedSpell();
+            if (SpellToCast != null && TargetUnit == target) SetSpellToCast(null, Vector2.Zero);
             if (TargetUnit == target)
             {
                 SetTargetUnit(null, true);
@@ -1990,11 +2331,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             {
                 return;
             }
+            if (_queuedSpellCast != null && (_queuedSpellCast.SpellSlot == slot1 || _queuedSpellCast.SpellSlot == slot2))
+                ClearQueuedSpell();
+            if (SpellToCast != null && (SpellToCast.CastInfo.SpellSlot == slot1 || SpellToCast.CastInfo.SpellSlot == slot2))
+                SetSpellToCast(null, Vector2.Zero);
 
             var slot1Name = Spells[slot1].SpellName;
             var slot2Name = Spells[slot2].SpellName;
 
-            var enabledBuffer = Stats.GetSpellEnabled(slot1);
+            var enabledBuffer = GetSpellInputEnabled(slot1);
             var buffer = Spells[slot1];
             Spells[slot1] = Spells[slot2];
 
@@ -2010,8 +2355,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 tooltipOwner.AddToolTipChange(Spells[slot2].ToolTipData);
             }
 
-            Stats.SetSpellEnabled(slot1, Stats.GetSpellEnabled(slot2));
-            Stats.SetSpellEnabled(slot2, enabledBuffer);
+            SetSpellInputEnabled(slot1, GetSpellInputEnabled(slot2));
+            SetSpellInputEnabled(slot2, enabledBuffer);
 
             if (networked && this is Champion champion)
             {
@@ -2053,7 +2398,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// </summary>
         public Pet GetPet()
         {
-            return _lastPetSpawned;
+            return _lastPetSpawned != null && !_lastPetSpawned.IsDead && !_lastPetSpawned.IsToRemove()
+                ? _lastPetSpawned : null;
         }
 
         /// <summary>
@@ -2072,14 +2418,60 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             TryPostActivateSpellScripts();
         }
 
+        private readonly struct SpellUpdateSnapshot : IDisposable
+        {
+            private readonly (Spell Spell, uint CastVersion)[] _spells;
+            private readonly int _count;
+
+            public SpellUpdateSnapshot(Dictionary<short, Spell> spells)
+            {
+                _count = spells.Count;
+                _spells = ArrayPool<(Spell Spell, uint CastVersion)>.Shared.Rent(_count);
+                int index = 0;
+                foreach (var spell in spells.Values)
+                {
+                    _spells[index] = (spell, spell.GetCastVersion());
+                    index++;
+                }
+            }
+
+            public uint? GetCastVersion(Spell spell)
+            {
+                for (int index = 0; index < _count; index++)
+                {
+                    if (_spells[index].Spell == spell)
+                    {
+                        return _spells[index].CastVersion;
+                    }
+                }
+
+                return null;
+            }
+
+            public void Dispose()
+            {
+                Array.Clear(_spells, 0, _count);
+                ArrayPool<(Spell Spell, uint CastVersion)>.Shared.Return(_spells);
+            }
+        }
+
         public override void Update(float diff)
         {
+            using var spellUpdates = new SpellUpdateSnapshot(Spells);
+
             // Elapsed time belongs to the existing cooldown, never an attack
             // started by scripts or targeting later in this update.
             if (_autoAttackCurrentCooldown > 0)
                 _autoAttackCurrentCooldown = Math.Max(0, _autoAttackCurrentCooldown - diff / 1000.0f);
             if (delayedSpellPackets.Count > 0) invisSent = true;
-            base.Update(diff);
+            _updatingMovement = true;
+            try { 
+                base.Update(diff); 
+            }
+            finally 
+            { 
+                _updatingMovement = false; 
+            }
             try
             {
                 CharScript.OnUpdate(diff);
@@ -2111,7 +2503,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     try
                     {
                         Spells.Values.CopyTo(snapshot, 0);
-                        for (int i = 0; i < count; i++) snapshot[i].Update(diff);
+                        for (int i = 0; i < count; i++)
+                        {
+                            var spell = snapshot[i];
+                            spell.UpdateFromOwner(diff, spellUpdates.GetCastVersion(spell));
+                        }
                     }
                     finally
                     {
@@ -2128,6 +2524,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
             {
                 UpdateAssistMarkers();
+                ResumePostponedMovementOrder();
+                FlushQueuedSpell();
                 UpdateTarget();
             }
 
@@ -2176,7 +2574,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void LateUpdate(float diff)
         {
-            if (TargetUnit != null && !TargetUnit.Status.HasFlag(StatusFlags.Targetable) && TargetUnit.GetIsTargetableToTeam(Team))
+            if (TargetUnit != null && (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) || !TargetUnit.GetIsTargetableToTeam(Team)))
             {
                 if (TargetUnit.CharData.IsUseable)
                 {
@@ -2255,7 +2653,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     HasMadeInitialAttack = false;
                 }
             }
-            else if (TargetUnit.IsDead || (!TargetUnit.Status.HasFlag(StatusFlags.Targetable) && !TargetUnit.CharData.IsUseable) || !TargetUnit.IsVisibleByTeam(Team))
+            else if (TargetUnit.IsDead
+                || ((!TargetUnit.Status.HasFlag(StatusFlags.Targetable) || !TargetUnit.GetIsTargetableToTeam(Team)) && !TargetUnit.CharData.IsUseable)
+                || !TargetUnit.IsVisibleByTeam(Team))
             {
                 // If the attack already connected (e.g. HasAutoAttacked), let the animation
                 // finish instead of cancelling it mid-animation.
@@ -2272,7 +2672,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     }
                 }
 
-                SetTargetUnit(null, true);
+                Untarget(TargetUnit);
                 return;
             }
             else if (IsAttacking)
@@ -2289,12 +2689,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 {
                     IsAttacking = false;
                 }
-                return;
+                else return;
             }
 
             var idealRange = Stats.Range.Total;
+            if (SpellToCast != null && (_spellToCastIsPlayerInput && (!IsSpellReadyForInput(SpellToCast)
+                    || SpellToCast.CastInfo.SpellSlot != _spellToCastInputSlot)
+                || TargetUnit != null && (TargetUnit.IsToRemove() || !SpellToCast.SpellData.IsValidTarget(this, TargetUnit))))
+            {
+                SetSpellToCast(null, Vector2.Zero);
+            }
             if (SpellToCast != null && !IsAttacking && (TargetUnit == null || SpellToCast.SpellData.IsValidTarget(this, TargetUnit)))
             {
+                if (!CanCast(SpellToCast)) return;
                 // Spell casts usually do not take into account collision radius, thus range is center -> center VS edge -> edge for attacks.
                 idealRange = SpellToCast.GetCurrentCastRange();
 
@@ -2302,12 +2709,12 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     && TargetUnit != null
                     && Vector2.DistanceSquared(TargetUnit.Position, SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
                 {
-                    SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.TargetPosition.X, SpellToCast.CastInfo.TargetPosition.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z), TargetUnit);
+                    CastPendingSpell(TargetUnit);
                 }
                 else if (MoveOrder == OrderType.MoveTo
                         && Vector2.DistanceSquared(new Vector2(SpellToCast.CastInfo.TargetPosition.X, SpellToCast.CastInfo.TargetPosition.Z), SpellToCast.CastInfo.Owner.Position) <= idealRange * idealRange)
                 {
-                    SpellToCast.Cast(new Vector2(SpellToCast.CastInfo.TargetPosition.X, SpellToCast.CastInfo.TargetPosition.Z), new Vector2(SpellToCast.CastInfo.TargetPositionEnd.X, SpellToCast.CastInfo.TargetPositionEnd.Z));
+                    CastPendingSpell(null);
                 }
                 else
                 {
@@ -2402,22 +2809,42 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             }
         }
 
-        /// <summary>
-        /// Sets this unit's move order to the given order.
-        /// </summary>
-        /// <param name="order">MoveOrder to set.</param>
-        public void UpdateMoveOrder(OrderType order, bool publish = true)
+        private void CastPendingSpell(AttackableUnit target)
+        {
+            var spell = SpellToCast;
+            var onSuccess = _spellToCastOnSuccess;
+            bool playerInput = _spellToCastIsPlayerInput;
+            var start = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
+            var end = new Vector2(spell.CastInfo.TargetPositionEnd.X, spell.CastInfo.TargetPositionEnd.Z);
+            if (spell.Cast(start, end, target))
+            {
+                onSuccess?.Invoke();
+            }
+            else if (SpellToCast == spell)
+            {
+                _spellToCastOnSuccess = onSuccess;
+                _spellToCastIsPlayerInput = playerInput;
+            }
+        }
+
+        /// <summary>Applies an allowed order. Lifecycle cleanup can preserve buffered player input.</summary>
+        public bool UpdateMoveOrder(OrderType order, bool publish = true, bool cancelQueuedSpell = true)
         {
             if (publish)
             {
                 // Return if scripts do not allow this order.
                 if (!ApiEventManager.OnUnitUpdateMoveOrder.Publish(this, order))
                 {
-                    return;
+                    return false;
                 }
             }
 
             MoveOrder = order;
+            if (cancelQueuedSpell)
+            {
+                _moveOrderRevision++;
+                _movementOrderToResume = null;
+            }
 
             if ((MoveOrder == OrderType.OrderNone
                 || MoveOrder == OrderType.Stop
@@ -2439,7 +2866,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                 || MoveOrder == OrderType.OrderNone
                 || MoveOrder == OrderType.Hold)
             {
-                ClearQueuedSpell();
+                if (cancelQueuedSpell) ClearQueuedSpell();
                 if (_castingSpell != null && !_castingSpell.SpellData.CantCancelWhileWindingUp)
                 {
                     _castingSpell.CancelCast();
@@ -2450,6 +2877,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                     CancelAutoAttack(true, true);
                 }
             }
+            return true;
         }
 
         /// <summary>
@@ -2549,6 +2977,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         protected override void UpdateFacing()
         {
+            if (MovementParameters == null && !CanMove()) return;
             bool isCastingMobile = _castingSpell != null && _castingSpell.SpellData.CanMoveWhileChanneling;
             bool isChannelingMobile = ChannelSpell != null && ChannelSpell.SpellData.CanMoveWhileChanneling;
 
@@ -2567,6 +2996,56 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
             Model = model;
             _game.PacketNotifier.NotifyS2C_ChangeCharacterData(this, skinID: (uint)SkinID);
             return true;
+        }
+
+        public void SetModelOverride(string model, object source, uint skinID = uint.MaxValue)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            var previous = _modelOverrides.LastOrDefault(entry => entry.Source == source);
+            if (previous != null && previous.Model == model && previous.SkinID == skinID)
+            {
+                return;
+            }
+
+            RemoveModelOverride(source);
+            if (string.IsNullOrEmpty(model))
+            {
+                return;
+            }
+
+            var entry = new CharacterModelOverride
+            {
+                Model = model,
+                SkinID = skinID,
+                ID = _game.NetworkIdManager.GetNewNetId(),
+                Source = source
+            };
+            _modelOverrides.Add(entry);
+            _game.PacketNotifier.NotifyS2C_ChangeCharacterData(
+                this,
+                skinID: entry.SkinID,
+                modelName: entry.Model,
+                id: entry.ID
+            );
+        }
+
+        public void RemoveModelOverride(object source)
+        {
+            for (int i = _modelOverrides.Count - 1; i >= 0; i--)
+            {
+                var entry = _modelOverrides[i];
+                if (entry.Source != source)
+                {
+                    continue;
+                }
+
+                _game.PacketNotifier.NotifyS2C_PopCharacterData(this, entry.ID);
+                _modelOverrides.RemoveAt(i);
+            }
         }
         public override void SetPosition(Vector2 vec, bool repath = true)
         {
@@ -2602,6 +3081,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
         public override void Die(DeathData data)
         {
+            ClearQueuedSpell();
+            SetSpellToCast(null, Vector2.Zero);
             SetTargetUnit(null, true);
             CancelAutoAttack(true, true);
             if (_castingSpell != null)

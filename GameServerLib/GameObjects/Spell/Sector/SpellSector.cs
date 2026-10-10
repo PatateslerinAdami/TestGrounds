@@ -71,6 +71,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
 
             // Update same tick of creation.
             // This prevents cases where single tick sectors change position before executing.
+            if (Parameters.BindObject != null) Move(0f);
             _game.Map.CollisionHandler.UpdateCollision(this);
             Update(0f);
         }

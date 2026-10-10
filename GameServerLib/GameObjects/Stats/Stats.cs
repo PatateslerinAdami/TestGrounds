@@ -4,6 +4,7 @@ using System.Linq;
 using GameServerCore.Enums;
 using LeagueSandbox.GameServer.Content;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
+using LeagueSandbox.GameServer.Inventory;
 
 namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 {
@@ -22,6 +23,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public bool IsTargetable { get; set; }
         public SpellDataFlags IsTargetableToTeam { get; set; }
 
+        public float BasicAttackMissChance { get; set; }
         public float AttackSpeedFlat { get; set; }
         public float HealthPerLevel { get; set; }
         public float ManaPerLevel { get; set; }
@@ -107,7 +109,7 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             AttackDamage = new Stat();
             AttackDamagePerLevel = new Stat();
             AttackSpeedMultiplier = new Stat(1.0f, 0, 0, 0, 0);
-            CooldownReduction = new Stat();
+            CooldownReduction = new CooldownReductionStat();
             CriticalChance = new Stat();
             CriticalDamage = new Stat();
             ExpGivenOnDeath = new Stat();
@@ -127,6 +129,70 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Tenacity = new Stat();
             AcquisitionRange = new Stat();
             PerceptionRange = new Stat();
+        }
+
+        public Stats CreateSnapshot()
+        {
+            var copy = new Stats();
+            CopyStat(AbilityPower, copy.AbilityPower);
+            CopyStat(Armor, copy.Armor);
+            CopyStat(ArmorPenetration, copy.ArmorPenetration);
+            CopyStat(AttackDamage, copy.AttackDamage);
+            CopyStat(AttackDamagePerLevel, copy.AttackDamagePerLevel);
+            CopyStat(AttackSpeedMultiplier, copy.AttackSpeedMultiplier);
+            CopyStat(CooldownReduction, copy.CooldownReduction);
+            CopyStat(CriticalChance, copy.CriticalChance);
+            CopyStat(CriticalDamage, copy.CriticalDamage);
+            CopyStat(ExpGivenOnDeath, copy.ExpGivenOnDeath);
+            CopyStat(GoldPerGoldTick, copy.GoldPerGoldTick);
+            CopyStat(GoldGivenOnDeath, copy.GoldGivenOnDeath);
+            CopyStat(HealthPoints, copy.HealthPoints);
+            CopyStat(HealthRegeneration, copy.HealthRegeneration);
+            CopyStat(LifeSteal, copy.LifeSteal);
+            CopyStat(MagicResist, copy.MagicResist);
+            CopyStat(MagicPenetration, copy.MagicPenetration);
+            CopyStat(ManaPoints, copy.ManaPoints);
+            CopyStat(ManaRegeneration, copy.ManaRegeneration);
+            CopyStat(MoveSpeed, copy.MoveSpeed);
+            CopyStat(Range, copy.Range);
+            CopyStat(Size, copy.Size);
+            CopyStat(SpellVamp, copy.SpellVamp);
+            CopyStat(Tenacity, copy.Tenacity);
+            CopyStat(AcquisitionRange, copy.AcquisitionRange);
+            CopyStat(PerceptionRange, copy.PerceptionRange);
+            copy.AttackSpeedFlat = AttackSpeedFlat;
+            copy.HealthPerLevel = HealthPerLevel;
+            copy.ManaPerLevel = ManaPerLevel;
+            copy.ArmorPerLevel = ArmorPerLevel;
+            copy.MagicResistPerLevel = MagicResistPerLevel;
+            copy.HealthRegenerationPerLevel = HealthRegenerationPerLevel;
+            copy.ManaRegenerationPerLevel = ManaRegenerationPerLevel;
+            copy.GrowthAttackSpeed = GrowthAttackSpeed;
+            copy.Level = Level;
+            copy.ParType = ParType;
+            copy.SlowResistPercent = SlowResistPercent;
+            copy.MultiplicativeSpeedBonus = MultiplicativeSpeedBonus;
+            copy._slows.AddRange(_slows);
+            copy._armorPenPercentMultipliers.AddRange(_armorPenPercentMultipliers);
+            copy._armorPenBonusPercentMultipliers.AddRange(_armorPenBonusPercentMultipliers);
+            copy._magicPenPercentMultipliers.AddRange(_magicPenPercentMultipliers);
+            copy._magicPenBonusPercentMultipliers.AddRange(_magicPenBonusPercentMultipliers);
+            copy._tenacityFactors.AddRange(_tenacityFactors);
+            copy._attackSpeedSlowFactors.AddRange(_attackSpeedSlowFactors);
+            copy._slowResistFactors.AddRange(_slowResistFactors);
+            copy.CurrentHealth = CurrentHealth;
+            copy.CurrentMana = CurrentMana;
+            copy.CalculateTrueMoveSpeed();
+            return copy;
+        }
+
+        private static void CopyStat(Stat source, Stat target)
+        {
+            target.BaseValue = source.BaseValue;
+            target.BaseBonus = source.BaseBonus;
+            target.PercentBaseBonus = source.PercentBaseBonus;
+            target.FlatBonus = source.FlatBonus;
+            target.PercentBonus = source.PercentBonus;
         }
 
         public void LoadStats(CharData charData)
@@ -211,8 +277,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             LifeSteal.ApplyStatModifier(modifier.LifeSteal);
             MagicResist.ApplyStatModifier(modifier.MagicResist);
             AddPenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
-            ManaPoints.ApplyStatModifier(modifier.ManaPoints);
-            ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
+            if (modifier is not ItemData || ParType == PrimaryAbilityResourceType.MANA)
+            {
+                ManaPoints.ApplyStatModifier(modifier.ManaPoints);
+                ManaRegeneration.ApplyStatModifier(modifier.ManaRegeneration);
+            }
             PerceptionRange.ApplyStatModifier(modifier.PerceptionRange);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
@@ -258,8 +327,11 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             LifeSteal.RemoveStatModifier(modifier.LifeSteal);
             MagicResist.RemoveStatModifier(modifier.MagicResist);
             RemovePenetrationModifier(MagicPenetration, modifier.MagicPenetration, _magicPenPercentMultipliers, _magicPenBonusPercentMultipliers);
-            ManaPoints.RemoveStatModifier(modifier.ManaPoints);
-            ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
+            if (modifier is not ItemData || ParType == PrimaryAbilityResourceType.MANA)
+            {
+                ManaPoints.RemoveStatModifier(modifier.ManaPoints);
+                ManaRegeneration.RemoveStatModifier(modifier.ManaRegeneration);
+            }
             PerceptionRange.RemoveStatModifier(modifier.PerceptionRange);
 
             if (modifier.MoveSpeed.PercentBonus < 0)
@@ -352,35 +424,37 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public bool GetSpellEnabled(byte id)
         {
-            return (SpellsEnabled & 1u << id) != 0;
+            return id < 64 && (SpellsEnabled & (1UL << id)) != 0;
         }
 
         public void SetSpellEnabled(byte id, bool enabled)
         {
+            if (id >= 64) return;
             if (enabled)
             {
-                SpellsEnabled |= 1u << id;
+                SpellsEnabled |= 1UL << id;
             }
             else
             {
-                SpellsEnabled &= ~(1u << id);
+                SpellsEnabled &= ~(1UL << id);
             }
         }
 
         public bool GetSummonerSpellEnabled(byte id)
         {
-            return (SummonerSpellsEnabled & 16u << id) != 0;
+            return id < 60 && (SummonerSpellsEnabled & (16UL << id)) != 0;
         }
 
         public void SetSummonerSpellEnabled(byte id, bool enabled)
         {
+            if (id >= 60) return;
             if (enabled)
             {
-                SummonerSpellsEnabled |= 16u << id;
+                SummonerSpellsEnabled |= 16UL << id;
             }
             else
             {
-                SummonerSpellsEnabled &= ~(16u << id);
+                SummonerSpellsEnabled &= ~(16UL << id);
             }
         }
 

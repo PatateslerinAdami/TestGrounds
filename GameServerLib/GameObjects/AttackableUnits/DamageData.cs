@@ -29,6 +29,18 @@ namespace GameServerLib.GameObjects.AttackableUnits
         /// Whether or not the damage came from an autoatack or a Spell
         /// </summary>
         public bool IsAutoAttack { get; set; }
+        public bool AppliesOnHitEffects { get; set; }
+        public bool UsesLifeSteal { get; set; }
+        public bool IsHitBlocked { get; private set; }
+        public bool TriggersOnHitEffects => AppliesOnHitEffects || DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK;
+
+        public void BlockHit(DamageResultType result = DamageResultType.RESULT_DODGE)
+        {
+            IsHitBlocked = true;
+            Damage = 0;
+            PostMitigationDamage = 0;
+            DamageResultType = result;
+        }
         /// <summary>
         /// Mitigated amount of damage (after being reduced by Armor/MR stats) 
         /// </summary>

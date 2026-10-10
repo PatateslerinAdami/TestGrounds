@@ -19,6 +19,8 @@ namespace LeagueSandbox.GameServer.Content
 
     public class SpellData
     {
+        public SpellCastBehavior? ClientCastBehavior { get; private set; }
+        public SpellCastOverrides CastOverrides { get; private set; } = new();
         public string AfterEffectName { get; set; } = "";
         //AIEndOnly
         //AILifetime
@@ -85,7 +87,7 @@ namespace LeagueSandbox.GameServer.Content
         //DrawSecondaryLineIndicator
         //DynamicExtended
         //string DynamicTooltip
-        //EffectXLevelYAmmount
+        private readonly float[,] _effectAmounts = new float[11, 7];
         public SpellDataFlags Flags { get; set; }
         //FloatStaticsDecimalsX
         //FloatVarsDecimalsX
@@ -201,13 +203,13 @@ namespace LeagueSandbox.GameServer.Content
             {
                 overrideTargetable = true;
             }
-            if (target.CharData.IsUseable && Flags.HasFlag(SpellDataFlags.AffectUseable))
+            if (target.CharData.IsUseable && useFlags.HasFlag(SpellDataFlags.AffectUseable))
             {
                 //TODO: Verify if we need a check for CharData.UsableByEnemy here too.
                 overrideTargetable = true;
             }
 
-            if (!target.Status.HasFlag(StatusFlags.Targetable) && target.GetIsTargetableToTeam(attacker.Team) && !overrideTargetable)
+            if ((!target.Status.HasFlag(StatusFlags.Targetable) || !target.GetIsTargetableToTeam(attacker.Team)) && !overrideTargetable)
             {
                 return false;
             }
@@ -226,13 +228,17 @@ namespace LeagueSandbox.GameServer.Content
             {
                 return false;
             }
+            if (target.Team == TeamId.TEAM_NEUTRAL && !useFlags.HasFlag(SpellDataFlags.AffectNeutral))
+            {
+                return false;
+            }
 
             bool valid = true;
 
             // Assuming all of the team-based checks passed, we move onto unit-based checks.
             if (valid)
             {
-                if (Flags.HasFlag(SpellDataFlags.AffectAllUnitTypes))
+                if (useFlags.HasFlag(SpellDataFlags.AffectAllUnitTypes))
                 {
                     valid = true;
                 }
@@ -278,11 +284,6 @@ namespace LeagueSandbox.GameServer.Content
                             break;
                     }
 
-                    // TODO: Verify if placing this here is okay.
-                    if (target.Team == TeamId.TEAM_NEUTRAL && !useFlags.HasFlag(SpellDataFlags.AffectNeutral))
-                    {
-                        valid = false;
-                    }
                 }
             }
 
@@ -336,8 +337,15 @@ namespace LeagueSandbox.GameServer.Content
             TargetingType = newType;
         }
 
+        public float GetEffectAmount(int effect, int rank)
+        {
+            if (effect < 1 || effect > 10 || rank < 0 || rank > 6) return 0;
+            return _effectAmounts[effect, rank];
+        }
+
         public SpellData Load(ContentFile file)
         {
+            CastOverrides = SpellCastOverrides.Load(file);
             string name = file.Name;
 
             AfterEffectName = file.GetString("SpellData", "AfterEffectName", AfterEffectName);
@@ -420,7 +428,13 @@ namespace LeagueSandbox.GameServer.Content
             //DrawSecondaryLineIndicator
             //DynamicExtended
             //string DynamicTooltip
-            //EffectXLevelYAmmount
+            for (int effect = 1; effect <= 10; effect++)
+            {
+                for (int rank = 0; rank <= 6; rank++)
+                {
+                    _effectAmounts[effect, rank] = file.GetFloat("SpellData", $"Effect{effect}Level{rank}Amount", 0);
+                }
+            }
             Flags = (SpellDataFlags)file.GetInt("SpellData", "Flags");
             //FloatStaticsDecimalsX
             //FloatVarsDecimalsX
@@ -517,6 +531,7 @@ namespace LeagueSandbox.GameServer.Content
             UseGlobalLineIndicator = file.GetBool("SpellData", "UseGlobalLineIndicator", UseGlobalLineIndicator);
             UseMinimapTargeting = file.GetBool("SpellData", "UseMinimapTargeting", UseMinimapTargeting);
 
+            ClientCastBehavior = new SpellCastBehavior(this, file);
             return this;
         }
     }

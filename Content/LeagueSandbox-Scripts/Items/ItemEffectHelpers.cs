@@ -91,8 +91,15 @@ namespace ItemHelpers
 
         public static bool IsSuccessfulBasicAttack(ObjAIBase owner, DamageData data)
         {
-            return !owner.IsDead && data.IsAutoAttack && data.Attacker == owner
-                && data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
+            return data.IsAutoAttack && IsSuccessfulBasicDamage(owner, data);
+        }
+
+        public static bool IsSuccessfulBasicDamage(ObjAIBase owner, DamageData data)
+            => data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK && IsSuccessfulOnHit(owner, data);
+
+        public static bool IsSuccessfulOnHit(ObjAIBase owner, DamageData data)
+        {
+            return !owner.IsDead && data.TriggersOnHitEffects && !data.IsHitBlocked && data.Attacker == owner
                 && (data.DamageResultType == DamageResultType.RESULT_NORMAL
                 || data.DamageResultType == DamageResultType.RESULT_CRITICAL)
                 && !data.Target.IsDead

@@ -91,10 +91,12 @@ namespace Buffs
 
     public class LichBane : NativeItemIndicator
     {
+        public LichBane() => BuffMetaData.ClientPackageHash = 0;
     }
 
     public class ItemFrozenFist : NativeItemIndicator
     {
+        public ItemFrozenFist() => BuffMetaData.ClientPackageHash = 0;
     }
 
     public class Rageblade : NativeItemIndicator

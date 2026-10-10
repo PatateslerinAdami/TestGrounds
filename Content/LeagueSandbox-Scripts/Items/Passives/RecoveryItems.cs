@@ -122,7 +122,6 @@ namespace ItemPassives
     {
         protected override void Configure()
         {
-            StatsModifier.CooldownReduction.FlatBonus = -0.2f;
         }
 
         public override void OnActivate(ObjAIBase owner)

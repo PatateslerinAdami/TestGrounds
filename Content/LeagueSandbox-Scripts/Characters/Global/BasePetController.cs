@@ -1,62 +1,43 @@
-﻿using GameServerCore.Enums;
-using GameServerCore.Scripting.CSharp;
-using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Linq;
+﻿using System.Linq;
 using System.Numerics;
-using static LeagueSandbox.GameServer.API.ApiFunctionManager;
+using GameServerCore.Enums;
+using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
+using LeagueSandbox.GameServer.Scripting.CSharp;
+using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells
 {
     public class BasePetController : ISpellScript
     {
-        private Pet Pet;
-
-        public SpellScriptMetadata ScriptMetadata => new SpellScriptMetadata()
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata
         {
             NotSingleTargetSpell = true,
             DoesntBreakShields = true,
             TriggersSpellCasts = false,
-            IsDamagingSpell = true,
-            SpellDamageRatio = 0.5f,
             IsPetDurationBuff = true
         };
 
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            Pet = owner.GetPet();
-        }
-
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            if (Pet != null)
+            var pet = owner.GetPet();
+            if (pet == null || owner.IsDead || !float.IsFinite(end.X) || !float.IsFinite(end.Y))
             {
-                // likely AddBuff("PetCommandParticle") here (refer to preload for particles)
-                //This particle get's displayed globably
-                AddParticle(owner, null, "cursor_moveto", start);
-
-                //TODO: Instead of baking AI here, make a general Pet AI script and set it as the default AI for Pet class.
-                var unitsInRange =
-                    EnumerateValidUnitsInRange(spell.CastInfo.Owner, end, 100.0f, true, SpellDataFlags.AffectEnemies)
-                        .ToList();
-                if (unitsInRange.Count > 0)
-                {
-                    Pet.UpdateMoveOrder(OrderType.PetHardAttack);
-                    Pet.SetTargetUnit(unitsInRange[0]);
-                    for (int i = 0; i < unitsInRange.Count; i++)
-                    {
-                        spell.CastInfo.SetTarget(unitsInRange[i], i);
-                    }
-                }
-                else
-                {
-                    Pet.SetTargetUnit(null, true);
-                    Pet.UpdateMoveOrder(OrderType.PetHardMove);
-                    Pet.SetWaypoints(GetPath(Pet.Position, end, Pet.PathfindingRadius));
-                }
+                spell.CancelCast();
+                return;
             }
+
+            if (target == owner) target = null;
+            if (target == null)
+            {
+                target = GetUnitsInRange(pet, end, 100, true, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral
+                    | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectTurrets
+                    | SpellDataFlags.AffectBuildings).FirstOrDefault(unit => TeamHasVision(pet.Team, unit));
+            }
+            var order = target != null ? OrderType.PetHardAttack : OrderType.PetHardMove;
+            if (!pet.IssueCommand(order, end, target)) spell.CancelCast();
         }
     }
 }

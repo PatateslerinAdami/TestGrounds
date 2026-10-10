@@ -15,29 +15,17 @@ namespace ItemPassives
         public virtual void OnActivate(ObjAIBase owner)
         {
             Owner = owner;
-            foreach (short slot in new short[]
-            {
-                0,
-                1,
-                2,
-                3
-            }
-
-            )
-            {
-                if (owner.Spells.TryGetValue(slot, out var spell))
-                {
-                    ApiEventManager.OnSpellCast.AddListener(this, spell, Cast);
-                }
-            }
+            ApiEventManager.OnAbilityCast.AddListener(this, owner, Cast);
         }
 
         private void Cast(Spell spell)
         {
             if (!Owner.IsDead && spell.Script.ScriptMetadata.TriggersSpellCasts
-                && !Owner.HasBuff("ItemSpellbladeCooldown"))
+                && Owner.GetBuffWithName("ItemSpellbladeCooldown") is not { Remove: false })
             {
                 AddBuff("ItemSpellblade", 10, 1, spell, Owner, Owner);
+                if (Owner.GetBuffWithName("ItemSpellblade") is { BuffScript: Buffs.ItemSpellblade active })
+                    active.OnUpdate(0);
             }
         }
 
@@ -72,11 +60,5 @@ namespace ItemPassives
 
     public class ItemID_3025 : SpellbladeItem
     {
-        public override void OnActivate(ObjAIBase owner)
-        {
-            base.OnActivate(owner);
-            StatsModifier.CooldownReduction.FlatBonus = -0.1f;
-            owner.AddStatModifier(StatsModifier);
-        }
     }
 }

@@ -208,7 +208,9 @@ namespace LeagueSandbox.GameServer.GameObjects
                         continue;
                     }
 
-                    if (unit == CollisionUnit && unit != VisionTarget)
+                    if (unit == CollisionUnit
+                        && unit != VisionTarget
+                        && (revealTeam == TeamId.TEAM_NEUTRAL || unit.Team == revealTeam))
                     {
                         continue;
                     }

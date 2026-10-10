@@ -20,12 +20,11 @@ namespace Buffs
         public StatsModifier StatsModifier { get; private set; }
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Taunted, true);
+            buff.SetStatusEffect(StatusFlags.Taunted, true);
             if (unit is ObjAIBase oa) oa.SetTargetUnit(ownerSpell.CastInfo.Owner, true);
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Taunted, false);
         }
     }
 }

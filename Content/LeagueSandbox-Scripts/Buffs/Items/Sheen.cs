@@ -18,6 +18,7 @@ namespace Buffs
         {
             BuffType = BuffType.COMBAT_ENCHANCER,
             BuffAddType = BuffAddType.REPLACE_EXISTING,
+            ClientPackageHash = 0,
             MaxStacks = 1
         };
         public StatsModifier StatsModifier { get; } = new StatsModifier();

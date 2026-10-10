@@ -26,6 +26,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         /// Creator of this particle.
         /// </summary>
         public GameObject Caster { get; }
+        public GameObject KeywordObject { get; }
 
         /// <summary>
         /// Primary bind target.
@@ -116,11 +117,13 @@ namespace LeagueSandbox.GameServer.GameObjects
             TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
             FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
             float overrideTargetHeight = 0f, string enemyParticle = null,
-            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+            uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+            GameObject keywordObject = null)
             : base(game, target.Position, 0, 0, 0, netId, teamOnly)
         {
             DisableFoW = !reqVision;
             Caster = caster;
+            KeywordObject = keywordObject;
             BindObject = bindObj;
             TargetObject = target;
             StartPosition = TargetObject.Position;
@@ -162,11 +165,13 @@ namespace LeagueSandbox.GameServer.GameObjects
                     TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
                     FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
-                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+                    GameObject keywordObject = null)
                     : base(game, targetPos, 0, 0, 0, netId, teamOnly)
         {
             DisableFoW = !reqVision;
             Caster = caster;
+            KeywordObject = keywordObject;
 
             BindObject = bindObj;
             if (BindObject != null)
@@ -214,11 +219,13 @@ namespace LeagueSandbox.GameServer.GameObjects
                     TeamId teamOnly = TeamId.TEAM_ALL, GameObject unitOnly = null,
                     FXFlags flags = FXFlags.GivenDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
-                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+                    GameObject keywordObject = null)
                     : base(game, startPos, 0, 0, 0, netId, teamOnly)
         {
             DisableFoW = !reqVision;
             Caster = caster;
+            KeywordObject = keywordObject;
 
             BindObject = null;
             TargetObject = null;
@@ -254,12 +261,14 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public string GetEffectNameForTeam(TeamId team)
         {
-            return Team == TeamId.TEAM_ALL || team == Team ? Name : NameForEnemies;
+            var effectTeam = Caster?.Team ?? Team;
+            return effectTeam == TeamId.TEAM_ALL || team == effectTeam ? Name : NameForEnemies;
         }
 
         public uint GetEffectNameHashForTeam(TeamId team)
         {
-            return Team == TeamId.TEAM_ALL || team == Team ? NameHash : NameForEnemiesHash;
+            var effectTeam = Caster?.Team ?? Team;
+            return effectTeam == TeamId.TEAM_ALL || team == effectTeam ? NameHash : NameForEnemiesHash;
         }
 
         /// <summary>

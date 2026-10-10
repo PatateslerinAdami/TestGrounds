@@ -24,13 +24,11 @@ public class
         _jinx = ownerSpell.CastInfo.Owner;
         _jinx.StopMovement();
         _jinx.UpdateMoveOrder(OrderType.Stop);
-        SetStatus(_jinx, StatusFlags.Rooted, true);
-        SetStatus(_jinx, StatusFlags.CanAttack, false);
+        buff.SetStatusEffect(StatusFlags.Rooted, true);
+        buff.SetStatusEffect(StatusFlags.CanAttack, false);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        SetStatus(_jinx, StatusFlags.Rooted, false);
-        SetStatus(_jinx, StatusFlags.CanAttack, true);
         _jinx.StopMovement();
         _jinx.UpdateMoveOrder(OrderType.Stop);
     }

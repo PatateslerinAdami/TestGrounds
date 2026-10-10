@@ -6,6 +6,14 @@
         "ResourcePath": "DATA/Spells/FioraRiposteMissileTowerDom.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellSlot": 48,
+            "ClientSpellLevel": 0,
+            "ClientDesignerCastTime": -1,
+            "ClientDesignerTotalTime": 1,
+            "ClientAmmoUsed": 0,
+            "AttackSpeedModifier": 1
+        },
         "SpellData": {
             "AfterEffectName": "missing_instant.troy",
             "AlternateName": "Disintegrate",

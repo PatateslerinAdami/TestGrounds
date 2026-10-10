@@ -268,11 +268,5 @@ namespace ItemPassives
 
     public class ItemID_3172 : ItemID_3170
     {
-        public override void OnActivate(ObjAIBase owner)
-        {
-            base.OnActivate(owner);
-            StatsModifier.CooldownReduction.FlatBonus = -0.1f;
-            owner.AddStatModifier(StatsModifier);
-        }
     }
 }

@@ -743,7 +743,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 
         public void TakeDamage(DamageData damageData, bool isCrit, IEventSource sourceScript = null)
         {
-            this.TakeDamage(damageData, Bool2Crit(isCrit));
+            this.TakeDamage(damageData, Bool2Crit(isCrit), sourceScript);
         }
 
         /// <summary>
@@ -757,12 +757,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         public virtual void TakeDamage(DamageData damageData, DamageResultType damageText, IEventSource sourceScript = null)
         {
             var targetIsWard = damageData.Target is Minion { IsWard: true };
-            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK)
+            if (damageData.TriggersOnHitEffects)
             {
-                ApiEventManager.OnBeingHit.Publish(damageData.Target, damageData.Attacker);
+                bool hitLanded = damageData.DamageResultType != DamageResultType.RESULT_MISS
+                    && damageData.DamageResultType != DamageResultType.RESULT_DODGE
+                    && damageData.DamageResultType != DamageResultType.RESULT_INVULNERABLE
+                    && damageData.DamageResultType != DamageResultType.RESULT_INVULNERABLENOMESSAGE
+                    && !IsDead && CanTakeDamage(damageData.DamageType);
+                if (hitLanded) ApiEventManager.OnPreHit.Publish(this, damageData);
+                hitLanded &= !damageData.IsHitBlocked;
+                if (hitLanded) ApiEventManager.OnBeingHit.Publish(damageData.Target, damageData.Attacker);
 
                 // Wards should not trigger on-hit proc pipelines; Therfore each basic attack consumes only one ward hit.
-                if (!targetIsWard)
+                if (!targetIsWard && hitLanded)
                     ApiEventManager.OnHitUnit.Publish(damageData.Attacker as ObjAIBase, damageData);
 
                 //TODO: find a use case for these OnDodge OnBeingDodged and OnMiss
@@ -774,6 +781,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 else if (damageData.DamageResultType == DamageResultType.RESULT_MISS)
                 {
                     ApiEventManager.OnMiss.Publish(damageData.Attacker, damageData.Target);
+                }
+                if (damageData.IsHitBlocked)
+                {
+                    if (damageData.Attacker.Team != Team
+                        && damageData.DamageResultType != DamageResultType.RESULT_INVULNERABLENOMESSAGE)
+                        _game.PacketNotifier.NotifyUnitApplyDamage(damageData, _game.Config.IsDamageTextGlobal);
+                    return;
                 }
             }
 
@@ -787,7 +801,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             ApiEventManager.OnPreTakeDamage.Publish(damageData.Target, damageData);
             ApiEventManager.OnPreApplyDamage.Publish(this, damageData);
             var postMitigationDamage = damageData.PostMitigationDamage;
-            if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
+            if (damageData.UsesLifeSteal)
+            {
+                healRatio = attackerStats.LifeSteal.Total;
+            }
+            else if (GlobalData.SpellVampVariables.SpellVampRatios.TryGetValue(source, out float ratio) || source == DamageSource.DAMAGE_SOURCE_ATTACK)
             {
                 switch (source)
                 {
@@ -807,7 +825,9 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
             }
 
-            if (this is Champion c && damageData.Attacker is Champion cAttacker)
+            var creditedAttacker = attacker is Minion { Owner: Champion petOwner }
+                ? petOwner : attacker;
+            if (this is Champion c && creditedAttacker is Champion cAttacker)
             {
                 c.AddAssistMarker(cAttacker, 10.0f, damageData);
             }
@@ -850,7 +870,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     BecomeZombie = false, // TODO: Unhardcode
                     DieType = 0, // TODO: Unhardcode
                     Unit = this,
-                    Killer = attacker,
+                    Killer = creditedAttacker,
                     DamageType = type,
                     DamageSource = source,
                     DeathDuration = 0 // TODO: Unhardcode
@@ -869,7 +889,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 if (healAmount > 0.0f)
                 {
                     attacker.TakeHeal(attacker, healAmount,
-                        source == DamageSource.DAMAGE_SOURCE_ATTACK ? HealType.LifeSteal : HealType.SpellVamp,
+                        source == DamageSource.DAMAGE_SOURCE_ATTACK || damageData.UsesLifeSteal ? HealType.LifeSteal : HealType.SpellVamp,
                         sourceScript);
                 }
             }
@@ -973,6 +993,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// <param name="enabled">Whether or not to enable the flag.</param>
         public void SetStatus(StatusFlags status, bool enabled)
         {
+            bool couldMove = CanMove();
             if (enabled)
             {
                 _statusBeforeApplyingBuffEfects |= status;
@@ -991,20 +1012,35 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             & ~_dashEffectsToDisable;
 
             UpdateActionState();
+            if (couldMove != CanMove()) _movementUpdated = true;
+        }
+
+        /// <summary>Status with live buff ownership preserved, excluding only forced movement.</summary>
+        protected StatusFlags GetStatusWithoutForcedMovement()
+        {
+            return (_statusBeforeApplyingBuffEfects & ~_buffEffectsToDisable) | _buffEffectsToEnable;
         }
 
         void UpdateActionState()
         {
             // CallForHelpSuppressor
-            Stats.SetActionState(ActionState.CAN_ATTACK, Status.HasFlag(StatusFlags.CanAttack));
+            bool canAttack = Status.HasFlag(StatusFlags.CanAttack)
+                && !Status.HasFlag(StatusFlags.Charmed)
+                && !Status.HasFlag(StatusFlags.Disarmed)
+                && !Status.HasFlag(StatusFlags.Feared)
+                && !Status.HasFlag(StatusFlags.Pacified)
+                && !Status.HasFlag(StatusFlags.Sleep)
+                && !Status.HasFlag(StatusFlags.Stunned)
+                && !Status.HasFlag(StatusFlags.Suppressed);
+            Stats.SetActionState(ActionState.CAN_ATTACK, canAttack);
             bool canCast = Status.HasFlag(StatusFlags.CanCast)
                 && !Status.HasFlag(StatusFlags.Charmed)
                 && !Status.HasFlag(StatusFlags.Feared)
+                && !Status.HasFlag(StatusFlags.Pacified)
                 && !Status.HasFlag(StatusFlags.Silenced)
                 && !Status.HasFlag(StatusFlags.Sleep)
                 && !Status.HasFlag(StatusFlags.Stunned)
-                && !Status.HasFlag(StatusFlags.Suppressed)
-                && !Status.HasFlag(StatusFlags.Taunted);
+                && !Status.HasFlag(StatusFlags.Suppressed);
             Stats.SetActionState(ActionState.CAN_CAST, canCast);
             Stats.SetActionState(ActionState.CAN_MOVE, Status.HasFlag(StatusFlags.CanMove));
             Stats.SetActionState(ActionState.CAN_NOT_MOVE, !Status.HasFlag(StatusFlags.CanMoveEver));
@@ -1047,6 +1083,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
             Stats.SetActionState(
                 ActionState.CAN_NOT_MOVE,
                 !Status.HasFlag(StatusFlags.CanMove)
+                || !Status.HasFlag(StatusFlags.CanMoveEver)
                 || Status.HasFlag(StatusFlags.Charmed)
                 || Status.HasFlag(StatusFlags.Feared)
                 || Status.HasFlag(StatusFlags.Immovable)
@@ -1058,18 +1095,22 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 || Status.HasFlag(StatusFlags.Taunted)
             );
 
-            Stats.SetActionState(
-                ActionState.CAN_NOT_ATTACK,
-                !Status.HasFlag(StatusFlags.CanAttack)
-                || Status.HasFlag(StatusFlags.Charmed)
-                || Status.HasFlag(StatusFlags.Disarmed)
-                || Status.HasFlag(StatusFlags.Feared)
-                // TODO: Verify
-                || Status.HasFlag(StatusFlags.Pacified)
-                || Status.HasFlag(StatusFlags.Sleep)
-                || Status.HasFlag(StatusFlags.Stunned)
-                || Status.HasFlag(StatusFlags.Suppressed)
-            );
+            Stats.SetActionState(ActionState.SUPPRESSED, Status.HasFlag(StatusFlags.Suppressed));
+        }
+
+        /// <summary>Refreshes buff owned status after an immediate removal without advancing timers.</summary>
+        public void RefreshBuffStatus()
+        {
+            _buffEffectsToEnable = StatusFlags.None;
+            _buffEffectsToDisable = StatusFlags.None;
+            foreach (var buff in BuffList)
+            {
+                if (buff.Elapsed()) continue;
+                _buffEffectsToEnable |= buff.StatusEffectsToEnable;
+                _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+            }
+            _buffEffectsToDisable &= ~_buffEffectsToEnable;
+            SetStatus(StatusFlags.None, true);
         }
 
         void UpdateBuffs(float diff)
@@ -1092,8 +1133,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         else
                         {
                             buff.Update(diff);
-                            _buffEffectsToEnable |= buff.StatusEffectsToEnable;
-                            _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+                            if (!buff.Elapsed())
+                            {
+                                _buffEffectsToEnable |= buff.StatusEffectsToEnable;
+                                _buffEffectsToDisable |= buff.StatusEffectsToDisable;
+                            }
                         }
                     }
                 }
@@ -1425,7 +1469,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     {
                         ParentBuffs.Add(b.Name, b);
                         BuffList.Add(b);
-                        if (!b.IsHidden)
+                        if (b.IsReplicated)
                         {
                             _game.PacketNotifier.NotifyNPC_BuffAdd2(b);
                         }
@@ -1444,7 +1488,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     ParentBuffs.Add(b.Name, b);
                     BuffList.Add(b);
 
-                    if (!b.IsHidden)
+                    if (b.IsReplicated)
                     {
                         _game.PacketNotifier.NotifyNPC_BuffReplace(b);
                     }
@@ -1518,6 +1562,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                         parentBuff.Refresh();
                     }
                 }
+                RefreshBuffStatus();
                 return true;
             }
             return false;
@@ -1654,7 +1699,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 BuffList.Remove(b);
                 RemoveBuffSlot(b);
 
-                if (!b.IsHidden) _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
+                if (b.IsReplicated) _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
                 return;
             }
 
@@ -1690,7 +1735,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     GetBuffsWithName(b.Name).ForEach(tb => { if (tb != parentBuff) tb.SetStacks(parentBuff.StackCount, false); });
                 }
 
-                if (!b.IsHidden && ParentBuffs.TryGetValue(b.Name, out var currentParent))
+                if (b.IsReplicated && ParentBuffs.TryGetValue(b.Name, out var currentParent))
                 {
                     if (b.BuffType == BuffType.COUNTER)
                     {
@@ -1720,7 +1765,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                     RemoveBuffSlot(b);
                 }
 
-                if (!b.IsHidden)
+                if (b.IsReplicated)
                 {
                     _game.PacketNotifier.NotifyNPC_BuffRemove2(b);
                 }
@@ -1870,7 +1915,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// TODO: Find a good way to grab these variables from spell data.
         /// TODO: Verify if we should count Dashing as a form of Crowd Control.
         /// TODO: Implement Dash class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default)
+        public void DashToLocation(Vector2 endPos, float dashSpeed, string animation = "", float leapGravity = 0.0f, bool keepFacingLastDirection = true, bool consideredCC = true, string movementName = "", AttackableUnit caster = null, bool ignoreTerrain = false, Vector2 parabolicStartPoint = default, ForceMovementOrdersType movementOrdersType = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER)
         {
             var parameters = new ForceMovementParameters
             {
@@ -1882,6 +1927,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 KeepFacingDirection = keepFacingLastDirection,
                 MovementName = movementName,
                 Caster = caster ?? this,
+                MovementOrdersType = movementOrdersType,
                 IgnoreTerrain = ignoreTerrain,
                 ParabolicStartPoint = parabolicStartPoint == default ? Position : parabolicStartPoint,
                 SetStatus = consideredCC ? (StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove) : StatusFlags.None
@@ -1927,6 +1973,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 MovementParameters = null;
 
                 ResetWaypoints();
+                _movementUpdated = true;
 
                 ApiEventManager.OnMoveEnd.Publish(this, movementParams);
 
@@ -1938,7 +1985,16 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 {
                     ApiEventManager.OnMoveFailure.Publish(this, movementParams);
                 }
+                if (this is ObjAIBase ai)
+                {
+                    ai.OnForcedMovementEnded(movementParams, reason);
+                }
             }
+        }
+
+        public IReadOnlyDictionary<string, string> GetAnimStates()
+        {
+            return animOverrides;
         }
 
         /// <summary>
@@ -2167,11 +2223,20 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         }
         public void StartForcedMovement(ForceMovementParameters parameters)
         {
+            if (parameters == null) return;
+            if (IsUnstoppable && parameters.Caster != null
+                && parameters.Caster != this && parameters.Caster.Team != Team)
+            {
+                return;
+            }
+            var previousMovement = MovementParameters;
             if (MovementParameters != null)
             {
                 SetDashingState(false, MoveStopReason.ForceMovement);
+                if (MovementParameters != null) return;
             }
 
+            if (this is ObjAIBase ai) ai.PrepareForcedMovementOrder(parameters, previousMovement);
             MovementParameters = parameters;
 
             if (parameters.Duration > 0 && parameters.PathSpeedOverride <= 0)
@@ -2229,7 +2294,13 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
                 }
                 else
                 {
-                    PlayAnimation(parameters.Animation, parameters.AnimationTimeScale, parameters.AnimationStartTime, parameters.AnimationSpeedScale, parameters.AnimationFlags);
+                    PlayAnimation(
+                        parameters.Animation,
+                        parameters.AnimationTimeScale,
+                        parameters.AnimationStartTime,
+                        parameters.AnimationSpeedScale,
+                        parameters.AnimationFlags
+                    );
                 }
             }
 

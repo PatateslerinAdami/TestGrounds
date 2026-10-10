@@ -7,6 +7,14 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
         public ReplicationHero(Champion owner) : base(owner)
         {
         }
+        protected override uint ReliableGroupMask
+        {
+            get
+            {
+                return 1u;
+            }
+        }
+
         public override void Update()
         {
             UpdateFloat(Stats.Gold, 0, 0); //mGold

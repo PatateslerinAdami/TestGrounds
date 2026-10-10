@@ -19,7 +19,7 @@ namespace ItemPassives
 
         private void BlockDamage(DamageData data)
         {
-            if (data.Attacker is Champion && data.DamageType != DamageType.DAMAGE_TYPE_TRUE && (data.IsAutoAttack
+            if (data.Attacker is Champion && data.DamageType != DamageType.DAMAGE_TYPE_TRUE && (data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
                 || data.DamageSource == DamageSource.DAMAGE_SOURCE_SPELL))
             {
                 data.PostMitigationDamage = Math.Max(0, data.PostMitigationDamage - 8);

@@ -147,7 +147,7 @@ namespace Spells
             if ((distance > 300f && secondTug) || !secondTug)
             {
                 var pullPosition = target.Position + (dir * 150f);
-                target.DashToLocation(pullPosition, 1000f, "RUN", consideredCC: true);
+                target.DashToLocation(pullPosition, 1000f, "RUN", consideredCC: true, caster: owner);
             }
         }
     }

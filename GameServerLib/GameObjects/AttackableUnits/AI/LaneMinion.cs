@@ -62,7 +62,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 
         public override void RefreshWaypoints(float idealRange)
         {
-            if (MovementParameters != null) return;
+            if (MovementParameters != null || !CanMove()) return;
 
             if (TargetUnit != null
                 && _castingSpell == null
@@ -117,14 +117,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
                         && AutoAttackSpell != null
                         && AutoAttackSpell.State == SpellState.STATE_READY;
 
-                    if (isReadyToAttack)
-                    {
-                        StopMovement(networked: false);
-                    }
-                    else
-                    {
-                        UpdateMoveOrder(OrderType.Hold, true);
-                    }
+                    if (!IsPathEnded()) StopMovement(networked: !isReadyToAttack);
 
                     return;
                 }
@@ -139,7 +132,7 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         internal bool TryUpdateAttackApproach(float idealRange, bool recovery)
         {
             var target = TargetUnit;
-            if (target == null || target.IsDead || MovementParameters != null) return false;
+            if (target == null || target.IsDead || MovementParameters != null || !CanMove()) return false;
             if (SpellToCast != null) idealRange = SpellToCast.GetCurrentCastRange();
             var targetPos = target.Position;
             bool changed = _approachTarget != target

@@ -23,11 +23,10 @@ internal class DarkBinding : IBuffGameScript {
     public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
         _morgana = ownerSpell.CastInfo.Owner;
         _snareParticle = AddParticleTarget(_morgana, unit, "Morgana_Base_Q_Tar", unit, buff.Duration);
-        SetStatus(unit, StatusFlags.Rooted, true);
+        buff.SetStatusEffect(StatusFlags.Rooted, true);
     }
 
     public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        SetStatus(unit, StatusFlags.Rooted, false);
         RemoveParticle(_snareParticle);
     }
 }

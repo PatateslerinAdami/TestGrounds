@@ -205,14 +205,15 @@ namespace LeagueSandbox.GameServer.Quests
 
         private void OnPointCaptured(AttackableUnit point, Champion capturer)
         {
-            if (!_isQuestActive || capturer == null) return;
+            if (!_isQuestActive || point == null) return;
 
-            if (point == _targetForBlueToCapture && capturer.Team == TeamId.TEAM_BLUE)
+
+            if (point == _targetForBlueToCapture && point.Team == TeamId.TEAM_BLUE)
             {
                 LoggerProvider.GetLogger().Info("[OdinQuest] Blue team completed the quest!");
                 CompleteOdinQuest(TeamId.TEAM_BLUE);
             }
-            else if (point == _targetForPurpleToCapture && capturer.Team == TeamId.TEAM_PURPLE)
+            else if (point == _targetForPurpleToCapture && point.Team == TeamId.TEAM_PURPLE)
             {
                 LoggerProvider.GetLogger().Info("[OdinQuest] Purple team completed the quest!");
                 CompleteOdinQuest(TeamId.TEAM_PURPLE);

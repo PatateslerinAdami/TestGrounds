@@ -1,72 +1,53 @@
-﻿using Buffs;
-using GameServerCore;
+﻿using LeagueSandbox.GameServer.GameObjects;
+using System.Numerics;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings.AnimatedBuildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using System.Collections.Generic; 
-using System.Numerics;
-using static LeaguePackets.Game.Common.CastInfo;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
-
 
 namespace Spells
 {
     public class JackInTheBox : ISpellScript
     {
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        private Vector2 _position;
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata
         {
-            TriggersSpellCasts = true,
+            TriggersSpellCasts = true
         };
-        private List<GameScriptTimer> _activationTimers = new List<GameScriptTimer>();
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            if (!float.IsFinite(end.X) || !float.IsFinite(end.Y))
+            {
+                spell.CancelCast();
+                return;
+            }
+            _position = GetClosestTerrainExit(end);
+        }
+
         public void OnSpellPostCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner;
-            var castrange = spell.GetCurrentCastRange();
-            var ownerPos = owner.Position;
-            var spellPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
+            int rank = spell.CastInfo.SpellLevel;
+            var box = AddMinion(owner, "ShacoBox", "ShacoBox", _position, owner.Team,
+                skinId: owner.SkinID, ignoreCollision: true, targetingFlags: SpellDataFlags.TargetableToAll);
+            box.SetStatus(StatusFlags.CanMove, false);
+            box.Stats.ManaRegeneration.BaseValue = 0;
+            box.Stats.GoldGivenOnDeath.BaseValue = 10;
+            box.Stats.ExpGivenOnDeath.BaseValue = 0;
+            FaceDirection(_position + new Vector2(owner.Direction.X, owner.Direction.Z), box);
+            AddParticle(owner, null, "JackintheboxPoof", _position, lifetime: 2, ignoreCasterVisibility: true);
 
-            if (Extensions.IsVectorWithinRange(ownerPos, spellPos, castrange))
-            {
-                Minion newBox = AddMinion((Champion)owner, "ShacoBox", "ShacoBox", spellPos, owner.Team);
-                newBox.FaceDirection(owner.Direction);
-                AddParticle(owner, null, "JackintheboxPoof", spellPos, lifetime: 5f, ignoreCasterVisibility: true, reqVision: true);
-
-                var boxTimer = new GameScriptTimer(2.0f, () =>
-                {
-                    AddBuff("BoxTime", 62.0f, 1, spell, newBox, owner);
-                    newBox.SetStatus(StatusFlags.Invulnerable, true);
-                    newBox.SetStatus(StatusFlags.Ghosted, true);
-                    // Dont know what TEAM_ALL and TEAM_UNKNOWN and TEAM_MAX does so to be safe.
-                    TeamId[] validTeams = { TeamId.TEAM_BLUE, TeamId.TEAM_PURPLE, TeamId.TEAM_NEUTRAL };
-
-                    foreach (var team in validTeams)
-                    {
-                        if (team != newBox.Team)
-                        {
-                            newBox.SetIsTargetableToTeam(team, false);
-                        }
-                    }
-                    newBox.EnterStealth();
-                });
-                _activationTimers.Add(boxTimer);
-            }
-        }
-        public void OnUpdate(float diff)
-        {
-            for (int i = _activationTimers.Count - 1; i >= 0; i--)
-            {
-                var timer = _activationTimers[i];
-                timer.Update(diff);
-
-                if (timer.IsDead())
-                {
-                    _activationTimers.RemoveAt(i);
-                }
-            }
+            var variables = new BuffVariables();
+            box.Stats.AttackDamage.BaseValue = spell.SpellData.GetEffectAmount(1, rank)
+                + owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient;
+            variables.Set("FearDuration", spell.SpellData.GetEffectAmount(3, rank));
+            variables.Set("HiddenDuration", spell.SpellData.GetEffectAmount(4, rank));
+            AddBuff("JackInTheBoxInternal", 2 + spell.SpellData.GetEffectAmount(4, rank) + 5, 1,
+                spell, box, owner, buffVariables: variables);
         }
     }
 }

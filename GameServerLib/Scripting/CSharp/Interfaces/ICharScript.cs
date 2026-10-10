@@ -5,6 +5,8 @@ namespace GameServerCore.Scripting.CSharp
 {
     public interface ICharScript
     {
+        Spell SelectAutoAttack(ObjAIBase owner, bool isCritical) => null;
+
         void OnActivate(ObjAIBase owner, Spell spell = null)
         {
         }

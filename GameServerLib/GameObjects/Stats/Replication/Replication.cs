@@ -83,14 +83,39 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
 
         public abstract void Update();
 
+        protected virtual uint ReliableGroupMask
+        {
+            get
+            {
+                return 0;
+            }
+        }
+
         public ReplicationData GetData(bool partial = true)
         {
-            var data = new ReplicationData(){
+            return GetData(partial, 0x3Fu);
+        }
+
+        public ReplicationData GetDataForDelivery(bool reliable, bool partial = true)
+        {
+            uint groupMask = reliable ? ReliableGroupMask : 0x3Fu & ~ReliableGroupMask;
+            return GetData(partial, groupMask);
+        }
+
+        private ReplicationData GetData(bool partial, uint groupMask)
+        {
+            var data = new ReplicationData
+            {
                 UnitNetID = Owner.NetId
             };
 
             for (byte primaryId = 0; primaryId < 6; primaryId++)
             {
+                if ((groupMask & (1u << primaryId)) == 0)
+                {
+                    continue;
+                }
+
                 uint secondaryIdArray = 0;
                 List<byte> bytes = new List<byte>(8);
                 for (byte secondaryId = 0; secondaryId < 32; secondaryId++)

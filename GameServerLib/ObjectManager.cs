@@ -270,6 +270,7 @@ namespace LeagueSandbox.GameServer
         {
             if (o != null)
             {
+                o.MarkRemoved();
                 _objectsToAdd.Remove(o);
 
                 if (_currentlyInUpdate)
@@ -618,7 +619,7 @@ namespace LeagueSandbox.GameServer
             foreach (var kv in _objects)
             {
                 var u = kv.Value as AttackableUnit;
-                if (u == null)
+                if (u == null || u == target)
                 {
                     continue;
                 }

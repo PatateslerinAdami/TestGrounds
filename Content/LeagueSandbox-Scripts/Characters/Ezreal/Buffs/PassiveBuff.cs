@@ -1,20 +1,21 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
+using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Collections.Generic;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Buffs
 {
     internal class EzrealRisingSpellForce : IBuffGameScript
     {
-        private ObjAIBase _ezreal;
-        private Particle _currentParticle;
+        private Buff _buff;
+        private readonly List<Particle> _particles = new List<Particle>();
 
         public BuffScriptMetaData BuffMetaData { get; set; } = new()
         {
@@ -28,7 +29,11 @@ namespace Buffs
 
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            _ezreal = ownerSpell.CastInfo.Owner;
+            if (_buff == null)
+            {
+                _buff = buff;
+                ApiEventManager.OnDeath.AddListener(this, unit, OnDeath);
+            }
 
             unit.RemoveStatModifier(StatsModifier2);
             StatsModifier2.AttackSpeed.PercentBonus = 0.1f * buff.StackCount;
@@ -36,30 +41,26 @@ namespace Buffs
 
             buff.SetToolTipVar(0, buff.StackCount * 10f);
 
-            if (_currentParticle != null)
+            while (_particles.Count < buff.StackCount)
             {
-                RemoveParticle(_currentParticle);
+                var particle = AddParticleTarget(unit,unit,$"Ezreal_glow{_particles.Count + 1}",unit,lifetime: 2500000f,bone: "L_hand",flags: FXFlags.BindDirection);
+                _particles.Add(particle);
             }
-
-            string particleName = buff.StackCount switch
-            {
-                1 => "Ezreal_glow1",
-                2 => "Ezreal_glow2",
-                3 => "Ezreal_glow3",
-                4 => "Ezreal_glow4",
-                _ => "Ezreal_glow5"
-            };
-
-            _currentParticle = AddParticle(_ezreal, _ezreal, particleName, _ezreal.Position, bone: "L_hand", lifetime: 2500000f);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            if (_currentParticle != null)
+            foreach (var particle in _particles)
             {
-                RemoveParticle(_currentParticle);
+                RemoveParticle(particle);
             }
+            _particles.Clear();
             unit.RemoveStatModifier(StatsModifier2);
+        }
+
+        private void OnDeath(DeathData data)
+        {
+            _buff.DeactivateBuff();
         }
     }
 }

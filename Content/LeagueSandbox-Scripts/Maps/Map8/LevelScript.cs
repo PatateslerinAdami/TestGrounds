@@ -163,7 +163,7 @@ namespace MapScripts.Map8
             foreach (var champion in GetAllPlayers())
             {
                 AddBuff("OdinPlayerBuff", 25000, 1, null, champion, null);
-                //SetMovementRestriction(champion, GetFountainPosition(champion.Team), 400f, restrictCam: false);
+                SetMovementRestriction(champion, GetFountainPosition(champion.Team), 400f, restrictCam: false);
             }
 
             foreach (var team in TeamScores.Keys)

@@ -6,6 +6,13 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoDummySpell.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "DesignerCastTime": 0.25,
+            "DesignerTotalTime": 1,
+            "AttackSpeedModifier": 1,
+            "UseAttackCastDelay": 0
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_OlafRagnarok"
         },

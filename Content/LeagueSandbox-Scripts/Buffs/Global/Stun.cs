@@ -24,13 +24,12 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             stun = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Stun", unit, buff.Duration, bone: "head");
-            unit.SetStatus(StatusFlags.Stunned, true);
+            buff.SetStatusEffect(StatusFlags.Stunned, true);
             unit.StopMovement();
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Stunned, false);
         }
     }
 }

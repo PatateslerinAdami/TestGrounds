@@ -1,4 +1,3 @@
-﻿
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
@@ -13,29 +12,40 @@ using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells
 {
-
     public class YasuoQ3W : ISpellScript
     {
         public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
         {
-            TriggersSpellCasts = true
+            TriggersSpellCasts = true,
+            CooldownIsAffectedByCDR = false
         };
+
+        public float? GetCooldown(Spell spell, byte rank)
+        {
+            return YasuoCastHelpers.QCooldown(spell, rank);
+        }
+
         public ObjAIBase _owner;
         Vector2 _start, _end;
         AttackableUnit _target;
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
+            YasuoCastHelpers.SyncQRank(owner, spell);
             _owner = owner;
             _start = start;
             _end = end;
             _target = target;
-
-            AddBuff("YasoAnimTest", 4f, 1, spell, owner, owner);
+            YasuoCastHelpers.ResetSheath(spell);
         }
 
         public void OnSpellPostCast(Spell spell)
         {
+            if (YasuoCastHelpers.TryArmCombo(spell))
+            {
+                return;
+            }
+
             _owner.GetSpell("YasuoQ3").Cast(_start, _end, _target);
         }
     }
@@ -47,18 +57,44 @@ namespace Spells
             TriggersSpellCasts = true,
             AutoFaceDirection = true
         };
+
+        private Buffs.YasuoDashController _dash;
+
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            FaceDirection(end, owner, true);
+            _dash = YasuoCastHelpers.ActiveDash(owner);
+            ScriptMetadata.AutoFaceDirection = _dash == null;
+            if (_dash == null)
+            {
+                FaceDirection(end, owner, true);
+                YasuoCastHelpers.PrepareThrust(owner, spell);
+            }
+            else
+            {
+                spell.CastInfo.DesignerCastTime = spell.CastInfo.DesignerTotalTime = 0;
+            }
         }
+
+        public void OnSpellCast(Spell spell)
+        {
+            if (_dash == null)
+            {
+                YasuoCastHelpers.AddThrustVisuals(spell);
+            }
+        }
+
         public void OnSpellPostCast(Spell spell)
         {
+            if (_dash != null)
+            {
+                _dash.ArmCombo(spell);
+                return;
+            }
+
             var owner = spell.CastInfo.Owner;
-            AddParticleTarget(owner, owner, "Yasuo_Q_Hand", owner);
-
-            var targetPos = GetPointFromUnit(owner, 1100.0f);
-            SpellCast(owner, 3, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero);
-
+            var direction = YasuoCastHelpers.ThrustDirection(spell);
+            var targetPos = owner.Position + new Vector2(direction.X, direction.Z) * 1100f;
+            SpellCast(owner, 3, SpellSlotType.ExtraSlots, targetPos, targetPos, true, Vector2.Zero, isForceCastingOrChanneling: true);
             if (owner.HasBuff("YasuoQ3W"))
             {
                 owner.RemoveBuffsWithName("YasuoQ3W");
@@ -73,21 +109,28 @@ namespace Spells
             MissileParameters = new MissileParameters
             {
                 Type = MissileType.Circle,
-
+                ReplicationHeightOffset = 100,
             },
             IsDamagingSpell = true,
         };
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
             spell.SetOverrideCastRange(1100.0f);
         }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            spell.CastInfo.Targets.Clear();
+        }
+
         public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
         {
             var owner = spell.CastInfo.Owner;
-            target.TakeDamage(owner, 20f, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spell);
-
-            AddBuff("YasuoQ3Mis", 1.2f, 1, spell, target, owner);
+            bool firstTarget = missile is not SpellCircleMissile circle || circle.ObjectsHit.Count <= 1;
+            YasuoCastHelpers.ApplyQDamage(spell, target, firstTarget, missile?.CastInfo.SpellLevel);
+            AddBuff(YasuoCastHelpers.KnockupBuffName(target), YasuoCastHelpers.KnockupDuration, 1, spell, target, owner);
             AddParticleTarget(owner, target, "yasuo_base_q_wind_hit_tar.troy", target);
         }
     }

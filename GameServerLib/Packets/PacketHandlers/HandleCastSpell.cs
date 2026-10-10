@@ -31,53 +31,39 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                 return false;
             }
 
-            var s = owner.Spells[req.Slot];
+            if (!owner.Spells.TryGetValue(req.Slot, out var s) || s == null)
+            {
+                return false;
+            }
             SpellCastInfo cs = new SpellCastInfo()
             {
                 Position = req.Position,
                 EndPosition = req.EndPosition,
                 TargetUnit = targetUnit
             };
-            var ownerCastingSpell = owner.GetCastSpell();
-
-            // Instant cast spells can be cast during other spell casts.
-            if (s != null && owner.CanCast(s)
-                && (ownerCastingSpell == null
-                || (ownerCastingSpell != null
-                    && s.SpellData.Flags.HasFlag(SpellDataFlags.InstantCast))
-                    && !ownerCastingSpell.SpellData.CantCancelWhileWindingUp))
+            var requestedItem = req.Slot >= (int)SpellSlotType.InventorySlots && req.Slot < (int)SpellSlotType.BluePillSlot
+                ? owner.Inventory.GetItem((byte)(req.Slot - (byte)SpellSlotType.InventorySlots)) : null;
+            
+            cs.CouldCast = owner.TryCastRequestedSpell(s, req.Position, req.EndPosition, targetUnit, () =>
             {
-                if (s.Cast(req.Position, req.EndPosition, targetUnit))
+                if (s.CastInfo.SpellSlot >= (int)SpellSlotType.InventorySlots && s.CastInfo.SpellSlot < (int)SpellSlotType.BluePillSlot)
                 {
-                    if (s.CastInfo.SpellSlot >= (int)SpellSlotType.InventorySlots && s.CastInfo.SpellSlot < (int)SpellSlotType.BluePillSlot)
+                    var item = owner.Inventory.GetItem((byte)(s.CastInfo.SpellSlot - (byte)SpellSlotType.InventorySlots));
+                    if (item != null && item == requestedItem)
                     {
-                        var item = s.CastInfo.Owner.Inventory.GetItem((byte)(s.CastInfo.SpellSlot - (byte)SpellSlotType.InventorySlots));
-                        if (item != null)
-                        {
-                            _game.PacketNotifier.NotifyUseItemAns(userId, owner, item);
+                        _game.PacketNotifier.NotifyUseItemAns(userId, owner, item);
 
-                            if (item.ItemData.Consumed)
-                            {
-                                var inventory = owner.Inventory;
-                                inventory.RemoveItem(inventory.GetItemSlot(item), owner);
-                            }
+                        if (item.ItemData.Consumed)
+                        {
+                            var inventory = owner.Inventory;
+                            inventory.RemoveItem(inventory.GetItemSlot(item), owner);
                         }
                     }
-                    cs.CouldCast = true;
-                    ApiEventManager.OnSpellPress.Publish(s, cs);
-
-                    return true;
                 }
-            }
-            if (s != null && ownerCastingSpell != null)
-            {
-                owner.TryQueueSpell(s, req.Position, req.EndPosition, targetUnit);
-            }
-
-            cs.CouldCast = false;
+            });
+            cs.WasQueued = owner.HasQueuedSpell(s);
             ApiEventManager.OnSpellPress.Publish(s, cs);
-
-            return false;
+            return cs.CouldCast;
         }
     }
 }

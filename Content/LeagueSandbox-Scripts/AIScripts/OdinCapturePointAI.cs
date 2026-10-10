@@ -409,7 +409,7 @@ namespace AIScripts
                 var scoreData = new ScoreData(capturer, 40.0f, ScoreCategory.Objective, ScoreEvent.NodeCapture, true);
                 ApiMapFunctionManager.NotifyS2C_IncrementPlayerScore(scoreData);
             }
-
+            /*
             foreach (var c in _capturers)
             {
                 if (c.Team == TeamId.TEAM_BLUE)
@@ -421,6 +421,7 @@ namespace AIScripts
                     c.PlayerAugmentManager.OfferAugments(3, new[] { "Base", "Seeker" });
                 }
             }
+            */
             InterruptAllCapturers();
         }
 

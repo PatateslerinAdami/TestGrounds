@@ -120,6 +120,9 @@
         "UNKNOWN_HASHES": {
             "237522587": "0",
             "944948707": "0"
+        },
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
         }
     }
 }

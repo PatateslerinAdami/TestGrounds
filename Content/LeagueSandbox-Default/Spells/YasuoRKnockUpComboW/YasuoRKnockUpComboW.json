@@ -6,6 +6,12 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoRKnockUpComboW.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "Cooldown": 0,
+            "DesignerCastTime": 0.25,
+            "DesignerTotalTime": 1
+        },
         "SpellData": {
             "AfterEffectName": "AnnieBasicAttack_mis.troy",
             "AlternateName": "YasuoRKnockUpComboW",
@@ -37,9 +43,9 @@
             "Coefficient": 1.5,
             "Coefficient2": 0.6,
             "Cooldown": 0,
-            "Cooldown1": 0,
-            "Cooldown2": 0,
-            "Cooldown3": 0,
+            "Cooldown1": 80,
+            "Cooldown2": 55,
+            "Cooldown3": 30,
             "Cooldown4": 0,
             "Cooldown5": 0,
             "Cooldown6": "6.0000",

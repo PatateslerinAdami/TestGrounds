@@ -42,6 +42,9 @@ namespace LeagueSandbox.GameServer
         // Function Vars
         private static ILog _logger = LoggerProvider.GetLogger();
         private float _nextSyncTime = 10 * 1000;
+        private TimeProvider _simulationTimeProvider = TimeProvider.System;
+        private long? _simulationFrameTimestamp;
+        private bool _isUpdatingSimulation;
         protected const double REFRESH_RATE = 1000.0 / 30.0; // GameLoop called 30 times a second.
         private HandleStartGame _gameStartHandler;
         public float TimeScale { get; set; } = 1.0f;
@@ -324,8 +327,6 @@ namespace LeagueSandbox.GameServer
             double refreshRate = REFRESH_RATE;
             double timeout = 0;
 
-            Stopwatch lastMapDurationWatch = new Stopwatch();
-            
             bool wasNotPaused = true;
             bool firstCycle = true;
             
@@ -333,8 +334,7 @@ namespace LeagueSandbox.GameServer
 
             while (!SetToExit)
             {
-                double lastSleepDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
-                lastMapDurationWatch.Restart();
+                double lastSleepDuration = BeginSimulationFrame();
                 
                 float deltaTime = (float)lastSleepDuration;
                 if(firstCycle)
@@ -392,7 +392,7 @@ namespace LeagueSandbox.GameServer
                     }
                 }
 
-                double lastUpdateDuration = lastMapDurationWatch.Elapsed.TotalMilliseconds;
+                double lastUpdateDuration = _simulationTimeProvider.GetElapsedTime(_simulationFrameTimestamp.Value).TotalMilliseconds;
                 // The elapsed loop time already includes the previous update.
                 // Wait only for the remainder of the current frame.
                 timeout = Math.Max(0, refreshRate - lastUpdateDuration);
@@ -421,24 +421,56 @@ namespace LeagueSandbox.GameServer
         /// <param name="diff">Number of milliseconds since this tick occurred.</param>
         public void Update(float diff)
         {
-            // This section dictates the priority of updates.
-            GameTime += diff;
-            // Collision
-            Map.Update(diff);
-            // Objects
-            ObjectManager.Update(diff);
-            // Protection (TODO: Move this into ObjectManager).
-            ProtectionManager.Update(diff);
-            ChatCommandManager.GetCommands().ForEach(command => command.Update(diff));
-            UpdateGameScriptTimers(diff);
-
-            // By default, synchronize the game time between server and clients every 10 seconds
-            _nextSyncTime += diff;
-            if (_nextSyncTime >= 10 * 1000)
+            bool wasUpdating = _isUpdatingSimulation;
+            _isUpdatingSimulation = true;
+            try
             {
-                PacketNotifier.NotifySynchSimTimeS2C(GameTime);
-                _nextSyncTime = 0;
+                // This section dictates the priority of updates.
+                GameTime += diff;
+                // Collision
+                Map.Update(diff);
+                // Objects
+                ObjectManager.Update(diff);
+                // Protection (TODO: Move this into ObjectManager).
+                ProtectionManager.Update(diff);
+                ChatCommandManager.GetCommands().ForEach(command => command.Update(diff));
+                UpdateGameScriptTimers(diff);
+
+                // By default, synchronize the game time between server and clients every 10 seconds
+                _nextSyncTime += diff;
+                if (_nextSyncTime >= 10 * 1000)
+                {
+                    PacketNotifier.NotifySynchSimTimeS2C(GameTime);
+                    _nextSyncTime = 0;
+                }
             }
+            finally
+            {
+                _isUpdatingSimulation = wasUpdating;
+            }
+        }
+
+        internal double BeginSimulationFrame()
+        {
+            long timestamp = _simulationTimeProvider.GetTimestamp();
+            double elapsed = _simulationFrameTimestamp.HasValue
+                ? _simulationTimeProvider.GetElapsedTime(_simulationFrameTimestamp.Value, timestamp).TotalMilliseconds
+                : 0;
+            _simulationFrameTimestamp = timestamp;
+            return elapsed;
+        }
+
+        internal float GetPendingSimulationMilliseconds()
+        {
+            if (!_simulationFrameTimestamp.HasValue
+                || _isUpdatingSimulation
+                || !IsRunning
+                || IsPaused)
+            {
+                return 0;
+            }
+
+            return (float)_simulationTimeProvider.GetElapsedTime(_simulationFrameTimestamp.Value).TotalMilliseconds * TimeScale;
         }
 
         private void UpdateGameScriptTimers(float diff)

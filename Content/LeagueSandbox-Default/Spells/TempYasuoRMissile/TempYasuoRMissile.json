@@ -6,6 +6,11 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/TempYasuoRMissile.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "DesignerCastTime": -1,
+            "DesignerTotalTime": 0.7,
+            "AttackSpeedModifier": 1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_AkaliMota"
         },

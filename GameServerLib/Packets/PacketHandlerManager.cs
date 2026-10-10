@@ -155,7 +155,7 @@ namespace PacketDefinitions420
             Console.WriteLine("--------");
         }
 
-        public bool SendPacket(int userId, byte[] source, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
+        public virtual bool SendPacket(int userId, byte[] source, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
             // Sometimes we try to send packets to a user that doesn't exist (like in broadcast when not all players are connected).
             if (0 <= userId && userId < _peers.Length && _peers[userId] != null)
@@ -175,7 +175,7 @@ namespace PacketDefinitions420
             return false;
         }
 
-        public bool BroadcastPacket(byte[] data, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
+        public virtual bool BroadcastPacket(byte[] data, Channel channelNo, PacketFlags flag = PacketFlags.RELIABLE)
         {
             if (_peers.Length == 0) return true;
             if (data.Length >= 8)
@@ -220,7 +220,7 @@ namespace PacketDefinitions420
             return true;
         }
 
-        public bool BroadcastPacketVision(GameObject o, byte[] data, Channel channelNo,
+        public virtual bool BroadcastPacketVision(GameObject o, byte[] data, Channel channelNo,
             PacketFlags flag = PacketFlags.RELIABLE)
         {
             foreach (int pid in o.VisibleForPlayers)

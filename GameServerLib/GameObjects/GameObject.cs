@@ -152,6 +152,8 @@ namespace LeagueSandbox.GameServer.GameObjects
             return _toRemove;
         }
 
+        internal void MarkRemoved() => _toRemove = true;
+
         /// <summary>
         /// Will cause ObjectManager to remove the object (usually) both server and client-side next update.
         /// </summary>
@@ -486,6 +488,7 @@ namespace LeagueSandbox.GameServer.GameObjects
 
         public float GetOpacity()
         {
+            if (_currentFade.Duration <= 0) return _currentFade.Opacity;
             float t = Math.Min(1, (_game.GameTime - _currentFade.StartTime) / _currentFade.Duration);
             return t * (_currentFade.Opacity - _currentFadeStartOpacity) + _currentFadeStartOpacity;
         }

@@ -43,13 +43,13 @@ namespace Buffs
                 requiredGravity,
                 0,
                 consideredAsCC: true,
-                movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING
+                movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
+                caster: ownerSpell.CastInfo.Owner
             );
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.Stunned, false);
         }
 
         public void OnUpdate(float diff)

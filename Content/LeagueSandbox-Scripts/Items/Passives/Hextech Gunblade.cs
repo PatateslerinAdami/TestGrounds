@@ -23,7 +23,7 @@ namespace ItemPassives
 
         private void Hit(DamageData data)
         {
-            if (!ItemEffectHelpers.IsSuccessfulBasicAttack(_owner, data))
+            if (!ItemEffectHelpers.IsSuccessfulBasicDamage(_owner, data))
             {
                 return;
             }

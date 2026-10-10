@@ -120,7 +120,9 @@ namespace Spells
             float desiredHeight = 5.0f;
             float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
             float requiredSpeed = horizontalDistance / desiredDuration;
-            ForceMovement(target, "run", pushEnd, requiredSpeed, 0f, requiredGravity, 0f, true, ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER, ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
+            ForceMovement(target, "run", pushEnd, requiredSpeed, 0f, requiredGravity, 0f, true,
+                ForceMovementType.FURTHEST_WITHIN_RANGE, ForceMovementOrdersType.POSTPONE_CURRENT_ORDER,
+                ForceMovementOrdersFacing.KEEP_CURRENT_FACING, caster: owner);
             AddBuff("ThreshEStun", 1.0f, 1, threshESpell, target, owner);
             AddParticleTarget(owner, target, "Thresh_E_hit.troy", target, 1.0f);
         }

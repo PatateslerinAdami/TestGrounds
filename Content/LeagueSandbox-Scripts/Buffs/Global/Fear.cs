@@ -36,9 +36,9 @@ namespace Buffs
 
             _unit = unit;
             _owner = buff.SourceUnit;
-            AddParticleTarget(_owner, unit, "LOC_fear", unit, buff.Duration, bone: "head");
+            _particle = AddParticleTarget(_owner, unit, "LOC_fear", unit, buff.Duration, bone: "head");
 
-            unit.SetStatus(StatusFlags.Feared, true);
+            buff.SetStatusEffect(StatusFlags.Feared, true);
 
             if (RandomDirection)
             {
@@ -58,8 +58,9 @@ namespace Buffs
         {
             if (_particle != null) _particle.SetToRemove();
 
-            unit.SetStatus(StatusFlags.Feared, false);
-            unit.StopMovement();
+            bool hasOtherFear = unit.GetBuffs().Exists(other => other != buff && !other.Elapsed()
+                && other.StatusEffectsToEnable.HasFlag(StatusFlags.Feared));
+            if (!hasOtherFear && unit.MovementParameters == null) unit.StopMovement();
         }
 
         public void OnUpdate(float diff)

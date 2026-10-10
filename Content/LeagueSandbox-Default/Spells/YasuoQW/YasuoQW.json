@@ -6,6 +6,9 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoQW.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
+        },
         "SpellData": {
             "AlternateName": "YasuoQW",
             "CanCastWhileDisabled": "0",

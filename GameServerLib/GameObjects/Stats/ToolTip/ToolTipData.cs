@@ -143,6 +143,20 @@ namespace LeagueSandbox.GameServer.GameObjects.StatsNS
             Slot = slot;
         }
 
+        public void CopyFrom(ToolTipData source)
+        {
+            if (source?._values == null) return;
+            for (int i = 0; i < Values.Length; i++)
+            {
+                var value = source.Values[i];
+                Values[i] = new ToolTipValue
+                {
+                    Hide = value.Hide, Value = value.Value, IsFloat = value.IsFloat, Changed = true
+                };
+            }
+            Changed = true;
+        }
+
         public static void Populate(ToolTipValue[] arr)
         {
             for (int i = 0; i < arr.Length; i++)

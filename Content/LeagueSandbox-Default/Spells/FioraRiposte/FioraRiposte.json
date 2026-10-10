@@ -6,6 +6,12 @@
         "ResourcePath": "DATA/Spells/FioraRiposte.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "ClientDesignerCastTime": 0.5,
+            "ClientDesignerTotalTime": 1.36,
+            "AttackSpeedModifier": 1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_FioraRiposte",
             "ShowInTrackerUI": 1

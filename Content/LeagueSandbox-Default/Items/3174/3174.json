@@ -63,7 +63,7 @@
             "PercentAttackSpeedMod": "0",
             "PercentBaseMPRegenMod": 0.5,
             "percentBlockMod": "0",
-            "PercentCooldownMod": "0",
+            "PercentCooldownMod": -0.2,
             "PercentCritChanceMod": "0",
             "PercentCritDamageMod": "0",
             "percentDodgeMod": "0",

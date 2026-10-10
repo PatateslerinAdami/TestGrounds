@@ -87,7 +87,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
             // The below section is making sure the sector has a correct direction.
 
             var goingTo = new Vector2(castInfo.TargetPositionEnd.X, castInfo.TargetPositionEnd.Z) - Position;
-            var dirTemp = Vector2.Normalize(goingTo);
+            var dirTemp = Parameters.DirectionOverride is Vector3 fixedDirection
+                ? Vector2.Normalize(new Vector2(fixedDirection.X, fixedDirection.Z))
+                : Vector2.Normalize(goingTo);
 
             if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y) && Parameters.BindObject != null)
             {
@@ -120,7 +122,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
         public override void Move(float diff)
         {
             // Change direction to the bind object's facing direction.
-            Direction = Parameters.BindObject.Direction;
+            Direction = Parameters.DirectionOverride ?? Parameters.BindObject.Direction;
 
             base.Move(diff);
         }
@@ -155,7 +157,8 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Sector
             if (Parameters.BindObject != null)
             {
                 // Center of polygon
-                return API.ApiFunctionManager.GetPointFromUnit(Parameters.BindObject, _trueLength / 2f);
+                var direction = Parameters.DirectionOverride ?? Parameters.BindObject.Direction;
+                return Parameters.BindObject.Position + new Vector2(direction.X, direction.Z) * (_trueLength / 2f);
             }
 
             return new Vector2(CastInfo.SpellCastLaunchPosition.X, CastInfo.SpellCastLaunchPosition.Z);

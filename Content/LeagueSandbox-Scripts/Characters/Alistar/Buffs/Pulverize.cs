@@ -51,7 +51,8 @@ namespace Buffs
             float requiredSpeed = horizontalDistance / desiredDuration;
             float requiredGravity = desiredHeight / (desiredDuration * desiredDuration);
 
-            ForceMovement(unit, "RUN", endPosition, requiredSpeed, 0, requiredGravity, 0, movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING);
+            ForceMovement(unit, "RUN", endPosition, requiredSpeed, 0, requiredGravity, 0,
+                movementOrdersFacing: ForceMovementOrdersFacing.KEEP_CURRENT_FACING, caster: ownerSpell.CastInfo.Owner);
         }
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {

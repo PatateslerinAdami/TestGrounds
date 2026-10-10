@@ -6,6 +6,12 @@
         "ResourcePath": "DATA/Spells/FioraQ.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "DesignerCastTime": 0.5,
+            "DesignerTotalTime": 2,
+            "AttackSpeedModifier": 1
+        },
         "SpellData": {
             "AfterEffectName": "missing_instant.troy",
             "AlternateName": "FioraQ",

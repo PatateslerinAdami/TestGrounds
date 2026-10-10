@@ -76,7 +76,7 @@ namespace PacketDefinitions420
         {
             return new MovementDataStop
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Position = o.Position,
                 Forward = new Vector2(o.Direction.X, o.Direction.Z)
             };
@@ -99,8 +99,8 @@ namespace PacketDefinitions420
             var currentWaypoints = new List<Vector2> { unit.Position };
 
             if (unit.MovementParameters == null
-                && unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase actor
-                && actor.NavigationState.Waiting)
+                && (!unit.CanMove()
+                    || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase { NavigationState.Waiting: true }))
                 return currentWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
             for (int i = Math.Max(1, unit.CurrentWaypointKey); i < unit.Waypoints.Count; i++)
                 currentWaypoints.Add(unit.Waypoints[i]);
@@ -118,7 +118,8 @@ namespace PacketDefinitions420
         public static MovementData CreateMovementDataNormalIfPossible(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
             // Prevent 0 waypoints packet error.
-            if (unit.Waypoints.Count < 1 || (!useTeleportID && unit.MovementParameters == null &&
+            if (unit.Waypoints.Count < 1 || (unit.MovementParameters == null && !unit.CanMove())
+                || (!useTeleportID && unit.MovementParameters == null &&
                 (unit.IsPathEnded() || unit is LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI.ObjAIBase { NavigationState.Waiting: true })))
             {
                 return CreateMovementDataStop(unit);
@@ -138,7 +139,7 @@ namespace PacketDefinitions420
 
             return new MovementDataNormal
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
@@ -159,7 +160,7 @@ namespace PacketDefinitions420
         public static MovementData CreateMovementDataWithSpeedIfPossible(AttackableUnit unit, NavigationGrid grid, bool useTeleportID = false)
         {
             // Prevent 0 waypoints packet error.
-            if (unit.Waypoints.Count < 1)
+            if (unit.Waypoints.Count < 1 && unit.MovementParameters?.IsStationaryJump != true)
             {
                 return CreateMovementDataStop(unit);
             }
@@ -181,27 +182,31 @@ namespace PacketDefinitions420
             System.Diagnostics.Debug.Assert(unit.MovementParameters != null);
 
             List<CompressedWaypoint> waypoints;
-            if (unit.MovementParameters.ParabolicStartPoint != default && unit.MovementParameters.ParabolicStartPoint != unit.Position)
+            if (unit.MovementParameters.IsStationaryJump)
             {
-                var customWaypoints = new List<Vector2> { unit.MovementParameters.ParabolicStartPoint, unit.MovementParameters.TargetPosition != default ? unit.MovementParameters.TargetPosition : unit.Position };
+                var movement = unit.MovementParameters;
+                var start = movement.ParabolicStartPoint;
+                var end = movement.TargetPosition;
+                var offset = end - start;
+                float distance = offset.Length();
+                float traveled = Math.Max(0, movement.PathSpeedOverride * movement.ElapsedTime / 1000f);
+                var current = distance > 0 ? start + offset * Math.Min(1, traveled / distance) : end;
+                var presentation = new List<Vector2> { current, end };
+                waypoints = presentation.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
+            }
+            else if (unit.Waypoints.Count < 1)
+            {
+                var customWaypoints = new List<Vector2> { unit.Position, unit.Position };
                 waypoints = customWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
             }
             else
             {
-                if (unit.Waypoints.Count < 1)
-                {
-                    var customWaypoints = new List<Vector2> { unit.Position, unit.Position };
-                    waypoints = customWaypoints.ConvertAll(v => Vector2ToWaypoint(TranslateToCenteredCoordinates(v, grid)));
-                }
-                else
-                {
-                    waypoints = GetCenteredWaypoints(unit, grid);
-                }
+                waypoints = GetCenteredWaypoints(unit, grid);
             }
 
             return new MovementDataWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 TeleportNetID = unit.NetId,
                 HasTeleportID = useTeleportID,
                 TeleportID = useTeleportID ? unit.TeleportID : (byte)0,
@@ -226,7 +231,7 @@ namespace PacketDefinitions420
 
             return new MovementDataWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 TeleportNetID = unit.NetId,
                 HasTeleportID = false,
                 TeleportID = 0,

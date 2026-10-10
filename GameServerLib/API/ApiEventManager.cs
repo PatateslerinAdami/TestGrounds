@@ -134,6 +134,9 @@ namespace LeagueSandbox.GameServer.API
         public static DataOnlyDispatcher<ObjAIBase, DamageData> OnHitUnit
             = new DataOnlyDispatcher<ObjAIBase, DamageData>();
 
+        public static DataOnlyDispatcher<AttackableUnit, DamageData> OnPreHit
+            = new DataOnlyDispatcher<AttackableUnit, DamageData>();
+
         public static DataOnlyDispatcher<Champion, ScoreData> OnIncrementChampionScore
             = new DataOnlyDispatcher<Champion, ScoreData>();
 
@@ -194,6 +197,9 @@ namespace LeagueSandbox.GameServer.API
 
         public static Dispatcher<Spell> OnSpellCast
             = new Dispatcher<Spell>();
+
+        public static DataOnlyDispatcher<ObjAIBase, Spell> OnAbilityCast
+            = new DataOnlyDispatcher<ObjAIBase, Spell>();
 
         public static Dispatcher<Spell> OnSpellChannel
             = new Dispatcher<Spell>();

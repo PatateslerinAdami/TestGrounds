@@ -22,10 +22,6 @@ namespace ItemPassives
                 StatsModifier.GoldPerSecond.FlatBonus = 0.2f;
             }
 
-            if (ItemId == 3069)
-            {
-                StatsModifier.CooldownReduction.FlatBonus = -0.1f;
-            }
         }
 
         public override void OnActivate(ObjAIBase owner)
@@ -105,10 +101,6 @@ namespace ItemPassives
         protected override void Configure()
         {
             StatsModifier.GoldPerSecond.FlatBonus = 0.2f;
-            if (ItemId == 3092)
-            {
-                StatsModifier.CooldownReduction.FlatBonus = -0.1f;
-            }
         }
 
         public override void OnActivate(ObjAIBase owner)
@@ -250,11 +242,6 @@ namespace ItemPassives
         {
             base.OnActivate(owner);
             _charges = MaxCharges;
-            if (ItemId == 3401)
-            {
-                StatsModifier.CooldownReduction.FlatBonus = -0.1f;
-                owner.AddStatModifier(StatsModifier);
-            }
 
             ApiEventManager.OnKillUnit.AddListener(this, owner, Kill);
             Display();

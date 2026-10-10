@@ -106,7 +106,7 @@ namespace Buffs
 
         private void Hit(DamageData data)
         {
-            if (ItemEffectHelpers.IsSuccessfulBasicAttack(_owner, data))
+            if (ItemEffectHelpers.IsSuccessfulOnHit(_owner, data))
             {
                 if (data.DamageResultType == DamageResultType.RESULT_CRITICAL)
                 {

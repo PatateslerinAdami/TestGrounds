@@ -136,9 +136,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
             }
         }
 
-        public Vector3 GetReplicationDirection()
+        public Vector3 GetReplicationDirection(Vector3? straightDirection = null)
         {
-            return _useCircularReplicationDirection ? _replicationDirection : Direction;
+            return _useCircularReplicationDirection ? _replicationDirection : straightDirection ?? Direction;
         }
 
         public override void Update(float diff)
@@ -219,17 +219,9 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
             var next = Destination;
 
-            var goingTo = new Vector3(next.X, _game.Map.NavigationGrid.GetHeightAtLocation(next), next.Y)
-                        - new Vector3(cur.X, _game.Map.NavigationGrid.GetHeightAtLocation(cur), cur.Y);
-            var dirTemp = Vector3.Normalize(goingTo);
-
-            // usually doesn't happen
-            if (float.IsNaN(dirTemp.X) || float.IsNaN(dirTemp.Y) || float.IsNaN(dirTemp.Z))
-            {
-                dirTemp = new Vector3(0, 0, 0);
-            }
-
-            Direction = dirTemp;
+            var goingTo = next - cur;
+            var dirTemp = goingTo.LengthSquared() > 0 ? Vector2.Normalize(goingTo) : Vector2.Zero;
+            Direction = new Vector3(dirTemp.X, 0, dirTemp.Y);
 
             var moveSpeed = GetSpeed();
 
@@ -243,24 +235,12 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
                 deltaMovement = dist;
             }
 
-            var xx = Direction.X * deltaMovement;
-            var yy = Direction.Z * deltaMovement;
-
-            Position = new Vector2(Position.X + xx, Position.Y + yy);
-
-            // (X, Y) has moved to the next position
-            cur = Position;
-
-            // Check if we reached the target position/destination.
-            // REVIEW (of previous code): (deltaMovement * 2) being used here is problematic; if the server lags, the diff will be much greater than the usual values
-            if ((cur - next).LengthSquared() < MOVEMENT_EPSILON * MOVEMENT_EPSILON)
+            if (deltaMovement >= dist)
             {
-                // remove this projectile because it has reached its destination
-                if (Position == Destination)
-                {
-                    _atDestination = true;
-                }
+                Position = Destination;
+                _atDestination = true;
             }
+            else Position += dirTemp * deltaMovement;
         }
 
         private void MoveAccelerated(float diff, float acceleration)

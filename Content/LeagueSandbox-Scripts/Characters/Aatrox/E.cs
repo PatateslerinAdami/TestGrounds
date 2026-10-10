@@ -1,232 +1,153 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Buffs;
-using CharScripts;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
-using GameServerLib.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.API;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.SpellNS.Missile;
-using LeagueSandbox.GameServer.GameObjects.SpellNS.Sector;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Spells;
+namespace Spells
+{
+    public class AatroxE : ISpellScript
+    {
+        private ObjAIBase _owner;
+        private Vector2 _direction;
+        private float _damage, _slowDuration;
+        private readonly Dictionary<SpellMissile, object> _listeners = new Dictionary<SpellMissile, object>();
 
-internal static class AatroxECastTracker {
-    private const long CastLifetimeMs = 2500;
-    private static int _nextCastId = 1;
-
-    private static readonly Dictionary<uint, int> _activeCastByOwner = new();
-    private static readonly Dictionary<uint, int> _castByMissile = new();
-    private static readonly Dictionary<int, HashSet<uint>> _targetsHitByCast = new();
-    private static readonly Dictionary<int, long> _castExpiresAt = new();
-
-    public static void BeginCast(ObjAIBase owner) {
-        if (owner == null) return;
-        Cleanup();
-
-        var castId = _nextCastId++;
-        if (_nextCastId == int.MaxValue) _nextCastId = 1;
-
-        _activeCastByOwner[owner.NetId] = castId;
-        _targetsHitByCast[castId] = new HashSet<uint>();
-        _castExpiresAt[castId] = NowMs() + CastLifetimeMs;
-    }
-
-    public static void RegisterMissile(ObjAIBase owner, SpellMissile missile) {
-        if (owner == null || missile == null) return;
-        Cleanup();
-
-        if (!_activeCastByOwner.TryGetValue(owner.NetId, out var castId)) return;
-        _castByMissile[missile.NetId] = castId;
-        _castExpiresAt[castId] = NowMs() + CastLifetimeMs;
-    }
-
-    public static bool RegisterFirstHit(SpellMissile missile, AttackableUnit target) {
-        if (missile == null || target == null) return true;
-        Cleanup();
-
-        if (!_castByMissile.TryGetValue(missile.NetId, out var castId)) return true;
-        if (!_targetsHitByCast.TryGetValue(castId, out var hitTargets)) {
-            hitTargets = new HashSet<uint>();
-            _targetsHitByCast[castId] = hitTargets;
-        }
-
-        _castExpiresAt[castId] = NowMs() + CastLifetimeMs;
-        return hitTargets.Add(target.NetId);
-    }
-
-    public static void OnMissileEnd(SpellMissile missile) {
-        if (missile == null) return;
-        _castByMissile.Remove(missile.NetId);
-    }
-
-    private static long NowMs() { return Environment.TickCount64; }
-
-    private static void Cleanup() {
-        var now = NowMs();
-        var expiredCastIds = new List<int>();
-        foreach (var entry in _castExpiresAt) {
-            if (entry.Value <= now) expiredCastIds.Add(entry.Key);
-        }
-
-        foreach (var castId in expiredCastIds) {
-            _castExpiresAt.Remove(castId);
-            _targetsHitByCast.Remove(castId);
-        }
-
-        var staleMissileIds = new List<uint>();
-        foreach (var entry in _castByMissile) {
-            if (!_targetsHitByCast.ContainsKey(entry.Value)) staleMissileIds.Add(entry.Key);
-        }
-
-        foreach (var missileId in staleMissileIds) {
-            _castByMissile.Remove(missileId);
-        }
-
-        var staleOwners = new List<uint>();
-        foreach (var entry in _activeCastByOwner) {
-            if (!_targetsHitByCast.ContainsKey(entry.Value)) staleOwners.Add(entry.Key);
-        }
-
-        foreach (var ownerId in staleOwners) {
-            _activeCastByOwner.Remove(ownerId);
-        }
-    }
-}
-
-public class AatroxE : ISpellScript {
-    ObjAIBase _aatrox;
-    Vector2 _targetPosition;
-    public SpellScriptMetadata ScriptMetadata => new() {
-        TriggersSpellCasts   = true,
-        CastingBreaksStealth = true
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _aatrox = owner;
-        ApiEventManager.OnUpdateStats.AddListener(this, _aatrox, OnUpdateStats);
-    }
-
-    public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end) {
-        var healthCost                  = _aatrox.Stats.CurrentHealth * 0.05f;
-        _aatrox.Stats.CurrentHealth = Math.Max(1, _aatrox.Stats.CurrentHealth - healthCost);
-        var buff = _aatrox.GetBuffWithName("AatroxPassive")?.BuffScript as AatroxPassive;
-        buff?.AddBlood(healthCost);
-        
-        _targetPosition             = end;
-        FaceDirection(_targetPosition, _aatrox, true);
-        AatroxECastTracker.BeginCast(_aatrox);
-    }
-
-    public void OnSpellPostCast(Spell spell) {
-        Vector2 startingPosRight = GetPointFromUnit(_aatrox, 100f, 90);
-        Vector2 startingPosLeft = GetPointFromUnit(_aatrox, 100f, 270);
-        Vector2 endPos = GetPointFromUnit(_aatrox, 1000f, 0);
-        _targetPosition = endPos;
-        SpellCast(_aatrox, 0, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, _aatrox.Position);
-        SpellCast(_aatrox, 1, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, startingPosLeft);
-        SpellCast(_aatrox, 1, SpellSlotType.ExtraSlots, _targetPosition, _targetPosition, true, startingPosRight);
-    }
-
-    private void OnUpdateStats(AttackableUnit unit, float diff) {
-        var cost = _aatrox.Stats.CurrentHealth * 0.05f;
-        SetSpellToolTipVar(_aatrox, 2, cost, SpellbookType.SPELLBOOK_CHAMPION, 2, SpellSlotType.SpellSlots);
-    }
-}
-
-public class AatroxEConeMissile : ISpellScript {
-    private ObjAIBase _aatrox;
-    public SpellScriptMetadata ScriptMetadata => new() {
-        MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle,
-        },
-        IsDamagingSpell = true
-    };
-    
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _aatrox = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnHit);
-        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
-    }
-
-    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
-        AatroxECastTracker.RegisterMissile(_aatrox, missile);
-        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
-    }
-
-    private void OnMissileEnd(SpellMissile missile) {
-        AatroxECastTracker.OnMissileEnd(missile);
-    }
-
-    public void OnHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        if (!IsValidTarget(_aatrox, target,
-                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral |
-                           SpellDataFlags.AffectHeroes  | SpellDataFlags.AffectMinions)) return;
-        if (!AatroxECastTracker.RegisterFirstHit(missile, target)) return;
-
-        var ap  = _aatrox.Stats.AbilityPower.Total     * _aatrox.Spells[2].SpellData.Coefficient;
-        var ad  = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[2].SpellData.Coefficient2;
-        var dmg = 75f + 35f * (_aatrox.GetSpell("AatroxE").CastInfo.SpellLevel - 1) + ap + ad;
-        var hitParticle = _aatrox.SkinID switch {
-            1 => "Aatrox_Skin01_EMissile_Hit",
-            2 => "Aatrox_Skin02_EMissile_Hit",
-            _ => "Aatrox_Base_EMissile_Hit"
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata()
+        {
+            TriggersSpellCasts = true,
+            CastingBreaksStealth = true
         };
-        AddParticleTarget(_aatrox, target, hitParticle, target);
-        var duration = 1.75f + 0.25f * (_aatrox.Spells[2].CastInfo.SpellLevel - 1);
-        AddBuff("AatroxEslow", duration, 1, spell, target, _aatrox);
-        target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
+
+        public void OnActivate(ObjAIBase owner, Spell spell)
+        {
+            _owner = owner;
+            ApiEventManager.OnUpdateStats.AddListener(this, owner, OnUpdateStats);
+        }
+
+        public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
+        {
+            AatroxHelpers.PayHealth(owner, owner.Stats.CurrentHealth * 0.05f);
+            _damage = 75 + 35 * (spell.CastInfo.SpellLevel - 1) + 0.6f * owner.Stats.AbilityPower.Total + 0.6f * (owner.Stats.AttackDamage.Total - owner.Stats.AttackDamage.BaseValue);
+            _slowDuration = 1.75f + 0.25f * (spell.CastInfo.SpellLevel - 1);
+            var direction = end - owner.Position;
+            if (direction.LengthSquared() < 0.001f)
+            {
+                direction = new Vector2(owner.Direction.X, owner.Direction.Z);
+            }
+
+            _direction = direction.LengthSquared() < 0.001f ? Vector2.UnitX : Vector2.Normalize(direction);
+            FaceDirection(owner.Position + _direction, owner, true);
+        }
+
+        public void OnSpellPostCast(Spell spell)
+        {
+            var hits = new HashSet<uint>();
+            float damage = _damage, slow = _slowDuration;
+            var start = _owner.Position;
+            var aim = start + _direction * 1050;
+            var side = new Vector2(-_direction.Y, _direction.X) * 115;
+            Launch("AatroxEConeMissile2", start, aim, 100, hits, spell, damage, slow);
+            foreach (var launch in new[]
+            {
+                start + side,
+                start - side
+            }
+
+            )
+            {
+                Launch("AatroxEConeMissile", launch, launch + Vector2.Normalize(aim - launch) * 1075, 0, hits, spell, damage, slow);
+            }
+        }
+
+        private void Launch(string name, Vector2 start, Vector2 end, float height, HashSet<uint> hits, Spell wrapper, float damage, float slow)
+        {
+            var carrier = _owner.GetSpell(name);
+            carrier.CastInfo.SpellLevel = 0;
+            var missile = carrier.CreateCustomMissile(start, end,
+                new MissileParameters { Type = MissileType.Circle, ReplicationHeightOffset = height, ReplicationEndHeightOffset = height },
+                isOverrideCastPosition: true, customHeightOffset: 0);
+            if (missile == null)
+            {
+                return;
+            }
+
+            var listener = new object();
+            _listeners.Add(missile, listener);
+            ApiEventManager.OnSpellMissileHit.AddListener(listener, missile, (_, target) =>
+            {
+                if (target == null)
+                {
+                    return;
+                }
+
+                if (target.IsDead)
+                {
+                    return;
+                }
+
+                if (target.IsToRemove())
+                {
+                    return;
+                }
+
+                if (!IsValidTarget(_owner, target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral))
+                {
+                    return;
+                }
+
+                if (!hits.Add(target.NetId))
+                {
+                    return;
+                }
+
+                AddParticleTarget(_owner, target, AatroxHelpers.Effect(_owner, "EMissile_Hit"), target, 0.5f);
+                AddBuff("AatroxEConeMissile", slow, 1, wrapper, target, _owner);
+                target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+            });
+            ApiEventManager.OnSpellMissileEnd.AddListener(listener, missile, _ =>
+            {
+                ApiEventManager.RemoveAllListenersForOwner(listener);
+                _listeners.Remove(missile);
+            },
+                true);
+        }
+
+        private void OnUpdateStats(AttackableUnit unit, float diff)
+        {
+            SetSpellToolTipVar(_owner, 2, _owner.Stats.CurrentHealth * 0.05f, SpellbookType.SPELLBOOK_CHAMPION, 2,
+                SpellSlotType.SpellSlots);
+        }
+
+        public void OnDeactivate(ObjAIBase owner, Spell spell)
+        {
+            foreach (var entry in _listeners)
+            {
+                ApiEventManager.RemoveAllListenersForOwner(entry.Value);
+                entry.Key.SetToRemove();
+            }
+
+            _listeners.Clear();
+            ApiEventManager.RemoveAllListenersForOwner(this);
+        }
     }
-}
 
-public class AatroxEConeMissile2 : ISpellScript {
-    private ObjAIBase _aatrox;
-    public SpellScriptMetadata ScriptMetadata => new() {
-        MissileParameters = new MissileParameters() {
-            Type = MissileType.Circle,
-        },
-        IsDamagingSpell = true
-    };
-
-    public void OnActivate(ObjAIBase owner, Spell spell) {
-        _aatrox = owner;
-        ApiEventManager.OnSpellHit.AddListener(this, spell, OnSpellHit);
-        ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunchMissile);
-    }
-
-    private void OnLaunchMissile(Spell spell, SpellMissile missile) {
-        AatroxECastTracker.RegisterMissile(_aatrox, missile);
-        ApiEventManager.OnSpellMissileEnd.AddListener(this, missile, OnMissileEnd, true);
-    }
-
-    private void OnMissileEnd(SpellMissile missile) {
-        AatroxECastTracker.OnMissileEnd(missile);
-    }
-
-    private void OnSpellHit(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
-        if (!IsValidTarget(_aatrox, target,
-                           SpellDataFlags.AffectEnemies | SpellDataFlags.AffectNeutral |
-                           SpellDataFlags.AffectHeroes  | SpellDataFlags.AffectMinions)) return;
-        if (!AatroxECastTracker.RegisterFirstHit(missile, target)) return;
-
-        var ap  = _aatrox.Stats.AbilityPower.Total     * _aatrox.Spells[2].SpellData.Coefficient;
-        var ad  = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[2].SpellData.Coefficient2;
-        var dmg = 75f + 35f * (_aatrox.GetSpell("AatroxE").CastInfo.SpellLevel - 1) + ap + ad;
-        var hitParticle = _aatrox.SkinID switch {
-            1 => "Aatrox_Skin01_EMissile_Hit",
-            2 => "Aatrox_Skin02_EMissile_Hit",
-            _ => "Aatrox_Base_EMissile_Hit"
+    public class AatroxEConeMissile : ISpellScript
+    {
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata()
+        {
+            IsDamagingSpell = true
         };
-        AddParticleTarget(_aatrox, target, hitParticle, target);
-        var duration = 1.75f + 0.25f * (_aatrox.Spells[2].CastInfo.SpellLevel - 1);
-        AddBuff("AatroxEslow", duration, 1, spell, target, _aatrox);
-        target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, DamageResultType.RESULT_NORMAL);
+    }
+
+    public class AatroxEConeMissile2 : AatroxEConeMissile
+    {
     }
 }

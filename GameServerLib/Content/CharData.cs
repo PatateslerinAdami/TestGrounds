@@ -151,10 +151,9 @@ namespace LeagueSandbox.GameServer.Content
             IsTower = file.GetBool("Minion", "IsTower", IsTower);
             AlwaysUpdatePAR = file.GetBool("Minion", "AlwaysUpdatePAR", AlwaysUpdatePAR);
 
-            foreach (var tag in file.GetString("Data", "UnitTags").Split(" | "))
+            foreach (var tag in file.GetString("Data", "UnitTags").Split('|'))
             {
-                Enum.TryParse(tag, out UnitTag unitTag);
-                UnitTags |= unitTag;
+                if (Enum.TryParse(tag.Trim(), out UnitTag unitTag)) UnitTags |= unitTag;
             }
 
             Enum.TryParse<PrimaryAbilityResourceType>(file.GetString("Data", "PARType", ParType.ToString()),

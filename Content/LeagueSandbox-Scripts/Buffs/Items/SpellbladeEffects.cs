@@ -63,6 +63,7 @@ namespace Buffs
             string name = item == 3100 ? "LichBane" : item == 3025 ? "ItemFrozenFist" : "Sheen";
             if (_presentation == name)
             {
+                NativeItemPresentation.Show(_buff, name);
                 return;
             }
 
@@ -73,7 +74,7 @@ namespace Buffs
 
         private void Hit(DamageData data)
         {
-            if (!ItemEffectHelpers.IsSuccessfulBasicAttack(_owner, data) || data.Target is Minion { IsWard: true })
+            if (!ItemEffectHelpers.IsSuccessfulOnHit(_owner, data) || data.Target is Minion { IsWard: true })
             {
                 return;
             }

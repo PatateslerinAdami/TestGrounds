@@ -1,6 +1,7 @@
 ﻿using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
@@ -22,16 +23,6 @@ namespace Spells
             IsDamagingSpell = true
         };
 
-        private ObjAIBase _owner;
-        private Spell _spell;
-        private float _bonusAd = 0;
-
-        public void OnActivate(ObjAIBase owner, Spell spell)
-        {
-            _owner = owner;
-            _spell = spell;
-        }
-
         public void OnSpellCast(Spell spell)
         {
             var owner = spell.CastInfo.Owner;
@@ -39,7 +30,7 @@ namespace Spells
         }
         public void OnSpellPostCast(Spell spell)
         {
-            var owner = spell.CastInfo.Owner as Champion;
+            var owner = spell.CastInfo.Owner;
             var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
             var distance = Vector2.Distance(owner.Position, targetPos);
             FaceDirection(targetPos, owner);
@@ -48,7 +39,8 @@ namespace Spells
             {
                 targetPos = GetPointFromUnit(owner, 1150.0f);
             }
-            SpellCast(owner, 2, SpellSlotType.ExtraSlots, targetPos, targetPos, false, Vector2.Zero);
+            SpellCast(owner, 2, SpellSlotType.ExtraSlots, targetPos, targetPos, false, Vector2.Zero,
+                overrideForceLevel: spell.CastInfo.SpellLevel);
         }
     }
 
@@ -58,34 +50,40 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Circle
+                Type = MissileType.Circle,
+                ReplicateOnLaunch = true
             },
             IsDamagingSpell = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+            ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunch);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void OnLaunch(Spell spell, SpellMissile missile)
         {
             var owner = spell.CastInfo.Owner;
-            var ad = owner.Stats.AttackDamage.Total * spell.SpellData.Coefficient;
-            var ap = owner.Stats.AbilityPower.Total * spell.SpellData.Coefficient2;
-            var damage = 15 + spell.CastInfo.SpellLevel * 20 + ad + ap;
+            var source = owner.GetSpell("EzrealEssenceFlux");
+            var rank = missile.CastInfo.SpellLevel;
+            var damage = source.SpellData.GetEffectAmount(1, rank)
+                + owner.Stats.AbilityPower.Total * source.SpellData.Coefficient;
+            EzrealHelpers.OnHit(missile, target =>
+            {
+                if (target.Team != owner.Team)
+                {
+                    target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false, source);
+                    AddParticleTarget(owner, target, owner.SkinID == 5 ? "Ezreal_Pulsefire_essenceflux_tar" : "Ezreal_essenceflux_tar", target, bone: owner.SkinID == 5 ? "" : "C_BUFFBONE_GLB_CHEST_LOC");
+                }
+                else
+                {
+                    var variables = new BuffVariables();
+                    variables.Set("attackSpeed", source.SpellData.GetEffectAmount(2, rank) / 100);
+                    AddBuff("EzrealEssenceFlux", 5, 1, source, target, owner, buffVariables: variables);
+                }
 
-            var spellO = owner.GetSpell("EzrealEssenceFlux");
-            if(target.Team != owner.Team)
-            {
-                target.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_ATTACK, false, spellO);
-                AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
-            }
-            else if(target.Team == owner.Team)
-            {
-                
-                AddBuff("EzrealEssenceFlux", 5.0f, 1, owner.GetSpell("EzrealEssenceFlux"), target, owner);
-            }
+                AddBuff("EzrealRisingSpellForce", 6, 1, source, owner, owner);
+            });
         }
     }
 }

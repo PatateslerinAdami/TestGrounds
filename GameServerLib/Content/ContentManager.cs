@@ -17,6 +17,7 @@ namespace LeagueSandbox.GameServer.Content
 
         private readonly List<Package> _loadedPackages;
         private readonly List<string> _dataPackageNames;
+        private Dictionary<uint, SpellCastBehavior>? _spellCastBehaviors;
 
         public string ContentPath { get; }
         public string PackageName { get; }
@@ -185,11 +186,28 @@ namespace LeagueSandbox.GameServer.Content
 
                 if (toReturnSpellData != null)
                 {
+                    if (toReturnSpellData.ClientCastBehavior != null)
+                    {
+                        _spellCastBehaviors ??= new Dictionary<uint, SpellCastBehavior>();
+                        uint hash = GameServerCore.Content.HashFunctions.HashString(spellName);
+                        _spellCastBehaviors.TryAdd(hash, toReturnSpellData.ClientCastBehavior);
+                    }
                     return toReturnSpellData;
                 }
             }
 
             throw new ContentNotFoundException($"No Spell Data found with name: {spellName}");
+        }
+
+        public SpellCastBehavior? GetLoadedSpellCastBehavior(uint spellHash)
+        {
+            if (_spellCastBehaviors != null
+                && _spellCastBehaviors.TryGetValue(spellHash, out var behavior))
+            {
+                return behavior;
+            }
+
+            return null;
         }
 
         public CharData GetCharData(string characterName)

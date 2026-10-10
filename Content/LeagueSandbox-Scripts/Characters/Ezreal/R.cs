@@ -40,7 +40,11 @@ public class EzrealTrueshotBarrage : ISpellScript {
     }
 
     public void OnSpellCast(Spell spell) {
-        AddParticleTarget(_owner, _owner, "Ezreal_bow_huge",      _owner, bone: "L_hand", flags: FXFlags.BindDirection);
+        AddParticleTarget(_owner, _owner, "Ezreal_bow_huge", _owner, bone: "L_hand", flags: FXFlags.BindDirection);
+        if (_owner.SkinID == 5)
+        {
+            AddParticle(_owner, _owner, "Ezreal_Pulsefire_Ult_Fire", _owner.Position, bone: "BUFFBONE_GLB_WEAPON_1_LOC");
+        }
     }
 
     private void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector) {
@@ -52,7 +56,12 @@ public class EzrealTrueshotBarrage : ISpellScript {
         var damage  = 350f + 150f * (spell.CastInfo.SpellLevel - 1) + bonusAd + ap;
         target.TakeDamage(owner, damage * (1f - (reduc - 1f) / 10f), DamageType.DAMAGE_TYPE_MAGICAL,
                           DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
-        AddParticleTarget(owner, target, "Ezreal_TrueShot_tar", target, bone: "spine");
+        AddParticleTarget(owner, target, owner.SkinID == 5 ? "Ezreal__Pulsefire_TrueShot_tar" : "Ezreal_TrueShot_tar", target, bone: owner.SkinID == 5 ? "" : "C_BUFFBONE_GLB_CHEST_LOC");
+        if (owner.SkinID == 5)
+        {
+            AddParticleTarget(owner, owner, "Ezreal_PulseFire_Ult_Thrusters", owner, bone: "BUFFBONE_Vent_Low_L");
+            AddParticleTarget(owner, owner, "Ezreal_PulseFire_Ult_Thrusters", owner, bone: "BUFFBONE_Vent_Low_R");
+        }
         AddBuff("EzrealRisingSpellForce", 6f, 1, spell, owner, owner);
     }
     

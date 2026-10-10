@@ -119,27 +119,7 @@ namespace ItemPassives
         {
             _owner = owner;
             ApiEventManager.OnLaunchAttack.AddListener(this, owner, spell => Stack());
-            foreach (short slot in new short[]
-            {
-                0,
-                1,
-                2,
-                3
-            }
-
-            )
-            {
-                if (owner.Spells.TryGetValue(slot, out var spell))
-                {
-                    ApiEventManager.OnSpellCast.AddListener(this, spell, cast =>
-                    {
-                        if (cast.Script.ScriptMetadata.TriggersSpellCasts)
-                        {
-                            Stack();
-                        }
-                    });
-                }
-            }
+            ApiEventManager.OnAbilityCast.AddListener(this, owner, cast => Stack());
 
             ApiEventManager.OnDealDamage.AddListener(this, owner, Combat);
             ApiEventManager.OnTakeDamage.AddListener(this, owner, Combat);

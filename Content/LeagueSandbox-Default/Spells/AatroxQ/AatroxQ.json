@@ -6,6 +6,11 @@
         "ResourcePath": "DATA/Characters/Aatrox/Spells/AatroxQ.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "ClientDesignerCastTime": 0.25,
+            "ClientDesignerTotalTime": 1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_AatroxQ"
         },

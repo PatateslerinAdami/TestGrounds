@@ -15,6 +15,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public uint SpellChainOwnerNetID { get; set; } // TODO: Figure out what this is used for
         public uint PackageHash { get; set; }
         public uint MissileNetID { get; set; }
+        internal HashSet<int> ClientCastRecipients { get; private set; } = new();
         public Vector3 TargetPosition { get; set; }
         public Vector3 TargetPositionEnd { get; set; }
 
@@ -35,6 +36,14 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public bool IsClickCasted { get; set; } = false;
 
         public byte SpellSlot { get; set; }
+        public byte? ClientSpellSlot { get; set; }
+        public byte? ClientSpellLevel { get; set; }
+        public float? ClientDesignerCastTime { get; set; }
+        public float? ClientDesignerTotalTime { get; set; }
+        public int? ClientAmmoUsed { get; set; }
+        public byte? ClientStopBeforeCastFlags { get; set; }
+        public byte? ClientStopAttackWindupFlags { get; set; }
+        public uint ClientStopBeforeCastMissileNetID { get; set; }
         public float ManaCost { get; set; }
         public Vector3 SpellCastLaunchPosition { get; set; }
         public int AmmoUsed { get; set; }
@@ -84,6 +93,7 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS
         public CastInfo Clone()
         {
             var clone = (CastInfo)this.MemberwiseClone();
+            clone.ClientCastRecipients = new HashSet<int>(ClientCastRecipients);
             if (Targets != null)
             {
                 clone.Targets = new List<CastTarget>(Targets);

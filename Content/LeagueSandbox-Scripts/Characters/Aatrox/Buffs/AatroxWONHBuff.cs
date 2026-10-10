@@ -1,4 +1,3 @@
-using System;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using GameServerLib.GameObjects.AttackableUnits;
@@ -8,75 +7,143 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using log4net.Repository.Hierarchy;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Buffs;
+namespace Buffs
+{
+    public class AatroxWONHBuff : IBuffGameScript
+    {
+        private ObjAIBase _owner;
+        private Spell _spell;
+        private int _hits;
+        private Attack _pending;
+        private Buff _indicator;
 
-public class AatroxWONHBuff : IBuffGameScript {
-    private ObjAIBase _aatrox;
-    private Spell     _spell;
+        private sealed record Attack(AttackableUnit Target, bool Power, float Heal, float Damage, float Cost);
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COUNTER,
-        BuffAddType = BuffAddType.STACKS_AND_RENEWS,
-        MaxStacks   = 3,
-        IsHidden    = true
-    };
+        public bool Ready
+        {
+            get
+            {
+                return _hits == 2;
+            }
+        }
 
-    public StatsModifier StatsModifier { get; } = new();
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData()
+        {
+            BuffType = BuffType.COUNTER,
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            IsHidden = true,
+            UpdateInfinite = true
+        };
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
-        _spell  = ownerspell;
-        RemoveBuff(_aatrox, "AatroxWPower");
-        ApiEventManager.OnHitUnit.AddListener(this, _aatrox, OnHit);
-    }
+        public StatsModifier StatsModifier { get; } = new StatsModifier();
 
-    private void OnHit(DamageData data) {
-        if (!IsValidTarget(_aatrox, data.Target, SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral))return;
-        AddBuff("AatroxW", 2500f, 1, _spell, _aatrox, _aatrox, true);
-        switch (_aatrox.GetBuffsWithName("AatroxW").Count) {
-            case 2:
-                AddBuff(_aatrox.HasBuff("AatroxWLife") ? "AatroxWONHLifeBuff" : "AatroxWONHPowerBuff", 25000f, 1,
-                        _spell, _aatrox, _aatrox, true);
-                break;
-            case >= 3:
-                RemoveBuff(_aatrox, "AatroxW");
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            _owner = (ObjAIBase)unit;
+            _spell = spell;
+            ApiEventManager.OnHitUnit.AddListener(this, _owner, OnHit);
+        }
 
-                if (_aatrox.HasBuff("AatroxWLife"))
-                {
-                    SpellCast(_aatrox, 2, SpellSlotType.ExtraSlots, false, _aatrox, data.Target.Position);
-                }
-                else if (_aatrox.HasBuff("AatroxWPower"))
-                {
-                    var adCost = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[1].SpellData.Coefficient;
-                    var healthCost = 15f + 8.75f * (_aatrox.Spells[1].CastInfo.SpellLevel - 1) + adCost;
-                    _aatrox.Stats.CurrentHealth = Math.Max(1, _aatrox.Stats.CurrentHealth - healthCost);
+        private Attack Capture(AttackableUnit target)
+        {
+            int rank = _owner.Spells[1].CastInfo.SpellLevel;
+            float bonusAD = _owner.Stats.AttackDamage.Total - _owner.Stats.AttackDamage.BaseValue;
+            float damage = 60 + 35 * (rank - 1) + bonusAD;
+            return new Attack(target, _owner.HasBuff("AatroxWPower"), 20 + 5 * (rank - 1) + 0.25f * bonusAD, damage, damage * 0.25f);
+        }
 
-                    // Safe cast check for AatroxPassive
-                    if (_aatrox.GetBuffWithName("AatroxPassive")?.BuffScript is AatroxPassive buff)
-                    {
-                        buff.AddBlood(healthCost);
-                    }
+        public void PrepareAttack(AttackableUnit target)
+        {
+            _pending = Capture(target);
+        }
 
-                    var ad = _aatrox.Stats.AttackDamage.FlatBonus * _aatrox.Spells[1].SpellData.Coefficient2;
-                    var dmg = 60f + 35f * (_aatrox.Spells[1].CastInfo.SpellLevel - 1) + ad;
-                    data.Target.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_PHYSICAL,
-                                           DamageSource.DAMAGE_SOURCE_SPELL, DamageResultType.RESULT_NORMAL);
-                }
+        public void OnUpdate(float diff)
+        {
+            var values = Capture(null);
+            SetSpellToolTipVar(_owner, 4, values.Cost, SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
+            SetSpellToolTipVar(_owner, 5, values.Heal * 3, SpellbookType.SPELLBOOK_CHAMPION, 1, SpellSlotType.SpellSlots);
+        }
 
-                CreateTimer(0.001f, () => {
-                    if (_aatrox != null && !_aatrox.IsDead)
-                    {
-                        RemoveBuff(_aatrox, _aatrox.HasBuff("AatroxWLife") ? "AatroxWONHLifeBuff" : "AatroxWONHPowerBuff");
-                    }
-                });
-                break;
+        private void OnHit(DamageData data)
+        {
+            if (!data.IsAutoAttack)
+            {
+                return;
+            }
+
+            if (data.DamageSource != DamageSource.DAMAGE_SOURCE_ATTACK)
+            {
+                return;
+            }
+
+            if (data.IsHitBlocked)
+            {
+                return;
+            }
+
+            if (data.Target == null)
+            {
+                return;
+            }
+
+            if (_owner.Spells[1].CastInfo.SpellLevel == 0)
+            {
+                return;
+            }
+
+            var attack = _pending != null && _pending.Target == data.Target ? _pending : Capture(data.Target);
+            _pending = null;
+            if (++_hits < 3)
+            {
+                RefreshIndicator();
+                return;
+            }
+
+            _hits = 0;
+            RefreshIndicator();
+            if (attack.Power)
+            {
+                Spells.AatroxHelpers.PayHealth(_owner, attack.Cost);
+                data.Target.TakeDamage(_owner, attack.Damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_PROC, false);
+                AddParticle(
+                    _owner,
+                    data.Target,
+                    Spells.AatroxHelpers.Effect(_owner, "basic_hit_effect_03"),
+                    data.Target.Position,
+                    lifetime: 0.5f
+                );
+            }
+            else
+            {
+                float heal = attack.Heal * (_owner.Stats.CurrentHealth < _owner.Stats.HealthPoints.Total * 0.5f ? 3 : 1);
+                _owner.TakeHeal(_owner, heal, HealType.SelfHeal);
+                AddParticleTarget(_owner, _owner, Spells.AatroxHelpers.Effect(_owner, "W_Life_Self"), _owner, 0.5f);
+            }
+        }
+
+        public void RefreshIndicator()
+        {
+            if (_indicator != null && !_indicator.Remove)
+            {
+                RemoveBuff(_indicator);
+            }
+
+            _indicator = Ready ? AddBuff(_owner.HasBuff("AatroxWPower") ? "AatroxWONHPowerBuff" : "AatroxWONHLifeBuff", 25000, 1, _spell,
+                _owner, _owner, true) : null;
+        }
+
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            ApiEventManager.RemoveAllListenersForOwner(this);
+            if (_indicator != null && !_indicator.Remove)
+            {
+                RemoveBuff(_indicator);
+            }
+
+            _pending = null;
         }
     }
-
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) { }
 }

@@ -688,11 +688,12 @@ namespace LeagueSandbox.GameServer.API
                     Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, TeamId teamOnly = TeamId.TEAM_ALL,
                     GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
-                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+                    GameObject keywordObject = null)
         {
             var p = new Particle(_game, caster, start, end, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash, keywordObject);
             return p;
         }
 
@@ -718,11 +719,12 @@ namespace LeagueSandbox.GameServer.API
                     Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, TeamId teamOnly = TeamId.TEAM_ALL,
                     GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
-                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+                    GameObject keywordObject = null)
         {
             return new Particle(_game, caster, bindObj, position, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash, keywordObject);
         }
 
         /// <summary>
@@ -748,11 +750,12 @@ namespace LeagueSandbox.GameServer.API
                     Vector3 direction = new Vector3(), bool followGroundTilt = false, bool reqVision = true, TeamId teamOnly = TeamId.TEAM_ALL,
                     GameObject unitOnly = null, FXFlags flags = FXFlags.BindDirection, bool ignoreCasterVisibility = false,
                     float overrideTargetHeight = 0f, string enemyParticle = null,
-                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0)
+                    uint nameHash = 0, uint boneNameHash = 0, uint targetBoneNameHash = 0, uint enemyNameHash = 0,
+                    GameObject keywordObject = null)
         {
             var p = new Particle(_game, caster, bindObj, target, particle, size, bone, targetBone, 0, direction,
                 followGroundTilt, reqVision, lifetime, teamOnly, unitOnly, flags, ignoreCasterVisibility, overrideTargetHeight,
-                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash);
+                enemyParticle, nameHash, boneNameHash, targetBoneNameHash, enemyNameHash, keywordObject);
             return p;
         }
         /// <summary>
@@ -781,6 +784,8 @@ namespace LeagueSandbox.GameServer.API
         /// <param name="visibilityOwner">Specifies the only unit which should be able to see the minion.</param>
         /// <param name="isVisible">Whether or not this minion should be visible.</param>
         /// <param name="aiPaused">Whether or not this minion's AI is inactive.</param>
+        /// <param name="visionRadius">Optional server sight radius applied before registration.</param>
+        /// <param name="visibilitySize">Optional native spawn metadata, independent of server sight.</param>
         /// <returns>New Minion instance.</returns>
         public static Minion AddMinion
         (
@@ -798,12 +803,17 @@ namespace LeagueSandbox.GameServer.API
             bool isVisible = true,
             bool aiPaused = true,
             bool useSpells = true,
-            Vector3 direction = default
+            Vector3 direction = default,
+            float? visionRadius = null,
+            float? visibilitySize = null
         )
         {
             var m = new Minion(_game, owner, position, model, name, 0, team, skinId, ignoreCollision, targetable,
                 isWard, visibilityOwner, null, "", 0, 0, 1, useSpells, direction: direction);
             m.Stats.IsTargetableToTeam = targetingFlags;
+            // Finalize sight and spawn metadata before registration.
+            if (visionRadius.HasValue) m.Stats.PerceptionRange.BaseValue = MathF.Max(0, visionRadius.Value);
+            m.VisibilitySize = visibilitySize;
             _game.ObjectManager.AddObject(m);
             if (owner != null)
             {
@@ -1752,7 +1762,7 @@ namespace LeagueSandbox.GameServer.API
         public static void CancelDash(AttackableUnit unit)
         {
             // Allow the user to move the champion
-            unit.SetDashingState(false);
+            unit.SetDashingState(false, MoveStopReason.ForceMovement);
         }
 
         /// <summary>
@@ -1793,7 +1803,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToLocation(target, speed, animation, gravity, keepFacingLastDirection, consideredAsCC,
-                movementName, caster);
+                movementName, caster, movementOrdersType: movementOrdersType);
         }
 
         /// <summary>
@@ -1836,7 +1846,7 @@ namespace LeagueSandbox.GameServer.API
             }
 
             unit.DashToTarget(target, speed, animation, gravity, keepFacingLastDirection, idealDistance, moveBackBy,
-                maxTravelTime, consideredAsCC, movementName, caster);
+                maxTravelTime, consideredAsCC, movementName, caster, movementOrdersType: movementOrdersType);
         }
 
         /// <summary>
@@ -1942,6 +1952,11 @@ namespace LeagueSandbox.GameServer.API
             spell.SetAutocast();
         }
 
+        public static void NotifyUnitStats(AttackableUnit unit, bool reliable = false)
+        {
+            _game.PacketNotifier.NotifyOnReplication(unit, partial: false, reliable: reliable);
+        }
+
         /// <summary>
         /// Sets the state of the given status for the given unit.
         /// </summary>
@@ -1951,6 +1966,16 @@ namespace LeagueSandbox.GameServer.API
         public static void SetStatus(AttackableUnit unit, StatusFlags status, bool enabled)
         {
             unit.SetStatus(status, enabled);
+        }
+
+        /// <param name="owner">Unit that owns the internal spell.</param>
+        /// <param name="spellName">Native spell name to load.</param>
+        /// <param name="slot">Absolute slot number to include in native cast packets.</param>
+        /// <param name="enableScripts">Whether to load the spell's script callbacks.</param>
+        /// <returns>A spell instance that leaves the owner's installed spells unchanged.</returns>
+        public static Spell CreateSpell(ObjAIBase owner, string spellName, byte slot, bool enableScripts = true)
+        {
+            return new Spell(_game, owner, spellName, slot, enableScripts);
         }
 
         /// <summary>
@@ -2315,6 +2340,10 @@ namespace LeagueSandbox.GameServer.API
             _game.PacketNotifier.NotifyDisplayFloatingText(floatTextData, team, userId);
         }
 
+        public static void NotifyNPCMessage(AttackableUnit target, string message, float bubbleDelay = 2,
+            uint floatTextType = 0, int slotNumber = 0, bool isError = false, byte colorIndex = 0)
+            => _game.PacketNotifier.NotifyNPCMessage(target, message, bubbleDelay, floatTextType, slotNumber, isError, colorIndex);
+
         /// <summary>
         /// Moves the camera of the player controlling the specified unit to a location.
         /// </summary>
@@ -2391,6 +2420,11 @@ namespace LeagueSandbox.GameServer.API
         public static void UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
         {
             _game.PacketNotifier.NotifyS2C_UnitSetLookAt(attacker, attacked, attackType);
+        }
+
+        public static void UnitSetLookAt(AttackableUnit unit, Vector3 direction)
+        {
+            _game.PacketNotifier.NotifyS2C_UnitSetLookAt(unit, direction);
         }
 
         public static List<SpellMissile> GetMissiles()

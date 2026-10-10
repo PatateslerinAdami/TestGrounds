@@ -6,6 +6,14 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoQ3.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "DesignerTotalTime": 0.5,
+            "AttackSpeedModifier": 1,
+            "ClientSpellSlot": 46,
+            "ClientSpellLevel": 0,
+            "ClientStopBeforeCastFlags": 195,
+            "ClientStopAttackWindupFlags": 209
+        },
         "SpellData": {
             "AfterEffectName": "",
             "AlternateName": "YasuoQW",

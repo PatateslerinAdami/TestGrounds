@@ -75,7 +75,8 @@ public class TrundleCircle : IBuffGameScript {
                 true,
                 ForceMovementType.FURTHEST_WITHIN_RANGE,
                 ForceMovementOrdersType.CANCEL_ORDER,
-                ForceMovementOrdersFacing.KEEP_CURRENT_FACING
+                ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
+                caster: _trundle
             );
         }
 

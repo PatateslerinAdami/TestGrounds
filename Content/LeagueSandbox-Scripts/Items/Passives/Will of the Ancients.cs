@@ -10,7 +10,6 @@ public class ItemID_3152 : IItemScript
     public void OnActivate(ObjAIBase owner)
     {
         StatsModifier.SpellVamp.FlatBonus = 0.20f;
-        StatsModifier.CooldownReduction.FlatBonus = -0.1f;
         owner.AddStatModifier(StatsModifier);
     }
 }

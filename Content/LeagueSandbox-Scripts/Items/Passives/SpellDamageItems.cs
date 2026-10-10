@@ -53,7 +53,6 @@ namespace ItemPassives
         {
             base.OnActivate(owner);
             StatsModifier.ArmorPenetration.FlatBonus = 10;
-            StatsModifier.CooldownReduction.FlatBonus = -0.1f;
             owner.AddStatModifier(StatsModifier);
         }
 
@@ -113,12 +112,6 @@ namespace ItemPassives
 
     public class ItemID_3165 : SpellDamageItem
     {
-        public override void OnActivate(ObjAIBase owner)
-        {
-            base.OnActivate(owner);
-            StatsModifier.CooldownReduction.FlatBonus = -0.2f;
-            owner.AddStatModifier(StatsModifier);
-        }
 
         protected override void OnDamage(DamageData data)
         {

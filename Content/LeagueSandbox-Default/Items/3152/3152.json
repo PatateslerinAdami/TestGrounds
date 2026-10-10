@@ -24,6 +24,7 @@
             "SpellVamp": 1
         },
         "Data": {
+            "PercentCooldownMod": -0.1,
             "CanBeDropped": 1,
             "CanBeSold": 1,
             "Consumed": "0",

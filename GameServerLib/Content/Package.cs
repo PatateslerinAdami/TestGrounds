@@ -24,6 +24,7 @@ namespace LeagueSandbox.GameServer.Content
         private readonly Dictionary<string, SpellData> _spellData = new Dictionary<string, SpellData>();
         private readonly Dictionary<string, NavigationGrid> _navGrids = new Dictionary<string, NavigationGrid>();
         private readonly Dictionary<string, string> _mapData = new Dictionary<string, string>();
+        private readonly ContentFileResolver _contentFileResolver;
         private readonly Game _game;
         private static ILog _logger = LoggerProvider.GetLogger();
 
@@ -32,6 +33,7 @@ namespace LeagueSandbox.GameServer.Content
         public Package(string packagePath, Game game)
         {
             PackagePath = packagePath;
+            _contentFileResolver = new ContentFileResolver(packagePath);
             _game = game;
         }
 
@@ -43,7 +45,7 @@ namespace LeagueSandbox.GameServer.Content
             LoadScripts();
         }
 
-        private ContentFile GetContentFileFromJson(string filePath)
+        private ContentFile GetContentFileFromJson(string? filePath)
         {
             ContentFile file = null;
             if (File.Exists(filePath))
@@ -264,7 +266,7 @@ namespace LeagueSandbox.GameServer.Content
             }
             else
             {
-                string path = $"{GetContentTypePath("Spells")}/{spellName}/{spellName}.json";
+                var path = _contentFileResolver.ResolveJsonFile("Spells", spellName);
                 ContentFile contentFile = GetContentFileFromJson(path);
                 if (contentFile != null)
                 {
@@ -285,7 +287,7 @@ namespace LeagueSandbox.GameServer.Content
             }
             else
             {
-                string path = $"{GetContentTypePath("Stats")}/{characterName}/{characterName}.json";
+                var path = _contentFileResolver.ResolveJsonFile("Stats", characterName);
                 ContentFile contentFile = GetContentFileFromJson(path);
                 if (contentFile != null)
                 {
@@ -300,7 +302,7 @@ namespace LeagueSandbox.GameServer.Content
 
         public TalentCollectionEntry GetTalentEntry(string name)
         {
-            string path = $"{GetContentTypePath("Talents")}/{name}/{name}.json";
+            var path = _contentFileResolver.ResolveJsonFile("Talents", name);
             if (File.Exists(path))
             {
                 return JsonConvert.DeserializeObject<TalentCollectionEntry>(File.ReadAllText(path));

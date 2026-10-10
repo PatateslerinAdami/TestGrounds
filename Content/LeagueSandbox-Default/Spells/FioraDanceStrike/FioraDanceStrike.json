@@ -6,6 +6,16 @@
         "ResourcePath": "DATA/Spells/FioraDanceStrike.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "DesignerCastTime": 0,
+            "DesignerTotalTime": 1,
+            "ClientDesignerCastTime": 0.3,
+            "ClientDesignerTotalTime": 1,
+            "ClientSpellLevelOffset": -1,
+            "AttackSpeedModifier": 1,
+            "IsForceCastingOrChannel": 1,
+            "IsOverrideCastPosition": 0
+        },
         "OffsetTargeting": {
             "OT_AreaRadius": 0,
             "OT_AreaRadius1": 0,

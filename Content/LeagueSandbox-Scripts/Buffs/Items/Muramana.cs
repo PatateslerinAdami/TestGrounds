@@ -30,7 +30,7 @@ namespace Buffs
 
         private void Hit(DamageData data)
         {
-            if (ItemEffectHelpers.IsSuccessfulBasicAttack(_owner, data))
+            if (ItemEffectHelpers.IsSuccessfulOnHit(_owner, data))
             {
                 Shock(data);
             }
@@ -38,7 +38,7 @@ namespace Buffs
 
         private void SpellHit(DamageData data)
         {
-            if (data.DamageSource == DamageSource.DAMAGE_SOURCE_SPELL && data.PostMitigationDamage > 0)
+            if (data.DamageSource == DamageSource.DAMAGE_SOURCE_SPELL && !data.AppliesOnHitEffects && data.PostMitigationDamage > 0)
             {
                 Shock(data);
             }

@@ -11,6 +11,9 @@ namespace GameServerCore.Scripting.CSharp
     {
         SpellScriptMetadata ScriptMetadata { get; }
 
+        /// <summary>Optional base cooldown calculation, ordinary CDR policy is applied afterward.</summary>
+        float? GetCooldown(Spell spell, byte rank) => null;
+
         void OnActivate(ObjAIBase owner, Spell spell)
         {
         }

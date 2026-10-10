@@ -179,6 +179,16 @@
             "1536257324": "0",
             "237522587": "0",
             "944948707": "0"
+        },
+        "ServerCast": {
+            "DesignerCastTime": 0,
+            "DesignerTotalTime": 1,
+            "AttackSpeedModifier": 1,
+            "ClientDesignerCastTime": -1,
+            "ClientSpellSlot": 49,
+            "ClientSpellLevelOffset": -1,
+            "ClientAmmoUsed": 0,
+            "Cooldown": 0
         }
     }
 }

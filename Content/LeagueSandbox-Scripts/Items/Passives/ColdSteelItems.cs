@@ -19,7 +19,7 @@ namespace ItemPassives
 
         private void Hit(DamageData data)
         {
-            if (data.IsAutoAttack && data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
+            if (data.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
                 && data.Attacker is ObjAIBase attacker
                 && !attacker.IsDead
                 && attacker.Team != data.Target.Team
@@ -85,7 +85,6 @@ namespace ItemPassives
     {
         protected override void Configure()
         {
-            StatsModifier.CooldownReduction.FlatBonus = -0.1f;
         }
     }
 }

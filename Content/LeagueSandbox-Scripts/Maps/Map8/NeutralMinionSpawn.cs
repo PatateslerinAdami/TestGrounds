@@ -152,10 +152,12 @@ namespace MapScripts.Map8
         public void OnCrystalDeath(DeathData deathData)
         {
             IsDead = true;
+            RespawnTimer = 180.0f * 1000f;
             foreach (var region in Regions)
             {
                 region.SetToRemove();
             }
+            Regions.Clear();
         }
     }
 }

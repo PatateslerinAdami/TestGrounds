@@ -22,7 +22,7 @@ namespace ItemPassives
             var ReturnedIncomingDamage = damageData.Damage * 0.3f;
             var Attacker = damageData.Attacker;
             var ThornmailOwner = damageData.Target;
-            if (damageData.IsAutoAttack && damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
+            if (damageData.DamageSource == DamageSource.DAMAGE_SOURCE_ATTACK
                 && damageData.Attacker != null
                 && !damageData.Attacker.IsDead
                 && damageData.DamageResultType != DamageResultType.RESULT_DODGE

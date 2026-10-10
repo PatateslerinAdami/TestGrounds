@@ -2,44 +2,42 @@ using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Buffs;
+namespace Buffs
+{
+    public class AatroxEConeMissile : IBuffGameScript
+    {
+        private Particle _effect;
 
-internal class AatroxEslow : IBuffGameScript {
-    private       ObjAIBase      _aatrox;
-    private       AttackableUnit _unit;
-    private       Particle       _slow, _slow2;
-    private const float          _slowPercentage = 0.4f;
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.SLOW,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1
-    };
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData()
+        {
+            BuffType= BuffType.SLOW,
+            BuffAddType = BuffAddType.REPLACE_EXISTING
+        };
 
-    public StatsModifier StatsModifier  { get; } = new();
+        public StatsModifier StatsModifier{ get; } = new StatsModifier();
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        _aatrox = ownerSpell.CastInfo.Owner;
-        _unit  = unit;
-        
-        _slow  = AddParticleTarget(_aatrox, null, "Global_Slow", unit, buff.Duration, bone: "BUFFBONE_GLB_GROUND_LOC");
-        switch (_aatrox.SkinID) {
-            
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            var owner = spell.CastInfo.Owner;
+            BuffMetaData.ClientPackageHash = owner.GetObjHash();
+            _effect = AddParticleTarget(owner, unit, Spells.AatroxHelpers.Effect(owner, "E_Slow"), unit);
+            StatsModifier.MoveSpeed.PercentBonus = -0.4f;
+            unit.AddStatModifier(StatsModifier);
+            ApplyAssistMarker(unit, owner, 10);
         }
-        _slow2  = AddParticleTarget(_aatrox, unit, "Aatrox_Base_E_Slow", unit);
-        ApplyAssistMarker(unit, _aatrox, 10.0f);
-        
-        StatsModifier.MoveSpeed.PercentBonus -= _slowPercentage;
-        unit.AddStatModifier(StatsModifier);
+
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            RemoveParticle(_effect);
+        }
     }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell) {
-        RemoveParticle(_slow);
-        RemoveParticle(_slow2);
+    public class AatroxEslow : AatroxEConeMissile
+    {
     }
 }

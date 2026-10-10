@@ -107,6 +107,7 @@ namespace LeagueSandbox.GameServer.GameObjects
         public float Duration { get; private set; }
         public bool Hidden { get; set; }
         public bool IsHidden => Hidden;
+        public bool IsReplicated => !IsHidden || BuffScript.BuffMetaData.SendHiddenToClient;
         public string Name { get; }
         public Spell OriginSpell { get; }
         public byte Slot { get; private set; }
@@ -156,6 +157,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 return;
             }
             Remove = true; // To prevent infinite loop with OnDeactivate calling events
+            TargetUnit.RefreshBuffStatus();
 
             try
             {
@@ -199,6 +201,7 @@ namespace LeagueSandbox.GameServer.GameObjects
                 StatusEffectsToDisable |= flag;
                 StatusEffectsToEnable &= ~flag;
             }
+            TargetUnit?.RefreshBuffStatus();
         }
 
         public void SetToolTipVar<T>(int tipIndex, T value) where T : struct
@@ -293,10 +296,16 @@ namespace LeagueSandbox.GameServer.GameObjects
             }
         }
 
-        public void Refresh()
+        public void Refresh(float? duration = null)
         {
+            if (duration.HasValue)
+            {
+                if (!float.IsFinite(duration.Value) || duration.Value < 0)
+                    throw new ArgumentOutOfRangeException(nameof(duration));
+                Duration = duration.Value;
+            }
             ResetTimeElapsed();
-            if (!IsHidden)
+            if (IsReplicated)
             {
                 _game.PacketNotifier.NotifyNPC_BuffReplace(this);
             }

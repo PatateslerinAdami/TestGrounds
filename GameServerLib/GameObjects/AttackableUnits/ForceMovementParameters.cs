@@ -1,5 +1,6 @@
 ﻿using GameServerCore.Enums;
 using System.Numerics;
+using System.Collections.Generic;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
 {
@@ -17,6 +18,14 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// Status flags which are disabled while dashing.
         /// </summary>
         public StatusFlags SetStatus { get; set; } = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove;
+        /// <summary>Spell slots blocked by this movement, independently of CC bypass flags.</summary>
+        public HashSet<byte> BlockedSpellSlots { get; set; } = new();
+        /// <summary>Slots allowed through this movement's CanCast restriction, retaining independent CC checks.</summary>
+        public HashSet<byte> AllowedSpellSlots { get; set; } = new();
+        /// <summary>Whether input blocked by this movement can wait for successful completion.</summary>
+        public bool BufferSpellCasts { get; set; }
+        /// <summary>Maximum age of buffered input, in seconds.</summary>
+        public float SpellBufferWindow { get; set; } = 0.5f;
         /// <summary>
         /// Amount of time passed since the unit started dashing.
         /// </summary>
@@ -30,14 +39,19 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public float PathSpeedOverride { get; set; }
         /// <summary>
-        /// Maximum vertical height.
-        /// NOTES: Internally follows the path of a parabola, stretched in the x and y axis by the distance to the destination and stretched in the z axis to the maximum height (this stretching of the z axis scales the vertical speed).
+        /// Client gravity multiplier(default client is 150)
+        /// Vertical height also depends on travel time, determined by path distance and speed.
         /// </summary>
         public float ParabolicGravity { get; set; }
         /// <summary>
-        /// End position of the movement.
+        /// Original launch position for the client vertical trajectory, separate from the current waypoint.
         /// </summary>
         public Vector2 ParabolicStartPoint { get; set; }
+        /// <summary>
+        /// Keeps gameplay stationary while the client follows the short parabolic
+        /// presentation path from ParabolicStartPoint to TargetPosition.
+        /// </summary>
+        public bool IsStationaryJump { get; set; }
         /// <summary>
         /// Whether or not the unit performing the movement should face the direction it had before starting the movement.
         /// </summary>
@@ -76,6 +90,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// How the movement affects current orders.
         /// </summary>
         public ForceMovementOrdersType MovementOrdersType { get; set; } = ForceMovementOrdersType.POSTPONE_CURRENT_ORDER;
+        internal Vector2? PostponedDestination { get; set; }
+        internal int PostponedOrderRevision { get; set; }
         /// <summary>
         /// How the movement affects facing direction.
         /// </summary>
@@ -116,7 +132,8 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits
         /// </summary>
         public bool IgnoreTerrain { get; set; } = false;
         /// <summary>
-        /// Whether this movement makes the unit unstoppable (immune to enemy forced movements and CC).
+        /// Whether this movement prevents replacement by hostile forced movement.
+        /// Crowd control immunity is handled separately by buffs and spell scripts.
         /// </summary>
         public bool IsUnstoppable { get; set; } = false;
 

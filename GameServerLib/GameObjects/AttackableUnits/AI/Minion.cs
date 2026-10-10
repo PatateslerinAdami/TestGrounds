@@ -1,11 +1,43 @@
 ﻿using LeagueSandbox.GameServer.GameObjects.StatsNS;
 using GameServerCore.Enums;
 using System.Numerics;
+using System.Collections.Generic;
 
 namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
 {
     public class Minion : ObjAIBase
     {
+        private readonly Dictionary<int, (AttackableUnit Target, float Speed)> _clientAttackLoops = new Dictionary<int, (AttackableUnit, float)>();
+
+        public bool UsesClientAttackLoop { get; set; }
+
+        public bool ShouldNotifyClientAttack(int userId, AttackableUnit target, bool isCrit)
+        {
+            if (!UsesClientAttackLoop || !IsMelee)
+            {
+                return true;
+            }
+
+            float speed = Stats.AttackSpeedMultiplier.Total;
+            bool repeating = _clientAttackLoops.TryGetValue(userId, out var loop)
+                && loop.Target == target
+                && loop.Speed == speed;
+            _clientAttackLoops[userId] = (target, speed);
+            return !repeating || isCrit;
+        }
+
+        public void ResetClientAttackLoop(int userId = -1)
+        {
+            if (userId < 0)
+            {
+                _clientAttackLoops?.Clear();
+            }
+            else
+            {
+                _clientAttackLoops?.Remove(userId);
+            }
+        }
+
         /// <summary>
         /// Unit which spawned this minion.
         /// </summary>
@@ -30,6 +62,11 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         /// Only unit which is allowed to see this minion.
         /// </summary>
         public ObjAIBase VisibilityOwner { get; }
+
+        /// <summary>
+        /// Optional native spawn visibility size, separate from the unit's sight radius.
+        /// </summary>
+        public float? VisibilitySize { get; set; }
 
         //TODO: Implement these variables
         public int DamageBonus { get; protected set; }
@@ -92,9 +129,15 @@ namespace LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI
         }
         public override bool SetWaypoints(List<Vector2> newWaypoints, bool isForced = false)
         {
+            bool wasMoving = !IsPathEnded();
             bool success = base.SetWaypoints(newWaypoints, isForced);
 
-            if (success && !IsAttacking)
+            if (success && newWaypoints.Count > 0 && newWaypoints[newWaypoints.Count - 1] != Position)
+            {
+                ResetClientAttackLoop();
+            }
+
+            if (success && !IsAttacking && (!UsesClientAttackLoop || !wasMoving))
             {
                 _game.PacketNotifier.NotifyNPC_InstantStop_Attack(this, false, false, false, true, true, 0);
             }

@@ -48,6 +48,7 @@ namespace PacketDefinitions420
 
         private Dictionary<int, List<MovementDataNormal>> _heldMovementData = new Dictionary<int, List<MovementDataNormal>>();
         private Dictionary<int, List<ReplicationData>> _heldReplicationData = new Dictionary<int, List<ReplicationData>>();
+        private Dictionary<int, List<ReplicationData>> _heldReliableReplicationData = new Dictionary<int, List<ReplicationData>>();
 
         /// <summary>
         /// Instantiation which preps PacketNotifier for packet sending.
@@ -99,11 +100,10 @@ namespace PacketDefinitions420
                 // TODO: Find out what values this can be and make an enum for it (so far: -2 & -1 for turrets)
                 RegionType = region.Type,
                 ClientID = region.OwnerClientID,
-                // TODO: Verify (usually 0 for vision only?)
-                UnitNetID = 0,
+                UnitNetID = region.CollisionUnit?.NetId ?? 0,
                 // TODO: Verify (is usually different from UnitNetID in packets, may also be a remnant or for internal use)
                 BubbleNetID = region.NetId,
-                VisionTargetNetID = 0,
+                VisionTargetNetID = region.VisionTarget?.NetId ?? 0,
                 Position = region.Position,
                 // For turrets, usually 25000.0 is used
                 TimeToLive = region.Lifetime,
@@ -232,9 +232,23 @@ namespace PacketDefinitions420
 
             charStackDataList.Add(charStackData);
 
+            if (o is ObjAIBase modelOwner)
+            {
+                foreach (var entry in modelOwner.ModelOverrides)
+                {
+                    charStackDataList.Add(new CharacterStackData
+                    {
+                        SkinName = entry.Model,
+                        SkinID = entry.SkinID,
+                        ModelOnly = true,
+                        ID = entry.ID
+                    });
+                }
+            }
+
             MovementData md;
 
-            if (o is AttackableUnit u && u.Waypoints.Count > 1)
+            if (o is AttackableUnit u && (u.MovementParameters != null || u.Waypoints.Count > 1))
             {
                 md = PacketExtensions.CreateMovementDataWithSpeedIfPossible(u, _navGrid, useTeleportID: true);
             }
@@ -281,7 +295,11 @@ namespace PacketDefinitions420
             var position = particle.GetPosition3D();
 
             var ownerPos = position;
-            if (particle.Caster != null)
+            if (particle.BindObject != null)
+            {
+                ownerPos = particle.BindObject.GetPosition3D();
+            }
+            else if (particle.Caster != null)
             {
                 ownerPos = particle.Caster.GetPosition3D();
             }
@@ -308,7 +326,7 @@ namespace PacketDefinitions420
             {
                 NetAssignedNetID = particle.NetId,
                 CasterNetID = 0,
-                KeywordNetID = 0, // Not sure what this is
+                KeywordNetID = particle.KeywordObject?.NetId ?? 0,
 
                 PositionX = (short)((position.X - _navGrid.MapWidth / 2) / 2),
                 PositionY = higherValue,
@@ -413,7 +431,7 @@ namespace PacketDefinitions420
                 IsTargetable = minion.IsTargetable,
 
                 IsTargetableToTeamSpellFlags = (uint)minion.Stats.IsTargetableToTeam,
-                VisibilitySize = minion.VisionRadius,
+                VisibilitySize = minion.VisibilitySize ?? minion.VisionRadius,
                 Name = minion.Name,
                 SkinName = minion.Model,
                 InitialLevel = (ushort)minion.InitialLevel,
@@ -435,12 +453,17 @@ namespace PacketDefinitions420
 
         MissileReplication ConstructMissileReplicationPacket(SpellMissile m)
         {
+            return ConstructMissileReplication(m, m.GetTimeSinceCreation() == 0);
+        }
+
+        MissileReplication ConstructMissileReplication(SpellMissile m, bool isLaunch)
+        {
             var castInfo = new LeaguePackets.Game.Common.CastInfo
             {
                 SpellHash = m.CastInfo.SpellHash,
                 SpellNetID = m.CastInfo.SpellNetID,
 
-                SpellLevel = m.CastInfo.SpellLevel,
+                SpellLevel = m.CastInfo.ClientSpellLevel ?? m.CastInfo.SpellLevel,
                 AttackSpeedModifier = m.CastInfo.AttackSpeedModifier,
                 CasterNetID = m.CastInfo.Owner.NetId,
                 // TODO: Implement spell chains?
@@ -450,9 +473,9 @@ namespace PacketDefinitions420
                 // Not sure if we want to add height for these, but i did it anyway
                 TargetPosition = m.CastInfo.TargetPosition,
                 TargetPositionEnd = m.CastInfo.TargetPositionEnd,
-                DesignerCastTime = m.CastInfo.DesignerCastTime,
+                DesignerCastTime = m.CastInfo.ClientDesignerCastTime ?? m.CastInfo.DesignerCastTime,
                 ExtraCastTime = m.CastInfo.ExtraCastTime,
-                DesignerTotalTime = m.CastInfo.DesignerTotalTime,
+                DesignerTotalTime = m.CastInfo.ClientDesignerTotalTime ?? m.CastInfo.DesignerTotalTime,
 
                 Cooldown = m.CastInfo.Cooldown,
                 StartCastTime = m.CastInfo.StartCastTime,
@@ -463,10 +486,10 @@ namespace PacketDefinitions420
                 IsOverrideCastPosition = m.CastInfo.IsOverrideCastPosition,
                 IsClickCasted = m.CastInfo.IsClickCasted,
 
-                SpellSlot = m.CastInfo.SpellSlot,
+                SpellSlot = m.CastInfo.ClientSpellSlot ?? m.CastInfo.SpellSlot,
                 ManaCost = m.CastInfo.ManaCost,
                 SpellCastLaunchPosition = m.CastInfo.SpellCastLaunchPosition,
-                AmmoUsed = m.CastInfo.AmmoUsed,
+                AmmoUsed = m.CastInfo.ClientAmmoUsed ?? m.CastInfo.AmmoUsed,
                 AmmoRechargeTime = m.CastInfo.AmmoRechargeTime
             };
 
@@ -490,17 +513,108 @@ namespace PacketDefinitions420
             {
                 replicationDirection = circleMissile.GetReplicationDirection();
             }
+            float horizontalDirectionLength = new Vector2(m.Direction.X, m.Direction.Z).Length();
+            var replicationVelocity = m.IsVisualOnly && horizontalDirectionLength > 0
+                ? m.Direction * (m.GetSpeed() / horizontalDirectionLength)
+                : m.Direction * m.GetSpeed();
+            var startPoint = m.CastInfo.SpellCastLaunchPosition;
+            var endPoint = m.CastInfo.TargetPositionEnd;
+            var positionHeight = startPoint.Y;
+            if (m.HasCustomHeightProfile)
+            {
+                var travel = endPoint - startPoint;
+                var horizontalTravel = new Vector2(travel.X, travel.Z);
+                float distance = horizontalTravel.Length();
+                if (distance > .001f)
+                {
+                    replicationVelocity = travel * (m.GetSpeed() / distance);
+                    var direction = Vector3.Normalize(travel);
+                    replicationDirection = m is SpellCircleMissile circle
+                        ? circle.GetReplicationDirection(direction)
+                        : direction;
+
+                    var displacement = m.Position - new Vector2(startPoint.X, startPoint.Z);
+                    float progress = Math.Clamp(Vector2.Dot(displacement, horizontalTravel) / horizontalTravel.LengthSquared(), 0, 1);
+                    positionHeight = startPoint.Y + travel.Y * progress;
+                }
+            }
+            else if (m.ReplicationHeightOffset is float heightOffset)
+            {
+                startPoint.Y += heightOffset;
+                var end2D = new Vector2(endPoint.X, endPoint.Z);
+                endPoint.Y = _game.Map.NavigationGrid.GetHeightAtLocation(end2D)
+                    + (m.ReplicationEndHeightOffset ?? heightOffset);
+                var distance = Vector2.Distance(m.Position, end2D);
+                if (distance > .001f)
+                    replicationVelocity.Y = (endPoint.Y - startPoint.Y) * m.GetSpeed() / distance;
+                positionHeight = startPoint.Y;
+            }
+            else if (m.UsesClientCastVisual)
+            {
+                if (m.Type == MissileType.Target && m.TargetUnit != null)
+                {
+                    endPoint = m.TargetUnit.GetPosition3D();
+                    castInfo.TargetPosition = endPoint;
+                    castInfo.TargetPositionEnd = endPoint;
+                    var visualTarget = endPoint + Vector3.UnitY * m.SpellOrigin.SpellData.MissileTargetHeightAugment;
+                    if (!isLaunch)
+                        positionHeight = m.GetHeight() + m.SpellOrigin.SpellData.MissileTargetHeightAugment;
+                    var currentPosition = new Vector3(m.Position.X, positionHeight, m.Position.Y);
+                    var direction = visualTarget - currentPosition;
+                    if (direction.LengthSquared() > .001f)
+                    {
+                        replicationDirection = Vector3.Normalize(direction);
+                        float horizontalDistance = new Vector2(direction.X, direction.Z).Length();
+                        replicationVelocity = horizontalDistance > .001f
+                            ? direction * (m.GetSpeed() / horizontalDistance)
+                            : replicationDirection * m.GetSpeed();
+                    }
+                }
+                else
+                {
+                    if (m is SpellCircleMissile skillshot)
+                    {
+                        var destination = skillshot.Destination;
+                        endPoint = new Vector3(
+                            destination.X,
+                            _game.Map.NavigationGrid.GetHeightAtLocation(destination),
+                            destination.Y
+                        );
+                    }
+                    if (!m.CastInfo.IsOverrideCastPosition)
+                    {
+                        float launchHeight = m.SpellOrigin.SpellData.MissileTargetHeightAugment;
+                        startPoint.Y += launchHeight;
+                        endPoint.Y += launchHeight;
+                        var launchPosition = new Vector2(startPoint.X, startPoint.Z);
+                        var distance = Vector2.Distance(launchPosition, new Vector2(endPoint.X, endPoint.Z));
+                        if (distance > .001f)
+                        {
+                            replicationVelocity.Y = -launchHeight * m.GetSpeed() / distance;
+                            if (!isLaunch)
+                            {
+                                var progress = Math.Clamp(Vector2.Distance(launchPosition, m.Position) / distance, 0, 1);
+                                positionHeight = m.SpellOrigin.SpellData.MissileFollowsTerrainHeight
+                                    ? m.GetHeight() + launchHeight
+                                    : startPoint.Y - launchHeight * progress;
+                            }
+                        }
+                        if (isLaunch) positionHeight = startPoint.Y;
+                    }
+                }
+            }
 
             var misPacket = new MissileReplication
             {
-                SenderNetID = m.CastInfo.Owner.NetId,
-                Position = new Vector3(m.Position.X, m.CastInfo.SpellCastLaunchPosition.Y, m.Position.Y),
-                CasterPosition = m.CastInfo.Owner.GetPosition3D(),
+                SenderNetID = m.NetId,
+                Position = new Vector3(m.Position.X, positionHeight, m.Position.Y),
+                CasterPosition = m.CastInfo.IsForceCastingOrChannel && m.CastInfo.IsOverrideCastPosition
+                    ? m.CastInfo.SpellCastLaunchPosition : m.CastInfo.Owner.GetPosition3D(),
                 // Not sure if we want to add height for these, but i did it anyway
                 Direction = replicationDirection,
-                Velocity = m.Direction * m.GetSpeed(),
-                StartPoint = m.CastInfo.SpellCastLaunchPosition,
-                EndPoint = m.CastInfo.TargetPositionEnd,
+                Velocity = replicationVelocity,
+                StartPoint = startPoint,
+                EndPoint = endPoint,
                 // TODO: Verify
                 UnitPosition = m.CastInfo.Owner.GetPosition3D(),
                 TimeFromCreation = m.GetTimeSinceCreation(), // TODO: Unhardcode
@@ -508,7 +622,7 @@ namespace PacketDefinitions420
                 LifePercentage = 0f, // TODO: Unhardcode
                 //TODO: Implement time limited projectiles
                 TimedSpeedDelta = 0f, // TODO: Implement time limited projectiles for this
-                TimedSpeedDeltaTime = 0x7F7FFFFF, // Same as above (this value is from the SpawnProjectile packet, it is a placeholder)
+                TimedSpeedDeltaTime = float.MaxValue,
 
                 Bounced = false, //TODO: Implement bouncing projectiles
 
@@ -598,7 +712,6 @@ namespace PacketDefinitions420
                 BuffName = pet.CloneBuff.Name,
                 CloneInventory = pet.CloneInventory,
                 ShowMinimapIconIfClone = pet.ShowMinimapIconIfClone,
-                DisallowPlayerControl = pet.DisallowPlayerControl,
                 DoFade = pet.DoFade,
                 SenderNetID = pet.NetId
             };
@@ -904,7 +1017,13 @@ namespace PacketDefinitions420
                 SenderNetID = attacker.NetId,
                 Attack = basicAttackData
             };
-            _packetHandlerManager.BroadcastPacketVision(attacker, basicAttackPacket.GetBytes(), Channel.CHL_S2C);
+            NotifyBasicAttackPacket(
+                attacker,
+                target,
+                futureProjNetId,
+                isCrit,
+                basicAttackPacket
+            );
         }
 
         /// <summary>
@@ -938,7 +1057,46 @@ namespace PacketDefinitions420
                 Attack = basicAttackData,
                 Position = attacker.Position // TODO: Verify
             };
-            _packetHandlerManager.BroadcastPacketVision(attacker, basicAttackPacket.GetBytes(), Channel.CHL_S2C);
+            NotifyBasicAttackPacket(
+                attacker,
+                target,
+                futureProjNetId,
+                isCrit,
+                basicAttackPacket
+            );
+        }
+
+        private void NotifyBasicAttackPacket(
+            ObjAIBase attacker,
+            AttackableUnit target,
+            uint futureProjNetId,
+            bool isCrit,
+            GamePacket packet)
+        {
+            if (attacker is not Minion minion || !minion.UsesClientAttackLoop || !minion.IsMelee)
+            {
+                SendCastVisualPacket(attacker.AutoAttackSpell.CastInfo, futureProjNetId, packet.GetBytes());
+                return;
+            }
+
+            if (packet is Basic_Attack attack)
+            {
+                packet = new Basic_Attack_Pos
+                {
+                    SenderNetID = attacker.NetId,
+                    Attack = attack.Attack,
+                    Position = attacker.Position
+                };
+            }
+
+            var bytes = packet.GetBytes();
+            foreach (int userId in attacker.VisibleForPlayers)
+            {
+                if (minion.ShouldNotifyClientAttack(userId, target, isCrit))
+                {
+                    _packetHandlerManager.SendPacket(userId, bytes, Channel.CHL_S2C);
+                }
+            }
         }
         /// <summary>
         /// Sends a packet to all players detailing that the specified building has died.
@@ -1128,6 +1286,48 @@ namespace PacketDefinitions420
             _packetHandlerManager.SendPacket(userId, changePacket.GetBytes(), Channel.CHL_S2C);
         }
 
+        private ChangeSlotSpellData_OwnerOnly ConstructSpellIconPacket(Spell spell)
+            => new()
+            {
+                SenderNetID = spell.CastInfo.Owner.NetId,
+                ChangeSpellData = new ChangeSpellDataIconIndex
+                {
+                    SpellSlot = spell.CastInfo.SpellSlot is 4 or 5
+                        ? (byte)(spell.CastInfo.SpellSlot - 4) : spell.CastInfo.SpellSlot,
+                    IsSummonerSpell = spell.CastInfo.SpellSlot is 4 or 5,
+                    IconIndex = spell.IconIndex
+                }
+            };
+
+        public void NotifySpellIcon(int userId, Spell spell)
+            => _packetHandlerManager.SendPacket(userId, ConstructSpellIconPacket(spell).GetBytes(), Channel.CHL_S2C);
+
+        public void NotifySpellManaCostOverride(int userId, Spell spell)
+            => _packetHandlerManager.SendPacket(userId, ConstructSpellManaCostOverridePacket(spell).GetBytes(), Channel.CHL_S2C);
+
+        private S2C_UnitSetSpellPARCost ConstructSpellManaCostOverridePacket(Spell spell)
+        {
+            float baseCost = spell.SpellData.ManaCost[spell.CastInfo.SpellLevel];
+            return new S2C_UnitSetSpellPARCost
+            {
+                SenderNetID = spell.CastInfo.Owner.NetId,
+                SpellSlot = spell.CastInfo.SpellSlot,
+                CostType = 2,
+                Amount = spell.HasManaCostOverride && baseCost > 0 ? spell.GetManaCost() / baseCost - 1 : 0
+            };
+        }
+
+        public void NotifyNPCMessage(AttackableUnit target, string message, float bubbleDelay = 2,
+            uint floatTextType = 0, int slotNumber = 0, bool isError = false, byte colorIndex = 0)
+        {
+            var packet = new NPC_MessageToClient_Broadcast
+            {
+                SenderNetID = target.NetId, Message = message, BubbleDelay = bubbleDelay,
+                FloatTextType = floatTextType, SlotNumber = slotNumber, IsError = isError, ColorIndex = colorIndex
+            };
+            _packetHandlerManager.BroadcastPacketVision(target, packet.GetBytes(), Channel.CHL_S2C);
+        }
+
         /// <summary>
         /// Sends a packet to all players with vision of a specified ObjAIBase explaining that their specified spell's cooldown has been set.
         /// </summary>
@@ -1145,7 +1345,7 @@ namespace PacketDefinitions420
                 PlayVOWhenCooldownReady = false, // TODO: Unhardcode
                 IsSummonerSpell = false, // TODO: Unhardcode
                 Cooldown = currentCd,
-                MaxCooldownForDisplay = 0 // TODO: Verify (packet loses functionality otherwise)
+                MaxCooldownForDisplay = Math.Max(currentCd, totalCd)
             };
             if (u is Champion && (slotId == 4 || slotId == 5))
             {
@@ -1577,10 +1777,9 @@ namespace PacketDefinitions420
         }
 
         /// <summary>
-        /// Sends a packet to all players detailing that the specified particle has been destroyed.
+        /// Sends destruction to the particle's configured player/team audience, or broadcasts unrestricted effects.
         /// </summary>
         /// <param name="particle">Particle that is being destroyed.</param>
-        /// TODO: Change to only broadcast to players who have vision of the particle (maybe?).
         public void NotifyFXKill(Particle particle)
         {
             var fxKill = new FX_Kill
@@ -1588,8 +1787,12 @@ namespace PacketDefinitions420
                 SenderNetID = particle.NetId,
                 NetID = particle.NetId
             };
-            //_packetHandlerManager.BroadcastPacketVision(particle, fxKill.GetBytes(), Channel.CHL_S2C);
-            _packetHandlerManager.BroadcastPacket(fxKill.GetBytes(), Channel.CHL_S2C);
+            if (particle.SpecificUnit is Champion recipient)
+                _packetHandlerManager.SendPacket(recipient.ClientId, fxKill.GetBytes(), Channel.CHL_S2C);
+            else if (particle.SpecificTeam != TeamId.TEAM_ALL)
+                _packetHandlerManager.BroadcastPacketTeam(particle.SpecificTeam, fxKill.GetBytes(), Channel.CHL_S2C);
+            else
+                _packetHandlerManager.BroadcastPacket(fxKill.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -1836,6 +2039,24 @@ namespace PacketDefinitions420
         public void NotifyMissileReplication(SpellMissile m)
         {
             var misPacket = ConstructMissileReplicationPacket(m);
+            BroadcastMissileReplication(m, misPacket);
+        }
+
+        public void NotifyMissileLaunch(SpellMissile m)
+        {
+            if (!m.UsesClientCastVisual || m.CastInfo.IsAutoAttack || m.GetTimeSinceCreation() != 0)
+            {
+                return;
+            }
+            BroadcastMissileReplication(m, ConstructMissileReplication(m, true));
+        }
+
+        private void BroadcastMissileReplication(SpellMissile m, MissileReplication misPacket)
+        {
+            if (misPacket == null)
+            {
+                return;
+            }
 
             if (!m.IsServerOnly)
             {
@@ -1866,7 +2087,7 @@ namespace PacketDefinitions420
         /// <param name="modelOnly">Wether or not it's only the model that it's being changed(?). I don't really know what's this for</param>
         /// <param name="overrideSpells">Wether or not the user's spells should be overriden, i assume it would be used for things like Nidalee or Elise.</param>
         /// <param name="replaceCharacterPackage">Unknown.</param>
-        public void NotifyS2C_ChangeCharacterData(AttackableUnit obj, int userId = -1, uint skinID = 0, bool modelOnly = true, bool overrideSpells = false, bool replaceCharacterPackage = false)
+        public void NotifyS2C_ChangeCharacterData(AttackableUnit obj, int userId = -1, uint skinID = 0, bool modelOnly = true, bool overrideSpells = false, bool replaceCharacterPackage = false, string modelName = null, uint id = 0)
         {
             var newCharData = new S2C_ChangeCharacterData
             {
@@ -1874,12 +2095,11 @@ namespace PacketDefinitions420
                 Data = new CharacterStackData
                 {
                     SkinID = skinID,
-                    SkinName = obj.Model,
+                    SkinName = modelName ?? obj.Model,
                     OverrideSpells = overrideSpells,
                     ModelOnly = modelOnly,
-                    ReplaceCharacterPackage = replaceCharacterPackage
-                    // TODO: ID variable, acts like a character ID, used later on in PopCharacterData packet for unloading.
-                    // Changes over time, or perhaps as new objects are added, does not have large values like NetID.
+                    ReplaceCharacterPackage = replaceCharacterPackage,
+                    ID = id
                 }
             };
 
@@ -1891,6 +2111,16 @@ namespace PacketDefinitions420
             {
                 _packetHandlerManager.SendPacket(userId, newCharData.GetBytes(), Channel.CHL_S2C);
             }
+        }
+
+        public void NotifyS2C_PopCharacterData(AttackableUnit obj, uint id)
+        {
+            var packet = new S2C_PopCharacterData
+            {
+                SenderNetID = obj.NetId,
+                PopID = id
+            };
+            _packetHandlerManager.BroadcastPacketVision(obj, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         /// <summary>
@@ -2003,6 +2233,16 @@ namespace PacketDefinitions420
         /// <param name="b">Buff being added.</param>
         public void NotifyNPC_BuffAdd2(Buff b)
         {
+            var addPacket = ConstructBuffAdd2Packet(b);
+            _packetHandlerManager.BroadcastPacket(addPacket.GetBytes(), Channel.CHL_S2C);
+            if (b.BuffType == BuffType.COUNTER)
+            {
+                NotifyNPC_BuffUpdateNumCounter(b);
+            }
+        }
+
+        private NPC_BuffAdd2 ConstructBuffAdd2Packet(Buff b)
+        {
             var addPacket = new NPC_BuffAdd2
             {
                 SenderNetID = b.TargetUnit.NetId,
@@ -2011,7 +2251,7 @@ namespace PacketDefinitions420
                 Count = b.BuffType == BuffType.COUNTER ? (byte)1 : (byte)b.StackCount,
                 IsHidden = b.IsHidden,
                 BuffNameHash = HashString(b.Name),
-                PackageHash = b.TargetUnit.GetObjHash(),
+                PackageHash = b.BuffScript.BuffMetaData.ClientPackageHash ?? b.TargetUnit.GetObjHash(),
                 RunningTime = b.TimeElapsed,
                 Duration = b.Duration,
             };
@@ -2019,11 +2259,7 @@ namespace PacketDefinitions420
             {
                 addPacket.CasterNetID = b.SourceUnit.NetId;
             }
-            _packetHandlerManager.BroadcastPacket(addPacket.GetBytes(), Channel.CHL_S2C);
-            if (b.BuffType == BuffType.COUNTER)
-            {
-                NotifyNPC_BuffUpdateNumCounter(b);
-            }
+            return addPacket;
         }
 
         /// <summary>
@@ -2130,9 +2366,9 @@ namespace PacketDefinitions420
                 CasterNetID = 0
             };
 
-            if (b.OriginSpell != null)
+            if (b.SourceUnit != null)
             {
-                replacePacket.CasterNetID = b.OriginSpell.CastInfo.Owner.NetId;
+                replacePacket.CasterNetID = b.SourceUnit.NetId;
             }
 
             _packetHandlerManager.BroadcastPacketVision(b.TargetUnit, replacePacket.GetBytes(), Channel.CHL_S2C);
@@ -2182,7 +2418,7 @@ namespace PacketDefinitions420
         /// <param name="runningTime">Time since the buff's creation.</param>
         public void NotifyNPC_BuffUpdateCount(Buff b, float duration, float runningTime)
         {
-            if (b.IsHidden) return;
+            if (!b.IsReplicated) return;
             var updatePacket = new NPC_BuffUpdateCount
             {
                 SenderNetID = b.TargetUnit.NetId,
@@ -2245,7 +2481,7 @@ namespace PacketDefinitions420
         /// <param name="b">Buff who's stacks will be updated.</param>
         public void NotifyNPC_BuffUpdateNumCounter(Buff b)
         {
-            if (b.IsHidden) return;
+            if (!b.IsReplicated) return;
             var updateNumPacket = new NPC_BuffUpdateNumCounter
             {
                 SenderNetID = b.TargetUnit.NetId,
@@ -2260,6 +2496,49 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="s">Spell being cast.</param>
         public void NotifyNPC_CastSpellAns(Spell s)
+        {
+            if (!s.CastInfo.IsAutoAttack && s.CastInfo.Owner is Minion minion)
+            {
+                minion.ResetClientAttackLoop();
+            }
+            if (!s.CastInfo.IsAutoAttack
+                && s.Script.ScriptMetadata.MissileParameters is { ReplicateOnLaunch: true, SkipCastPacket: true })
+            {
+                return;
+            }
+
+            var packet = ConstructCastSpellAnsPacket(s);
+            if (InstantCastPresentation.NeedsCarrier(_game, s, packet))
+            {
+                var packets = InstantCastPresentation.Create(_game, s, packet);
+                foreach (var presentationBytes in packets)
+                {
+                    SendCastVisualPacket(s.CastInfo, s.CastInfo.MissileNetID, presentationBytes);
+                }
+                return;
+            }
+
+            if (s.CastInfo.ClientStopBeforeCastFlags.HasValue)
+            {
+                NotifyCastHandoff(
+                    s.CastInfo.Owner,
+                    s.CastInfo.ClientStopBeforeCastFlags.Value,
+                    s.CastInfo.ClientStopBeforeCastMissileNetID);
+            }
+            SendCastVisualPacket(s.CastInfo, s.CastInfo.MissileNetID, packet.GetBytes());
+        }
+
+        private void SendCastVisualPacket(LeagueSandbox.GameServer.GameObjects.SpellNS.CastInfo cast, uint missileNetId, byte[] packet)
+        {
+            foreach (int userId in cast.Owner.VisibleForPlayers)
+            {
+                if (_packetHandlerManager.SendPacket(userId, packet, Channel.CHL_S2C)
+                    && cast.MissileNetID == missileNetId)
+                    cast.ClientCastRecipients.Add(userId);
+            }
+        }
+
+        private NPC_CastSpellAns ConstructCastSpellAnsPacket(Spell s)
         {
             var packetDesignerCastTime = s.CastInfo.DesignerCastTime;
             var packetDesignerTotalTime = s.CastInfo.DesignerTotalTime;
@@ -2279,9 +2558,9 @@ namespace PacketDefinitions420
 
             var castInfo = new LeaguePackets.Game.Common.CastInfo
             {
-                SpellHash = (uint)s.GetId(),
+                SpellHash = s.CastInfo.SpellHash != 0 ? s.CastInfo.SpellHash : (uint)s.GetId(),
                 SpellNetID = s.CastInfo.SpellNetID,
-                SpellLevel = s.CastInfo.SpellLevel,
+                SpellLevel = s.CastInfo.ClientSpellLevel ?? s.CastInfo.SpellLevel,
                 AttackSpeedModifier = s.CastInfo.AttackSpeedModifier,
                 CasterNetID = s.CastInfo.Owner.NetId,
                 SpellChainOwnerNetID = s.CastInfo.Owner.NetId,
@@ -2289,9 +2568,9 @@ namespace PacketDefinitions420
                 MissileNetID = s.CastInfo.MissileNetID,
                 TargetPosition = s.CastInfo.TargetPosition,
                 TargetPositionEnd = s.CastInfo.TargetPositionEnd,
-                DesignerCastTime = packetDesignerCastTime,
+                DesignerCastTime = s.CastInfo.ClientDesignerCastTime ?? packetDesignerCastTime,
                 ExtraCastTime = packetExtraCastTime,
-                DesignerTotalTime = packetDesignerTotalTime,
+                DesignerTotalTime = s.CastInfo.ClientDesignerTotalTime ?? packetDesignerTotalTime,
                 Cooldown = s.CastInfo.Cooldown,
                 StartCastTime = packetStartCastTime,
                 IsAutoAttack = s.CastInfo.IsAutoAttack,
@@ -2299,9 +2578,9 @@ namespace PacketDefinitions420
                 IsForceCastingOrChannel = s.CastInfo.IsForceCastingOrChannel,
                 IsOverrideCastPosition = s.CastInfo.IsOverrideCastPosition,
                 IsClickCasted = s.CastInfo.IsClickCasted,
-                SpellSlot = s.CastInfo.SpellSlot,
+                SpellSlot = s.CastInfo.ClientSpellSlot ?? s.CastInfo.SpellSlot,
                 SpellCastLaunchPosition = s.CastInfo.SpellCastLaunchPosition,
-                AmmoUsed = s.CastInfo.AmmoUsed,
+                AmmoUsed = s.CastInfo.ClientAmmoUsed ?? s.CastInfo.AmmoUsed,
                 AmmoRechargeTime = s.CastInfo.AmmoRechargeTime
             };
 
@@ -2322,22 +2601,22 @@ namespace PacketDefinitions420
 
             if (s.CastInfo.SpellLevel > 0)
             {
-                castInfo.ManaCost = s.SpellData.ManaCost[s.CastInfo.SpellLevel];
+                castInfo.ManaCost = s.GetManaCost();
             }
             else
             {
-                castInfo.ManaCost = s.SpellData.ManaCost[0];
+                castInfo.ManaCost = s.GetManaCost();
             }
 
             var castAnsPacket = new NPC_CastSpellAns
             {
                 SenderNetID = s.CastInfo.Owner.NetId,
-                CasterPositionSyncID = Environment.TickCount,
+                CasterPositionSyncID = PacketSyncId.Next(),
                 // TODO: Find what this is (if false, causes CasterPositionSyncID to be used)
                 Unknown1 = false,
                 CastInfo = castInfo
             };
-            _packetHandlerManager.BroadcastPacketVision(s.CastInfo.Owner, castAnsPacket.GetBytes(), Channel.CHL_S2C);
+            return castAnsPacket;
         }
 
         /// <summary>
@@ -2436,6 +2715,12 @@ namespace PacketDefinitions420
                 ch.teamChanged = false;
             }
         }
+        public void NotifyCastHandoff(AttackableUnit caster, byte flags, uint missileNetID = 0)
+        {
+            var stop = new NPC_InstantStop_Attack { SenderNetID = caster.NetId, Flags = flags, MissileNetID = missileNetID };
+            _packetHandlerManager.BroadcastPacketVision(caster, stop.GetBytes(), Channel.CHL_S2C);
+        }
+
         /// <summary>
         /// Sends a packet to all players with vision of the specified AttackableUnit detailing that the attacker has abrubtly stopped their attack (can be a spell or auto attack, although internally AAs are also spells).
         /// </summary>
@@ -2454,6 +2739,11 @@ namespace PacketDefinitions420
             bool forceClient = false,
             uint missileNetID = 0)
         {
+            if (attacker is Minion minion)
+            {
+                minion.ResetClientAttackLoop();
+            }
+
             var stopAttack = new NPC_InstantStop_Attack
             {
                 SenderNetID = attacker.NetId,
@@ -2566,28 +2856,65 @@ namespace PacketDefinitions420
         /// <param name="userId">UserId to send the packet to. If not specified or zero, the packet is broadcasted to all players that have vision of the specified unit.</param>
         /// <param name="partial">Whether or not the packet should only include stats marked as changed.</param>
         /// TODO: Replace with LeaguePackets and preferably move all uses of this function to a central EventHandler class (if one is fully implemented).
-        public void NotifyOnReplication(AttackableUnit u, int userId = -1, bool partial = true)
+        public void NotifyOnReplication(AttackableUnit u, int userId = -1, bool partial = true, bool reliable = false)
         {
-            if (u.Replication != null)
+            if (u.Replication == null)
             {
-                u.Replication.Update();
-                var us = new OnReplication()
+                return;
+            }
+
+            u.Replication.Update();
+            RefreshHeldReplicationData(u, _heldReliableReplicationData, true);
+            RefreshHeldReplicationData(u, _heldReplicationData, false);
+            if (reliable)
+            {
+                SendReplication(u, userId, u.Replication.GetData(partial), true);
+                return;
+            }
+
+            SendReplication(u, userId, u.Replication.GetDataForDelivery(true, partial), true);
+            SendReplication(u, userId, u.Replication.GetDataForDelivery(false, partial), false);
+        }
+
+        private static void RefreshHeldReplicationData(
+            AttackableUnit unit,
+            Dictionary<int, List<ReplicationData>> queue,
+            bool reliable)
+        {
+            var current = unit.Replication.GetDataForDelivery(reliable, false);
+            foreach (var held in queue.Values)
+            {
+                for (int index = 0; index < held.Count; index++)
                 {
-                    SyncID = (uint)Environment.TickCount,
-                    // TODO: Support multi-unit replication creation (perhaps via a separate function which takes in a list of units).
-                    ReplicationData = new List<ReplicationData>(1){
-                        u.Replication.GetData(partial)
+                    if (held[index].UnitNetID == unit.NetId)
+                    {
+                        held[index] = current;
                     }
-                };
-                var channel = Channel.CHL_LOW_PRIORITY;
-                if (userId < 0)
-                {
-                    _packetHandlerManager.BroadcastPacketVision(u, us.GetBytes(), channel, PacketFlags.UNSEQUENCED);
                 }
-                else
-                {
-                    _packetHandlerManager.SendPacket(userId, us.GetBytes(), channel, PacketFlags.UNSEQUENCED);
-                }
+            }
+        }
+
+        private void SendReplication(AttackableUnit unit, int userId, ReplicationData data, bool reliable)
+        {
+            if (!data.Data.Any(group => group.Item1 != 0))
+            {
+                return;
+            }
+
+            var packet = new OnReplication
+            {
+                SyncID = (uint)PacketSyncId.Next(),
+                ReplicationData = new List<ReplicationData> { data }
+            };
+            var channel = reliable ? Channel.CHL_S2C : Channel.CHL_LOW_PRIORITY;
+            var flags = reliable ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED;
+            if (userId < 0)
+            {
+                _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), channel, flags);
+            }
+            else
+            {
+                _packetHandlerManager.SendPacket(userId, packet.GetBytes(), channel, flags);
             }
         }
 
@@ -3645,15 +3972,29 @@ namespace PacketDefinitions420
         /// <param name="attackType">AttackType that the attacker is using to attack.</param>
         public void NotifyS2C_UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked, AttackType attackType)
         {
+            NotifyS2C_UnitSetLookAt(attacker, attacked);
+        }
+
+        public void NotifyS2C_UnitSetLookAt(AttackableUnit attacker, AttackableUnit attacked)
+        {
             var lookAtPacket = new S2C_UnitSetLookAt
             {
                 SenderNetID = attacker.NetId,
-                LookAtType = (byte)attackType,
+                LookAtType = 2,
                 TargetPosition = attacked.GetPosition3D(),
                 TargetNetID = attacked.NetId
             };
 
             _packetHandlerManager.BroadcastPacketVision(attacker, lookAtPacket.GetBytes(), Channel.CHL_S2C);
+        }
+
+        public void NotifyS2C_UnitSetLookAt(AttackableUnit unit, Vector3 direction)
+        {
+            var packet = new S2C_UnitSetLookAt
+            {
+                SenderNetID = unit.NetId, LookAtType = 0, TargetPosition = direction, TargetNetID = 0
+            };
+            _packetHandlerManager.BroadcastPacketVision(unit, packet.GetBytes(), Channel.CHL_S2C);
         }
 
         public void NotifyS2C_UpdateAscended(ObjAIBase ascendant = null)
@@ -3907,6 +4248,11 @@ namespace PacketDefinitions420
         /// <param name="doVision">Whether or not to package the packets into a vision packet.</param>
         public void NotifySpawn(GameObject obj, TeamId team, int userId, float gameTime, bool doVision = false)
         {
+            if (obj is SpellMissile missile && missile.IsInInitialSpawn
+                && missile.UsesClientCastVisual
+                && (missile.HasExplicitLaunchReplication || missile.CastInfo.ClientCastRecipients.Contains(userId)))
+                return;
+
             var spawnPacket = ConstructSpawnPacket(obj, team, gameTime);
             if (spawnPacket != null)
             {
@@ -4173,7 +4519,7 @@ namespace PacketDefinitions420
         {
             var md = new MovementDataNormal()
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 TeleportNetID = unit.NetId,
                 HasTeleportID = true,
                 TeleportID = unit.TeleportID,
@@ -4182,7 +4528,7 @@ namespace PacketDefinitions420
 
             var wpGroup = new WaypointGroup()
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Movements = new List<MovementDataNormal> { md }
             };
 
@@ -4368,6 +4714,24 @@ namespace PacketDefinitions420
         /// </summary>
         void NotifyEnterTeamVision(GameObject obj, TeamId team, int userId = -1, GamePacket spawnPacket = null)
         {
+            if (obj is Minion minion && minion.UsesClientAttackLoop)
+            {
+                if (userId >= 0)
+                {
+                    minion.ResetClientAttackLoop(userId);
+                }
+                else
+                {
+                    foreach (var player in _game.PlayerManager.GetPlayers())
+                    {
+                        if (player.Team == team)
+                        {
+                            minion.ResetClientAttackLoop(player.ClientId);
+                        }
+                    }
+                }
+            }
+
             if (obj is Particle particleObj && !IsParticleVisibleToRecipient(particleObj, team, userId))
             {
                 return;
@@ -4389,7 +4753,7 @@ namespace PacketDefinitions420
                 //TODO: try to include it to packets too?
                 var us = new OnReplication()
                 {
-                    SyncID = (uint)Environment.TickCount,
+                    SyncID = (uint)PacketSyncId.Next(),
                     ReplicationData = new List<ReplicationData>(1){
                 u.Replication.GetData(false)
             }
@@ -4462,6 +4826,11 @@ namespace PacketDefinitions420
         /// <param name="useTeleportID">Whether or not to teleport the unit to its current position in its path.</param>
         public void HoldMovementDataUntilWaypointGroupNotification(AttackableUnit u, int userId, bool useTeleportID = false)
         {
+            if (u.MovementParameters != null)
+            {
+                NotifyWaypointGroupWithSpeed(u, userId, useTeleportID);
+                return;
+            }
             var data = PacketExtensions.CreateMovementDataNormal(u, _navGrid, useTeleportID);
 
             List<MovementDataNormal> list = null;
@@ -4486,7 +4855,7 @@ namespace PacketDefinitions420
                 {
                     var packet = new WaypointGroup
                     {
-                        SyncID = Environment.TickCount,
+                        SyncID = PacketSyncId.Next(),
                         Movements = list
                     };
 
@@ -4506,13 +4875,26 @@ namespace PacketDefinitions420
         public void HoldReplicationDataUntilOnReplicationNotification(AttackableUnit u, int userId, bool partial = true)
         {
             u.Replication.Update();
-            var data = u.Replication.GetData(partial);
+            HoldReplicationData(_heldReliableReplicationData, userId, u.Replication.GetDataForDelivery(true, partial));
+            HoldReplicationData(_heldReplicationData, userId, u.Replication.GetDataForDelivery(false, partial));
+        }
 
-            List<ReplicationData> list = null;
-            if (!_heldReplicationData.TryGetValue(userId, out list))
+        private static void HoldReplicationData(
+            Dictionary<int, List<ReplicationData>> queue,
+            int userId,
+            ReplicationData data)
+        {
+            if (!data.Data.Any(group => group.Item1 != 0))
             {
-                _heldReplicationData[userId] = list = new List<ReplicationData>();
+                return;
             }
+
+            if (!queue.TryGetValue(userId, out var list))
+            {
+                list = new List<ReplicationData>();
+                queue[userId] = list;
+            }
+
             list.Add(data);
         }
 
@@ -4521,20 +4903,30 @@ namespace PacketDefinitions420
         /// </summary>
         public void NotifyOnReplication()
         {
-            foreach (var kv in _heldReplicationData)
+            FlushReplicationData(_heldReliableReplicationData, true);
+            FlushReplicationData(_heldReplicationData, false);
+        }
+
+        private void FlushReplicationData(Dictionary<int, List<ReplicationData>> queue, bool reliable)
+        {
+            foreach (var kv in queue)
             {
                 int userId = kv.Key;
                 var list = kv.Value;
 
                 if (list.Count > 0)
                 {
-                    var packet = new OnReplication()
+                    var packet = new OnReplication
                     {
-                        SyncID = (uint)Environment.TickCount,
+                        SyncID = (uint)PacketSyncId.Next(),
                         ReplicationData = list
                     };
 
-                    _packetHandlerManager.SendPacket(userId, packet.GetBytes(), Channel.CHL_LOW_PRIORITY, PacketFlags.UNSEQUENCED);
+                    _packetHandlerManager.SendPacket(
+                        userId,
+                        packet.GetBytes(),
+                        reliable ? Channel.CHL_S2C : Channel.CHL_LOW_PRIORITY,
+                        reliable ? PacketFlags.RELIABLE : PacketFlags.UNSEQUENCED);
 
                     list.Clear();
                 }
@@ -4549,17 +4941,31 @@ namespace PacketDefinitions420
         /// <param name="useTeleportID">Whether or not to teleport the unit to its current position in its path.</param>
         public void NotifyWaypointGroup(AttackableUnit u, int userId = -1, bool useTeleportID = false)
         {
+            if (u.MovementParameters != null)
+            {
+                NotifyWaypointGroupWithSpeed(u, userId, useTeleportID);
+                return;
+            }
             var move = PacketExtensions.CreateMovementDataNormal(u, _navGrid, useTeleportID);
 
             // TODO: Implement support for multiple movements.
             var packet = new WaypointGroup
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Movements = new List<MovementDataNormal>() { move }
             };
 
             if (userId < 0)
             {
+                foreach (var held in _heldMovementData.Values)
+                {
+                    for (int i = 0; i < held.Count; i++)
+                    {
+                        if (held[i].TeleportNetID == u.NetId)
+                            held[i] = PacketExtensions.CreateMovementDataNormal(u, _navGrid,
+                                useTeleportID || held[i].HasTeleportID);
+                    }
+                }
                 _packetHandlerManager.BroadcastPacketVision(u, packet.GetBytes(), Channel.CHL_LOW_PRIORITY);
                 if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
             }
@@ -4576,20 +4982,30 @@ namespace PacketDefinitions420
         /// </summary>
         /// <param name="u">Unit that is dashing.</param>
         /// TODO: Implement ForceMovement class which houses these parameters, then have that as the only parameter to this function (and other Dash-based functions).
-        public void NotifyWaypointGroupWithSpeed(AttackableUnit u)
+        public void NotifyWaypointGroupWithSpeed(AttackableUnit u, int userId = -1, bool useTeleportID = false)
         {
-            // TODO: Implement Dash class and house a List of these with waypoints.
-            var md = PacketExtensions.CreateMovementDataWithSpeed(u, _navGrid);
-
-            var speedWpGroup = new WaypointGroupWithSpeed
+            foreach (var held in _heldMovementData)
             {
-                SyncID = Environment.TickCount,
-                // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
-                Movements = new List<MovementDataWithSpeed> { md }
-            };
+                if (userId < 0 || held.Key == userId)
+                    held.Value.RemoveAll(movement => movement.TeleportNetID == u.NetId);
+            }
+            var speedWpGroup = ConstructWaypointGroupWithSpeedPacket(u, useTeleportID);
 
-            _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+            if (userId < 0)
+                _packetHandlerManager.BroadcastPacketVision(u, speedWpGroup.GetBytes(), Channel.CHL_S2C);
+            else
+                _packetHandlerManager.SendPacket(userId, speedWpGroup.GetBytes(), Channel.CHL_S2C);
             if (u is ObjAIBase actor) actor.OnMovementSnapshotCreated();
+        }
+
+        private WaypointGroupWithSpeed ConstructWaypointGroupWithSpeedPacket(AttackableUnit unit, bool useTeleportID = false)
+        {
+            var movement = PacketExtensions.CreateMovementDataWithSpeed(unit, _navGrid, useTeleportID);
+            return new WaypointGroupWithSpeed
+            {
+                SyncID = PacketSyncId.Next(),
+                Movements = new List<MovementDataWithSpeed> { movement }
+            };
         }
 
         /// <summary>
@@ -4601,7 +5017,7 @@ namespace PacketDefinitions420
             var wpList = new WaypointList
             {
                 SenderNetID = unit.NetId,
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Waypoints = unit.Waypoints
             };
 
@@ -4617,7 +5033,7 @@ namespace PacketDefinitions420
             var wpList = new WaypointList
             {
                 SenderNetID = obj.NetId,
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Waypoints = waypoints
             };
 
@@ -4672,7 +5088,7 @@ namespace PacketDefinitions420
             var speedWpGroup = new WaypointListHeroWithSpeed
             {
                 SenderNetID = u.NetId,
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 // TOOD: Implement support for multiple speed-based movements (functionally known as dashes).
                 WaypointSpeedParams = speeds,
                 Waypoints = u.Waypoints
@@ -4770,17 +5186,17 @@ namespace PacketDefinitions420
 
             if (s.CastInfo.SpellLevel > 0)
             {
-                castInfo.ManaCost = s.SpellData.ManaCost[s.CastInfo.SpellLevel];
+                castInfo.ManaCost = s.GetManaCost();
             }
             else
             {
-                castInfo.ManaCost = s.SpellData.ManaCost[0];
+                castInfo.ManaCost = s.GetManaCost();
             }
 
             var castAnsPacket = new NPC_CastSpellAns
             {
                 SenderNetID = s.CastInfo.Owner.NetId,
-                CasterPositionSyncID = Environment.TickCount,
+                CasterPositionSyncID = PacketSyncId.Next(),
                 Unknown1 = false,
                 CastInfo = castInfo
             };
@@ -4797,7 +5213,7 @@ namespace PacketDefinitions420
 
             var speedWpGroup = new WaypointGroupWithSpeed
             {
-                SyncID = Environment.TickCount,
+                SyncID = PacketSyncId.Next(),
                 Movements = new List<MovementDataWithSpeed> { md }
             };
 

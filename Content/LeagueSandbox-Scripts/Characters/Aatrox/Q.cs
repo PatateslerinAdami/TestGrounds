@@ -1,207 +1,278 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+using System;
 using System.Numerics;
-using Buffs;
-using GameServerCore;
 using GameServerCore.Enums;
 using GameServerCore.Scripting.CSharp;
 using LeagueSandbox.GameServer.API;
+using LeagueSandbox.GameServer.GameObjects;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
-using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System.Collections.Generic;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
 namespace Spells
 {
     public class AatroxQ : ISpellScript
     {
+        private const float MaxDashRange = 650;
+        private const float LandingPositionTolerance = 0.01f;
+        private const float JumpToDashDelaySeconds = 0.3f;
+        private const float LandingDashDurationSeconds = 0.3f;
+        private const float DesiredJumpHeight = 500;
+        private const float JumpDistance = 10;
         private ObjAIBase _aatrox;
-        private Spell _spell;
-        private Vector2 _endPos2D;
         private Vector2 _castStartPos2D;
-        private const float MaxDashRange = 650f;
-        private const float JumpToDashDelaySeconds = 0.30f;
-        private const float LandingDashDurationS = 0.30f;
-        float desiredJumpHeight = 500;
-        public SpellScriptMetadata ScriptMetadata { get; private set; } = new SpellScriptMetadata()
+        private Vector2 _endPos2D;
+        private float _damage;
+        private ForceMovementParameters _movement;
+        private Buff _stage;
+        private Particle _marker;
+        private string _animation;
+
+        public SpellScriptMetadata ScriptMetadata { get; } = new SpellScriptMetadata()
         {
-            TriggersSpellCasts = true,
+            TriggersSpellCasts = true
         };
+
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
             _aatrox = owner;
-            _spell = spell;
-
-            ApiEventManager.OnUpdateStats.AddListener(this, _aatrox, OnUpdateStats);
-            ApiEventManager.OnMoveSuccess.AddListener(this, _aatrox, OnMoveSuccess);
+            ApiEventManager.OnUpdateStats.AddListener(this, owner, OnUpdateStats);
         }
 
         public void OnSpellPreCast(ObjAIBase owner, Spell spell, AttackableUnit target, Vector2 start, Vector2 end)
         {
-            var healthCost = _aatrox.Stats.CurrentHealth * 0.1f;
-            _aatrox.Stats.CurrentHealth = Math.Max(1, _aatrox.Stats.CurrentHealth - healthCost);
-            var buff = _aatrox.GetBuffWithName("AatroxPassive")?.BuffScript as AatroxPassive;
-            buff?.AddBlood(healthCost);
-
-            _spell = spell;
-
+            AatroxHelpers.PayHealth(owner, owner.Stats.CurrentHealth * 0.1f);
+            _damage = 70 + 45 * (spell.CastInfo.SpellLevel - 1) + 0.6f * (owner.Stats.AttackDamage.Total - owner.Stats.AttackDamage.BaseValue);
             _castStartPos2D = owner.Position;
-            _endPos2D = end != Vector2.Zero
-                ? end
-                : start != Vector2.Zero
-                    ? start
-                    : new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
-
-            var desiredDirection = _endPos2D - _castStartPos2D;
-            var desiredDistance = desiredDirection.Length();
-            if (desiredDistance > MaxDashRange)
+            _endPos2D = end != Vector2.Zero ? end : start;
+            var direction = _endPos2D - _castStartPos2D;
+            if (direction.Length() > MaxDashRange)
             {
-                _endPos2D = _castStartPos2D + (Vector2.Normalize(desiredDirection) * MaxDashRange);
+                _endPos2D = _castStartPos2D + Vector2.Normalize(direction) * MaxDashRange;
             }
+
+            _endPos2D = ResolveLandingPosition(owner, _endPos2D);
         }
 
-        public void OnSpellCast(Spell spell)
+        private Vector2 ResolveLandingPosition(ObjAIBase owner, Vector2 destination)
         {
-            //PlayAnimation(_aatrox, Vector2.Distance(_aatrox.Position, _endPos2D) <= 250f ? "Spell1_Close" : "Spell1", 1f);
-            var allyCircleParticle = _aatrox.SkinID switch
+            if (owner.MovementRestrictionRadius > 0f)
             {
-                1 => "Aatrox_Skin01_Q_Tar_Green",
-                2 => "Aatrox_Skin02_Q_Tar_Green",
-                _ => "Aatrox_Base_Q_Tar_Green"
-            };
-            var enemyCircleParticle = _aatrox.SkinID switch
+                var offset = destination - owner.MovementRestrictionCenter;
+                if (offset.LengthSquared() > owner.MovementRestrictionRadius * owner.MovementRestrictionRadius)
+                {
+                    destination = owner.MovementRestrictionCenter + Vector2.Normalize(offset) * Math.Max(0f, owner.MovementRestrictionRadius - LandingPositionTolerance);
+                }
+            }
+
+            var landingPosition = GetClosestTerrainExit(destination, owner.PathfindingRadius + 1f);
+            if (IsValidLandingPosition(owner, landingPosition))
             {
-                1 => "Aatrox_Skin01_Q_Tar_Red",
-                2 => "Aatrox_Skin02_Q_Tar_Red",
-                _ => "Aatrox_Base_Q_Tar_Red"
-            };
-            AddParticle(_aatrox, null, allyCircleParticle, _endPos2D, enemyParticle: enemyCircleParticle);
+                return landingPosition;
+            }
+
+            var offsetToStart = _castStartPos2D - destination;
+            var distance = offsetToStart.Length();
+            for (float retreat = 10f; retreat < distance; retreat += 10f)
+            {
+                landingPosition = destination + offsetToStart * (retreat / distance);
+                if (IsValidLandingPosition(owner, landingPosition))
+                {
+                    return landingPosition;
+                }
+            }
+
+            return _castStartPos2D;
+        }
+
+        private bool IsValidLandingPosition(ObjAIBase owner, Vector2 position)
+        {
+            const float range = MaxDashRange + LandingPositionTolerance;
+            return Vector2.DistanceSquared(_castStartPos2D, position) <= range * range
+                && (owner.MovementRestrictionRadius <= 0f
+                || Vector2.DistanceSquared(owner.MovementRestrictionCenter, position) <= owner.MovementRestrictionRadius * owner.MovementRestrictionRadius)
+                && IsWalkable(position.X, position.Y, owner.PathfindingRadius + 1f);
         }
 
         public void OnSpellPostCast(Spell spell)
         {
-            Jump();
-        }
-
-        private void Jump()
-        {
-            FaceDirection(_endPos2D, _aatrox, true);
-
-            Vector2 direction = new Vector2(_aatrox.Direction.X, _aatrox.Direction.Z);
-            if (direction == Vector2.Zero) direction = new Vector2(1, 0);
-
-            float jumpDistance = 10f;
-            Vector2 jumpTarget = _aatrox.Position;
-            Vector2 jumpTargetFal = _aatrox.Position - (direction * jumpDistance);
-
-            var dashParams = GetDashParameters(jumpDistance, 0.6f, desiredJumpHeight);
-
-            var jumpParams = new ForceMovementParameters
+            var landing = _endPos2D;
+            float damage = _damage;
+            var direction = landing - _aatrox.Position;
+            if (direction.LengthSquared() < 0.001f)
             {
-                TargetPosition = jumpTarget,
-                ParabolicStartPoint = jumpTargetFal,
+                direction = new Vector2(_aatrox.Direction.X, _aatrox.Direction.Z);
+            }
+
+            if (direction.LengthSquared() < 0.001f)
+            {
+                direction = Vector2.UnitX;
+            }
+
+            direction = Vector2.Normalize(direction);
+            FaceDirection(_aatrox.Position + direction, _aatrox, true);
+            _animation = "Spell1";
+            _marker = AddParticle(_aatrox, null, AatroxHelpers.Effect(_aatrox, "Q_Tar_Green"), landing,
+                enemyParticle: AatroxHelpers.Effect(_aatrox, "Q_Tar_Red"));
+            _stage = AddBuff("AatroxQ", 10, 1, spell, _aatrox, _aatrox);
+            var jumpParameters = GetDashParameters(JumpDistance, 0.6f, DesiredJumpHeight);
+            var takeoff = new ForceMovementParameters
+            {
+                TargetPosition = _aatrox.Position,
+                ParabolicStartPoint = _aatrox.Position - direction * JumpDistance,
+                PathSpeedOverride = jumpParameters.Speed,
+                ParabolicGravity = jumpParameters.Gravity,
                 Duration = JumpToDashDelaySeconds,
-
-                PathSpeedOverride = dashParams.Speed,
-                ParabolicGravity = dashParams.Gravity,
-
+                IsStationaryJump = true,
+                KeepFacingDirection = true,
+                MovementOrdersFacing = ForceMovementOrdersFacing.KEEP_CURRENT_FACING,
                 IgnoreTerrain = true,
+                Caster = _aatrox,
                 MovementName = "AatroxQJump",
-                Animation = "Spell1",
-                OverrideRunAnimation = false,
+                Animation = _animation,
                 AnimationFlags = AnimationFlags.UniqueOverride | AnimationFlags.Unknown6,
-                AnimationTimeScale = 0f,
-                AnimationStartTime = 0f,
-                AnimationSpeedScale = 1f,
-                SetStatus = StatusFlags.CanMove | StatusFlags.CanCast | StatusFlags.CanAttack
+                AnimationTimeScale = 0,
+                AnimationSpeedScale = 1,
+                SetStatus = StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast,
+                BlockedSpellSlots = new HashSet<byte>() { 0, 1, 2, 3 },
+                BufferSpellCasts = true
             };
-
-            _aatrox.StartForcedMovement(jumpParams);
-        }
-
-        private void Dash()
-        {
-            FaceDirection(_endPos2D, _aatrox, true);
-            var desiredDirection = _endPos2D - _castStartPos2D;
-            var desiredDistance = desiredDirection.Length();
-            var dashTarget = desiredDistance > MaxDashRange
-                ? _castStartPos2D + (Vector2.Normalize(desiredDirection) * MaxDashRange)
-                : _endPos2D;
-
-            var distance = (dashTarget - _aatrox.Position).Length();
-            if (distance <= 1f)
+            Move(takeoff, () =>
             {
-                OnMoveSuccess(_aatrox, new ForceMovementParameters { MovementName = "AatroxQDash" });
-                return;
-            }
-
-            var dashParams = new ForceMovementParameters
-            {
-                TargetPosition = dashTarget,
-                Duration = LandingDashDurationS, 
-                ParabolicGravity = 0f,
-                MovementName = "AatroxQDash",
-                SetStatus = StatusFlags.CanMove | StatusFlags.CanCast | StatusFlags.CanAttack
-            };
-
-            _aatrox.StartForcedMovement(dashParams);
-        }
-
-        public void OnMoveSuccess(AttackableUnit unit, ForceMovementParameters parameters)
-        {
-            if (parameters.MovementName == "AatroxQJump")
-            {
-                Dash();
-            }
-            else if (parameters.MovementName == "AatroxQDash")
-            {
-                StopAnimation(_aatrox, "Spell1", fade: true);
-                StopAnimation(_aatrox, "Spell1_Close", fade: true);
-
-                var landParticle = _aatrox.SkinID switch
+                if (_stage == null || _stage.Remove || _stage.Name != "AatroxQDescent")
                 {
-                    1 => "Aatrox_Skin01_Q_Land",
-                    2 => "Aatrox_Skin02_Q_Land",
-                    _ => "Aatrox_Base_Q_Land"
-                };
-                AddParticle(_aatrox, null, landParticle, _aatrox.Position);
-
-                var enemiesInKnockUpRange = GetUnitsInRange(_aatrox, _aatrox.Position, 150f, true,
-                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                    SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-                foreach (var enemy in enemiesInKnockUpRange.Where(u => _spell.SpellData.IsValidTarget(_aatrox, u)))
-                {
-                    AddBuff("AatroxQ", 1f, 1, _spell, enemy, _aatrox);
+                    RemoveStage();
+                    _stage = AddBuff("AatroxQDescent", 5, 1, spell, _aatrox, _aatrox);
                 }
 
-                var enemiesInRange = GetUnitsInRange(_aatrox, _aatrox.Position, 300f, true,
-                    SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes |
-                    SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral);
-                var ad = _aatrox.Stats.AttackDamage.FlatBonus * _spell.SpellData.Coefficient;
-                var dmg = 70f + 45f * (_spell.CastInfo.SpellLevel - 1) + ad;
-
-                var hitParticle = _aatrox.SkinID switch
+                var descent = new ForceMovementParameters
                 {
-                    1 => "Aatrox_Skin01_Q_Hit",
-                    2 => "Aatrox_Skin02_Q_Hit",
-                    _ => "Aatrox_Base_Q_Hit"
+                    TargetPosition = landing,
+                    ParabolicStartPoint = _aatrox.Position,
+                    Duration = LandingDashDurationSeconds,
+                    ParabolicGravity = 0,
+                    IgnoreTerrain = true,
+                    Caster = _aatrox,
+                    MovementName = "AatroxQDash",
+                    SetStatus = StatusFlags.CanMove | StatusFlags.CanAttack | StatusFlags.CanCast,
+                    BlockedSpellSlots = new HashSet<byte>() { 0, 1, 2, 3 },
+                    BufferSpellCasts = true
                 };
-                foreach (var enemy in enemiesInRange)
-                {
-                    AddParticleTarget(_aatrox, enemy, hitParticle, enemy);
-                    enemy.TakeDamage(_aatrox, dmg, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE,
-                        DamageResultType.RESULT_NORMAL);
-                }
+                Move(descent, () => Land(spell, damage));
+            });
+        }
+
+        private void Move(ForceMovementParameters movement, Action complete)
+        {
+            _movement = movement;
+            Action<AttackableUnit, ForceMovementParameters> success = null, failure = null;
+            void Unsubscribe()
+            {
+                ApiEventManager.OnMoveSuccess.RemoveListener(this, _aatrox, success);
+                ApiEventManager.OnMoveFailure.RemoveListener(this, _aatrox, failure);
             }
+
+            success = (_, ended) =>
+            {
+                if (ended != movement)
+                {
+                    return;
+                }
+
+                Unsubscribe();
+                _movement = null;
+                if (_aatrox.IsDead || _aatrox.IsToRemove())
+                {
+                    Cleanup();
+                    return;
+                }
+
+                complete();
+            };
+            failure = (_, ended) =>
+            {
+                if (ended != movement)
+                {
+                    return;
+                }
+
+                Unsubscribe();
+                _movement = null;
+                Cleanup();
+            };
+            ApiEventManager.OnMoveSuccess.AddListener(this, _aatrox, success);
+            ApiEventManager.OnMoveFailure.AddListener(this, _aatrox, failure);
+            _aatrox.StartForcedMovement(movement);
+            if (_aatrox.MovementParameters != movement)
+            {
+                Unsubscribe();
+                _movement = null;
+                Cleanup();
+            }
+        }
+
+        private void Land(Spell spell, float damage)
+        {
+            Cleanup();
+            AddParticle(_aatrox, null, AatroxHelpers.Effect(_aatrox, "Q_Land"), _aatrox.Position);
+            foreach (var enemy in GetUnitsInRange(_aatrox, _aatrox.Position, 300, true,
+                SpellDataFlags.AffectEnemies | SpellDataFlags.AffectHeroes | SpellDataFlags.AffectMinions | SpellDataFlags.AffectNeutral))
+            {
+                if (enemy.IsDead || enemy.IsToRemove() || !spell.SpellData.IsValidTarget(_aatrox, enemy))
+                {
+                    continue;
+                }
+
+                if (Vector2.Distance(enemy.Position, _aatrox.Position) <= 150 + enemy.CollisionRadius)
+                {
+                    AddBuff("AatroxQKnockup", 1, 1, spell, enemy, _aatrox);
+                }
+
+                AddParticleTarget(_aatrox, enemy, AatroxHelpers.Effect(_aatrox, "Q_Hit"), enemy, 0.5f);
+                enemy.TakeDamage(_aatrox, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELLAOE, false);
+            }
+        }
+
+        private void RemoveStage()
+        {
+            var stage = _stage;
+            _stage = null;
+            if (stage != null && !stage.Remove)
+            {
+                RemoveBuff(stage);
+            }
+        }
+
+        private void Cleanup()
+        {
+            RemoveStage();
+            RemoveParticle(_marker);
+            _marker = null;
+            if (_animation != null)
+            {
+                StopAnimation(_aatrox, _animation, fade: true);
+            }
+
+            _animation = null;
         }
 
         private void OnUpdateStats(AttackableUnit unit, float diff)
         {
-            var cost = _aatrox.Stats.CurrentHealth * 0.1f;
-            SetSpellToolTipVar(_aatrox, 2, cost, SpellbookType.SPELLBOOK_CHAMPION, 0, SpellSlotType.SpellSlots);
+            SetSpellToolTipVar(_aatrox, 2, _aatrox.Stats.CurrentHealth * 0.1f, SpellbookType.SPELLBOOK_CHAMPION, 0,
+                SpellSlotType.SpellSlots);
+        }
+
+        public void OnDeactivate(ObjAIBase owner, Spell spell)
+        {
+            if (_movement != null && owner.MovementParameters == _movement)
+            {
+                CancelDash(owner);
+            }
+
+            Cleanup();
+            ApiEventManager.RemoveAllListenersForOwner(this);
         }
     }
 }

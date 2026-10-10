@@ -112,6 +112,9 @@
             "TextFlags": "AffectEnemies | AffectNeutral | AffectMinions | AffectHeroes",
             "TriggersGlobalCooldown": 1,
             "Version": 1
+        },
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
         }
     }
 }

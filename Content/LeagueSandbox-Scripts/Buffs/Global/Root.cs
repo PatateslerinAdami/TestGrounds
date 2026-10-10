@@ -25,12 +25,11 @@ namespace Buffs
         public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
             root = AddParticleTarget(ownerSpell.CastInfo.Owner, unit, "LOC_Root", unit, buff.Duration);
-            unit.SetStatus(StatusFlags.CanMove, false);
+            buff.SetStatusEffect(StatusFlags.Rooted, true);
         }
 
         public void OnDeactivate(AttackableUnit unit, Buff buff, Spell ownerSpell)
         {
-            unit.SetStatus(StatusFlags.CanMove, true);
             RemoveParticle(root);
         }
     }

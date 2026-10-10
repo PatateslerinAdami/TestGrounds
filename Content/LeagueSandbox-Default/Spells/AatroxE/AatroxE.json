@@ -6,6 +6,9 @@
         "ResourcePath": "DATA/Characters/Aatrox/Spells/AatroxE.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
+        },
         "SpellData": {
             "AfterEffectName": "",
             "AlternateName": "AatroxE",

@@ -124,7 +124,7 @@ namespace ItemHelpers
                 float extension = remaining - (shown.Duration - shown.TimeElapsed);
                 if (extension > 0.001f)
                 {
-                    shown.ExtendDuration(extension);
+                    shown.Refresh(remaining);
                 }
             }
         }

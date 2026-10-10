@@ -6,6 +6,9 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoQ3W.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_YasuoQ3W",
             "ShowInTrackerUI": 1

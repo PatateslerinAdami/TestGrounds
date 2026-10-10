@@ -30,12 +30,25 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
             }
 
             var champion = peerInfo.Champion;
+            if (req.OrderType == OrderType.PetHardAttack || req.OrderType == OrderType.PetHardMove
+                || req.OrderType == OrderType.PetHardReturn || req.OrderType == OrderType.PetHardStop)
+            {
+                if (champion.IsDead) return false;
+                var controlledPet = champion.GetPet();
+                var petTarget = _game.ObjectManager.GetObjectById(req.TargetNetID) as AttackableUnit;
+                return controlledPet != null && controlledPet.IssueCommand(req.OrderType, req.Position, petTarget);
+            }
+
+            if (IsPlayerControlIntent(req))
+            {
+                champion.ClearQueuedSpell();
+            }
+            bool acceptedOrder = false;
             if (champion.MovementParameters == null && champion.CanIssueMoveOrders())
             {
                 var nav = _game.Map.NavigationGrid;
 
                 var u = _game.ObjectManager.GetObjectById(req.TargetNetID) as AttackableUnit;
-                var pet = champion.GetPet();
                 List<Vector2> waypoints;
 
                 switch (req.OrderType)
@@ -52,8 +65,9 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
 
                         if (u != null)
                         {
-                            champion.UpdateMoveOrder(req.OrderType, true);
+                            if (!champion.UpdateMoveOrder(req.OrderType, true)) break;
                             champion.SetTargetUnit(u);
+                            acceptedOrder = true;
                         }
                         else
                         {
@@ -82,49 +96,42 @@ namespace LeagueSandbox.GameServer.Packets.PacketHandlers
                                 ?? nav.GetPath(champion.Position, target, champion.PathfindingRadius);
                             if(path != null && path.Count > 1)
                             {
-                                champion.UpdateMoveOrder(req.OrderType, true);
-                                champion.SetWaypoints(path);
+                                if (!champion.UpdateMoveOrder(req.OrderType, true)
+                                    || !champion.SetWaypoints(path)) break;
                                 champion.SetTargetUnit(null);
+                                acceptedOrder = true;
                             }
-                        }
-                        break;
-                    case OrderType.PetHardAttack:
-                    case OrderType.PetHardMove:
-                    case OrderType.PetHardReturn:
-                        if (pet != null)
-                        {
-                            waypoints = nav.GetPath(pet.Position, req.Position, pet.PathfindingRadius);
-                            if (waypoints == null)
-                            {
-                                return false;
-                            }
-                            pet.UpdateMoveOrder(req.OrderType, true);
-                            pet.SetWaypoints(waypoints);
-                            pet.SetTargetUnit(u, true);
                         }
                         break;
                     case OrderType.Taunt:
                         champion.UpdateMoveOrder(req.OrderType);
                         return true;
                     case OrderType.Stop:
-                        champion.SetTargetUnit(null,true);
-                        champion.UpdateMoveOrder(req.OrderType, true);
-                        break;
-                    case OrderType.PetHardStop:
-                        if (pet != null)
-                        {
-                            pet.UpdateMoveOrder(req.OrderType, true);
-                        }
+                        if (!champion.UpdateMoveOrder(req.OrderType, true)) break;
+                        champion.SetTargetUnit(null, true);
+                        acceptedOrder = true;
                         break;
                 }
             }
 
-            // TODO: Shouldn't be here.
-            if (champion.SpellToCast != null)
+            if (acceptedOrder && champion.SpellToCast != null)
             {
                 champion.SetSpellToCast(null, Vector2.Zero);
             }
 
+            return true;
+        }
+
+        private static bool IsPlayerControlIntent(MovementRequest req)
+        {
+            if (req.OrderType == OrderType.Stop) return true;
+            if (req.OrderType != OrderType.MoveTo && req.OrderType != OrderType.AttackTo
+                && req.OrderType != OrderType.AttackMove && req.OrderType != OrderType.Use) return false;
+            if (req.Waypoints == null || req.Waypoints.Count == 0 || req.Waypoints.Count > 64) return false;
+            foreach (var point in req.Waypoints)
+            {
+                if (!float.IsFinite(point.X) || !float.IsFinite(point.Y)) return false;
+            }
             return true;
         }
 

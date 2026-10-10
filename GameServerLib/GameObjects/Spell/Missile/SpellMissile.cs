@@ -32,6 +32,13 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
         /// Whether or not this projectile's visuals should not be networked to clients.
         /// </summary>
         public bool IsServerOnly { get; }
+        public bool IsVisualOnly { get; internal set; }
+        public float? ReplicationHeightOffset { get; internal set; }
+        public float? ReplicationEndHeightOffset { get; internal set; }
+        public bool HasCustomHeightProfile { get; internal set; }
+        public bool UsesClientCastVisual { get; internal set; }
+        internal bool IsInInitialSpawn { get; set; }
+        internal bool HasExplicitLaunchReplication { get; set; }
 
         public override bool IsAffectedByFoW => true;
         public override bool SpawnShouldBeHidden => true;
@@ -185,6 +192,11 @@ namespace LeagueSandbox.GameServer.GameObjects.SpellNS.Missile
 
         public virtual void CheckFlagsForUnit(AttackableUnit unit)
         {
+            if (IsVisualOnly)
+            {
+                if (unit == TargetUnit) SetToRemove();
+                return;
+            }
             if (unit == null || !HasTarget() || !SpellOrigin.SpellData.IsValidTarget(CastInfo.Owner, unit) || TargetUnit != unit)
             {
                 return;

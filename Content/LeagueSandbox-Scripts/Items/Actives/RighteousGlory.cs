@@ -17,7 +17,7 @@ namespace ItemSpells
             base.OnActivate(owner, spell);
             ApiEventManager.OnSpellPress.AddListener(this, spell, (cast, info) =>
             {
-                if (!info.CouldCast && owner.HasBuff("ItemRighteousGlory"))
+                if (!info.CouldCast && !info.WasQueued && owner.HasBuff("ItemRighteousGlory"))
                 {
                     RemoveBuff(owner, "ItemRighteousGlory");
                 }

@@ -8,6 +8,7 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.Buildings;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.Scripting.CSharp;
+using System;
 using System.Numerics;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
@@ -23,6 +24,7 @@ namespace Spells
         private ObjAIBase _owner;
         private AttackableUnit _target;
         private int _currentQStage = 0;
+        private int _dashSequence;
         Spell _spell;
 
         public void OnActivate(ObjAIBase owner, Spell spell)
@@ -46,8 +48,6 @@ namespace Spells
 
             var buff = _owner.GetBuffWithName("RivenTriCleave");
             _currentQStage = buff != null ? buff.StackCount : 1;
-
-            ApiEventManager.OnMoveEnd.AddListener(this, _owner, OnDashFinished, true);
 
             float q1q2Range = 225f;
             float q3Range = 250f;
@@ -85,7 +85,41 @@ namespace Spells
             var newSpeed = (dashSpeedBase / range) * distance;
             float verticalSpeed = (_currentQStage == 3) ? 50 : 0;
 
-            ForceMovement(_owner, animName, dashPos, newSpeed, 0, verticalSpeed, 0, false);
+            int stage = _currentQStage;
+            string movementName = "RivenQ" + ++_dashSequence;
+            Action<AttackableUnit, ForceMovementParameters> onSuccess = null;
+            Action<AttackableUnit, ForceMovementParameters> onFailure = null;
+            void RemoveMovementListeners()
+            {
+                ApiEventManager.OnMoveSuccess.RemoveListener(this, _owner, onSuccess);
+                ApiEventManager.OnMoveFailure.RemoveListener(this, _owner, onFailure);
+            }
+            onSuccess = (unit, movement) =>
+            {
+                if (movement.MovementName != movementName) return;
+                RemoveMovementListeners();
+                OnDashFinished(unit, stage);
+            };
+            onFailure = (unit, movement) =>
+            {
+                if (movement.MovementName == movementName) RemoveMovementListeners();
+            };
+            ApiEventManager.OnMoveSuccess.AddListener(this, _owner, onSuccess);
+            ApiEventManager.OnMoveFailure.AddListener(this, _owner, onFailure);
+            _owner.StartForcedMovement(new ForceMovementParameters
+            {
+                TargetPosition = dashPos,
+                PathSpeedOverride = newSpeed,
+                Animation = animName,
+                OverrideRunAnimation = true,
+                ParabolicGravity = verticalSpeed,
+                ParabolicStartPoint = _owner.Position,
+                MovementName = movementName,
+                Caster = _owner,
+                SetStatus = StatusFlags.CanAttack | StatusFlags.CanCast | StatusFlags.CanMove,
+                BlockedSpellSlots = new System.Collections.Generic.HashSet<byte> { 0, 1, 2, 3 },
+                BufferSpellCasts = true
+            });
 
             if (!string.IsNullOrEmpty(trailParticle))
             {
@@ -94,21 +128,26 @@ namespace Spells
             }
         }
 
-        public void OnDashFinished(AttackableUnit unit, ForceMovementParameters parameters)
+        public void OnDeactivate(ObjAIBase owner, Spell spell)
+        {
+            ApiEventManager.RemoveAllListenersForOwner(this);
+        }
+
+        private void OnDashFinished(AttackableUnit unit, int stage)
         {
             if (!(unit is ObjAIBase owner)) return;
 
             _owner.SkipNextAutoAttack();
 
-            float radius = (_currentQStage == 3) ? 300f : 260f;
-            string detonateParticle = $"exile_Q_0{_currentQStage}_detonate.troy";
-            string hitParticle = $"exile_Q_tar_0{_currentQStage}.troy";
+            float radius = (stage == 3) ? 300f : 260f;
+            string detonateParticle = $"exile_Q_0{stage}_detonate.troy";
+            string hitParticle = $"exile_Q_tar_0{stage}.troy";
 
             AddParticle(_owner, null, detonateParticle, GetPointFromUnit(_owner, 125f));
-            ApplyQDamage(_owner, radius, hitParticle);
+            ApplyQDamage(_owner, radius, hitParticle, stage);
         }
 
-        private void ApplyQDamage(ObjAIBase owner, float radius, string specificHitParticle)
+        private void ApplyQDamage(ObjAIBase owner, float radius, string specificHitParticle, int stage)
         {
             var damage = 10;
 
@@ -121,7 +160,7 @@ namespace Spells
             {
                 target.TakeDamage(_owner, damage, DamageType.DAMAGE_TYPE_PHYSICAL, DamageSource.DAMAGE_SOURCE_SPELL,
                     false, _spell);
-                if (_currentQStage == 3)
+                if (stage == 3)
                 {
                     AddBuff("Pulverize", 0.75f, 1, _spell, target, _owner);
                 }

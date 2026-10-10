@@ -39,7 +39,7 @@ namespace ItemPassives
         private void Hit(DamageData data)
         {
             if (!Preferred || Owner.HasBuff("ItemPhageSpeed")
-                || !ItemEffectHelpers.IsSuccessfulBasicAttack(Owner, data))
+                || !ItemEffectHelpers.IsSuccessfulBasicDamage(Owner, data))
             {
                 return;
             }

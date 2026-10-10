@@ -22,6 +22,7 @@
             "SpellDamage": 1
         },
         "Data": {
+            "PercentCooldownMod": -0.2,
             "AvatarUniqueEffect": "game_item_uniqueeffect_3165",
             "CanBeDropped": 1,
             "CanBeSold": 1,

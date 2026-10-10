@@ -6,6 +6,12 @@
         "ResourcePath": "DATA/Characters/Yasuo/Spells/YasuoDashWrapper.inibin"
     },
     "Values": {
+        "ServerCast": {
+            "ClientSpellLevelOffset": -1,
+            "Cooldown": 0,
+            "DesignerCastTime": 0.25,
+            "DesignerTotalTime": 1
+        },
         "BuffData": {
             "DynamicTooltip": "game_buff_tooltip_YasuoDashWrapper"
         },

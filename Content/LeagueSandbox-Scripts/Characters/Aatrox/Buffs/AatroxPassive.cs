@@ -8,64 +8,92 @@ using LeagueSandbox.GameServer.GameObjects.AttackableUnits;
 using LeagueSandbox.GameServer.GameObjects.AttackableUnits.AI;
 using LeagueSandbox.GameServer.GameObjects.SpellNS;
 using LeagueSandbox.GameServer.GameObjects.StatsNS;
-using LeagueSandbox.GameServer.Logging;
 using LeagueSandbox.GameServer.Scripting.CSharp;
-using log4net.Repository.Hierarchy;
 using static LeagueSandbox.GameServer.API.ApiFunctionManager;
 
-namespace Buffs;
+namespace Buffs
+{
+    public class AatroxPassive : IBuffGameScript
+    {
+        private ObjAIBase _owner;
+        private float _combatDelay, _decayTime;
+        private bool _applied;
 
-public class AatroxPassive : IBuffGameScript {
-    private ObjAIBase _aatrox;
-    private float     _delayTimer = 0f;
-    private float     _decayTimer = 0f;
+        public BuffScriptMetaData BuffMetaData { get; set; } = new BuffScriptMetaData()
+        {
+            BuffType= BuffType.COMBAT_ENCHANCER,
+            BuffAddType = BuffAddType.REPLACE_EXISTING,
+            IsHidden = true,
+            UpdateInfinite = true
+        };
 
-    public BuffScriptMetaData BuffMetaData { get; set; } = new() {
-        BuffType    = BuffType.COMBAT_ENCHANCER,
-        BuffAddType = BuffAddType.REPLACE_EXISTING,
-        MaxStacks   = 1,
-        IsHidden = true
-    };
+        public StatsModifier StatsModifier { get; } = new StatsModifier();
 
-    public StatsModifier StatsModifier { get; } = new();
-    public StatsModifier StatsModifier2 { get; } = new();
+        public void OnActivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            _owner = (ObjAIBase)unit;
+            RefreshAttackSpeed();
+            ApiEventManager.OnTakeDamage.AddListener(this, _owner, Combat);
+            ApiEventManager.OnDealDamage.AddListener(this, _owner, Combat);
+        }
 
-    public void OnActivate(AttackableUnit unit, Buff buff, Spell ownerspell) {
-        _aatrox = ownerspell.CastInfo.Owner;
-        SpendPAR(_aatrox, GetPAR(_aatrox));
-        UpdateAttackSpeedStat();
-        ApiEventManager.OnTakeDamage.AddListener(this, _aatrox, EngagingInCombat);
-        ApiEventManager.OnDealDamage.AddListener(this, _aatrox, EngagingInCombat);
-    }
+        private void Combat(DamageData data)
+        {
+            if (data.Attacker != data.Target && data.PostMitigationDamage > 0)
+            {
+                _combatDelay = 6000;
+                _decayTime = 0;
+            }
+        }
 
-    public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell) { }
+        public void OnUpdate(float diff)
+        {
+            if (_owner.IsDead || _owner.HasBuff("AatroxPassiveDeath"))
+            {
+                return;
+            }
 
-    public void OnUpdate(float diff) {
-        if (_aatrox.HasBuff("AatroxPassiveDeath")) return;
-        _delayTimer -= diff;
-        if (!(_delayTimer <= 0f)) return;
-        _decayTimer -= diff;
-        if (!(_decayTimer <= 0f)) return;
-        if (_aatrox.GetPAR() <= 0) return;
-        _aatrox.SpendPAR(_aatrox.GetMaxPAR() * 0.02f);
-        UpdateAttackSpeedStat();
-        _decayTimer = 1000f;
-    }
+            RefreshAttackSpeed();
+            float outOfCombat = Math.Max(0, diff - Math.Max(0, _combatDelay));
+            _combatDelay = Math.Max(0, _combatDelay - diff);
+            _decayTime += outOfCombat;
+            while (_decayTime >= 1000)
+            {
+                _owner.SpendPAR(_owner.GetMaxPAR() * 0.02f);
+                _decayTime -= 1000;
+            }
 
-    private void UpdateAttackSpeedStat() {
-        _aatrox.RemoveStatModifier(StatsModifier2);
-        var maxPar     = Math.Max(1f, _aatrox.GetMaxPAR());
-        var bloodRatio = _aatrox.GetPAR() / maxPar;
-        StatsModifier2.AttackSpeed.PercentBonus = bloodRatio              * 0.5f;
-        _aatrox.AddStatModifier(StatsModifier2);
-        
-    }
+            RefreshAttackSpeed();
+        }
 
-    private void EngagingInCombat(DamageData data) { _delayTimer = 6000f; }
+        public void RefreshAttackSpeed()
+        {
+            float bonus = Math.Clamp(_owner.GetPAR() / Math.Max(1, _owner.GetMaxPAR()), 0, 1) * 0.5f;
+            if (_applied && StatsModifier.AttackSpeed.FlatBonus == bonus)
+            {
+                return;
+            }
 
-    public void AddBlood(float amount) {
-        IncreasePAR(_aatrox, amount, PrimaryAbilityResourceType.BloodWell);
-        UpdateAttackSpeedStat();
-        if (_delayTimer <= 1500f) { _delayTimer = 1500f; }
+            if (_applied)
+            {
+                _owner.RemoveStatModifier(StatsModifier);
+            }
+
+            StatsModifier.AttackSpeed.FlatBonus = bonus;
+            _owner.AddStatModifier(StatsModifier);
+            _applied = true;
+        }
+
+        public void AddBlood(float amount)
+        {
+            IncreasePAR(_owner, amount, PrimaryAbilityResourceType.BloodWell);
+            _combatDelay = Math.Max(_combatDelay, 1500);
+            RefreshAttackSpeed();
+        }
+
+        public void OnDeactivate(AttackableUnit unit, Buff buff, Spell spell)
+        {
+            ApiEventManager.RemoveAllListenersForOwner(this);
+        }
     }
 }

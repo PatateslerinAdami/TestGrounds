@@ -24,12 +24,7 @@ namespace Spells
 
         public void OnSpellPostCast(Spell spell)
         {
-            var owner = spell.CastInfo.Owner as Champion;
-            if (owner == null)
-            {
-                return;
-            }
-
+            var owner = spell.CastInfo.Owner;
             var targetPos = new Vector2(spell.CastInfo.TargetPosition.X, spell.CastInfo.TargetPosition.Z);
             var ownerPos = owner.Position;
             var distance = Vector2.Distance(ownerPos, targetPos);
@@ -46,9 +41,9 @@ namespace Spells
                 teleportPos = targetPos;
             }
 
-            AddParticle(owner, null, "ezreal_arcaneshift_cas", owner.Position);
+            AddParticle(owner, null, owner.SkinID == 5 ? "Ezreal_arcaneshift_cas_pulsefire" : "ezreal_arcaneshift_cas", owner.Position);
             TeleportTo(owner, teleportPos.X, teleportPos.Y);
-            AddParticleTarget(owner, owner, "ezreal_arcaneshift_flash", owner);
+            AddParticleTarget(owner, owner, owner.SkinID == 5 ? "Ezreal_arcaneshift_flash_Pulsefire" : "ezreal_arcaneshift_flash", owner);
 
             float missileRange = 750.0f;
             var target = GetUnitsInRange(owner, teleportPos, missileRange, true,
@@ -57,7 +52,7 @@ namespace Spells
 
             if (target != null)
             {
-                SpellCast(owner, 1, SpellSlotType.ExtraSlots, false, target, owner.Position);
+                SpellCast(owner, 1, SpellSlotType.ExtraSlots, false, target, owner.Position, overrideForceLevel: spell.CastInfo.SpellLevel);
             }
         }
     }
@@ -68,32 +63,31 @@ namespace Spells
         {
             MissileParameters = new MissileParameters
             {
-                Type = MissileType.Target
+                Type = MissileType.Target,
+                ReplicateOnLaunch = true
             },
             IsDamagingSpell = true
         };
 
         public void OnActivate(ObjAIBase owner, Spell spell)
         {
-            ApiEventManager.OnSpellHit.AddListener(this, spell, TargetExecute, false);
+            ApiEventManager.OnLaunchMissile.AddListener(this, spell, OnLaunch);
         }
 
-        public void TargetExecute(Spell spell, AttackableUnit target, SpellMissile missile, SpellSector sector)
+        private void OnLaunch(Spell spell, SpellMissile missile)
         {
-            var owner = spell.CastInfo.Owner;
-
-            var mainSpell = owner.GetSpell("EzrealArcaneShift");
-            int spellLevel = mainSpell != null ? mainSpell.CastInfo.SpellLevel : 0;
-
-            float baseDamage = 75 + (spellLevel * 50);
-            float bonusAd = owner.Stats.AttackDamage.BaseBonus * 0.5f;
-            float ap = owner.Stats.AbilityPower.Total * 0.75f;
-
-            float totalDamage = baseDamage + bonusAd + ap;
-            target.TakeDamage(owner, totalDamage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL,
-                false, spell);
-            AddBuff("EzrealRisingSpellForce", 5f, 1, spell, owner, owner);
-            missile.SetToRemove();
+            var owner = missile.CastInfo.Owner;
+            var source = owner.GetSpell("EzrealArcaneShift");
+            var rank = missile.CastInfo.SpellLevel;
+            var damage = source.SpellData.GetEffectAmount(1, rank)
+                + owner.Stats.AbilityPower.Total * source.SpellData.Coefficient;
+            EzrealHelpers.OnHit(missile, victim =>
+            {
+                victim.TakeDamage(owner, damage, DamageType.DAMAGE_TYPE_MAGICAL, DamageSource.DAMAGE_SOURCE_SPELL, false, source);
+                AddParticle(owner, victim, "Ezreal_arcaneshift_tar", victim.Position, bone: "root", direction: victim.Direction, flags: FXFlags.GivenDirection, keywordObject: owner);
+                AddBuff("EzrealRisingSpellForce", 6, 1, source, owner, owner);
+                missile.SetToRemove();
+            });
         }
     }
 }
